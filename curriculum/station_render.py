@@ -3,7 +3,7 @@
     python3 curriculum/station_render.py stations/085-idempotent-upi-payments OUT_DIR
 
 page.py holds only the station's content. It runs with every helper below already in scope
-(code, read, run, belongs, table, filebrowser, dwn, e, ST, STATION_RUN, N_TESTS) and must define:
+(code, read, run, belongs, table, filebrowser, dwn, e, pretty, capture, examples, challenge, ST, STATION_RUN, N_TESTS) and must define:
     META   = {"id": 85, "stack": "...", optional "simulation", "label", "show_blueprint", "package"}
     LEVELS = [("1", "Understand", [(tab_id, label, sections, html), ...]), ("2", "Build", [...]), ("3", "Go deeper", [...])]
 Header facts (title, stage, types, before/after) come from curriculum/roadmap.json, so they never drift from the roadmap.
@@ -13,6 +13,7 @@ import html
 import json
 import pathlib
 import re
+import shlex
 import subprocess
 import sys
 
@@ -45,6 +46,57 @@ def run(name):
     total = sum(t for _, t in per.values())
     passed = sum(p for p, _ in per.values())
     return per, passed, total, text
+
+
+def pretty(text):
+    try:
+        return json.dumps(json.loads(text), indent=2, ensure_ascii=False)
+    except ValueError:
+        return text
+
+
+def capture(name):
+    """docs/captures/NAME.txt as (request, response) text for code(..., "http").
+    capture.sh writes the first line as "$ curl" plus single-quoted args, so shlex can split it."""
+    first, rest = read(f"docs/captures/{name}.txt").split("\n", 1)
+    method, headers, body, url = None, [], None, ""
+    args = iter(shlex.split(first[len("$ curl"):]))
+    for a in args:
+        if a == "-X":
+            method = next(args)
+        elif a == "-H":
+            headers.append(next(args))
+        elif a in ("-d", "--data-raw"):
+            body = next(args)
+        elif a.startswith("http"):
+            url = a
+    method = method or ("POST" if body is not None else "GET")
+    req = f"{method} {re.sub(r'^https?://[^/]+', '', url)} HTTP/1.1" + "".join("\n" + h for h in headers)
+    req += f"\n\n{pretty(body)}" if body else ""
+    head, _, rbody = rest.strip().partition("\n\n")
+    return req, head.strip() + (f"\n\n{pretty(rbody.strip())}" if rbody.strip() else "")
+
+
+def examples(items):
+    """items: (capture name, title, why). Request and response side by side, both from the real capture."""
+    out = []
+    for name, title, why in items:
+        req, resp = capture(name)
+        out.append(f'<section class="example"><h3>{title}</h3><p>{why}</p><div class="pair">'
+                   f'<div><p class="eyebrow">Request</p>{code(req, "http")}</div>'
+                   f'<div><p class="eyebrow">Response</p>{code(resp, "http")}</div></div></section>')
+    return "".join(out)
+
+
+def challenge(n, title, level, minutes, task, done, hints, test, solutions):
+    """One Practice coding challenge: the task, hints, the ready test, and the solution behind a click."""
+    sol = "".join(f'<p class="path">{e(f)}</p><div class="src">{code(read(f), lang_of(f))}</div>' for f in solutions)
+    hint = "".join(f"<li>{h}</li>" for h in hints)
+    return (f'<section class="challenge"><p class="eyebrow">Challenge {n} · {level} · about {minutes} minutes</p><h2>{title}</h2>'
+            f'<p>{task}</p><p><b>Done when:</b> {done}</p>'
+            f'<details class="qa"><summary>Hints</summary><ul>{hint}</ul></details>'
+            f'<p class="path">{e(test)}</p>{code(read(test), "java")}'
+            f'<details class="qa solution"><summary>Solution (open after trying)</summary>{sol}</details></section>')
 
 
 def belongs(sections, rule):

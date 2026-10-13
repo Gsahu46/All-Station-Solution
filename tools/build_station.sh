@@ -80,7 +80,7 @@ if [ "$CAPTURE" = "--capture" ]; then
   for _ in $(seq 1 90); do curl -s -o /dev/null http://localhost:8080/ && break; sleep 1; done
   docs/capture.sh
   kill "$APP_PID"; APP_PID=""
-  docker compose down -v >/dev/null 2>&1; COMPOSE_UP=""
+  if [ -n "${COMPOSE_UP:-}" ]; then docker compose down -v >/dev/null 2>&1 || true; COMPOSE_UP=""; fi
 fi
 
 echo "5/6 rendering"
