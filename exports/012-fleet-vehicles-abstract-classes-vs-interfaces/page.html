@@ -1,0 +1,1156 @@
+<title>Station 012 · Fleet vehicles: abstract classes vs interfaces</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 012</span>
+    <h1>Fleet vehicles: abstract classes vs interfaces</h1>
+    <p class="scenario">Trucks, vans and bikes share copy-pasted code; a new &#x27;EV van&#x27; type needed changes in nine places.</p>
+    <p class="sim"><b>Simulation</b><span>Five vehicles are fixed in the code. Service intervals are demo rules, not any manufacturer's schedule.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Logistics</li>
+      <li><b>Types</b>None</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>009 Wishlist without duplicates</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring MVC · interfaces, enums, records · MockMvc</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Dakroute's fleet app grew one class at a time</strong><p>Vehicle, then FuelVehicle, then Truck, Van and Bike underneath, with shared code copied between them.</p></li><li><strong>An EV van arrived</strong><p>It was made a subclass of Van, so it inherited an engine oil change. Fixing that took changes in nine places, and someone's "diesel filter for trucks" in the shared parent showed up on petrol bikes.</p></li><li><strong>The fix</strong><p>Describe a vehicle by its parts: a powertrain (diesel, petrol, electric) and a body (truck, van, two-wheeler). Each part lists its own tasks; a vehicle's plan is its parts' tasks together.</p></li></ol>
+<p class="lesson">"Is a" is a strong promise: a child gets everything the parent has, today and after every future change. "Has a" lets you pick exactly the parts you need.</p>
+
+<h2>What are we building?</h2>
+<p><code>GET /fleet/vehicles/{id}/service-plan</code>: the maintenance tasks for one vehicle, each with the kilometre reading when it is next due, soonest first. An EV van gets battery checks and van checks, and never an oil change.</p>
+
+<h2>An everyday analogy</h2>
+<p>A tiffin service. One way is to have a "North Indian Thali", a "North Indian Thali Without Onion", a "Jain North Indian Thali Without Onion", each a copy of the one above with changes. The other way is to let each customer choose a base, a dal and a sabzi. The second way never serves onions to a Jain customer by accident when the base thali changes.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>A vehicle is two parts</strong>: a powertrain and a body.</li>
+<li><strong>Each part lists its tasks</strong>, such as "Engine oil change every 15,000 km" for diesel or "Brake check every 15,000 km" for a van.</li>
+<li><strong>The planner asks each part</strong> for its tasks without knowing which part it is (polymorphism).</li>
+<li><strong>For each task</strong>, the next due reading is the next multiple of its interval; the list is sorted soonest first.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: Dakroute buys a CNG van. With composition, what has to change?</summary><p>Only a new powertrain value, CNG, with its own tasks, and the van itself in the fleet list. The body VAN, the planner and every other vehicle stay untouched. Practice challenge 1 does exactly this.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No service history.</strong> "Next due" is the next multiple of the interval, not based on when the work was last done.</li>
+<li><strong>Not real schedules.</strong> Intervals are demo rules; real ones come from each manufacturer's manual.</li>
+<li><strong>No database.</strong> Five vehicles are fixed in code.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Inheritance</strong></td><td>A class takes everything from a parent class (<code>extends</code>).</td><td>A child inheriting the family house, leaks and all.</td><td>The trap's <code>OldEvVan extends OldVan</code>.</td></tr><tr><td><strong>Abstract class</strong></td><td>A parent class that cannot be created on its own and can hold shared code and fields.</td><td>A recipe base: "every curry starts with onions".</td><td>The trap's <code>OldVehicle</code>.</td></tr><tr><td><strong>Interface</strong></td><td>A promise of what a class can do, with no stored data.</td><td>A plug socket shape: anything that fits can be plugged in.</td><td><code>ServiceItems</code>: "I can list service tasks".</td></tr><tr><td><strong>Composition</strong></td><td>Building something out of parts it has, instead of a parent it is.</td><td>A thali: you choose the dishes, nothing comes with the plate.</td><td>A vehicle has a powertrain and a body.</td></tr><tr><td><strong>Polymorphism</strong></td><td>Calling the same method on different kinds of objects, each answering its own way.</td><td>Asking every guest "what will you eat?"</td><td><code>part.tasks()</code> on a powertrain or a body.</td></tr><tr><td><strong>Fragile base class</strong></td><td>A change in a parent class breaks children that never asked for it.</td><td>Changing the house's wiring, and every flat's lights flicker.</td><td>A diesel filter task added for trucks appears on bikes.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Dakroute</strong> (a fictional logistics company) runs trucks, vans and two-wheelers. Its fleet app models them as a tree of classes. When the first EV van arrived, it was added as a subclass of Van and inherited an engine oil change, so the workshop booked oil changes for an electric van. Removing it touched nine classes. A month later a "diesel particulate filter" task, added to the shared fuel-vehicle parent for trucks, appeared on every petrol bike.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> a diesel truck at 128,400 km, <b>then</b> its plan has the diesel tasks and the truck tasks, soonest first; the 15,000 km oil change is next due at 135,000 km (in 6,600 km).</li>
+<li><b>Given</b> an electric van, <b>then</b> its plan has battery and van tasks and no engine oil change.</li>
+<li><b>Given</b> a petrol two-wheeler, <b>then</b> no diesel tasks, and the petrol oil interval (10,000 km).</li>
+<li><b>Given</b> a task within 10% of its interval, <b>then</b> it is marked <code>dueSoon</code>.</li>
+<li><b>Given</b> an unknown vehicle, <b>then</b> <code>404</code>; a non-numeric id, <code>400</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>A vehicle is a powertrain plus a body. Each contributes its own tasks; nothing is inherited.</li>
+<li>Next due = the next multiple of the interval at or above the odometer (at least one interval).</li>
+<li>Tasks are sorted by km until due, then by name.</li>
+<li>Errors are RFC 9457 problems.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Explain the difference between an abstract class and an interface, and when each fits.</li>
+<li>Prefer composition to inheritance, and say why.</li>
+<li>Use polymorphism through an interface implemented by enums.</li>
+<li>Recognise the fragile base class problem in code you review.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/fleet/vehicles/{id}/service-plan</code></td><td>The vehicle's parts and its tasks, soonest first.</td></tr></tbody></table></div>
+<h2>Each task</h2>
+<div class="scroll"><table class=""><thead><tr><th>Field</th><th>Meaning</th></tr></thead><tbody><tr><td><code>task</code>, <code>everyKm</code></td><td>What to do, and how often.</td></tr><tr><td><code>nextDueKm</code>, <code>dueInKm</code></td><td>The odometer reading when it is next due, and how far away that is.</td></tr><tr><td><code>dueSoon</code></td><td>Within 10% of the interval (a demo rule).</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>The vehicle exists</td></tr><tr><td><span class="pill warn">400</span></td><td>The id is not a number</td></tr><tr><td><span class="pill warn">404</span></td><td>No such vehicle</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 13 Oct 2026. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: the diesel truck</h3><p><b>Why:</b> DIESEL tasks plus TRUCK tasks, soonest first. Two tasks due in 1,600 km are ordered by name.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /fleet/vehicles/1/service-plan HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 703
+
+{
+  &quot;vehicleId&quot;: 1,
+  &quot;registration&quot;: &quot;KA01TR1234&quot;,
+  &quot;model&quot;: &quot;Tata Prima 2830.K&quot;,
+  &quot;powertrain&quot;: &quot;DIESEL&quot;,
+  &quot;body&quot;: &quot;TRUCK&quot;,
+  &quot;odometerKm&quot;: 128400,
+  &quot;tasks&quot;: [
+    {
+      &quot;task&quot;: &quot;Axle greasing&quot;,
+      &quot;everyKm&quot;: 5000,
+      &quot;nextDueKm&quot;: 130000,
+      &quot;dueInKm&quot;: 1600,
+      &quot;dueSoon&quot;: false
+    },
+    {
+      &quot;task&quot;: &quot;Brake check&quot;,
+      &quot;everyKm&quot;: 10000,
+      &quot;nextDueKm&quot;: 130000,
+      &quot;dueInKm&quot;: 1600,
+      &quot;dueSoon&quot;: false
+    },
+    {
+      &quot;task&quot;: &quot;Engine oil change&quot;,
+      &quot;everyKm&quot;: 15000,
+      &quot;nextDueKm&quot;: 135000,
+      &quot;dueInKm&quot;: 6600,
+      &quot;dueSoon&quot;: false
+    },
+    {
+      &quot;task&quot;: &quot;Tyre rotation&quot;,
+      &quot;everyKm&quot;: 15000,
+      &quot;nextDueKm&quot;: 135000,
+      &quot;dueInKm&quot;: 6600,
+      &quot;dueSoon&quot;: false
+    },
+    {
+      &quot;task&quot;: &quot;Fuel filter&quot;,
+      &quot;everyKm&quot;: 30000,
+      &quot;nextDueKm&quot;: 150000,
+      &quot;dueInKm&quot;: 21600,
+      &quot;dueSoon&quot;: false
+    },
+    {
+      &quot;task&quot;: &quot;Diesel particulate filter clean&quot;,
+      &quot;everyKm&quot;: 60000,
+      &quot;nextDueKm&quot;: 180000,
+      &quot;dueInKm&quot;: 51600,
+      &quot;dueSoon&quot;: false
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 2: the EV van</h3><p><b>Why:</b> ELECTRIC plus VAN: battery checks and van checks, no oil change. The battery check is <code>dueSoon</code> (1,050 km of a 20,000 km interval).</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /fleet/vehicles/3/service-plan HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 499
+
+{
+  &quot;vehicleId&quot;: 3,
+  &quot;registration&quot;: &quot;KA01EV9012&quot;,
+  &quot;model&quot;: &quot;Tata Ace EV&quot;,
+  &quot;powertrain&quot;: &quot;ELECTRIC&quot;,
+  &quot;body&quot;: &quot;VAN&quot;,
+  &quot;odometerKm&quot;: 18950,
+  &quot;tasks&quot;: [
+    {
+      &quot;task&quot;: &quot;Battery health check&quot;,
+      &quot;everyKm&quot;: 20000,
+      &quot;nextDueKm&quot;: 20000,
+      &quot;dueInKm&quot;: 1050,
+      &quot;dueSoon&quot;: true
+    },
+    {
+      &quot;task&quot;: &quot;Tyre rotation&quot;,
+      &quot;everyKm&quot;: 10000,
+      &quot;nextDueKm&quot;: 20000,
+      &quot;dueInKm&quot;: 1050,
+      &quot;dueSoon&quot;: false
+    },
+    {
+      &quot;task&quot;: &quot;Brake check&quot;,
+      &quot;everyKm&quot;: 15000,
+      &quot;nextDueKm&quot;: 30000,
+      &quot;dueInKm&quot;: 11050,
+      &quot;dueSoon&quot;: false
+    },
+    {
+      &quot;task&quot;: &quot;Battery coolant&quot;,
+      &quot;everyKm&quot;: 40000,
+      &quot;nextDueKm&quot;: 40000,
+      &quot;dueInKm&quot;: 21050,
+      &quot;dueSoon&quot;: false
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 3: the petrol two-wheeler</h3><p><b>Why:</b> PETROL plus TWO_WHEELER: a 10,000 km oil change, chain lubrication, no diesel filter.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /fleet/vehicles/4/service-plan HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 497
+
+{
+  &quot;vehicleId&quot;: 4,
+  &quot;registration&quot;: &quot;KA01BK3456&quot;,
+  &quot;model&quot;: &quot;Hero Splendor+&quot;,
+  &quot;powertrain&quot;: &quot;PETROL&quot;,
+  &quot;body&quot;: &quot;TWO_WHEELER&quot;,
+  &quot;odometerKm&quot;: 9600,
+  &quot;tasks&quot;: [
+    {
+      &quot;task&quot;: &quot;Brake check&quot;,
+      &quot;everyKm&quot;: 5000,
+      &quot;nextDueKm&quot;: 10000,
+      &quot;dueInKm&quot;: 400,
+      &quot;dueSoon&quot;: true
+    },
+    {
+      &quot;task&quot;: &quot;Chain lubrication&quot;,
+      &quot;everyKm&quot;: 1000,
+      &quot;nextDueKm&quot;: 10000,
+      &quot;dueInKm&quot;: 400,
+      &quot;dueSoon&quot;: false
+    },
+    {
+      &quot;task&quot;: &quot;Engine oil change&quot;,
+      &quot;everyKm&quot;: 10000,
+      &quot;nextDueKm&quot;: 10000,
+      &quot;dueInKm&quot;: 400,
+      &quot;dueSoon&quot;: true
+    },
+    {
+      &quot;task&quot;: &quot;Spark plugs&quot;,
+      &quot;everyKm&quot;: 20000,
+      &quot;nextDueKm&quot;: 20000,
+      &quot;dueInKm&quot;: 10400,
+      &quot;dueSoon&quot;: false
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 4: unknown vehicle</h3><p><b>Why:</b> <code>404</code> problem.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /fleet/vehicles/99/service-plan HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No vehicle has this id.&quot;,
+  &quot;instance&quot;: &quot;/fleet/vehicles/99/service-plan&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Vehicle not found&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>Diesel truck</td><td>Diesel and truck tasks, soonest first, ties by name</td><td><code>aDieselTruckGetsEngineAndTruckTasksSoonestFirst</code></td></tr><tr><td>Electric van</td><td>Battery and van tasks; dueSoon at 10%</td><td><code>anElectricVanGetsBatteryAndVanTasks</code></td></tr><tr><td>Petrol two-wheeler</td><td>Petrol interval; no diesel tasks</td><td><code>aPetrolBikeGetsEngineAndTwoWheelerTasks</code>, <code>composedVehiclesGetOnlyTheTasksOfTheirOwnParts</code></td></tr><tr><td>Every one of the 9 combinations</td><td>Exactly its two parts' tasks</td><td><code>everyCombinationOfPartsGetsExactlyTheTasksOfItsTwoParts</code></td></tr><tr><td>Odometer 0, 14,999, exactly 30,000, 30,001</td><td>Due at 15,000; 15,000; now; 45,000</td><td><code>nextDueIsTheNextMultipleOfTheInterval</code></td></tr><tr><td>Unknown vehicle; id "truck"</td><td><code>404</code>; <code>400</code></td><td><code>anUnknownVehicleIs404AndANonNumberIs400</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Deep inheritance trees where one change in the base class breaks every vehicle.</p>
+<p>The "before" code is a tree of abstract classes: <code>OldVehicle</code> → <code>OldFuelVehicle</code> → <code>OldVan</code> → <code>OldEvVan</code>. Each step looks reasonable. The first test shows the result: the EV van inherits an oil change, and a task added to the fuel parent "for the trucks" lands on a petrol bike. The second test asks the real API, built from parts, and neither happens. Removing the body from <code>Vehicle.parts()</code> was tried while building: 4 tests went red.</p>
+</div>
+<pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+
+/**
+ * The first test written for this station: it reproduces the problem before the fix.
+ * The &quot;before&quot; code is a family tree of abstract classes, the way the fleet app grew.
+ */
+class DeepInheritanceTrapTest extends ApiTest {
+
+    abstract static class OldVehicle {
+        List&lt;String&gt; tasks() {
+            return new ArrayList&lt;&gt;(List.of(&quot;Brake check&quot;));
+        }
+    }
+
+    abstract static class OldFuelVehicle extends OldVehicle {
+        @Override
+        List&lt;String&gt; tasks() {
+            List&lt;String&gt; t = super.tasks();
+            t.add(&quot;Engine oil change&quot;);
+            t.add(&quot;Diesel particulate filter clean&quot;); // added later &quot;for the trucks&quot;, in the shared parent
+            return t;
+        }
+    }
+
+    static class OldVan extends OldFuelVehicle {
+        @Override
+        List&lt;String&gt; tasks() {
+            List&lt;String&gt; t = super.tasks();
+            t.add(&quot;Tyre rotation&quot;);
+            return t;
+        }
+    }
+
+    /** &quot;An EV van is a van&quot;, so it extends OldVan, and inherits everything a fuel van needs. */
+    static class OldEvVan extends OldVan {
+        @Override
+        List&lt;String&gt; tasks() {
+            List&lt;String&gt; t = super.tasks();
+            t.add(&quot;Battery health check&quot;);
+            return t;
+        }
+    }
+
+    static class OldPetrolBike extends OldFuelVehicle {
+    }
+
+    @Test
+    void theEvVanInheritsAnOilChangeAndThePetrolBikeADieselFilter() {
+        assertThat(new OldEvVan().tasks()).contains(&quot;Engine oil change&quot;);                 // an EV has no engine oil
+        assertThat(new OldPetrolBike().tasks()).contains(&quot;Diesel particulate filter clean&quot;); // nor does a petrol bike
+    }
+
+    @Test
+    void composedVehiclesGetOnlyTheTasksOfTheirOwnParts() throws Exception {
+        mvc.perform(get(&quot;/fleet/vehicles/3/service-plan&quot;))   // Tata Ace EV: ELECTRIC + VAN
+                .andExpect(jsonPath(&quot;$.tasks[*].task&quot;, hasItem(&quot;Battery health check&quot;)))
+                .andExpect(jsonPath(&quot;$.tasks[*].task&quot;, not(hasItem(&quot;Engine oil change&quot;))));
+        mvc.perform(get(&quot;/fleet/vehicles/4/service-plan&quot;))   // Hero Splendor+: PETROL + TWO_WHEELER
+                .andExpect(jsonPath(&quot;$.tasks[*].task&quot;, not(hasItem(&quot;Diesel particulate filter clean&quot;))));
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr><tr><td>Docker</td><td>Not needed for this station</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 8 tests</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<pre class="code"><code class="language-bash">curl http://localhost:8080/fleet/vehicles/3/service-plan
+curl http://localhost:8080/fleet/vehicles/5/service-plan</code></pre>
+<p>Vehicle 5 is an electric two-wheeler: a combination nobody wrote a class for. Compare its tasks with vehicle 3's.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>404</code></td><td>Only vehicles 1 to 5 exist.</td><td>Use one of those ids.</td></tr><tr><td><code>release version 25 not supported</code></td><td>Maven is using an older JDK.</td><td>Point <code>JAVA_HOME</code> at JDK 25, or add <code>-Djava.version=21</code>.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/012-fleet-vehicles-abstract-classes-vs-interfaces/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/dakroute/fleet/
+│   ├── ServicePlanController.java   ├── ServicePlanner.java   ├── Fleet.java
+│   ├── Vehicle.java                 ├── ServiceItems.java     ├── ServiceTask.java
+│   ├── Powertrain.java              ├── Body.java             └── FleetApplication.java
+├── src/test/java/com/dakroute/fleet/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">ServicePlanController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">Vehicle.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">ServiceItems.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">Powertrain.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">Body.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">ServicePlanner.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">Fleet.java</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">ServiceTask.java</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-9-b" aria-controls="code-9" aria-selected="false" data-group="code">FleetApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/dakroute/fleet/ServicePlanController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Finds the vehicle and returns its plan.</dd><dt>Why</dt><dd>HTTP in one place.</dd><dt>Without it</dt><dd>No API.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+class ServicePlanController {
+
+    record ServicePlan(long vehicleId, String registration, String model, Powertrain powertrain, Body body,
+                       int odometerKm, List&lt;ServicePlanner.PlanItem&gt; tasks) {
+    }
+
+    private final Fleet fleet;
+
+    ServicePlanController(Fleet fleet) {
+        this.fleet = fleet;
+    }
+
+    @GetMapping(&quot;/fleet/vehicles/{id}/service-plan&quot;)
+    ServicePlan plan(@PathVariable long id) {
+        Vehicle v = fleet.find(id).orElseThrow(() -&gt; {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No vehicle has this id.&quot;);
+            p.setTitle(&quot;Vehicle not found&quot;);
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        });
+        return new ServicePlan(v.id(), v.registration(), v.model(), v.powertrain(), v.body(), v.odometerKm(),
+                ServicePlanner.plan(v));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/dakroute/fleet/Vehicle.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>A record that <em>has</em> a powertrain and a body.</dd><dt>Why</dt><dd>Composition: any powertrain goes with any body, with no new class.</dd><dt>Without it</dt><dd>A class per combination (EvVan, DieselVan, PetrolVan…), each inheriting from something.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import java.util.List;
+
+/**
+ * Composition: a vehicle HAS a powertrain and a body; it does not inherit from them. A new kind of vehicle is a new
+ * combination of parts, not a new class at the bottom of a family tree.
+ */
+public record Vehicle(long id, String registration, String model, Powertrain powertrain, Body body, int odometerKm) {
+
+    /** Polymorphism: the planner asks every part for its tasks without knowing which part it is. */
+    List&lt;ServiceItems&gt; parts() {
+        return List.of(powertrain, body);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/dakroute/fleet/ServiceItems.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The interface: "I can list service tasks".</dd><dt>Why</dt><dd>It is all the planner needs to know about a part.</dd><dt>Without it</dt><dd>The planner would need an <code>if</code> for every kind of part.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import java.util.List;
+
+/**
+ * An interface: &quot;anything that contributes service tasks&quot;. It says what, not how, and holds no state.
+ * A vehicle is built from several of these (a powertrain and a body), instead of inheriting from a chain of parents.
+ */
+interface ServiceItems {
+
+    List&lt;ServiceTask&gt; tasks();
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/dakroute/fleet/Powertrain.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>An enum that implements <code>ServiceItems</code>: each value carries its tasks.</dd><dt>Why</dt><dd>Adding CNG is one new value.</dd><dt>Without it</dt><dd>Tasks spread over subclasses.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import java.util.List;
+
+/** What moves the vehicle. Each value brings its own tasks. Intervals are demo rules, not a manufacturer&#x27;s schedule. */
+public enum Powertrain implements ServiceItems {
+    DIESEL(List.of(new ServiceTask(&quot;Engine oil change&quot;, 15_000), new ServiceTask(&quot;Fuel filter&quot;, 30_000),
+            new ServiceTask(&quot;Diesel particulate filter clean&quot;, 60_000))),
+    PETROL(List.of(new ServiceTask(&quot;Engine oil change&quot;, 10_000), new ServiceTask(&quot;Spark plugs&quot;, 20_000))),
+    ELECTRIC(List.of(new ServiceTask(&quot;Battery health check&quot;, 20_000), new ServiceTask(&quot;Battery coolant&quot;, 40_000)));
+
+    private final List&lt;ServiceTask&gt; tasks;
+
+    Powertrain(List&lt;ServiceTask&gt; tasks) {
+        this.tasks = tasks;
+    }
+
+    @Override
+    public List&lt;ServiceTask&gt; tasks() {
+        return tasks;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/dakroute/fleet/Body.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The same idea for bodies.</dd><dt>Why</dt><dd>Independent of the powertrain.</dd><dt>Without it</dt><dd>Truck tasks mixed into engine classes.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import java.util.List;
+
+/** What the vehicle is shaped like and carries. Independent of the powertrain: an EV van is ELECTRIC + VAN. */
+public enum Body implements ServiceItems {
+    TRUCK(List.of(new ServiceTask(&quot;Brake check&quot;, 10_000), new ServiceTask(&quot;Tyre rotation&quot;, 15_000),
+            new ServiceTask(&quot;Axle greasing&quot;, 5_000))),
+    VAN(List.of(new ServiceTask(&quot;Brake check&quot;, 15_000), new ServiceTask(&quot;Tyre rotation&quot;, 10_000))),
+    TWO_WHEELER(List.of(new ServiceTask(&quot;Chain lubrication&quot;, 1_000), new ServiceTask(&quot;Brake check&quot;, 5_000)));
+
+    private final List&lt;ServiceTask&gt; tasks;
+
+    Body(List&lt;ServiceTask&gt; tasks) {
+        this.tasks = tasks;
+    }
+
+    @Override
+    public List&lt;ServiceTask&gt; tasks() {
+        return tasks;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/dakroute/fleet/ServicePlanner.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Asks every part for its tasks, works out when each is next due, sorts soonest first.</dd><dt>Why</dt><dd>One place for the arithmetic, tested without Spring.</dd><dt>Without it</dt><dd>Each vehicle class computing its own dates differently.</dd></dl><ul><li><code>Math.ceilDiv(odometer, every) * every</code> is the next multiple, at least one interval.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import java.util.Comparator;
+import java.util.List;
+
+/** Turns a vehicle&#x27;s tasks into a plan: when each is next due, soonest first. Plain Java, tested without Spring. */
+final class ServicePlanner {
+
+    /** One line of the plan. dueSoon: within 10% of the task&#x27;s interval (a demo rule). */
+    record PlanItem(String task, int everyKm, int nextDueKm, int dueInKm, boolean dueSoon) {
+    }
+
+    private ServicePlanner() {
+    }
+
+    static List&lt;PlanItem&gt; plan(Vehicle v) {
+        return v.parts().stream()
+                .flatMap(part -&gt; part.tasks().stream())
+                .map(t -&gt; item(t, v.odometerKm()))
+                .sorted(Comparator.comparingInt(PlanItem::dueInKm).thenComparing(PlanItem::task))
+                .toList();
+    }
+
+    /** Due at every multiple of the interval: at 128,400 km a 15,000 km task is next due at 135,000. At exactly 30,000 it is due now. */
+    static PlanItem item(ServiceTask t, int odometerKm) {
+        int nextDue = Math.max(t.everyKm(), Math.ceilDiv(odometerKm, t.everyKm()) * t.everyKm());
+        int dueIn = nextDue - odometerKm;
+        return new PlanItem(t.name(), t.everyKm(), nextDue, dueIn, dueIn &lt;= t.everyKm() / 10);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/dakroute/fleet/Fleet.java</p><div class="notes"><p>The five vehicles.</p></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import org.springframework.stereotype.Component;
+
+import java.util.Map;
+import java.util.Optional;
+
+/** Dakroute&#x27;s vehicles. Fixed for this station; a fleet database comes later. */
+@Component
+class Fleet {
+
+    private final Map&lt;Long, Vehicle&gt; vehicles = Map.of(
+            1L, new Vehicle(1, &quot;KA01TR1234&quot;, &quot;Tata Prima 2830.K&quot;, Powertrain.DIESEL, Body.TRUCK, 128_400),
+            2L, new Vehicle(2, &quot;KA01VN5678&quot;, &quot;Mahindra Supro&quot;, Powertrain.PETROL, Body.VAN, 42_300),
+            3L, new Vehicle(3, &quot;KA01EV9012&quot;, &quot;Tata Ace EV&quot;, Powertrain.ELECTRIC, Body.VAN, 18_950),
+            4L, new Vehicle(4, &quot;KA01BK3456&quot;, &quot;Hero Splendor+&quot;, Powertrain.PETROL, Body.TWO_WHEELER, 9_600),
+            5L, new Vehicle(5, &quot;KA01EB7890&quot;, &quot;Ather Rizta&quot;, Powertrain.ELECTRIC, Body.TWO_WHEELER, 3_200));
+
+    Optional&lt;Vehicle&gt; find(long id) {
+        return Optional.ofNullable(vehicles.get(id));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/java/com/dakroute/fleet/ServiceTask.java</p><div class="notes"><p>A task and its interval.</p></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+/** A maintenance job and how often it is due, in kilometres. */
+public record ServiceTask(String name, int everyKm) {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Turns on Spring Boot's RFC 9457 problem bodies for every error.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: dakroute-fleet
+  mvc:
+    problemdetails:
+      enabled: true # every error, ours and Spring&#x27;s, as an RFC 9457 problem body</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-9" aria-labelledby="code-9-b" hidden><p class="path">src/main/java/com/dakroute/fleet/FleetApplication.java</p><div class="notes"><p>Standard Spring Boot entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class FleetApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(FleetApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>ServicePlanContractTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>DeepInheritanceTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>This station</td><td>Arithmetic and all 9 combinations</td><td><code>ServicePlannerTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.dakroute.fleet.DeepInheritanceTrapTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.dakroute.fleet.ServicePlannerTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.dakroute.fleet.ServicePlanContractTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">DeepInheritanceTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">ServicePlanContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">ServicePlannerTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/dakroute/fleet/DeepInheritanceTrapTest.java</p><div class="notes"><p>Written first: the class tree hands an EV van an oil change and a petrol bike a diesel filter.</p></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+
+/**
+ * The first test written for this station: it reproduces the problem before the fix.
+ * The &quot;before&quot; code is a family tree of abstract classes, the way the fleet app grew.
+ */
+class DeepInheritanceTrapTest extends ApiTest {
+
+    abstract static class OldVehicle {
+        List&lt;String&gt; tasks() {
+            return new ArrayList&lt;&gt;(List.of(&quot;Brake check&quot;));
+        }
+    }
+
+    abstract static class OldFuelVehicle extends OldVehicle {
+        @Override
+        List&lt;String&gt; tasks() {
+            List&lt;String&gt; t = super.tasks();
+            t.add(&quot;Engine oil change&quot;);
+            t.add(&quot;Diesel particulate filter clean&quot;); // added later &quot;for the trucks&quot;, in the shared parent
+            return t;
+        }
+    }
+
+    static class OldVan extends OldFuelVehicle {
+        @Override
+        List&lt;String&gt; tasks() {
+            List&lt;String&gt; t = super.tasks();
+            t.add(&quot;Tyre rotation&quot;);
+            return t;
+        }
+    }
+
+    /** &quot;An EV van is a van&quot;, so it extends OldVan, and inherits everything a fuel van needs. */
+    static class OldEvVan extends OldVan {
+        @Override
+        List&lt;String&gt; tasks() {
+            List&lt;String&gt; t = super.tasks();
+            t.add(&quot;Battery health check&quot;);
+            return t;
+        }
+    }
+
+    static class OldPetrolBike extends OldFuelVehicle {
+    }
+
+    @Test
+    void theEvVanInheritsAnOilChangeAndThePetrolBikeADieselFilter() {
+        assertThat(new OldEvVan().tasks()).contains(&quot;Engine oil change&quot;);                 // an EV has no engine oil
+        assertThat(new OldPetrolBike().tasks()).contains(&quot;Diesel particulate filter clean&quot;); // nor does a petrol bike
+    }
+
+    @Test
+    void composedVehiclesGetOnlyTheTasksOfTheirOwnParts() throws Exception {
+        mvc.perform(get(&quot;/fleet/vehicles/3/service-plan&quot;))   // Tata Ace EV: ELECTRIC + VAN
+                .andExpect(jsonPath(&quot;$.tasks[*].task&quot;, hasItem(&quot;Battery health check&quot;)))
+                .andExpect(jsonPath(&quot;$.tasks[*].task&quot;, not(hasItem(&quot;Engine oil change&quot;))));
+        mvc.perform(get(&quot;/fleet/vehicles/4/service-plan&quot;))   // Hero Splendor+: PETROL + TWO_WHEELER
+                .andExpect(jsonPath(&quot;$.tasks[*].task&quot;, not(hasItem(&quot;Diesel particulate filter clean&quot;))));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/dakroute/fleet/ServicePlanContractTest.java</p><div class="notes"><p>Three different vehicles, exact plans, and the refusals.</p></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP contract: plans for different combinations of parts, soonest first, and the refusals. */
+class ServicePlanContractTest extends ApiTest {
+
+    @Test
+    void aDieselTruckGetsEngineAndTruckTasksSoonestFirst() throws Exception {
+        mvc.perform(get(&quot;/fleet/vehicles/1/service-plan&quot;))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.registration&quot;).value(&quot;KA01TR1234&quot;))
+                .andExpect(jsonPath(&quot;$.powertrain&quot;).value(&quot;DIESEL&quot;))
+                .andExpect(jsonPath(&quot;$.body&quot;).value(&quot;TRUCK&quot;))
+                .andExpect(jsonPath(&quot;$.odometerKm&quot;).value(128400))
+                .andExpect(jsonPath(&quot;$.tasks[*].task&quot;, contains(&quot;Axle greasing&quot;, &quot;Brake check&quot;, &quot;Engine oil change&quot;,
+                        &quot;Tyre rotation&quot;, &quot;Fuel filter&quot;, &quot;Diesel particulate filter clean&quot;)))
+                .andExpect(jsonPath(&quot;$.tasks[2].nextDueKm&quot;).value(135000))
+                .andExpect(jsonPath(&quot;$.tasks[2].dueInKm&quot;).value(6600));
+    }
+
+    @Test
+    void anElectricVanGetsBatteryAndVanTasks() throws Exception {
+        mvc.perform(get(&quot;/fleet/vehicles/3/service-plan&quot;))
+                .andExpect(jsonPath(&quot;$.tasks[*].task&quot;, contains(&quot;Battery health check&quot;, &quot;Tyre rotation&quot;, &quot;Brake check&quot;, &quot;Battery coolant&quot;)))
+                .andExpect(jsonPath(&quot;$.tasks[0].dueInKm&quot;).value(1050))
+                .andExpect(jsonPath(&quot;$.tasks[0].dueSoon&quot;).value(true))    // within 10% of 20,000 km
+                .andExpect(jsonPath(&quot;$.tasks[1].dueSoon&quot;).value(false));  // 1,050 is not within 10% of 10,000
+    }
+
+    @Test
+    void aPetrolBikeGetsEngineAndTwoWheelerTasks() throws Exception {
+        mvc.perform(get(&quot;/fleet/vehicles/4/service-plan&quot;))
+                .andExpect(jsonPath(&quot;$.tasks[*].task&quot;, contains(&quot;Brake check&quot;, &quot;Chain lubrication&quot;, &quot;Engine oil change&quot;, &quot;Spark plugs&quot;)))
+                .andExpect(jsonPath(&quot;$.tasks[2].everyKm&quot;).value(10000));  // petrol oil interval, not diesel&#x27;s 15,000
+    }
+
+    @Test
+    void anUnknownVehicleIs404AndANonNumberIs400() throws Exception {
+        mvc.perform(get(&quot;/fleet/vehicles/99/service-plan&quot;)).andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Vehicle not found&quot;));
+        mvc.perform(get(&quot;/fleet/vehicles/truck/service-plan&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/dakroute/fleet/ServicePlannerTest.java</p><div class="notes"><p>Due-date arithmetic, and every powertrain with every body.</p></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.HashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** The planner on its own: due-date arithmetic, and that composition never leaks tasks between parts. */
+class ServicePlannerTest {
+
+    private final ServiceTask oil = new ServiceTask(&quot;Engine oil change&quot;, 15_000);
+
+    @Test
+    void nextDueIsTheNextMultipleOfTheInterval() {
+        assertThat(ServicePlanner.item(oil, 0).nextDueKm()).isEqualTo(15_000);
+        assertThat(ServicePlanner.item(oil, 14_999).nextDueKm()).isEqualTo(15_000);
+        assertThat(ServicePlanner.item(oil, 30_000).dueInKm()).isZero();        // exactly at the mark: due now
+        assertThat(ServicePlanner.item(oil, 30_000).dueSoon()).isTrue();
+        assertThat(ServicePlanner.item(oil, 30_001).nextDueKm()).isEqualTo(45_000);
+    }
+
+    @Test
+    void everyCombinationOfPartsGetsExactlyTheTasksOfItsTwoParts() {
+        for (Powertrain p : Powertrain.values()) {
+            for (Body b : Body.values()) {
+                Set&lt;String&gt; expected = new HashSet&lt;&gt;();
+                p.tasks().forEach(t -&gt; expected.add(t.name()));
+                b.tasks().forEach(t -&gt; expected.add(t.name()));
+                Vehicle v = new Vehicle(0, &quot;TEST&quot;, &quot;test&quot;, p, b, 1_000);
+                assertThat(ServicePlanner.plan(v).stream().map(ServicePlanner.PlanItem::task).collect(Collectors.toSet()))
+                        .as(p + &quot; + &quot; + b).isEqualTo(expected);
+            }
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/dakroute/fleet/ApiTest.java</p><div class="notes"><p>Shared setup: the whole app through MockMvc.</p></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
+
+/** Shared setup: the whole app, called through MockMvc. No server port and no network: requests go straight to Spring MVC. */
+@SpringBootTest
+@AutoConfigureMockMvc
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/dakroute/fleet/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=CngPowertrainChallengeTest</code></li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 8 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 13 tests pass (8 station tests and 5 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>A CNG van joins the fleet</h2><p>Add a CNG powertrain (oil change every 10,000 km, gas leak check every 10,000 km, cylinder hydro-test every 1,00,000 km) and vehicle 6, a Bajaj Maxima Cargo CNG van, KA01CN2468, at 51,000 km. Count how many files you change.</p><p><b>Done when:</b> both tests in <code>CngPowertrainChallengeTest</code> pass: the CNG van's plan is right and vehicle 2's is unchanged.</p><details class="qa"><summary>Hints</summary><ul><li>Two files: a new enum value and a new fleet entry. With the old class tree it would have been a new class and a fight with its parents.</li><li>The station's combination test now covers CNG with every body too, for free.</li></ul></details><p class="path">challenge/CngPowertrainChallengeTest.java</p><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.hasItems;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+
+/**
+ * Challenge 1: Dakroute buys a CNG cargo van (vehicle 6, KA01CN2468, Bajaj Maxima Cargo CNG, 51,000 km).
+ * A CNG engine needs an oil change every 10,000 km, a gas leak check every 10,000 km and a cylinder hydro-test
+ * every 1,00,000 km. Add it, and prove no other vehicle&#x27;s plan changed.
+ */
+class CngPowertrainChallengeTest extends ApiTest {
+
+    @Test
+    void theCngVanGetsCngAndVanTasks() throws Exception {
+        mvc.perform(get(&quot;/fleet/vehicles/6/service-plan&quot;))
+                .andExpect(jsonPath(&quot;$.powertrain&quot;).value(&quot;CNG&quot;))
+                .andExpect(jsonPath(&quot;$.body&quot;).value(&quot;VAN&quot;))
+                .andExpect(jsonPath(&quot;$.tasks[*].task&quot;, hasItems(&quot;Gas leak check&quot;, &quot;Cylinder hydro-test&quot;, &quot;Engine oil change&quot;, &quot;Brake check&quot;)));
+    }
+
+    @Test
+    void theOtherVehiclesAreUntouched() throws Exception {
+        mvc.perform(get(&quot;/fleet/vehicles/2/service-plan&quot;))
+                .andExpect(jsonPath(&quot;$.tasks[*].task&quot;, contains(&quot;Brake check&quot;, &quot;Engine oil change&quot;, &quot;Tyre rotation&quot;, &quot;Spark plugs&quot;)));
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/Powertrain.java</p><div class="src"><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import java.util.List;
+
+/** What moves the vehicle. Each value brings its own tasks. Intervals are demo rules, not a manufacturer&#x27;s schedule. */
+public enum Powertrain implements ServiceItems {
+    DIESEL(List.of(new ServiceTask(&quot;Engine oil change&quot;, 15_000), new ServiceTask(&quot;Fuel filter&quot;, 30_000),
+            new ServiceTask(&quot;Diesel particulate filter clean&quot;, 60_000))),
+    PETROL(List.of(new ServiceTask(&quot;Engine oil change&quot;, 10_000), new ServiceTask(&quot;Spark plugs&quot;, 20_000))),
+    ELECTRIC(List.of(new ServiceTask(&quot;Battery health check&quot;, 20_000), new ServiceTask(&quot;Battery coolant&quot;, 40_000))),
+    // Challenge 1: one new value, with its own tasks. No other class changes.
+    CNG(List.of(new ServiceTask(&quot;Engine oil change&quot;, 10_000), new ServiceTask(&quot;Gas leak check&quot;, 10_000),
+            new ServiceTask(&quot;Cylinder hydro-test&quot;, 100_000)));
+
+    private final List&lt;ServiceTask&gt; tasks;
+
+    Powertrain(List&lt;ServiceTask&gt; tasks) {
+        this.tasks = tasks;
+    }
+
+    @Override
+    public List&lt;ServiceTask&gt; tasks() {
+        return tasks;
+    }
+}</code></pre></div><p class="path">challenge/solution/Fleet.java</p><div class="src"><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import org.springframework.stereotype.Component;
+
+import java.util.Map;
+import java.util.Optional;
+
+/** Dakroute&#x27;s vehicles. Fixed for this station; a fleet database comes later. */
+@Component
+class Fleet {
+
+    private final Map&lt;Long, Vehicle&gt; vehicles = Map.of(
+            1L, new Vehicle(1, &quot;KA01TR1234&quot;, &quot;Tata Prima 2830.K&quot;, Powertrain.DIESEL, Body.TRUCK, 128_400),
+            2L, new Vehicle(2, &quot;KA01VN5678&quot;, &quot;Mahindra Supro&quot;, Powertrain.PETROL, Body.VAN, 42_300),
+            3L, new Vehicle(3, &quot;KA01EV9012&quot;, &quot;Tata Ace EV&quot;, Powertrain.ELECTRIC, Body.VAN, 18_950),
+            4L, new Vehicle(4, &quot;KA01BK3456&quot;, &quot;Hero Splendor+&quot;, Powertrain.PETROL, Body.TWO_WHEELER, 9_600),
+            5L, new Vehicle(5, &quot;KA01EB7890&quot;, &quot;Ather Rizta&quot;, Powertrain.ELECTRIC, Body.TWO_WHEELER, 3_200),
+            6L, new Vehicle(6, &quot;KA01CN2468&quot;, &quot;Bajaj Maxima Cargo CNG&quot;, Powertrain.CNG, Body.VAN, 51_000)); // challenge 1
+
+    Optional&lt;Vehicle&gt; find(long id) {
+        return Optional.ofNullable(vehicles.get(id));
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Beginner-friendly · about 20 minutes</p><h2>Only what is due soon</h2><p>The workshop asks what is due in the next N km. Add an optional <code>withinKm</code> parameter (1 to 1,00,000; the boundary is included).</p><p><b>Done when:</b> all three tests in <code>WithinKmChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Filter the planned list; do not touch the planner's arithmetic.</li><li><code>@Min</code>/<code>@Max</code> on a parameter need the validation starter: <code>challenge/solution/pom-additions.xml</code> has the dependency.</li></ul></details><p class="path">challenge/WithinKmChallengeTest.java</p><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Challenge 2: the workshop asks &quot;what is due in the next N km?&quot;: an optional withinKm filter, 1 to 1,00,000. */
+class WithinKmChallengeTest extends ApiTest {
+
+    @Test
+    void onlyTasksDueWithinTheDistanceAreListed() throws Exception {
+        mvc.perform(get(&quot;/fleet/vehicles/1/service-plan&quot;).param(&quot;withinKm&quot;, &quot;2000&quot;))
+                .andExpect(jsonPath(&quot;$.tasks[*].task&quot;, contains(&quot;Axle greasing&quot;, &quot;Brake check&quot;)));
+    }
+
+    @Test
+    void theBoundaryIsIncluded() throws Exception {
+        mvc.perform(get(&quot;/fleet/vehicles/1/service-plan&quot;).param(&quot;withinKm&quot;, &quot;6600&quot;))
+                .andExpect(jsonPath(&quot;$.tasks[*].task&quot;, contains(&quot;Axle greasing&quot;, &quot;Brake check&quot;, &quot;Engine oil change&quot;, &quot;Tyre rotation&quot;)));
+    }
+
+    @Test
+    void outOfRangeIs400() throws Exception {
+        mvc.perform(get(&quot;/fleet/vehicles/1/service-plan&quot;).param(&quot;withinKm&quot;, &quot;0&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/fleet/vehicles/1/service-plan&quot;).param(&quot;withinKm&quot;, &quot;100001&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/ServicePlanController.java</p><div class="src"><pre class="code"><code class="language-java">package com.dakroute.fleet;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+class ServicePlanController {
+
+    record ServicePlan(long vehicleId, String registration, String model, Powertrain powertrain, Body body,
+                       int odometerKm, List&lt;ServicePlanner.PlanItem&gt; tasks) {
+    }
+
+    private final Fleet fleet;
+
+    ServicePlanController(Fleet fleet) {
+        this.fleet = fleet;
+    }
+
+    @GetMapping(&quot;/fleet/vehicles/{id}/service-plan&quot;)
+    ServicePlan plan(@PathVariable long id, @RequestParam(required = false) @Min(1) @Max(100_000) Integer withinKm) {
+        Vehicle v = fleet.find(id).orElseThrow(() -&gt; {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No vehicle has this id.&quot;);
+            p.setTitle(&quot;Vehicle not found&quot;);
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        });
+        // Challenge 2: filter after planning, so the plan&#x27;s order and arithmetic stay in one place.
+        List&lt;ServicePlanner.PlanItem&gt; tasks = ServicePlanner.plan(v).stream()
+                .filter(t -&gt; withinKm == null || t.dueInKm() &lt;= withinKm)
+                .toList();
+        return new ServicePlan(v.id(), v.registration(), v.model(), v.powertrain(), v.body(), v.odometerKm(), tasks);
+    }
+}</code></pre></div><p class="path">challenge/solution/pom-additions.xml</p><div class="src"><pre class="code"><code class="language-xml">&lt;!-- Challenge 2 checks @Min/@Max on a request parameter: add the validation starter inside &lt;dependencies&gt;. --&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-validation&lt;/artifactId&gt;
+        &lt;/dependency&gt;</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>When is an abstract class the right tool?</h2>
+<p>Dakroute's telematics team wants every vehicle tracker to share the same connection, retry and logging code, with each tracker brand filling in how it reads GPS. Sketch it once with an abstract class (a template method) and once with an interface plus a helper class. Which would you choose, and what would make you change your mind?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design (none in this station)</li></ul><p class="rule">Short at Foundations: the choices that matter here.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: the class tree gives the EV van an oil change.</li>
+<li>Name the independent parts of a vehicle: powertrain and body.</li>
+<li>Write one small interface for what the planner needs, and let both enums implement it.</li>
+<li>Compose a vehicle from the two parts; plan by asking each part.</li>
+<li>Test every combination, so no part can leak into another.</li>
+</ol>
+<h2>Abstract class or interface?</h2>
+<div class="scroll"><table class=""><thead><tr><th></th><th>Abstract class</th><th>Interface</th></tr></thead><tbody><tr><td>Holds fields (state)</td><td>Yes</td><td>No (constants only)</td></tr><tr><td>Shares method code</td><td>Yes</td><td>Only <code>default</code> methods, without state</td></tr><tr><td>A class can have</td><td>One parent</td><td>Many interfaces</td></tr><tr><td>Says</td><td>"is a kind of"</td><td>"can do"</td></tr><tr><td>Good for</td><td>Close relatives sharing state and a fixed sequence of steps</td><td>Any type that can play a role, unrelated or not</td></tr></tbody></table></div>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Interface + enums + composition</td><td>A part per independent idea; combinations are free.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Deep tree of abstract classes</td><td>Children inherit everything, including later mistakes (the trap).</td><td><span class="pill bad">Wrong here</span></td></tr><tr><td>One class with <code>if (type == ...)</code></td><td>Every new type edits the same method; station 014 shows where that leads.</td><td><span class="pill bad">Wrong</span></td></tr><tr><td>Abstract class for shared plumbing (template method)</td><td>Right when subclasses truly share state and steps, as in Challenge 3.</td><td><span class="pill warn">When it fits</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>None in this station. In a database, powertrain and body are two columns (or two small tables) and tasks hang off each; a vehicle row points at one of each.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Maintainability</dt><dd>A new powertrain or body is one enum value. A new kind of rule for every vehicle is one more part in <code>Vehicle.parts()</code>.</dd>
+<dt>Correctness</dt><dd>The combination test guards the core promise: a vehicle gets exactly its parts' tasks.</dd>
+<dt>Data</dt><dd>Real intervals vary by model and duty; in production they come from data, not code. The structure stays the same.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>Abstract class or interface: how do you choose?</summary><p>Interface when you describe a role many unrelated types can play; it holds no state and a class can implement many. Abstract class when close relatives share state and a fixed series of steps. When in doubt, start with an interface.</p></details><details class="qa"><summary>What does &#x27;favour composition over inheritance&#x27; mean?</summary><p>Build objects from parts they have, rather than parents they are. Parts can be combined freely and changed independently; a parent&#x27;s change reaches every child.</p></details><details class="qa"><summary>What is the fragile base class problem?</summary><p>A change to a parent class silently changes every subclass, including ones the change was never meant for, like a truck task appearing on bikes.</p></details><details class="qa"><summary>What is polymorphism here?</summary><p>The planner calls tasks() on each part without knowing if it is a powertrain or a body; each answers in its own way.</p></details><details class="qa"><summary>Can an enum implement an interface?</summary><p>Yes. Each enum value is an object; it can carry data and implement methods, which makes small fixed sets of behaviour very simple.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 8 tests pass.</td><td>You can say which tests fail if a part is left out.</td></tr><tr><td>Design</td><td>A vehicle is composed of parts.</td><td>You can name a case where an abstract class is the better tool.</td></tr><tr><td>Tests</td><td>Every combination is tested.</td><td>You can explain why that one test replaces nine.</td></tr><tr><td>Explanation</td><td>The table: abstract class against interface.</td><td>You can spot a fragile base class in someone else's code.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This Foundations station has no flawed version to review. Use this checklist on any class hierarchy:</p>
+<ul class="rules">
+<li>Is every subclass truly "a kind of" its parent, for every method it inherits?</li>
+<li>How many levels deep is the tree? Could the levels be parts instead?</li>
+<li>If you changed the parent, which children would change without asking?</li>
+<li>Is there copied code that a shared part could replace?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
