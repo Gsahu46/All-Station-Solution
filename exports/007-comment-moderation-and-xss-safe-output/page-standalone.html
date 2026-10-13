@@ -1,0 +1,1907 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 007 · Comment moderation and XSS-safe output</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 007</span>
+    <h1>Comment moderation and XSS-safe output</h1>
+    <p class="scenario">A comment containing a &lt;script&gt; tag ran in every reader&#x27;s browser; banned words slip through as &#x27;b@d&#x27;.</p>
+    <p class="sim"><b>Simulation</b><span>Two posts and four demo users are fixed in the code; comments live in memory. The attack payloads are harmless test strings: nothing here attacks a real site.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Social</li>
+      <li><b>Types</b>Security</li>
+      <li><b>Reviewer view</b>Yes</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>004 Event registration form</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring MVC · Spring Security 7 · HtmlUtils · MockMvc</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Someone posts a comment</strong><p>It looks like a broken image: <code>&lt;img src=x onerror=…&gt;</code>. Chaupal saves it and puts it on the post's page.</p></li><li><strong>Every reader runs it</strong><p>Each browser that opens the post treats the comment as HTML, fails to load the image, and runs the attacker's code with the reader's login.</p></li><li><strong>The fix</strong><p>Store the comment as typed, and <em>encode</em> it whenever it goes into HTML, so the browser shows <code>&lt;img…&gt;</code> as plain characters. Moderation sees through disguises such as "b@d" before matching.</p></li></ol>
+<p class="lesson">You cannot list every dangerous input. You can make sure that, wherever text is shown, it is shown as text.</p>
+
+<h2>What are we building?</h2>
+<p>A comments API: members post comments; anyone can read a public post's comments as JSON (for the app) or as an HTML fragment (for the website). The HTML is encoded; moderation rejects insults even when disguised; each user may post 5 comments a minute.</p>
+
+<h2>An everyday analogy</h2>
+<p>A school principal reads out notes from the suggestion box. A prankster writes: "Announcement: school is cancelled." A careless principal reads it as an announcement. A careful one always says "A student wrote: …" before each note, so whatever the note says, everyone hears it as a quotation, not an order. Output encoding is that "a student wrote".</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>A member posts</strong> a comment. Length is checked; the author comes from the login.</li>
+<li><strong>Moderation normalises</strong> the text (full-width letters, look-alike digits, spaced letters) and looks for banned whole words: <code>422</code> if found. Too many comments: <code>429</code>.</li>
+<li><strong>The comment is stored exactly as typed.</strong> Nothing is stripped.</li>
+<li><strong>On output</strong>, JSON carries it as data; the HTML fragment encodes every <code>&lt;</code>, <code>&gt;</code>, <code>&amp;</code> and quote.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: why not just remove every "&lt;script&gt;" from comments when they are saved?</summary><p>Because scripts do not need a <code>&lt;script&gt;</code> tag (<code>&lt;img onerror=…&gt;</code> runs code too), and removing a tag can glue the pieces around it into a new one: <code>&lt;scr&lt;script&gt;ipt&gt;</code> becomes <code>&lt;script&gt;</code>. The trap test shows both. Encoding on output does not need to know what is dangerous: every special character is shown as itself.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>Not a full moderation system.</strong> Three banned words show the technique; real platforms add human review and machine-learning models.</li>
+<li><strong>Demo sign-in.</strong> HTTP Basic with four in-memory users.</li>
+<li><strong>One server.</strong> The rate limit lives in memory, so two servers would each allow 5.</li>
+<li><strong>Payloads are test strings.</strong> They run in no browser here; the tests check the HTML text.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>XSS (cross-site scripting)</strong></td><td>An attacker's text is shown on a page as code, so it runs in every reader's browser.</td><td>A notice on a board that, when read aloud, makes the reader hand over their keys.</td><td>A comment containing <code>&lt;img onerror=…&gt;</code>.</td></tr><tr><td><strong>Output encoding</strong></td><td>Turning special characters into safe versions for the place they are shown: <code>&lt;</code> becomes <code>&amp;lt;</code> in HTML.</td><td>Writing a quote in a letter inside quotation marks, so nobody mistakes it for your own words.</td><td><code>HtmlUtils.htmlEscape</code> in <code>CommentHtml</code>.</td></tr><tr><td><strong>Input filter (blocklist)</strong></td><td>Removing "bad" things from input before saving.</td><td>A guard who stops anyone named "Thief".</td><td>The trap: removing <code>&lt;script&gt;</code>.</td></tr><tr><td><strong>Normalising</strong></td><td>Bringing text to one standard form before comparing it.</td><td>Reading "1d10t" and "ＩＤＩＯＴ" as "idiot".</td><td><code>Moderation.words</code></td></tr><tr><td><strong>Rate limit</strong></td><td>A cap on how often one user may do something.</td><td>"Two samples per customer."</td><td>5 comments a minute.</td></tr><tr><td><strong>Content-Security-Policy</strong></td><td>A header telling the browser which scripts it may run.</td><td>A rule that only staff may use the PA system.</td><td><code>default-src 'none'</code>: no scripts at all.</td></tr><tr><td><strong>422 / 429</strong></td><td>422: we understood, but the content is not allowed. 429: too many requests, slow down.</td><td>"We don't print that" / "one at a time, please".</td><td>A banned word / the sixth comment in a minute.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Chaupal</strong> (a fictional community forum) shows comments under each post, on its website and in its app. Last week a comment containing a <code>&lt;script&gt;</code> tag ran in every reader's browser. The quick fix, removing <code>&lt;script&gt;</code> from input, was bypassed the same day. Meanwhile moderators complain that banned words slip through as "b@d", "1d10t" or "s c a m", while a filter that matches inside words blocked a restaurant review that mentioned "scampi".</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> any comment, <b>when</b> it is shown in the HTML fragment, <b>then</b> every <code>&lt;</code> <code>&gt;</code> <code>&amp;</code> <code>"</code> <code>'</code> from the user is encoded, and the response has a Content-Security-Policy that allows no scripts.</li>
+<li><b>Given</b> any comment, <b>then</b> the JSON returns it exactly as typed.</li>
+<li><b>Given</b> a banned word, even as "ＩＤＩＯＴ", "1d10t" or "s c a m", <b>then</b> <code>422</code> without repeating the word. <b>Given</b> "scampi", <b>then</b> it is accepted.</li>
+<li><b>Given</b> a sixth comment within 60 seconds from one user, <b>then</b> <code>429</code> with <code>Retry-After</code>.</li>
+<li><b>Given</b> no login, <b>then</b> posting is <code>401</code>; <b>given</b> a muted user, <b>then</b> <code>403</code>; <b>given</b> another user's private post, <b>then</b> <code>404</code> for reading and posting.</li>
+<li><b>Given</b> a blank or 501-character comment, <b>then</b> <code>400</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>Validate input (length, required); encode output (for HTML). Never strip or rewrite what users type.</li>
+<li>Moderation compares whole normalised words with <code>Locale.ROOT</code>.</li>
+<li>At most 5 comments per user per 60 seconds (a demo rule).</li>
+<li>The author is the signed-in user. Errors are RFC 9457 problems that never repeat the input.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Explain XSS and why output encoding beats input filtering.</li>
+<li>Encode text for HTML with <code>HtmlUtils.htmlEscape</code>, at the point of output.</li>
+<li>Normalise text (Unicode NFKC, case, look-alikes, spacing) before matching.</li>
+<li>Limit input length and rate, with <code>400</code>, <code>422</code> and <code>429</code>.</li>
+<li>Add a Content-Security-Policy as a second line of defence.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Who</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/posts/{postId}/comments</code></td><td>Members</td><td>Add a comment. Body: <code>{"text": "…"}</code>, 1–500 characters.</td></tr><tr><td><code>GET</code></td><td><code>/posts/{postId}/comments</code></td><td>Anyone (private posts: their author)</td><td><code>Accept: application/json</code> (default): the comments as data. <code>Accept: text/html</code>: an encoded HTML fragment.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>Type (after <code>…/problems/</code>)</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">201</span></td><td></td><td>Comment saved</td></tr><tr><td><span class="pill ok">200</span></td><td></td><td>Comments listed</td></tr><tr><td><span class="pill warn">400</span></td><td><code>invalid-request</code></td><td>Blank, over 500 characters, broken JSON</td></tr><tr><td><span class="pill warn">401</span></td><td><code>unauthenticated</code></td><td>Posting without signing in</td></tr><tr><td><span class="pill warn">403</span></td><td><code>forbidden</code></td><td>A muted user posting</td></tr><tr><td><span class="pill warn">404</span></td><td><code>post-not-found</code></td><td>Unknown post, or someone else's private post</td></tr><tr><td><span class="pill warn">422</span></td><td><code>community-rules</code></td><td>A banned word, disguised or not</td></tr><tr><td><span class="pill warn">429</span></td><td><code>too-many-comments</code></td><td>A sixth comment within 60 seconds; <code>Retry-After: 60</code></td></tr></tbody></table></div>
+<p class="note"><strong>JSON is data, not HTML.</strong> The JSON list returns <code>&lt;img…&gt;</code> exactly as typed, which is correct: JSON is not run by a browser. The app must put it on screen as text (for example <code>textContent</code> in a web page, never <code>innerHTML</code>). Encoding belongs to whoever writes the HTML.</p>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 13 Oct 2026. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out. The <code>Authorization</code> header carries demo passwords.</p>
+<section class="example"><h3>Case 1: Ravi comments</h3><p><b>Why:</b> valid text from a member: <code>201</code>, with Ravi as the author because he signed in as Ravi.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /posts/1/comments HTTP/1.1
+Authorization: Basic cmF2aTpyYXZpLWRlbW8tcGFzcw==
+Content-Type: application/json
+
+{
+  &quot;text&quot;: &quot;Amruttulya near FC Road, every time.&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Security-Policy: default-src &#x27;none&#x27;; frame-ancestors &#x27;none&#x27;
+Content-Type: application/json
+Content-Length: 157
+
+{
+  &quot;id&quot;: &quot;8abfb9b3-c604-4955-994b-88924269cdc8&quot;,
+  &quot;postId&quot;: 1,
+  &quot;author&quot;: &quot;ravi&quot;,
+  &quot;text&quot;: &quot;Amruttulya near FC Road, every time.&quot;,
+  &quot;createdAt&quot;: &quot;2026-10-13T14:03:18.895Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: Kabir posts an attack</h3><p><b>Why:</b> it is just text and breaks no rule, so it is saved exactly as typed. Its safety comes at output, in case 3.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /posts/1/comments HTTP/1.1
+Authorization: Basic a2FiaXI6a2FiaXItZGVtby1wYXNz
+Content-Type: application/json
+
+{
+  &quot;text&quot;: &quot;&lt;img src=x onerror=alert(document.cookie)&gt;&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Security-Policy: default-src &#x27;none&#x27;; frame-ancestors &#x27;none&#x27;
+Content-Type: application/json
+Content-Length: 164
+
+{
+  &quot;id&quot;: &quot;8c47dc42-cde1-47e8-bed0-daef95f12333&quot;,
+  &quot;postId&quot;: 1,
+  &quot;author&quot;: &quot;kabir&quot;,
+  &quot;text&quot;: &quot;&lt;img src=x onerror=alert(document.cookie)&gt;&quot;,
+  &quot;createdAt&quot;: &quot;2026-10-13T14:03:19.024Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: the website asks for HTML</h3><p><b>Why:</b> the attack arrives as <code>&amp;lt;img…&amp;gt;</code>: the browser would show the characters and run nothing. The Content-Security-Policy header forbids scripts anyway.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /posts/1/comments HTTP/1.1
+Accept: text/html</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Security-Policy: default-src &#x27;none&#x27;; frame-ancestors &#x27;none&#x27;
+Content-Type: text/html;charset=UTF-8
+Content-Length: 175
+
+&lt;ul class=&quot;comments&quot;&gt;
+  &lt;li&gt;&lt;b&gt;ravi&lt;/b&gt; &lt;p&gt;Amruttulya near FC Road, every time.&lt;/p&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;b&gt;kabir&lt;/b&gt; &lt;p&gt;&amp;lt;img src=x onerror=alert(document.cookie)&amp;gt;&lt;/p&gt;&lt;/li&gt;
+&lt;/ul&gt;</code></pre></div></div></section><section class="example"><h3>Case 4: the app asks for JSON</h3><p><b>Why:</b> the same comments as data, text unchanged. The app shows it as text.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /posts/1/comments HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Security-Policy: default-src &#x27;none&#x27;; frame-ancestors &#x27;none&#x27;
+Content-Type: application/json
+Content-Length: 324
+
+[
+  {
+    &quot;id&quot;: &quot;8abfb9b3-c604-4955-994b-88924269cdc8&quot;,
+    &quot;postId&quot;: 1,
+    &quot;author&quot;: &quot;ravi&quot;,
+    &quot;text&quot;: &quot;Amruttulya near FC Road, every time.&quot;,
+    &quot;createdAt&quot;: &quot;2026-10-13T14:03:18.895Z&quot;
+  },
+  {
+    &quot;id&quot;: &quot;8c47dc42-cde1-47e8-bed0-daef95f12333&quot;,
+    &quot;postId&quot;: 1,
+    &quot;author&quot;: &quot;kabir&quot;,
+    &quot;text&quot;: &quot;&lt;img src=x onerror=alert(document.cookie)&gt;&quot;,
+    &quot;createdAt&quot;: &quot;2026-10-13T14:03:19.024Z&quot;
+  }
+]</code></pre></div></div></section><section class="example"><h3>Case 5: "1d10t"</h3><p><b>Why:</b> normalised to "idiot", a banned word: <code>422</code>. The answer does not repeat the word.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /posts/1/comments HTTP/1.1
+Authorization: Basic cmF2aTpyYXZpLWRlbW8tcGFzcw==
+Content-Type: application/json
+
+{
+  &quot;text&quot;: &quot;what an 1d10t&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Security-Policy: default-src &#x27;none&#x27;; frame-ancestors &#x27;none&#x27;
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Please rephrase your comment without insults or scam talk.&quot;,
+  &quot;instance&quot;: &quot;/posts/1/comments&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Comment breaks community rules&quot;,
+  &quot;type&quot;: &quot;https://chaupal.example/problems/community-rules&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: scampi</h3><p><b>Why:</b> whole words are compared, and "scampi" is not "scam": <code>201</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /posts/1/comments HTTP/1.1
+Authorization: Basic YXNoYTphc2hhLWRlbW8tcGFzcw==
+Content-Type: application/json
+
+{
+  &quot;text&quot;: &quot;Try the scampi at Mahesh Lunch Home&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Security-Policy: default-src &#x27;none&#x27;; frame-ancestors &#x27;none&#x27;
+Content-Type: application/json
+Content-Length: 156
+
+{
+  &quot;id&quot;: &quot;ffdcf57c-d47f-4e41-87bf-42a7de1203c0&quot;,
+  &quot;postId&quot;: 1,
+  &quot;author&quot;: &quot;asha&quot;,
+  &quot;text&quot;: &quot;Try the scampi at Mahesh Lunch Home&quot;,
+  &quot;createdAt&quot;: &quot;2026-10-13T14:03:19.277Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: a muted user</h3><p><b>Why:</b> Tara is signed in but muted: <code>403</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /posts/1/comments HTTP/1.1
+Authorization: Basic dGFyYTp0YXJhLWRlbW8tcGFzcw==
+Content-Type: application/json
+
+{
+  &quot;text&quot;: &quot;Let me in&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 403 
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Security-Policy: default-src &#x27;none&#x27;; frame-ancestors &#x27;none&#x27;
+Content-Type: application/problem+json
+Content-Length: 169
+
+{
+  &quot;type&quot;: &quot;https://chaupal.example/problems/forbidden&quot;,
+  &quot;title&quot;: &quot;Not allowed&quot;,
+  &quot;status&quot;: 403,
+  &quot;detail&quot;: &quot;Your account cannot do this right now.&quot;,
+  &quot;instance&quot;: &quot;/posts/1/comments&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 8: Asha opens Ravi's private post</h3><p><b>Why:</b> <code>404</code>, as for a post that does not exist.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /posts/2/comments HTTP/1.1
+Authorization: Basic YXNoYTphc2hhLWRlbW8tcGFzcw==</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+X-Frame-Options: DENY
+Content-Security-Policy: default-src &#x27;none&#x27;; frame-ancestors &#x27;none&#x27;
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No post with this id is visible to you.&quot;,
+  &quot;instance&quot;: &quot;/posts/2/comments&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Post not found&quot;,
+  &quot;type&quot;: &quot;https://chaupal.example/problems/post-not-found&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What the API does</th><th>Proved by</th></tr></thead><tbody><tr><td>Seven common XSS payloads (script, upper-case script, nested, img, svg, iframe, javascript: link)</td><td>Stored as typed; shown in HTML as exactly <code>htmlEscape(payload)</code></td><td><code>everyPayloadIsStoredAsTextAndShownAsText</code> (7 cases)</td></tr><tr><td><code>&lt;b&gt;</code>, <code>&amp;</code>, double and single quotes</td><td>All encoded; CSP header present</td><td><code>theHtmlFragmentEncodesEveryCharacterThatMatters</code></td></tr><tr><td>JSON list</td><td>Oldest first, text unchanged</td><td><code>jsonListsCommentsOldestFirstWithTheTextExactlyAsTyped</code></td></tr><tr><td>"ＩＤＩＯＴ", "1d10t", "$c@m", "s c a m", "stuuupid", "id-iot"</td><td>Caught</td><td><code>disguisesAreSeenThrough</code>, <code>aBannedWordIs422WithoutRepeatingIt</code></td></tr><tr><td>"scampi", "smart idea"</td><td>Allowed</td><td><code>wholeWordsOnlySoScampiIsFine</code></td></tr><tr><td>"stupidity", "st*pid"</td><td>Allowed: known limits of a word list</td><td><code>theLimitsOfAWordList</code></td></tr><tr><td>Turkish server locale</td><td>Still caught</td><td><code>aTurkishServerLocaleChangesNothing</code></td></tr><tr><td>Blank, 501 characters; exactly 500</td><td><code>400</code>; <code>201</code></td><td><code>blankOrTooLongTextIs400</code></td></tr><tr><td>Sixth comment in a minute</td><td><code>429</code> + <code>Retry-After</code>; other users unaffected</td><td><code>theSixthCommentInAMinuteIs429WithRetryAfter</code></td></tr><tr><td>No login; muted user</td><td><code>401</code>; <code>403</code></td><td><code>postingWithoutSigningInIs401</code>, <code>aMutedUserCanReadButNotPost403</code></td></tr><tr><td>Another user's private post</td><td><code>404</code> to read or post</td><td><code>anotherUsersPrivatePostLooksLikeItDoesNotExist</code></td></tr><tr><td><code>author</code> in the body</td><td>Ignored</td><td><code>anAuthorFieldInTheBodyIsIgnored</code></td></tr><tr><td>Refused payload</td><td>Not echoed in the error</td><td><code>aRefusedPayloadIsNotEchoedInTheError</code></td></tr><tr><td>Unknown post; broken JSON</td><td><code>404</code>; <code>400</code></td><td><code>anUnknownPostIs404</code>, <code>brokenJsonIs400</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Filtering <code>&lt;script&gt;</code> from input instead of encoding output; attackers bypass the filter.</p>
+<p>A "before" controller removes <code>&lt;script&gt;</code> and <code>&lt;/script&gt;</code> from every comment, then builds HTML by gluing strings. The first test posts two classic payloads: the <code>&lt;img onerror&gt;</code> passes untouched, and <code>&lt;scr&lt;script&gt;ipt&gt;</code> becomes a working <code>&lt;script&gt;</code> <em>because of</em> the filter. The second test sends the same payloads to the real API: both come out as harmless text.</p>
+</div>
+<pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.security.Principal;
+import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/**
+ * The first test written for this station: it reproduces the attack before the fix.
+ * Two well-known payloads against a &quot;remove the script tags from the input&quot; defence.
+ */
+@Import(InputFilterTrapTest.FilteringController.class)
+class InputFilterTrapTest extends ApiTest {
+
+    static final String IMG = &quot;&lt;img src=x onerror=alert(document.cookie)&gt;&quot;;
+    static final String NESTED = &quot;&lt;scr&lt;script&gt;ipt&gt;alert(1)&lt;/script&gt;&quot;;
+
+    /** The &quot;before&quot; code: strip &lt;script&gt; tags on the way in, then put the text into HTML as-is. Kept only in tests. */
+    @RestController
+    static class FilteringController {
+        private final CommentService service;
+
+        FilteringController(CommentService service) {
+            this.service = service;
+        }
+
+        @PostMapping(&quot;/naive/posts/{postId}/comments&quot;)
+        Comment add(Principal user, @PathVariable long postId, @RequestBody CommentRequest r) {
+            String cleaned = r.text().replaceAll(&quot;(?i)&lt;script&gt;&quot;, &quot;&quot;).replaceAll(&quot;(?i)&lt;/script&gt;&quot;, &quot;&quot;);
+            return service.add(user.getName(), postId, cleaned);
+        }
+
+        @GetMapping(value = &quot;/naive/posts/{postId}/comments&quot;, produces = MediaType.TEXT_HTML_VALUE)
+        String html(Principal user, @PathVariable long postId) {
+            return service.list(postId, user.getName()).stream()
+                    .map(c -&gt; &quot;&lt;li&gt;&lt;b&gt;&quot; + c.author() + &quot;&lt;/b&gt; &lt;p&gt;&quot; + c.text() + &quot;&lt;/p&gt;&lt;/li&gt;&quot;)
+                    .collect(Collectors.joining(&quot;\n&quot;, &quot;&lt;ul&gt;\n&quot;, &quot;\n&lt;/ul&gt;&quot;));
+        }
+    }
+
+    @Test
+    void theFilterMissesAnImageTagAndRebuildsTheScriptTagItRemoved() throws Exception {
+        for (String payload : new String[]{IMG, NESTED}) {
+            mvc.perform(post(&quot;/naive/posts/1/comments&quot;).with(httpBasic(&quot;ravi&quot;, &quot;ravi-demo-pass&quot;))
+                    .contentType(MediaType.APPLICATION_JSON).content(body(payload)));
+        }
+        String page = mvc.perform(get(&quot;/naive/posts/1/comments&quot;).with(httpBasic(&quot;asha&quot;, &quot;asha-demo-pass&quot;)).accept(MediaType.TEXT_HTML))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(page).contains(&quot;&lt;img src=x onerror=alert(document.cookie)&gt;&quot;); // not a &lt;script&gt;, so the filter ignores it
+        assertThat(page).contains(&quot;&lt;script&gt;alert(1)&quot;);                           // removing the inner tag joined the outer one
+    }
+
+    @Test
+    void encodingOnOutputTurnsBothIntoHarmlessText() throws Exception {
+        comment(&quot;ravi&quot;, 1, IMG);
+        comment(&quot;ravi&quot;, 1, NESTED);
+        String page = html(1);
+        assertThat(page).contains(&quot;&amp;lt;img src=x onerror=alert(document.cookie)&amp;gt;&quot;);
+        assertThat(page).contains(&quot;&amp;lt;scr&amp;lt;script&amp;gt;ipt&amp;gt;alert(1)&amp;lt;/script&amp;gt;&quot;);
+        assertThat(page).doesNotContain(&quot;&lt;img&quot;).doesNotContain(&quot;&lt;script&quot;).doesNotContain(&quot;&lt;scr&lt;&quot;);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr><tr><td>Docker</td><td>Not needed for this station</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 27 tests</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Demo users: <code>asha</code>, <code>ravi</code>, <code>kabir</code> (members) and <code>tara</code> (muted); each password is the name plus <code>-demo-pass</code>. The attack body is in <code>docs/attack.json</code>.</p>
+<pre class="code"><code class="language-bash"># Post the attack: expect 201
+curl -i -u kabir:kabir-demo-pass -X POST http://localhost:8080/posts/1/comments -H &quot;Content-Type: application/json&quot; -d &quot;@docs/attack.json&quot;
+
+# See it as HTML: expect &amp;lt;img ... &amp;gt; and a Content-Security-Policy header
+curl -i -H &quot;Accept: text/html&quot; http://localhost:8080/posts/1/comments</code></pre>
+<p>Save the HTML answer as <code>comments.html</code> and open it in a browser: you see the attack as text, and no alert appears.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>JSON when you wanted HTML</td><td>No <code>Accept: text/html</code> header.</td><td>Add <code>-H "Accept: text/html"</code>.</td></tr><tr><td><code>429</code></td><td>More than 5 comments in a minute as one user.</td><td>Wait 60 seconds or use another demo user.</td></tr><tr><td><code>release version 25 not supported</code></td><td>Maven is using an older JDK.</td><td>Point <code>JAVA_HOME</code> at JDK 25, or add <code>-Djava.version=21</code>.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/007-comment-moderation-and-xss-safe-output/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/chaupal/comments/
+│   ├── SecurityConfig.java   ├── CommentController.java   ├── CommentRequest.java
+│   ├── CommentService.java   ├── Moderation.java          ├── RateLimiter.java
+│   ├── CommentHtml.java      ├── ApiErrors.java           ├── ProblemResponses.java
+│   └── Post.java, Comment.java, Exceptions.java, CommentsApplication.java
+├── src/test/java/com/chaupal/comments/   (see Tests)
+├── review/                   the flawed version (see Review)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels: security filters, controller, service, and the HTML on the way out.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">SecurityConfig.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">CommentController.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">CommentRequest.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">CommentService.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">Moderation.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">RateLimiter.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">CommentHtml.java</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">ApiErrors.java</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">ProblemResponses.java</button><button class="file-btn" role="tab" id="code-9-b" aria-controls="code-9" aria-selected="false" data-group="code">Post.java</button><button class="file-btn" role="tab" id="code-10-b" aria-controls="code-10" aria-selected="false" data-group="code">Comment.java</button><button class="file-btn" role="tab" id="code-11-b" aria-controls="code-11" aria-selected="false" data-group="code">Exceptions.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/chaupal/comments/SecurityConfig.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Lets anyone read, members post, muted users only read; adds the Content-Security-Policy header.</dd><dt>Why</dt><dd>Access rules live in one place, and CSP is a second wall if encoding is ever missed.</dd><dt>Without it</dt><dd>Anyone could post; a single missed <code>htmlEscape</code> would run scripts.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+/**
+ * Anyone may read public posts; members may comment; muted users may read but not comment.
+ * A Content-Security-Policy tells browsers to run no scripts at all from these responses: a second wall,
+ * in case encoding is ever missed somewhere.
+ */
+@Configuration
+class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems) throws Exception {
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(HttpMethod.GET, &quot;/posts/*/comments&quot;).permitAll()
+                        .requestMatchers(HttpMethod.POST, &quot;/posts/*/comments&quot;).hasRole(&quot;MEMBER&quot;)
+                        .anyRequest().authenticated())
+                .httpBasic(basic -&gt; basic.authenticationEntryPoint(problems::unauthenticated))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .headers(h -&gt; h.contentSecurityPolicy(csp -&gt; csp.policyDirectives(&quot;default-src &#x27;none&#x27;; frame-ancestors &#x27;none&#x27;&quot;)))
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable()); // no cookies or sessions: credentials come with every request
+        return http.build();
+    }
+
+    /** Demo users, passwords stored as bcrypt hashes. tara is muted by the moderators. */
+    @Bean
+    UserDetailsService users() {
+        PasswordEncoder encoder = PasswordEncoderFactories.createDelegatingPasswordEncoder();
+        return new InMemoryUserDetailsManager(
+                User.withUsername(&quot;asha&quot;).password(encoder.encode(&quot;asha-demo-pass&quot;)).roles(&quot;MEMBER&quot;).build(),
+                User.withUsername(&quot;ravi&quot;).password(encoder.encode(&quot;ravi-demo-pass&quot;)).roles(&quot;MEMBER&quot;).build(),
+                User.withUsername(&quot;kabir&quot;).password(encoder.encode(&quot;kabir-demo-pass&quot;)).roles(&quot;MEMBER&quot;).build(),
+                User.withUsername(&quot;tara&quot;).password(encoder.encode(&quot;tara-demo-pass&quot;)).roles(&quot;MUTED&quot;).build());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/chaupal/comments/CommentController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>One <code>POST</code>, and one <code>GET</code> URL with two formats chosen by <code>Accept</code>: JSON or HTML.</dd><dt>Why</dt><dd>The same data, two outputs: each output is responsible for its own safety.</dd><dt>Without it</dt><dd>No API.</dd></dl><ul><li><code>produces</code> on each <code>@GetMapping</code> lets Spring pick by the request's <code>Accept</code> header.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.security.Principal;
+import java.util.List;
+
+@RestController
+@RequestMapping(&quot;/posts/{postId}/comments&quot;)
+class CommentController {
+
+    private final CommentService service;
+
+    CommentController(CommentService service) {
+        this.service = service;
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    Comment add(Principal user, @PathVariable long postId, @Valid @RequestBody CommentRequest request) {
+        return service.add(user.getName(), postId, request.text());
+    }
+
+    /** JSON for the app. The text is raw: the app must put it on screen as text, never as HTML. */
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+    List&lt;Comment&gt; list(Principal user, @PathVariable long postId) {
+        return service.list(postId, user == null ? null : user.getName());
+    }
+
+    /** The same comments as an HTML fragment for the website, with every piece of user text encoded. */
+    @GetMapping(produces = MediaType.TEXT_HTML_VALUE)
+    String html(Principal user, @PathVariable long postId) {
+        return CommentHtml.render(service.list(postId, user == null ? null : user.getName()));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/chaupal/comments/CommentRequest.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Validates input: required and at most 500 characters. No author field.</dd><dt>Why</dt><dd>Validation checks what input <em>is</em>, not whether it looks dangerous.</dd><dt>Without it</dt><dd>Empty or huge comments.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
+/** Body of POST /posts/{id}/comments. No author field: the author is the signed-in user. */
+public record CommentRequest(@NotBlank @Size(max = 500, message = &quot;must be at most 500 characters&quot;) String text) {
+
+    public CommentRequest {
+        text = text == null ? null : text.strip();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/chaupal/comments/CommentService.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Checks the post is visible, runs moderation and the rate limit, stores the text exactly as typed.</dd><dt>Why</dt><dd>Storing the original keeps every output free to encode for its own format (HTML, JSON, CSV, an email).</dd><dt>Without it</dt><dd>Rules spread around; a filtered copy that is neither the original nor safe.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+/** Posts and comments in memory. The rules: who can see a post, moderation, and the rate limit. */
+@Service
+class CommentService {
+
+    private final Map&lt;Long, Post&gt; posts = Map.of(
+            1L, new Post(1, &quot;asha&quot;, &quot;Best cutting chai in Pune?&quot;, false),
+            2L, new Post(2, &quot;ravi&quot;, &quot;Notes to self&quot;, true));
+    private final List&lt;Comment&gt; comments = new ArrayList&lt;&gt;();
+    private final Moderation moderation;
+    private final RateLimiter rateLimiter;
+
+    CommentService(Moderation moderation, RateLimiter rateLimiter) {
+        this.moderation = moderation;
+        this.rateLimiter = rateLimiter;
+    }
+
+    /** The text is stored exactly as typed: no stripping of tags. Output encoding makes it safe (CommentHtml). */
+    Comment add(String user, long postId, String text) {
+        visiblePost(postId, user);
+        if (moderation.breaksRules(text)) {
+            throw new Exceptions.BreaksCommunityRules();
+        }
+        if (!rateLimiter.tryAcquire(user)) {
+            throw new Exceptions.TooManyComments();
+        }
+        var c = new Comment(UUID.randomUUID(), postId, user, text, Instant.now().truncatedTo(ChronoUnit.MILLIS));
+        synchronized (comments) {
+            comments.add(c);
+        }
+        return c;
+    }
+
+    /** user is null for a reader who is not signed in. */
+    List&lt;Comment&gt; list(long postId, String user) {
+        visiblePost(postId, user);
+        synchronized (comments) {
+            return comments.stream().filter(c -&gt; c.postId() == postId).toList();
+        }
+    }
+
+    private Post visiblePost(long postId, String user) {
+        Post p = posts.get(postId);
+        if (p == null || !p.visibleTo(user)) {
+            throw new Exceptions.PostNotFound();
+        }
+        return p;
+    }
+
+    /** For tests only. */
+    void clear() {
+        synchronized (comments) {
+            comments.clear();
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/chaupal/comments/Moderation.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Normalises text step by step, then compares whole words with a small list.</dd><dt>Why</dt><dd>Disguises are undone before matching; whole words avoid blocking "scampi".</dd><dt>Without it</dt><dd>"1d10t" passes and "scampi" is blocked (see Review).</dd></dl><ul><li>NFKC turns full-width <code>ＩＤＩＯＴ</code> into <code>IDIOT</code>.</li><li>Runs of one-letter words are joined: <code>s c a m</code>.</li><li>Three or more repeats collapse: <code>stuuupid</code>.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import org.springframework.stereotype.Component;
+
+import java.text.Normalizer;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
+/**
+ * Finds banned words after normalising the text, so the usual disguises still match:
+ * &quot;ＩＤＩＯＴ&quot; (full-width letters), &quot;1d10t&quot; and &quot;$c@m&quot; (look-alike digits and symbols), &quot;s c a m&quot; (spaced out),
+ * &quot;stuuupid&quot; (stretched). It compares whole words, so &quot;scampi&quot; is not &quot;scam&quot;.
+ * A word list is a first line of defence, never the only one: people invent new spellings every day.
+ */
+@Component
+class Moderation {
+
+    static final Set&lt;String&gt; BANNED = Set.of(&quot;idiot&quot;, &quot;stupid&quot;, &quot;scam&quot;);
+
+    boolean breaksRules(String text) {
+        return words(text).stream().anyMatch(BANNED::contains);
+    }
+
+    /** The text as normalised words. Package-private so tests can show each step. */
+    static List&lt;String&gt; words(String text) {
+        String t = Normalizer.normalize(text, Normalizer.Form.NFKC).toLowerCase(Locale.ROOT); // ＩＤＩＯＴ -&gt; idiot
+        StringBuilder mapped = new StringBuilder();
+        for (char c : t.toCharArray()) {
+            mapped.append(switch (c) {
+                case &#x27;0&#x27; -&gt; &#x27;o&#x27;;
+                case &#x27;1&#x27; -&gt; &#x27;i&#x27;;
+                case &#x27;3&#x27; -&gt; &#x27;e&#x27;;
+                case &#x27;4&#x27;, &#x27;@&#x27; -&gt; &#x27;a&#x27;;
+                case &#x27;5&#x27;, &#x27;$&#x27; -&gt; &#x27;s&#x27;;
+                case &#x27;7&#x27; -&gt; &#x27;t&#x27;;
+                default -&gt; c;
+            });
+        }
+        List&lt;String&gt; words = new ArrayList&lt;&gt;();
+        StringBuilder run = new StringBuilder(); // consecutive one-letter words: &quot;s c a m&quot; -&gt; &quot;scam&quot;
+        for (String token : mapped.toString().split(&quot;\\s+&quot;)) {
+            String w = token.replaceAll(&quot;[^\\p{L}]&quot;, &quot;&quot;).replaceAll(&quot;(\\p{L})\\1{2,}&quot;, &quot;$1&quot;); // letters only; &quot;uuu&quot; -&gt; &quot;u&quot;
+            if (w.length() == 1) {
+                run.append(w);
+                continue;
+            }
+            if (!run.isEmpty()) {
+                words.add(run.toString());
+                run.setLength(0);
+            }
+            if (!w.isEmpty()) {
+                words.add(w);
+            }
+        }
+        if (!run.isEmpty()) {
+            words.add(run.toString());
+        }
+        return words;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/chaupal/comments/RateLimiter.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Keeps each user's recent comment times and refuses a sixth within 60 seconds.</dd><dt>Why</dt><dd>Limits the damage of spam bots and angry bursts.</dd><dt>Without it</dt><dd>One account can flood a post.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * At most 5 comments per user in any 60 seconds (a demo rule). Each user has a queue of recent comment times;
+ * times older than the window drop off the front. In memory, so it works for one server only.
+ */
+@Component
+class RateLimiter {
+
+    static final int LIMIT = 5;
+    static final Duration WINDOW = Duration.ofSeconds(60);
+    private final Map&lt;String, Deque&lt;Instant&gt;&gt; recent = new ConcurrentHashMap&lt;&gt;();
+
+    /** True and counted if the user may post now; false if they have used up the window. */
+    boolean tryAcquire(String user) {
+        Instant now = Instant.now();
+        Deque&lt;Instant&gt; times = recent.computeIfAbsent(user, u -&gt; new ArrayDeque&lt;&gt;());
+        synchronized (times) {
+            while (!times.isEmpty() &amp;&amp; times.peekFirst().isBefore(now.minus(WINDOW))) {
+                times.pollFirst();
+            }
+            if (times.size() &gt;= LIMIT) {
+                return false;
+            }
+            times.addLast(now);
+            return true;
+        }
+    }
+
+    /** For tests only. */
+    void reset() {
+        recent.clear();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/chaupal/comments/CommentHtml.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Builds the HTML fragment, passing every piece of user text through <code>htmlEscape</code>.</dd><dt>Why</dt><dd>This is the one place where text becomes HTML, so it is the one place that must encode.</dd><dt>Without it</dt><dd>The attack in case 2 runs in every reader's browser.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import java.util.List;
+
+import static org.springframework.web.util.HtmlUtils.htmlEscape;
+
+/**
+ * The comments as an HTML fragment, for the web page that embeds them. Every piece of user text goes through
+ * htmlEscape: &lt; &gt; &amp; &quot; &#x27; become &amp;lt; &amp;gt; &amp;amp; &amp;quot; &amp;#39;, so the browser shows them as characters and never
+ * reads them as tags or attributes. Encode at the moment of output, for the format being output.
+ */
+final class CommentHtml {
+
+    private CommentHtml() {
+    }
+
+    static String render(List&lt;Comment&gt; comments) {
+        StringBuilder html = new StringBuilder(&quot;&lt;ul class=\&quot;comments\&quot;&gt;\n&quot;);
+        for (Comment c : comments) {
+            html.append(&quot;  &lt;li&gt;&lt;b&gt;&quot;).append(htmlEscape(c.author())).append(&quot;&lt;/b&gt; &lt;p&gt;&quot;)
+                    .append(htmlEscape(c.text())).append(&quot;&lt;/p&gt;&lt;/li&gt;\n&quot;);
+        }
+        return html.append(&quot;&lt;/ul&gt;\n&quot;).toString();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/java/com/chaupal/comments/ApiErrors.java</p><div class="notes"><p>The problem shape from station 006: 404, 422, 429 with <code>Retry-After</code>, and validation errors that never repeat input.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import org.springframework.beans.TypeMismatchException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+
+import java.net.URI;
+import java.util.Map;
+import java.util.TreeMap;
+
+/** One problem shape for every error (station 006). No message repeats what the user sent. */
+@RestControllerAdvice
+class ApiErrors extends ResponseEntityExceptionHandler {
+
+    static final String TYPES = &quot;https://chaupal.example/problems/&quot;;
+
+    static ProblemDetail problem(HttpStatus status, String type, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setType(URI.create(TYPES + type));
+        p.setTitle(title);
+        return p;
+    }
+
+    @ExceptionHandler
+    ResponseEntity&lt;ProblemDetail&gt; notFound(Exceptions.PostNotFound e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(problem(HttpStatus.NOT_FOUND, &quot;post-not-found&quot;, &quot;Post not found&quot;, &quot;No post with this id is visible to you.&quot;));
+    }
+
+    @ExceptionHandler
+    ResponseEntity&lt;ProblemDetail&gt; rules(Exceptions.BreaksCommunityRules e) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT)
+                .body(problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;community-rules&quot;, &quot;Comment breaks community rules&quot;,
+                        &quot;Please rephrase your comment without insults or scam talk.&quot;));
+    }
+
+    @ExceptionHandler
+    ResponseEntity&lt;ProblemDetail&gt; tooMany(Exceptions.TooManyComments e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(RateLimiter.WINDOW.toSeconds()))
+                .body(problem(HttpStatus.TOO_MANY_REQUESTS, &quot;too-many-comments&quot;, &quot;Too many comments&quot;,
+                        &quot;At most &quot; + RateLimiter.LIMIT + &quot; comments a minute. Try again shortly.&quot;));
+    }
+
+    @Override
+    protected ResponseEntity&lt;Object&gt; handleMethodArgumentNotValid(
+            MethodArgumentNotValidException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        Map&lt;String, String&gt; errors = new TreeMap&lt;&gt;();
+        ex.getBindingResult().getFieldErrors().forEach(f -&gt; errors.putIfAbsent(f.getField(), f.getDefaultMessage()));
+        ProblemDetail p = problem(HttpStatus.BAD_REQUEST, &quot;invalid-request&quot;, &quot;Invalid request&quot;, &quot;Some fields are invalid.&quot;);
+        p.setProperty(&quot;errors&quot;, errors);
+        return handleExceptionInternal(ex, p, headers, status, request);
+    }
+
+    @Override
+    protected ResponseEntity&lt;Object&gt; handleTypeMismatch(
+            TypeMismatchException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        ProblemDetail p = problem(HttpStatus.BAD_REQUEST, &quot;invalid-request&quot;, &quot;Invalid request&quot;,
+                &quot;&#x27;&quot; + ex.getPropertyName() + &quot;&#x27; has the wrong format.&quot;);
+        return handleExceptionInternal(ex, p, headers, status, request);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">src/main/java/com/chaupal/comments/ProblemResponses.java</p><div class="notes"><p>401 and 403 in the same problem shape (from station 006).</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/**
+ * 401 and 403 happen in Spring Security&#x27;s filters, before any controller, so @RestControllerAdvice never sees
+ * them. These two methods write the same problem shape by hand, so an app gets one error format from every path.
+ */
+@Component
+class ProblemResponses {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    void unauthenticated(HttpServletRequest req, HttpServletResponse res, AuthenticationException e) throws IOException {
+        // Same answer for &quot;no credentials&quot; and &quot;wrong password&quot;: the response does not say which part was wrong.
+        res.setHeader(&quot;WWW-Authenticate&quot;, &quot;Basic realm=\&quot;chaupal\&quot;&quot;);
+        write(req, res, HttpStatus.UNAUTHORIZED, &quot;unauthenticated&quot;, &quot;Sign-in required&quot;, &quot;Send valid credentials to use this API.&quot;);
+    }
+
+    void forbidden(HttpServletRequest req, HttpServletResponse res, AccessDeniedException e) throws IOException {
+        write(req, res, HttpStatus.FORBIDDEN, &quot;forbidden&quot;, &quot;Not allowed&quot;, &quot;Your account cannot do this right now.&quot;);
+    }
+
+    private static void write(HttpServletRequest req, HttpServletResponse res, HttpStatus status,
+                              String type, String title, String detail) throws IOException {
+        Map&lt;String, Object&gt; body = new LinkedHashMap&lt;&gt;();
+        body.put(&quot;type&quot;, ApiErrors.TYPES + type);
+        body.put(&quot;title&quot;, title);
+        body.put(&quot;status&quot;, status.value());
+        body.put(&quot;detail&quot;, detail);
+        body.put(&quot;instance&quot;, req.getRequestURI());
+        res.setStatus(status.value());
+        res.setContentType(&quot;application/problem+json&quot;);
+        JSON.writeValue(res.getOutputStream(), body);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-9" aria-labelledby="code-9-b" hidden><p class="path">src/main/java/com/chaupal/comments/Post.java</p><div class="notes"><p>A post and who may see it.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+/** A post. A private post and its comments are visible to its author only. */
+record Post(long id, String author, String title, boolean isPrivate) {
+
+    boolean visibleTo(String user) {
+        return !isPrivate || author.equals(user);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-10" aria-labelledby="code-10-b" hidden><p class="path">src/main/java/com/chaupal/comments/Comment.java</p><div class="notes"><p>A stored comment.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import java.time.Instant;
+import java.util.UUID;
+
+/** A comment, stored exactly as typed. Making it safe is the job of whoever outputs it, for the format they output. */
+public record Comment(UUID id, long postId, String author, String text, Instant createdAt) {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-11" aria-labelledby="code-11-b" hidden><p class="path">src/main/java/com/chaupal/comments/Exceptions.java</p><div class="notes"><p>Post not found, community rules, too many comments.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+/** What can go wrong, in business terms. ApiErrors turns each into a problem response. */
+final class Exceptions {
+
+    private Exceptions() {
+    }
+
+    /** 404. Also for a private post the user may not see: the API does not confirm it exists. */
+    static class PostNotFound extends RuntimeException {
+    }
+
+    /** 422. The text contains a banned word. The response does not say which one. */
+    static class BreaksCommunityRules extends RuntimeException {
+    }
+
+    /** 429. Too many comments in the window. */
+    static class TooManyComments extends RuntimeException {
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">Required tests come from the station's types. The validator fails a station that is missing any of them.</p></aside>
+<h2>Required tests for this station</h2>
+<p>Station type: <span class="chip">Security</span></p>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>CommentContractTest</code> (8)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>InputFilterTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Security</td><td>401, 403, another user's data, malicious input</td><td><code>CommentSecurityTest</code> (12)</td><td><span class="pill ok">pass</span></td></tr><tr><td>This station</td><td>Normalising and matching on its own</td><td><code>ModerationTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, Spring Security 7. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.comments.InputFilterTrapTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.comments.CommentSecurityTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.comments.ModerationTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.comments.CommentContractTest
+[INFO] Tests run: 27, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">InputFilterTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">CommentSecurityTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">CommentContractTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">ModerationTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/chaupal/comments/InputFilterTrapTest.java</p><div class="notes"><p>Written first: the input filter misses one payload and builds another.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.security.Principal;
+import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/**
+ * The first test written for this station: it reproduces the attack before the fix.
+ * Two well-known payloads against a &quot;remove the script tags from the input&quot; defence.
+ */
+@Import(InputFilterTrapTest.FilteringController.class)
+class InputFilterTrapTest extends ApiTest {
+
+    static final String IMG = &quot;&lt;img src=x onerror=alert(document.cookie)&gt;&quot;;
+    static final String NESTED = &quot;&lt;scr&lt;script&gt;ipt&gt;alert(1)&lt;/script&gt;&quot;;
+
+    /** The &quot;before&quot; code: strip &lt;script&gt; tags on the way in, then put the text into HTML as-is. Kept only in tests. */
+    @RestController
+    static class FilteringController {
+        private final CommentService service;
+
+        FilteringController(CommentService service) {
+            this.service = service;
+        }
+
+        @PostMapping(&quot;/naive/posts/{postId}/comments&quot;)
+        Comment add(Principal user, @PathVariable long postId, @RequestBody CommentRequest r) {
+            String cleaned = r.text().replaceAll(&quot;(?i)&lt;script&gt;&quot;, &quot;&quot;).replaceAll(&quot;(?i)&lt;/script&gt;&quot;, &quot;&quot;);
+            return service.add(user.getName(), postId, cleaned);
+        }
+
+        @GetMapping(value = &quot;/naive/posts/{postId}/comments&quot;, produces = MediaType.TEXT_HTML_VALUE)
+        String html(Principal user, @PathVariable long postId) {
+            return service.list(postId, user.getName()).stream()
+                    .map(c -&gt; &quot;&lt;li&gt;&lt;b&gt;&quot; + c.author() + &quot;&lt;/b&gt; &lt;p&gt;&quot; + c.text() + &quot;&lt;/p&gt;&lt;/li&gt;&quot;)
+                    .collect(Collectors.joining(&quot;\n&quot;, &quot;&lt;ul&gt;\n&quot;, &quot;\n&lt;/ul&gt;&quot;));
+        }
+    }
+
+    @Test
+    void theFilterMissesAnImageTagAndRebuildsTheScriptTagItRemoved() throws Exception {
+        for (String payload : new String[]{IMG, NESTED}) {
+            mvc.perform(post(&quot;/naive/posts/1/comments&quot;).with(httpBasic(&quot;ravi&quot;, &quot;ravi-demo-pass&quot;))
+                    .contentType(MediaType.APPLICATION_JSON).content(body(payload)));
+        }
+        String page = mvc.perform(get(&quot;/naive/posts/1/comments&quot;).with(httpBasic(&quot;asha&quot;, &quot;asha-demo-pass&quot;)).accept(MediaType.TEXT_HTML))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(page).contains(&quot;&lt;img src=x onerror=alert(document.cookie)&gt;&quot;); // not a &lt;script&gt;, so the filter ignores it
+        assertThat(page).contains(&quot;&lt;script&gt;alert(1)&quot;);                           // removing the inner tag joined the outer one
+    }
+
+    @Test
+    void encodingOnOutputTurnsBothIntoHarmlessText() throws Exception {
+        comment(&quot;ravi&quot;, 1, IMG);
+        comment(&quot;ravi&quot;, 1, NESTED);
+        String page = html(1);
+        assertThat(page).contains(&quot;&amp;lt;img src=x onerror=alert(document.cookie)&amp;gt;&quot;);
+        assertThat(page).contains(&quot;&amp;lt;scr&amp;lt;script&amp;gt;ipt&amp;gt;alert(1)&amp;lt;/script&amp;gt;&quot;);
+        assertThat(page).doesNotContain(&quot;&lt;img&quot;).doesNotContain(&quot;&lt;script&quot;).doesNotContain(&quot;&lt;scr&lt;&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/chaupal/comments/CommentSecurityTest.java</p><div class="notes"><p>401, 403, private posts, the author field, seven payloads, and no echo in errors.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.web.util.HtmlUtils;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Security: 401, 403, another user&#x27;s private post, and malicious input of the kinds attackers actually send. */
+class CommentSecurityTest extends ApiTest {
+
+    @Test
+    void postingWithoutSigningInIs401() throws Exception {
+        mvc.perform(post(&quot;/posts/1/comments&quot;).contentType(MediaType.APPLICATION_JSON).content(body(&quot;hi&quot;)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
+    @Test
+    void aMutedUserCanReadButNotPost403() throws Exception {
+        comment(&quot;tara&quot;, 1, &quot;Let me in&quot;).andExpect(status().isForbidden())
+                .andExpect(jsonPath(&quot;$.type&quot;).value(&quot;https://chaupal.example/problems/forbidden&quot;));
+        mvc.perform(get(&quot;/posts/1/comments&quot;).with(httpBasic(&quot;tara&quot;, &quot;tara-demo-pass&quot;))).andExpect(status().isOk());
+    }
+
+    @Test
+    void anotherUsersPrivatePostLooksLikeItDoesNotExist() throws Exception {
+        comment(&quot;ravi&quot;, 2, &quot;Buy milk&quot;).andExpect(status().isCreated());
+        mvc.perform(get(&quot;/posts/2/comments&quot;).with(httpBasic(&quot;ravi&quot;, &quot;ravi-demo-pass&quot;))).andExpect(jsonPath(&quot;$[0].text&quot;).value(&quot;Buy milk&quot;));
+        mvc.perform(get(&quot;/posts/2/comments&quot;).with(httpBasic(&quot;asha&quot;, &quot;asha-demo-pass&quot;))).andExpect(status().isNotFound());
+        mvc.perform(get(&quot;/posts/2/comments&quot;)).andExpect(status().isNotFound());
+        comment(&quot;asha&quot;, 2, &quot;Peeking&quot;).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void anAuthorFieldInTheBodyIsIgnored() throws Exception {
+        mvc.perform(post(&quot;/posts/1/comments&quot;).with(httpBasic(&quot;ravi&quot;, &quot;ravi-demo-pass&quot;)).contentType(MediaType.APPLICATION_JSON)
+                        .content(&quot;{\&quot;text\&quot;:\&quot;I am asha\&quot;,\&quot;author\&quot;:\&quot;asha\&quot;}&quot;))
+                .andExpect(jsonPath(&quot;$.author&quot;).value(&quot;ravi&quot;));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            &quot;&lt;script&gt;alert(1)&lt;/script&gt;&quot;,
+            &quot;&lt;SCRIPT&gt;alert(1)&lt;/SCRIPT&gt;&quot;,
+            &quot;&lt;scr&lt;script&gt;ipt&gt;alert(1)&lt;/script&gt;&quot;,
+            &quot;&lt;img src=x onerror=alert(1)&gt;&quot;,
+            &quot;&lt;svg onload=alert(1)&gt;&quot;,
+            &quot;\&quot;&gt;&lt;iframe src=javascript:alert(1)&gt;&quot;,
+            &quot;&lt;a href=\&quot;javascript:alert(1)\&quot;&gt;win a prize&lt;/a&gt;&quot;})
+    void everyPayloadIsStoredAsTextAndShownAsText(String payload) throws Exception {
+        comment(&quot;ravi&quot;, 1, payload).andExpect(status().isCreated()).andExpect(jsonPath(&quot;$.text&quot;).value(payload));
+        String shown = html(1).replaceAll(&quot;(?s).*&lt;p&gt;(.*)&lt;/p&gt;.*&quot;, &quot;$1&quot;); // the user&#x27;s text, as the page carries it
+        assertThat(shown).isEqualTo(HtmlUtils.htmlEscape(payload)).doesNotContain(&quot;&lt;&quot;).doesNotContain(&quot;\&quot;&quot;);
+    }
+
+    @Test
+    void aRefusedPayloadIsNotEchoedInTheError() throws Exception {
+        comment(&quot;ravi&quot;, 1, &quot;&lt;script&gt;steal()&lt;/script&gt; you idiot&quot;)
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(content().string(not(containsString(&quot;&lt;script&gt;&quot;))));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/chaupal/comments/CommentContractTest.java</p><div class="notes"><p>Post, JSON, HTML with CSP, length, moderation, rate limit, 404, broken JSON.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP contract: post, list as JSON or HTML, and every way a comment can be refused. */
+class CommentContractTest extends ApiTest {
+
+    @Test
+    void aCommentIs201WithTheSignedInUserAsAuthor() throws Exception {
+        comment(&quot;ravi&quot;, 1, &quot;Amruttulya near FC Road, every time.&quot;)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath(&quot;$.id&quot;).isNotEmpty())
+                .andExpect(jsonPath(&quot;$.postId&quot;).value(1))
+                .andExpect(jsonPath(&quot;$.author&quot;).value(&quot;ravi&quot;))
+                .andExpect(jsonPath(&quot;$.text&quot;).value(&quot;Amruttulya near FC Road, every time.&quot;));
+    }
+
+    @Test
+    void jsonListsCommentsOldestFirstWithTheTextExactlyAsTyped() throws Exception {
+        comment(&quot;ravi&quot;, 1, &quot;First!&quot;);
+        comment(&quot;asha&quot;, 1, &quot;Use &lt;b&gt; for bold? &amp; \&quot;quotes\&quot;&quot;);
+        mvc.perform(get(&quot;/posts/1/comments&quot;))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath(&quot;$[*].author&quot;, contains(&quot;ravi&quot;, &quot;asha&quot;)))
+                .andExpect(jsonPath(&quot;$[1].text&quot;).value(&quot;Use &lt;b&gt; for bold? &amp; \&quot;quotes\&quot;&quot;));
+    }
+
+    @Test
+    void theHtmlFragmentEncodesEveryCharacterThatMatters() throws Exception {
+        comment(&quot;asha&quot;, 1, &quot;Use &lt;b&gt; for bold? &amp; \&quot;quotes\&quot; &#x27;too&#x27;&quot;);
+        String page = mvc.perform(get(&quot;/posts/1/comments&quot;).accept(MediaType.TEXT_HTML))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+                .andExpect(header().string(&quot;Content-Security-Policy&quot;, &quot;default-src &#x27;none&#x27;; frame-ancestors &#x27;none&#x27;&quot;))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(page).contains(&quot;&lt;p&gt;Use &amp;lt;b&amp;gt; for bold? &amp;amp; &amp;quot;quotes&amp;quot; &amp;#39;too&amp;#39;&lt;/p&gt;&quot;);
+    }
+
+    @Test
+    void blankOrTooLongTextIs400() throws Exception {
+        comment(&quot;asha&quot;, 1, &quot;   &quot;).andExpect(status().isBadRequest()).andExpect(jsonPath(&quot;$.errors.text&quot;).value(&quot;must not be blank&quot;));
+        comment(&quot;asha&quot;, 1, &quot;a&quot;.repeat(501)).andExpect(status().isBadRequest())
+                .andExpect(jsonPath(&quot;$.errors.text&quot;).value(&quot;must be at most 500 characters&quot;));
+        comment(&quot;asha&quot;, 1, &quot;a&quot;.repeat(500)).andExpect(status().isCreated());
+    }
+
+    @Test
+    void aBannedWordIs422WithoutRepeatingIt() throws Exception {
+        comment(&quot;ravi&quot;, 1, &quot;What an 1d10t&quot;)
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.type&quot;).value(&quot;https://chaupal.example/problems/community-rules&quot;))
+                .andExpect(content().string(not(containsString(&quot;1d10t&quot;))));
+        mvc.perform(get(&quot;/posts/1/comments&quot;)).andExpect(jsonPath(&quot;$&quot;).isEmpty());
+    }
+
+    @Test
+    void theSixthCommentInAMinuteIs429WithRetryAfter() throws Exception {
+        for (int i = 1; i &lt;= 5; i++) {
+            comment(&quot;kabir&quot;, 1, &quot;Comment &quot; + i).andExpect(status().isCreated());
+        }
+        comment(&quot;kabir&quot;, 1, &quot;Comment 6&quot;)
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string(&quot;Retry-After&quot;, &quot;60&quot;))
+                .andExpect(jsonPath(&quot;$.type&quot;).value(&quot;https://chaupal.example/problems/too-many-comments&quot;));
+        comment(&quot;asha&quot;, 1, &quot;My first today&quot;).andExpect(status().isCreated()); // the limit is per user
+    }
+
+    @Test
+    void anUnknownPostIs404() throws Exception {
+        comment(&quot;asha&quot;, 99, &quot;Hello&quot;).andExpect(status().isNotFound());
+        mvc.perform(get(&quot;/posts/99/comments&quot;)).andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
+    @Test
+    void brokenJsonIs400() throws Exception {
+        mvc.perform(post(&quot;/posts/1/comments&quot;).with(httpBasic(&quot;asha&quot;, &quot;asha-demo-pass&quot;))
+                        .contentType(MediaType.APPLICATION_JSON).content(&quot;{\&quot;text\&quot;:&quot;))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/chaupal/comments/ModerationTest.java</p><div class="notes"><p>Disguises caught, innocent words left alone, the honest limits, and a Turkish locale.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+
+import java.util.Locale;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** Moderation on its own: the disguises it sees through, and the innocent words it must leave alone. */
+class ModerationTest {
+
+    private final Moderation moderation = new Moderation();
+    private final Locale original = Locale.getDefault();
+
+    @AfterEach
+    void restoreLocale() {
+        Locale.setDefault(original);
+    }
+
+    @Test
+    void disguisesAreSeenThrough() {
+        for (String text : new String[]{&quot;you idiot&quot;, &quot;IDIOT!&quot;, &quot;ＩＤＩＯＴ&quot;, &quot;1d10t&quot;, &quot;$c@m alert&quot;, &quot;s c a m&quot;, &quot;so stuuupid&quot;, &quot;id-iot&quot;}) {
+            assertThat(moderation.breaksRules(text)).as(text).isTrue();
+        }
+    }
+
+    @Test
+    void wholeWordsOnlySoScampiIsFine() {
+        for (String text : new String[]{&quot;Try the scampi&quot;, &quot;Scampi fry at Mahesh Lunch Home&quot;, &quot;That was a smart idea&quot;}) {
+            assertThat(moderation.breaksRules(text)).as(text).isFalse();
+        }
+    }
+
+    @Test
+    void theLimitsOfAWordList() {
+        // Honest limits: a different form of the word, or a mask character, gets through. Moderators still matter.
+        assertThat(moderation.breaksRules(&quot;stupidity&quot;)).isFalse();
+        assertThat(moderation.breaksRules(&quot;st*pid&quot;)).isFalse();
+    }
+
+    @Test
+    void stepsAreVisible() {
+        assertThat(Moderation.words(&quot;Ｓ c a m, 1d10t!!&quot;)).containsExactly(&quot;scam&quot;, &quot;idiot&quot;);
+    }
+
+    @Test
+    void aTurkishServerLocaleChangesNothing() {
+        Locale.setDefault(Locale.forLanguageTag(&quot;tr-TR&quot;)); // &quot;IDIOT&quot;.toLowerCase() would be &quot;ıdıot&quot;
+        assertThat(moderation.breaksRules(&quot;IDIOT&quot;)).isTrue();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/chaupal/comments/ApiTest.java</p><div class="notes"><p>Shared setup: no comments and a fresh rate limit before each test; bodies built by Jackson so payloads arrive exactly.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.Map;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/** Shared setup: the whole app with security, through MockMvc. No comments and a fresh rate limit before each test. */
+@SpringBootTest
+@AutoConfigureMockMvc
+abstract class ApiTest {
+
+    static final JsonMapper JSON = JsonMapper.builder().build();
+
+    @Autowired
+    MockMvc mvc;
+
+    @Autowired
+    CommentService service;
+
+    @Autowired
+    RateLimiter rateLimiter;
+
+    @BeforeEach
+    void cleanSlate() {
+        service.clear();
+        rateLimiter.reset();
+    }
+
+    /** JSON built by Jackson, so payloads full of quotes and angle brackets arrive exactly as written. */
+    static String body(String text) {
+        return JSON.writeValueAsString(Map.of(&quot;text&quot;, text));
+    }
+
+    ResultActions comment(String user, long postId, String text) throws Exception {
+        return mvc.perform(post(&quot;/posts/{id}/comments&quot;, postId).with(httpBasic(user, user + &quot;-demo-pass&quot;))
+                .contentType(MediaType.APPLICATION_JSON).content(body(text)));
+    }
+
+    String html(long postId) throws Exception {
+        return mvc.perform(get(&quot;/posts/{id}/comments&quot;, postId).accept(MediaType.TEXT_HTML))
+                .andReturn().getResponse().getContentAsString();
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/chaupal/comments/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=BoldFormattingChallengeTest</code></li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 27 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 35 tests pass (27 station tests and 8 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Go deeper · about 30 minutes</p><h2>Safe bold text</h2><p>Members want <code>**bold**</code>. In the HTML fragment, turn <code>**text**</code> into <code>&lt;strong&gt;text&lt;/strong&gt;</code>, while every other tag the user typed stays encoded, including one inside the stars.</p><p><b>Done when:</b> all four tests in <code>BoldFormattingChallengeTest</code> pass, and the station's tests still pass.</p><details class="qa"><summary>Hints</summary><ul><li>Order matters: encode first, then format. After encoding, the only tag in the text can be the one you add.</li><li><code>*</code> is not changed by HTML encoding, so the stars are still there to find.</li><li>A regular expression with a lazy group, <code>\*\*(…*?)\*\*</code>, finds each pair.</li></ul></details><p class="path">challenge/BoldFormattingChallengeTest.java</p><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** Challenge 1: **bold** becomes &lt;strong&gt;bold&lt;/strong&gt; in the HTML, without opening a door for any other tag. */
+class BoldFormattingChallengeTest extends ApiTest {
+
+    private String shown(String text) throws Exception {
+        comment(&quot;ravi&quot;, 1, text);
+        return html(1).replaceAll(&quot;(?s).*&lt;p&gt;(.*)&lt;/p&gt;.*&quot;, &quot;$1&quot;);
+    }
+
+    @Test
+    void doubleStarsBecomeStrong() throws Exception {
+        assertThat(shown(&quot;**Amruttulya** is the best&quot;)).isEqualTo(&quot;&lt;strong&gt;Amruttulya&lt;/strong&gt; is the best&quot;);
+    }
+
+    @Test
+    void realTagsStayEncodedNextToTheFormatting() throws Exception {
+        assertThat(shown(&quot;**yes** &lt;b&gt;no&lt;/b&gt;&quot;)).isEqualTo(&quot;&lt;strong&gt;yes&lt;/strong&gt; &amp;lt;b&amp;gt;no&amp;lt;/b&amp;gt;&quot;);
+    }
+
+    @Test
+    void anAttackInsideTheStarsIsStillText() throws Exception {
+        assertThat(shown(&quot;**&lt;img src=x onerror=alert(1)&gt;**&quot;)).isEqualTo(&quot;&lt;strong&gt;&amp;lt;img src=x onerror=alert(1)&amp;gt;&lt;/strong&gt;&quot;);
+    }
+
+    @Test
+    void unmatchedStarsStayAsTyped() throws Exception {
+        assertThat(shown(&quot;5 ** 2 is not bold&quot;)).isEqualTo(&quot;5 ** 2 is not bold&quot;);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/CommentHtml.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import java.util.List;
+
+import static org.springframework.web.util.HtmlUtils.htmlEscape;
+
+/**
+ * The comments as an HTML fragment, for the web page that embeds them. Every piece of user text goes through
+ * htmlEscape: &lt; &gt; &amp; &quot; &#x27; become &amp;lt; &amp;gt; &amp;amp; &amp;quot; &amp;#39;, so the browser shows them as characters and never
+ * reads them as tags or attributes. Encode at the moment of output, for the format being output.
+ */
+final class CommentHtml {
+
+    private CommentHtml() {
+    }
+
+    static String render(List&lt;Comment&gt; comments) {
+        StringBuilder html = new StringBuilder(&quot;&lt;ul class=\&quot;comments\&quot;&gt;\n&quot;);
+        for (Comment c : comments) {
+            html.append(&quot;  &lt;li&gt;&lt;b&gt;&quot;).append(htmlEscape(c.author())).append(&quot;&lt;/b&gt; &lt;p&gt;&quot;)
+                    .append(bold(htmlEscape(c.text()))).append(&quot;&lt;/p&gt;&lt;/li&gt;\n&quot;);
+        }
+        return html.append(&quot;&lt;/ul&gt;\n&quot;).toString();
+    }
+
+    /**
+     * Challenge 1. Runs on text that is already encoded, so the only tag that can appear is the one we add.
+     * Formatting first and encoding second would encode our own &lt;strong&gt; too; trusting user tags would undo the station.
+     */
+    static String bold(String encoded) {
+        return encoded.replaceAll(&quot;\\*\\*([^*\\s][^*]*?)\\*\\*&quot;, &quot;&lt;strong&gt;$1&lt;/strong&gt;&quot;);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 40 minutes</p><h2>Report a comment</h2><p>Add <code>POST /posts/{postId}/comments/{commentId}/reports</code> for members: <code>204</code> each time. When 3 different members have reported a comment, it is hidden from both lists. Reporting twice counts once; an unknown comment or an invisible post is <code>404</code>; muted users get <code>403</code>.</p><p><b>Done when:</b> all four tests in <code>ReportChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>A <code>Set</code> of reporters per comment makes "twice counts once" automatic.</li><li>Hide in <code>list()</code>, so JSON and HTML agree.</li><li>Always <code>204</code>: telling a reporter "that was the third report" helps people coordinate to hide comments they dislike.</li></ul></details><p class="path">challenge/ReportChallengeTest.java</p><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.test.web.servlet.ResultActions;
+
+import java.util.UUID;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Challenge 2: members report a comment; three different reporters hide it. */
+class ReportChallengeTest extends ApiTest {
+
+    ResultActions report(String user, long postId, String commentId) throws Exception {
+        return mvc.perform(post(&quot;/posts/{p}/comments/{c}/reports&quot;, postId, commentId).with(httpBasic(user, user + &quot;-demo-pass&quot;)));
+    }
+
+    String commentId(String user, long postId, String text) throws Exception {
+        String json = comment(user, postId, text).andReturn().getResponse().getContentAsString();
+        return com.jayway.jsonpath.JsonPath.read(json, &quot;$.id&quot;);
+    }
+
+    @Test
+    void threeDifferentReportersHideTheComment() throws Exception {
+        String id = commentId(&quot;ravi&quot;, 1, &quot;Visit my shop for cheap phones&quot;);
+        report(&quot;asha&quot;, 1, id).andExpect(status().isNoContent());
+        report(&quot;kabir&quot;, 1, id).andExpect(status().isNoContent());
+        mvc.perform(get(&quot;/posts/1/comments&quot;)).andExpect(jsonPath(&quot;$[0].id&quot;).value(id));   // two reports: still shown
+        report(&quot;ravi&quot;, 1, id).andExpect(status().isNoContent());
+        mvc.perform(get(&quot;/posts/1/comments&quot;)).andExpect(jsonPath(&quot;$&quot;).isEmpty());
+    }
+
+    @Test
+    void reportingTwiceCountsOnce() throws Exception {
+        String id = commentId(&quot;ravi&quot;, 1, &quot;Hmm&quot;);
+        report(&quot;asha&quot;, 1, id);
+        report(&quot;asha&quot;, 1, id).andExpect(status().isNoContent());
+        report(&quot;asha&quot;, 1, id);
+        mvc.perform(get(&quot;/posts/1/comments&quot;)).andExpect(jsonPath(&quot;$[0].id&quot;).value(id));
+    }
+
+    @Test
+    void anUnknownCommentOrAnInvisiblePostIs404() throws Exception {
+        report(&quot;asha&quot;, 1, UUID.randomUUID().toString()).andExpect(status().isNotFound());
+        String hidden = commentId(&quot;ravi&quot;, 2, &quot;private note&quot;);
+        report(&quot;asha&quot;, 2, hidden).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void mutedUsersCannotReport() throws Exception {
+        String id = commentId(&quot;ravi&quot;, 1, &quot;Hello&quot;);
+        report(&quot;tara&quot;, 1, id).andExpect(status().isForbidden());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/CommentService.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+/** Posts and comments in memory. The rules: who can see a post, moderation, and the rate limit. */
+@Service
+class CommentService {
+
+    private final Map&lt;Long, Post&gt; posts = Map.of(
+            1L, new Post(1, &quot;asha&quot;, &quot;Best cutting chai in Pune?&quot;, false),
+            2L, new Post(2, &quot;ravi&quot;, &quot;Notes to self&quot;, true));
+    private final List&lt;Comment&gt; comments = new ArrayList&lt;&gt;();
+    /** Challenge 2: comment id -&gt; who reported it. A Set, so the same reporter counts once. */
+    private final Map&lt;UUID, Set&lt;String&gt;&gt; reports = new ConcurrentHashMap&lt;&gt;();
+    static final int HIDE_AFTER = 3;
+    private final Moderation moderation;
+    private final RateLimiter rateLimiter;
+
+    CommentService(Moderation moderation, RateLimiter rateLimiter) {
+        this.moderation = moderation;
+        this.rateLimiter = rateLimiter;
+    }
+
+    /** The text is stored exactly as typed: no stripping of tags. Output encoding makes it safe (CommentHtml). */
+    Comment add(String user, long postId, String text) {
+        visiblePost(postId, user);
+        if (moderation.breaksRules(text)) {
+            throw new Exceptions.BreaksCommunityRules();
+        }
+        if (!rateLimiter.tryAcquire(user)) {
+            throw new Exceptions.TooManyComments();
+        }
+        var c = new Comment(UUID.randomUUID(), postId, user, text, Instant.now().truncatedTo(ChronoUnit.MILLIS));
+        synchronized (comments) {
+            comments.add(c);
+        }
+        return c;
+    }
+
+    /** user is null for a reader who is not signed in. */
+    List&lt;Comment&gt; list(long postId, String user) {
+        visiblePost(postId, user);
+        synchronized (comments) {
+            return comments.stream().filter(c -&gt; c.postId() == postId)
+                    .filter(c -&gt; reports.getOrDefault(c.id(), Set.of()).size() &lt; HIDE_AFTER)
+                    .toList();
+        }
+    }
+
+    /** Challenge 2. The comment must be on a post this user can see; otherwise 404, as everywhere else. */
+    void report(String user, long postId, UUID commentId) {
+        visiblePost(postId, user);
+        boolean exists;
+        synchronized (comments) {
+            exists = comments.stream().anyMatch(c -&gt; c.id().equals(commentId) &amp;&amp; c.postId() == postId);
+        }
+        if (!exists) {
+            throw new Exceptions.PostNotFound();
+        }
+        reports.computeIfAbsent(commentId, id -&gt; ConcurrentHashMap.newKeySet()).add(user);
+    }
+
+    private Post visiblePost(long postId, String user) {
+        Post p = posts.get(postId);
+        if (p == null || !p.visibleTo(user)) {
+            throw new Exceptions.PostNotFound();
+        }
+        return p;
+    }
+
+    /** For tests only. */
+    void clear() {
+        synchronized (comments) {
+            comments.clear();
+        }
+        reports.clear();
+    }
+}</code></pre></div><p class="path">challenge/solution/CommentController.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.security.Principal;
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping(&quot;/posts/{postId}/comments&quot;)
+class CommentController {
+
+    private final CommentService service;
+
+    CommentController(CommentService service) {
+        this.service = service;
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    Comment add(Principal user, @PathVariable long postId, @Valid @RequestBody CommentRequest request) {
+        return service.add(user.getName(), postId, request.text());
+    }
+
+    /** Challenge 2. 204 every time, so a reporter cannot tell how many others reported. */
+    @PostMapping(&quot;/{commentId}/reports&quot;)
+    ResponseEntity&lt;Void&gt; report(Principal user, @PathVariable long postId, @PathVariable UUID commentId) {
+        service.report(user.getName(), postId, commentId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** JSON for the app. The text is raw: the app must put it on screen as text, never as HTML. */
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+    List&lt;Comment&gt; list(Principal user, @PathVariable long postId) {
+        return service.list(postId, user == null ? null : user.getName());
+    }
+
+    /** The same comments as an HTML fragment for the website, with every piece of user text encoded. */
+    @GetMapping(produces = MediaType.TEXT_HTML_VALUE)
+    String html(Principal user, @PathVariable long postId) {
+        return CommentHtml.render(service.list(postId, user == null ? null : user.getName()));
+    }
+}</code></pre></div><p class="path">challenge/solution/SecurityConfig.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+/**
+ * Anyone may read public posts; members may comment; muted users may read but not comment.
+ * A Content-Security-Policy tells browsers to run no scripts at all from these responses: a second wall,
+ * in case encoding is ever missed somewhere.
+ */
+@Configuration
+class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems) throws Exception {
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(HttpMethod.GET, &quot;/posts/*/comments&quot;).permitAll()
+                        .requestMatchers(HttpMethod.POST, &quot;/posts/*/comments&quot;).hasRole(&quot;MEMBER&quot;)
+                        .requestMatchers(HttpMethod.POST, &quot;/posts/*/comments/*/reports&quot;).hasRole(&quot;MEMBER&quot;) // challenge 2
+                        .anyRequest().authenticated())
+                .httpBasic(basic -&gt; basic.authenticationEntryPoint(problems::unauthenticated))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .headers(h -&gt; h.contentSecurityPolicy(csp -&gt; csp.policyDirectives(&quot;default-src &#x27;none&#x27;; frame-ancestors &#x27;none&#x27;&quot;)))
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable()); // no cookies or sessions: credentials come with every request
+        return http.build();
+    }
+
+    /** Demo users, passwords stored as bcrypt hashes. tara is muted by the moderators. */
+    @Bean
+    UserDetailsService users() {
+        PasswordEncoder encoder = PasswordEncoderFactories.createDelegatingPasswordEncoder();
+        return new InMemoryUserDetailsManager(
+                User.withUsername(&quot;asha&quot;).password(encoder.encode(&quot;asha-demo-pass&quot;)).roles(&quot;MEMBER&quot;).build(),
+                User.withUsername(&quot;ravi&quot;).password(encoder.encode(&quot;ravi-demo-pass&quot;)).roles(&quot;MEMBER&quot;).build(),
+                User.withUsername(&quot;kabir&quot;).password(encoder.encode(&quot;kabir-demo-pass&quot;)).roles(&quot;MEMBER&quot;).build(),
+                User.withUsername(&quot;tara&quot;).password(encoder.encode(&quot;tara-demo-pass&quot;)).roles(&quot;MUTED&quot;).build());
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Links in comments</h2>
+<p>Members want links to be clickable. Which URLs would you allow (think of <code>javascript:</code> and <code>data:</code>)? Where in the encode-then-format order does linking happen? Which attributes would you add to the <code>&lt;a&gt;</code> tag, and why? When would you use a tested HTML sanitiser library instead of your own rules?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design (none in this station)</li></ul><p class="rule">Short at Foundations: the choices that matter here.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: the input filter misses <code>&lt;img onerror&gt;</code> and builds a <code>&lt;script&gt;</code>.</li>
+<li>Store text as typed; encode in the one place that writes HTML.</li>
+<li>Add CSP as a second wall.</li>
+<li>Write <code>Moderation.words</code> step by step, with a test per disguise and per innocent word.</li>
+<li>Add length and rate limits, each with its own status code.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Store as typed, encode on output</td><td>Every output path must encode for its own format.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Blocklist filter on input</td><td>Bypassed by other tags, case tricks and nesting; damages honest text.</td><td><span class="pill bad">Wrong</span></td></tr><tr><td>HTML-encode on input, store encoded</td><td>JSON and CSV now show <code>&amp;lt;</code>; encoding twice shows <code>&amp;amp;lt;</code>.</td><td><span class="pill bad">Wrong</span></td></tr><tr><td>A sanitiser library allowing some tags (OWASP Java HTML Sanitizer)</td><td>The right choice when users need real formatting. A dependency to keep updated.</td><td><span class="pill warn">When needed</span></td></tr><tr><td>Substring match for banned words</td><td>Blocks "scampi"; misses "1d10t".</td><td><span class="pill bad">Wrong</span></td></tr><tr><td>Hold suspicious comments for a moderator</td><td>Kinder than rejecting, slower to appear.</td><td><span class="pill warn">Common in production</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>None in this station. With a database, store the original text in a <code>TEXT</code> column with a length check, and never store an "encoded" copy.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Security</dt><dd>Encoding stops HTML injection; CSP stops scripts even if encoding is missed; JSON clients must render text as text. Encoding is per context: HTML text, an HTML attribute, a URL and JavaScript each need their own.</dd>
+<dt>Abuse</dt><dd>Moderation runs before the rate limit, so refused comments do not use up a user's 5; a determined spammer of banned words is limited only by the 422. Watch the 422 rate per user.</dd>
+<dt>Scale</dt><dd>The rate limit is per server. Several servers need a shared counter (Redis or a gateway), covered in later stations.</dd>
+<dt>Maintainability</dt><dd>The banned list is code here; in production it is data that moderators can edit, with tests for both "caught" and "allowed".</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>What is XSS, in one sentence?</summary><p>An attacker gets their text into a page in a way that the browser runs it as code, with the reader&#x27;s session.</p></details><details class="qa"><summary>Why encode output instead of filtering input?</summary><p>A filter must know every dangerous input and fails on the one it missed; encoding needs no list: every special character is shown as itself. Filters also corrupt honest text.</p></details><details class="qa"><summary>Is JSON safe from XSS?</summary><p>JSON itself is data. The danger is the client: inserting JSON text with innerHTML brings XSS back. Use textContent or a framework&#x27;s default escaping.</p></details><details class="qa"><summary>What does a Content-Security-Policy add?</summary><p>A second line of defence: the browser refuses to run scripts the policy does not allow, even if an attacker gets markup into the page.</p></details><details class="qa"><summary>Why normalise text before matching banned words?</summary><p>Attackers use look-alikes: full-width letters, digits for letters, spaces between letters. Normalising maps them to one form so one list covers them; whole-word comparison avoids blocking innocent words.</p></details><details class="qa"><summary>422 or 400 for a banned word?</summary><p>400 is for malformed requests. The request is well-formed; its content is not acceptable. 422 says exactly that.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 27 tests pass.</td><td>You can predict what the flawed version fails.</td></tr><tr><td>Security</td><td>Every output of user text is encoded.</td><td>You can name the encoding for an attribute, a URL and JavaScript.</td></tr><tr><td>Design</td><td>Store as typed, encode on output.</td><td>You can explain why encode-then-format, not the reverse.</td></tr><tr><td>Explanation</td><td>You can show the nested-tag bypass.</td><td>You can explain the limits of any word list.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate's "security hardening" PR: sanitise on the way in, a simpler moderator, and a tidy-up of <code>list()</code>. Read the three files and list every problem before opening the findings.</p>
+<p class="path">review/CommentService.java</p>
+<pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+/** Posts and comments in memory. The rules: who can see a post, moderation, and the rate limit. */
+@Service
+class CommentService {
+
+    private final Map&lt;Long, Post&gt; posts = Map.of(
+            1L, new Post(1, &quot;asha&quot;, &quot;Best cutting chai in Pune?&quot;, false),
+            2L, new Post(2, &quot;ravi&quot;, &quot;Notes to self&quot;, true));
+    private final List&lt;Comment&gt; comments = new ArrayList&lt;&gt;();
+    private final Moderation moderation;
+    private final RateLimiter rateLimiter;
+
+    CommentService(Moderation moderation, RateLimiter rateLimiter) {
+        this.moderation = moderation;
+        this.rateLimiter = rateLimiter;
+    }
+
+    /** Sanitise on the way in, so nothing dangerous is ever stored. */
+    Comment add(String user, long postId, String text) {
+        visiblePost(postId, user);
+        text = text.replaceAll(&quot;(?i)&lt;script[^&gt;]*&gt;.*?&lt;/script&gt;&quot;, &quot;&quot;);
+        if (moderation.breaksRules(text)) {
+            throw new Exceptions.BreaksCommunityRules();
+        }
+        if (!rateLimiter.tryAcquire(user)) {
+            throw new Exceptions.TooManyComments();
+        }
+        var c = new Comment(UUID.randomUUID(), postId, user, text, Instant.now().truncatedTo(ChronoUnit.MILLIS));
+        synchronized (comments) {
+            comments.add(c);
+        }
+        return c;
+    }
+
+    /** user is null for a reader who is not signed in. */
+    List&lt;Comment&gt; list(long postId, String user) {
+        if (!posts.containsKey(postId)) {
+            throw new Exceptions.PostNotFound();
+        }
+        synchronized (comments) {
+            return comments.stream().filter(c -&gt; c.postId() == postId).toList();
+        }
+    }
+
+    private Post visiblePost(long postId, String user) {
+        Post p = posts.get(postId);
+        if (p == null || !p.visibleTo(user)) {
+            throw new Exceptions.PostNotFound();
+        }
+        return p;
+    }
+
+    /** For tests only. */
+    void clear() {
+        synchronized (comments) {
+            comments.clear();
+        }
+    }
+}</code></pre>
+<p class="path">review/CommentHtml.java</p>
+<pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import java.util.List;
+
+/** Comments as an HTML fragment. Text is already sanitised when it is saved (see CommentService), so no escaping needed here. */
+final class CommentHtml {
+
+    private CommentHtml() {
+    }
+
+    static String render(List&lt;Comment&gt; comments) {
+        StringBuilder html = new StringBuilder(&quot;&lt;ul class=\&quot;comments\&quot;&gt;\n&quot;);
+        for (Comment c : comments) {
+            html.append(&quot;  &lt;li&gt;&lt;b&gt;&quot;).append(c.author()).append(&quot;&lt;/b&gt; &lt;p&gt;&quot;).append(c.text()).append(&quot;&lt;/p&gt;&lt;/li&gt;\n&quot;);
+        }
+        return html.append(&quot;&lt;/ul&gt;\n&quot;).toString();
+    }
+}</code></pre>
+<p class="path">review/Moderation.java</p>
+<pre class="code"><code class="language-java">package com.chaupal.comments;
+
+import org.springframework.stereotype.Component;
+
+import java.util.Set;
+
+/** Simple and fast: lower-case the text and look for each banned word. */
+@Component
+class Moderation {
+
+    static final Set&lt;String&gt; BANNED = Set.of(&quot;idiot&quot;, &quot;stupid&quot;, &quot;scam&quot;);
+
+    boolean breaksRules(String text) {
+        String lower = text.toLowerCase();
+        return BANNED.stream().anyMatch(lower::contains);
+    }
+
+    static java.util.List&lt;String&gt; words(String text) {
+        return java.util.List.of(text.toLowerCase().split(&quot;\\s+&quot;));
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>"Sanitise on input" with a <code>&lt;script&gt;</code> regex</summary><p>Only script tags are removed; <code>&lt;img onerror&gt;</code>, <code>&lt;svg onload&gt;</code> and others pass. It also damages honest comments: <code>&lt;scr&lt;script&gt;ipt&gt;…</code> was stored as <code>&lt;scr</code>.</p><p class="evidence"><b>Test evidence:</b> <code>everyPayloadIsStoredAsTextAndShownAsText</code>: the stored text differs from what was sent.</p></details><details class="finding"><summary><span class="sev">2</span>No encoding in <code>CommentHtml</code></summary><p>"Already sanitised" is trusted, so every payload the filter missed reaches the page as live HTML.</p><p class="evidence"><b>Test evidence:</b> <code>encodingOnOutputTurnsBothIntoHarmlessText</code>, <code>theHtmlFragmentEncodesEveryCharacterThatMatters</code> and the payload cases.</p></details><details class="finding"><summary><span class="sev">3</span>Substring matching in <code>Moderation</code></summary><p><code>text.toLowerCase().contains(word)</code> misses "1d10t" and "ＩＤＩＯＴ", blocks "scampi", and uses the server's locale.</p><p class="evidence"><b>Test evidence:</b> <code>aBannedWordIs422WithoutRepeatingIt</code> (got 201), all five <code>ModerationTest</code> tests.</p></details><details class="finding"><summary><span class="sev">4</span>Private posts readable by anyone</summary><p><code>list()</code> checks only that the post exists, not that the reader may see it. Posting is still blocked, which makes the gap easy to miss.</p><p class="evidence"><b>Test evidence:</b> <code>anotherUsersPrivatePostLooksLikeItDoesNotExist</code>: 200 instead of 404.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the three flawed files copied over the real ones, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>CommentContractTest</code></td><td><span class="pill ok">8 / 8</span></td><td><span class="pill bad">6 / 8</span></td></tr><tr><td><code>CommentSecurityTest</code></td><td><span class="pill ok">12 / 12</span></td><td><span class="pill bad">4 / 12</span></td></tr><tr><td><code>InputFilterTrapTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">1 / 2</span></td></tr><tr><td><code>ModerationTest</code></td><td><span class="pill ok">5 / 5</span></td><td><span class="pill bad">0 / 5</span></td></tr></tbody></table></div>
+<p class="note">The PR's own description says "security hardening". Every change made the API less safe. Reviews need tests that ask what an attacker would send, not just whether the happy path still works.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
