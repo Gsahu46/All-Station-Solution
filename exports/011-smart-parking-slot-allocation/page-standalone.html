@@ -1,0 +1,1559 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 011 · Smart parking slot allocation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 011</span>
+    <h1>Smart parking slot allocation</h1>
+    <p class="scenario">Cars are sent to the far end of a 6-floor parking while nearer slots stay empty; bikes take car slots.</p>
+    <p class="sim"><b>Simulation</b><span>One 6-floor building with 360 slots exists only in the app's memory. No gate hardware, cameras or payments: a fee is a number on the receipt.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Smart cities</li>
+      <li><b>Types</b>None</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>009 Wishlist without duplicates</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring MVC · enums · TreeSet · java.time.Clock · MockMvc</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Neha drives into an empty mall parking at 9 a.m.</strong><p>The entry gate sends her to floor 5, at the far end. Ground-floor slots next to the exit stay empty all morning.</p></li><li><strong>A biker gets a car slot</strong><p>The gate gave the first free slot on its list, whatever its size, so bikes took car slots and cars were turned away while bike slots stood free.</p></li><li><strong>The fix</strong><p>Keep the free slots of each type in order, nearest first. Each entry takes the top one; each exit puts its slot back in its place.</p></li></ol>
+<p class="lesson">If you will ask "which is the best one?" thousands of times, keep things sorted once, instead of searching every time.</p>
+
+<h2>What are we building?</h2>
+<p>Two endpoints: an entry gate (<code>POST /parking/entries</code>) that hands out a ticket for the nearest free slot of the right size, and an exit gate (<code>POST /parking/exits/{ticketId}</code>) that frees the slot and prints a receipt, charging every started hour.</p>
+
+<h2>An everyday analogy</h2>
+<p>A hospital keeps a waiting list sorted by urgency. When a doctor is free, the nurse calls the top name; nobody re-reads the whole register each time. When a patient leaves and comes back, they go back into the list at their place. Free parking slots, sorted by distance, work the same way.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>At start-up</strong>, every slot goes into one of two sorted sets, cars or bikes, nearest first.</li>
+<li><strong>A vehicle enters</strong>: the gate takes the first slot from the set for its type. Nothing left: <code>409</code>.</li>
+<li><strong>The ticket</strong> records the slot and the entry time.</li>
+<li><strong>At exit</strong>, the fee counts every started hour; the slot goes back into its set, in its place.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: a car on the ground floor leaves. The next car arrives. Where does it go?</summary><p>To that ground-floor slot, if it is now the nearest free car slot. Putting the slot back into the sorted set places it at the front again, so the next <code>pollFirst</code> returns it.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No hardware.</strong> No boom barriers, cameras or number-plate readers.</li>
+<li><strong>No payment.</strong> The fee is a number on the receipt. Rates are demo rules, not any city's tariff.</li>
+<li><strong>One building, in memory.</strong> A restart forgets every ticket.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Model</strong></td><td>Classes that mirror the real things: slot, vehicle type, ticket, receipt.</td><td>A toy model of a building.</td><td><code>Slot</code>, <code>Ticket</code>, <code>Garage</code></td></tr><tr><td><strong>Enum</strong></td><td>A fixed list of named values, which can also carry data.</td><td>The sizes on a T-shirt label.</td><td><code>VehicleType.CAR</code> knows its slot type and rates.</td></tr><tr><td><strong>TreeSet</strong></td><td>A set that keeps its items sorted all the time.</td><td>A queue at a counter that reorders itself by token number.</td><td>Free slots, nearest first.</td></tr><tr><td><strong>pollFirst</strong></td><td>Take and remove the smallest item of a sorted set.</td><td>Calling the next token.</td><td>The nearest free slot.</td></tr><tr><td><strong>Comparator</strong></td><td>The rule for which item comes first.</td><td>"Shorter walk first; if equal, lower slot number."</td><td><code>Slot.NEAREST_FIRST</code></td></tr><tr><td><strong>Rounding up</strong></td><td>Any part of an hour counts as a whole hour.</td><td>A taxi meter that adds a full unit when you start one.</td><td>61 minutes is 2 hours.</td></tr><tr><td><strong>Clock</strong></td><td>Java's source of "now" that tests can replace.</td><td>A stopwatch the referee controls.</td><td><code>TestClock</code> in tests.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Parkora</strong> (a fictional smart-parking operator) runs a 6-floor mall car park. Its gate software walks the slot sheet from the top floor and takes the first free slot of any size. Customers complain about walking from floor 5 when the ground floor is empty; bikes fill car slots; and at peak hours each entry gets slower, because every car re-reads the whole sheet.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> an empty building, <b>when</b> a car enters, <b>then</b> it gets <code>F0-C01</code>, the nearest car slot; a bike gets <code>F0-B01</code>.</li>
+<li><b>Given</b> a freed slot that is now the nearest, <b>then</b> the next vehicle of that type gets it.</li>
+<li><b>Given</b> no free car slots, <b>then</b> a car gets <code>409</code>, while bikes can still enter.</li>
+<li><b>Given</b> a vehicle already inside, <b>when</b> the same plate enters again (in any spelling), <b>then</b> <code>409</code> naming its open ticket.</li>
+<li><b>Given</b> 150 minutes parked, <b>then</b> 3 hours are charged: ₹40 + 2 × ₹30 = ₹100 for a car.</li>
+<li><b>Given</b> the exit gate sends the same ticket twice, <b>then</b> the same receipt comes back and the slot is freed once.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>Slot types: bike and car. Each vehicle type uses only its own slot type.</li>
+<li>"Nearest" = shortest walk to the exit; ties by slot id.</li>
+<li>Fees (demo rules): car ₹40 first hour, ₹30 each started hour after; bike ₹20, then ₹10. Minimum one hour. Amounts in paise.</li>
+<li>Plates are normalised (spaces and hyphens removed, upper case with <code>Locale.ROOT</code>) and checked against a demo pattern like <code>MH12AB1234</code>.</li>
+<li>Entry and exit never interleave: two gates cannot hand out the same slot.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Model a real system with records, enums and one class that owns the rules.</li>
+<li>Put data and behaviour on enums.</li>
+<li>Keep a <code>TreeSet</code> ordered with a <code>Comparator</code>, and use <code>pollFirst</code> and <code>add</code>.</li>
+<li>Round up correctly with <code>Math.ceilDiv</code>, and test the boundaries.</li>
+<li>Inject a <code>Clock</code> so time-based rules can be tested instantly.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/parking/entries</code></td><td>Body <code>{"vehicleNumber", "vehicleType": "CAR" | "BIKE"}</code>. <code>201</code> with a ticket and slot.</td></tr><tr><td><code>POST</code></td><td><code>/parking/exits/{ticketId}</code></td><td><code>200</code> with the receipt; the slot is freed.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">201</span></td><td>Ticket issued</td></tr><tr><td><span class="pill ok">200</span></td><td>Receipt (also for a repeated exit: the same receipt)</td></tr><tr><td><span class="pill warn">400</span></td><td>Bad plate, unknown vehicle type, missing fields, malformed ticket id</td></tr><tr><td><span class="pill warn">404</span></td><td>Unknown ticket</td></tr><tr><td><span class="pill warn">409</span></td><td><em>No free slot</em> of this type, or <em>Already parked</em> (with the open <code>ticketId</code>)</td></tr></tbody></table></div>
+<p class="note">Why is exit a <code>POST</code> that may be repeated? The exit gate retries when its network drops. The first exit stores the receipt; every later call returns it unchanged, so the customer is charged once and the slot is freed once (the idempotency idea from station 008).</p>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 13 Oct 2026, with the real clock, so exits happen seconds after entry. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: a bike enters an empty building</h3><p><b>Why:</b> the nearest bike slot, <code>F0-B01</code>: never a car slot.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /parking/entries HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;vehicleNumber&quot;: &quot;KA05XY4321&quot;,
+  &quot;vehicleType&quot;: &quot;BIKE&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Content-Type: application/json
+Content-Length: 209
+
+{
+  &quot;ticketId&quot;: &quot;545b6169-87af-4786-a7c2-e752db08607a&quot;,
+  &quot;vehicleNumber&quot;: &quot;KA05XY4321&quot;,
+  &quot;vehicleType&quot;: &quot;BIKE&quot;,
+  &quot;slot&quot;: {
+    &quot;id&quot;: &quot;F0-B01&quot;,
+    &quot;floor&quot;: 0,
+    &quot;number&quot;: 1,
+    &quot;type&quot;: &quot;BIKE&quot;,
+    &quot;walkMetres&quot;: 3
+  },
+  &quot;enteredAt&quot;: &quot;2026-10-13T16:30:19Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: a car, plate typed loosely</h3><p><b>Why:</b> <code>mh 12 ab-1234</code> is normalised to <code>MH12AB1234</code>; the nearest car slot is <code>F0-C01</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /parking/entries HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;vehicleNumber&quot;: &quot;mh 12 ab-1234&quot;,
+  &quot;vehicleType&quot;: &quot;CAR&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Content-Type: application/json
+Content-Length: 207
+
+{
+  &quot;ticketId&quot;: &quot;ae866854-8cca-46ff-899c-a2008f7fff2f&quot;,
+  &quot;vehicleNumber&quot;: &quot;MH12AB1234&quot;,
+  &quot;vehicleType&quot;: &quot;CAR&quot;,
+  &quot;slot&quot;: {
+    &quot;id&quot;: &quot;F0-C01&quot;,
+    &quot;floor&quot;: 0,
+    &quot;number&quot;: 1,
+    &quot;type&quot;: &quot;CAR&quot;,
+    &quot;walkMetres&quot;: 6
+  },
+  &quot;enteredAt&quot;: &quot;2026-10-13T16:30:19Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: the same car at another gate</h3><p><b>Why:</b> it is already inside: <code>409</code>, with its open ticket so staff can find it.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /parking/entries HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;vehicleNumber&quot;: &quot;MH12AB1234&quot;,
+  &quot;vehicleType&quot;: &quot;CAR&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 409 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;This vehicle already has an open ticket.&quot;,
+  &quot;instance&quot;: &quot;/parking/entries&quot;,
+  &quot;status&quot;: 409,
+  &quot;title&quot;: &quot;Already parked&quot;,
+  &quot;ticketId&quot;: &quot;ae866854-8cca-46ff-899c-a2008f7fff2f&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: not a plate</h3><p><b>Why:</b> <code>400</code> before any slot is touched.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /parking/entries HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;vehicleNumber&quot;: &quot;12345&quot;,
+  &quot;vehicleType&quot;: &quot;CAR&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Use a number plate like MH12AB1234.&quot;,
+  &quot;instance&quot;: &quot;/parking/entries&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Invalid vehicle number&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: the car leaves</h3><p><b>Why:</b> a few seconds parked still pays the first hour: ₹40 (4000 paise). The slot goes back to the front of the free set.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /parking/exits/ae866854-8cca-46ff-899c-a2008f7fff2f HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 218
+
+{
+  &quot;ticketId&quot;: &quot;ae866854-8cca-46ff-899c-a2008f7fff2f&quot;,
+  &quot;vehicleNumber&quot;: &quot;MH12AB1234&quot;,
+  &quot;slotId&quot;: &quot;F0-C01&quot;,
+  &quot;enteredAt&quot;: &quot;2026-10-13T16:30:19Z&quot;,
+  &quot;exitedAt&quot;: &quot;2026-10-13T16:30:19Z&quot;,
+  &quot;minutesParked&quot;: 0,
+  &quot;hoursCharged&quot;: 1,
+  &quot;feePaise&quot;: 4000
+}</code></pre></div></div></section><section class="example"><h3>Case 6: the exit gate retries</h3><p><b>Why:</b> the same receipt, word for word: no second charge, no second free slot.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /parking/exits/ae866854-8cca-46ff-899c-a2008f7fff2f HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 218
+
+{
+  &quot;ticketId&quot;: &quot;ae866854-8cca-46ff-899c-a2008f7fff2f&quot;,
+  &quot;vehicleNumber&quot;: &quot;MH12AB1234&quot;,
+  &quot;slotId&quot;: &quot;F0-C01&quot;,
+  &quot;enteredAt&quot;: &quot;2026-10-13T16:30:19Z&quot;,
+  &quot;exitedAt&quot;: &quot;2026-10-13T16:30:19Z&quot;,
+  &quot;minutesParked&quot;: 0,
+  &quot;hoursCharged&quot;: 1,
+  &quot;feePaise&quot;: 4000
+}</code></pre></div></div></section><section class="example"><h3>Case 7: a ticket that does not exist</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /parking/exits/00000000-0000-0000-0000-000000000000 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No ticket has this id.&quot;,
+  &quot;instance&quot;: &quot;/parking/exits/00000000-0000-0000-0000-000000000000&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Ticket not found&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>Bike, then car, in an empty building</td><td><code>F0-B01</code>, <code>F0-C01</code></td><td><code>theGarageGivesEachVehicleTheNearestSlotOfItsOwnType</code></td></tr><tr><td>A freed near slot</td><td>Given to the next car</td><td><code>carsFillTheNearestSlotsFirstAndAFreedNearSlotIsReused</code></td></tr><tr><td>Plate with spaces, hyphen, lower case; then the same plate again</td><td>Normalised; <code>409</code> <em>Already parked</em></td><td><code>spacesHyphensAndLowerCaseInThePlateAreTheSameCar</code></td></tr><tr><td>Bad plate, <code>TRUCK</code>, empty body</td><td><code>400</code></td><td><code>badInputIs400</code></td></tr><tr><td>All 240 car slots taken</td><td>Cars <code>409</code>; bikes still enter</td><td><code>whenCarSlotsRunOutCarsGet409ButBikesStillEnter</code></td></tr><tr><td>150 minutes</td><td>3 hours, ₹100</td><td><code>exitChargesEveryStartedHour</code></td></tr><tr><td>12-minute bike stay</td><td>1 hour, ₹20</td><td><code>aShortBikeStayPaysTheFirstHour</code></td></tr><tr><td>0, 1, 60, 60:01, 120, 121 minutes</td><td>1, 1, 1, 2, 2, 3 hours</td><td><code>everyStartedHourCounts</code></td></tr><tr><td>119 minutes</td><td>2 hours (integer division would give 1)</td><td><code>integerDivisionWouldHaveRoundedDown</code></td></tr><tr><td>Exit twice, 5 hours apart</td><td>Same receipt; slot freed once</td><td><code>exitingTwiceReturnsTheSameReceiptAndFreesTheSlotOnce</code></td></tr><tr><td>Same car returns after leaving</td><td>New ticket</td><td><code>theSameCarCanParkAgainAfterLeaving</code></td></tr><tr><td>Unknown or malformed ticket</td><td><code>404</code>; <code>400</code></td><td><code>anUnknownOrMalformedTicketIsRefused</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Re-scanning every slot on each entry instead of keeping free slots ordered.</p>
+<p>"Loop over the slots, take the first free one" is the first idea, and it works in a demo with 10 slots. The first test runs it on the real 360-slot sheet, which lists floor 5 first: the bike gets a car slot on the top floor, the car walks 412 m instead of 6 m, and filling the building looks at 64,980 slots. The second test sends the same two vehicles to the real gate: <code>F0-B01</code> and <code>F0-C01</code>. Rounding the fee down instead of up was tried while building: 4 tests went red.</p>
+</div>
+<pre class="code"><code class="language-java">package com.parkora.parking;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+
+/**
+ * The first test written for this station: it reproduces the bug before the fix.
+ * An empty building; a bike arrives, then a car.
+ */
+class RescanEverySlotTrapTest extends ApiTest {
+
+    /** The &quot;before&quot; allocator: walk the slot sheet from the top and take the first free slot. Kept only in tests. */
+    static class OldAllocator {
+        final List&lt;Slot&gt; sheet = Garage.layout();
+        final Set&lt;String&gt; taken = new HashSet&lt;&gt;();
+        int slotsLookedAt;
+
+        Slot allocate() {
+            for (Slot s : sheet) {
+                slotsLookedAt++;
+                if (taken.add(s.id())) {
+                    return s;
+                }
+            }
+            return null;
+        }
+    }
+
+    @Test
+    void scanningTheSheetSendsTheBikeToACarSlotOnTheTopFloor() {
+        OldAllocator old = new OldAllocator();
+        Slot forBike = old.allocate();
+        Slot forCar = old.allocate();
+        assertThat(forBike.type()).isEqualTo(SlotType.CAR);          // a bike in a car slot
+        assertThat(forBike.floor()).isEqualTo(5);                     // on the top floor of an empty building
+        assertThat(forCar.walkMetres()).isEqualTo(5 * 80 + 2 * 6);    // the car walks 412 m, not 6 m
+
+        // and every entry re-reads the sheet: filling the building looks at 360 + 359 + ... + 1 slots
+        for (int i = 2; i &lt; 360; i++) {
+            old.allocate();
+        }
+        assertThat(old.slotsLookedAt).isEqualTo(360 * 361 / 2);
+    }
+
+    @Test
+    void theGarageGivesEachVehicleTheNearestSlotOfItsOwnType() throws Exception {
+        enter(&quot;KA01AB0001&quot;, &quot;BIKE&quot;).andExpect(jsonPath(&quot;$.slot.id&quot;).value(&quot;F0-B01&quot;))
+                .andExpect(jsonPath(&quot;$.slot.type&quot;).value(&quot;BIKE&quot;));
+        enter(&quot;KA01AB0002&quot;, &quot;CAR&quot;).andExpect(jsonPath(&quot;$.slot.id&quot;).value(&quot;F0-C01&quot;))
+                .andExpect(jsonPath(&quot;$.slot.walkMetres&quot;).value(6));
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr><tr><td>Docker</td><td>Not needed for this station</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 15 tests</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. <code>Math.ceilDiv</code> needs Java 18 or later.</p>
+<h2>Try it yourself</h2>
+<p>The body is in <code>docs/car.json</code>.</p>
+<pre class="code"><code class="language-bash"># Enter: expect 201 and &quot;slot&quot;: {&quot;id&quot;: &quot;F0-C01&quot;, ...}
+curl -i -X POST http://localhost:8080/parking/entries -H &quot;Content-Type: application/json&quot; -d &quot;@docs/car.json&quot;
+
+# Exit: paste the ticketId; expect &quot;feePaise&quot;: 4000
+curl -i -X POST http://localhost:8080/parking/exits/PASTE-THE-TICKET-ID</code></pre>
+<p>Run the exit twice and compare the two receipts.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>400</code> for <code>"vehicleType": "car"</code></td><td>Enum names are upper case.</td><td>Send <code>CAR</code> or <code>BIKE</code>.</td></tr><tr><td><code>409 Already parked</code></td><td>That plate has an open ticket.</td><td>Exit it first, or use another plate.</td></tr><tr><td><code>release version 25 not supported</code></td><td>Maven is using an older JDK.</td><td>Point <code>JAVA_HOME</code> at JDK 25, or add <code>-Djava.version=21</code>.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/011-smart-parking-slot-allocation/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/parkora/parking/
+│   ├── ParkingController.java   ├── Garage.java      ├── Fee.java
+│   ├── VehicleType.java         ├── SlotType.java    ├── Slot.java
+│   ├── Ticket.java, Receipt.java, ApiErrors.java, ParkingApplication.java
+├── src/test/java/com/parkora/parking/   (see Tests; TestClock moves time)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">ParkingController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">Garage.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">VehicleType.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">Fee.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">Slot.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">SlotType.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">Ticket.java</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">Receipt.java</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">ParkingApplication.java</button><button class="file-btn" role="tab" id="code-9-b" aria-controls="code-9" aria-selected="false" data-group="code">ApiErrors.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/parkora/parking/ParkingController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Two gates. Normalises and checks the plate; maps each garage exception to its status.</dd><dt>Why</dt><dd>HTTP stays out of the garage, which only knows slots and tickets.</dd><dt>Without it</dt><dd>No API.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Locale;
+import java.util.UUID;
+import java.util.regex.Pattern;
+
+@RestController
+class ParkingController {
+
+    /** Indian-style plates: MH12AB1234, DL3CAF0001 (a demo rule; it does not cover every real format). */
+    private static final Pattern PLATE = Pattern.compile(&quot;[A-Z]{2}\\d{1,2}[A-Z]{0,3}\\d{4}&quot;);
+
+    record EntryRequest(@NotBlank String vehicleNumber, @NotNull VehicleType vehicleType) {
+    }
+
+    private final Garage garage;
+
+    ParkingController(Garage garage) {
+        this.garage = garage;
+    }
+
+    @PostMapping(&quot;/parking/entries&quot;)
+    @ResponseStatus(HttpStatus.CREATED)
+    Ticket enter(@Valid @RequestBody EntryRequest request) {
+        // &quot;mh 12 ab-1234&quot; and &quot;MH12AB1234&quot; are the same car. Locale.ROOT so a Turkish server keeps &quot;i&quot; as &quot;I&quot;.
+        String plate = request.vehicleNumber().replaceAll(&quot;[\\s-]&quot;, &quot;&quot;).toUpperCase(Locale.ROOT);
+        if (!PLATE.matcher(plate).matches()) {
+            throw new ErrorResponseException(HttpStatus.BAD_REQUEST,
+                    problem(HttpStatus.BAD_REQUEST, &quot;Invalid vehicle number&quot;, &quot;Use a number plate like MH12AB1234.&quot;), null);
+        }
+        return garage.enter(plate, request.vehicleType());
+    }
+
+    @PostMapping(&quot;/parking/exits/{ticketId}&quot;)
+    Receipt exit(@PathVariable UUID ticketId) {
+        return garage.exit(ticketId);
+    }
+
+    @ExceptionHandler
+    ProblemDetail full(Garage.GarageFull e) {
+        return problem(HttpStatus.CONFLICT, &quot;No free slot&quot;, &quot;Every slot for this vehicle type is taken.&quot;);
+    }
+
+    @ExceptionHandler
+    ProblemDetail alreadyParked(Garage.AlreadyParked e) {
+        ProblemDetail p = problem(HttpStatus.CONFLICT, &quot;Already parked&quot;, &quot;This vehicle already has an open ticket.&quot;);
+        p.setProperty(&quot;ticketId&quot;, e.ticketId);
+        return p;
+    }
+
+    @ExceptionHandler
+    ProblemDetail unknownTicket(Garage.TicketNotFound e) {
+        return problem(HttpStatus.NOT_FOUND, &quot;Ticket not found&quot;, &quot;No ticket has this id.&quot;);
+    }
+
+    private static ProblemDetail problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return p;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/parkora/parking/Garage.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Owns the building: one <code>TreeSet</code> of free slots per type, the tickets, the receipts.</dd><dt>Why</dt><dd>The sorted sets make "nearest free slot" one <code>pollFirst</code>, and "free it again" one <code>add</code>.</dd><dt>Without it</dt><dd>The trap: a loop over every slot, on every entry.</dd></dl><ul><li><code>synchronized</code>: two gates at the same moment cannot take the same slot.</li><li>A stored receipt makes a repeated exit harmless.</li><li><code>layout()</code> lists the building top floor first, as the old sheet did; the sorted set does not care.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import org.springframework.stereotype.Component;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeSet;
+import java.util.UUID;
+
+/**
+ * The building: 6 floors (0 to 5), each with 40 car slots and 20 bike slots.
+ *
+ * Free slots are kept already ordered, nearest first, in one TreeSet per slot type. Entry takes the first one
+ * (pollFirst, O(log n)); exit puts the slot back (add, O(log n)). Nothing ever scans all 360 slots.
+ * Every public method is synchronized: two cars at two gates must never get the same slot.
+ */
+@Component
+class Garage {
+
+    static final int FLOORS = 6, CAR_SLOTS_PER_FLOOR = 40, BIKE_SLOTS_PER_FLOOR = 20;
+
+    static class GarageFull extends RuntimeException {
+    }
+
+    static class AlreadyParked extends RuntimeException {
+        final UUID ticketId;
+
+        AlreadyParked(UUID ticketId) {
+            this.ticketId = ticketId;
+        }
+    }
+
+    static class TicketNotFound extends RuntimeException {
+    }
+
+    private final Clock clock;
+    private final Map&lt;SlotType, TreeSet&lt;Slot&gt;&gt; free = new EnumMap&lt;&gt;(SlotType.class);
+    private final Map&lt;UUID, Ticket&gt; tickets = new HashMap&lt;&gt;();
+    private final Map&lt;UUID, Receipt&gt; receipts = new HashMap&lt;&gt;();
+    private final Map&lt;String, UUID&gt; parkedNow = new HashMap&lt;&gt;(); // vehicle number -&gt; open ticket
+
+    Garage(Clock clock) {
+        this.clock = clock;
+        reset();
+    }
+
+    /** The whole layout, in the order a builder would list it. Package-private so the trap test can scan it. */
+    static List&lt;Slot&gt; layout() {
+        List&lt;Slot&gt; slots = new ArrayList&lt;&gt;();
+        for (int floor = FLOORS - 1; floor &gt;= 0; floor--) { // listed top floor first, as the building&#x27;s old sheet was
+            for (int n = 1; n &lt;= CAR_SLOTS_PER_FLOOR; n++) {
+                slots.add(new Slot(&quot;F%d-C%02d&quot;.formatted(floor, n), floor, n, SlotType.CAR, floor * 80 + n * 6));
+            }
+            for (int n = 1; n &lt;= BIKE_SLOTS_PER_FLOOR; n++) {
+                slots.add(new Slot(&quot;F%d-B%02d&quot;.formatted(floor, n), floor, n, SlotType.BIKE, floor * 80 + n * 3));
+            }
+        }
+        return slots;
+    }
+
+    synchronized Ticket enter(String vehicleNumber, VehicleType type) {
+        UUID open = parkedNow.get(vehicleNumber);
+        if (open != null) {
+            throw new AlreadyParked(open);
+        }
+        Slot slot = free.get(type.slotType).pollFirst(); // the nearest free slot of the right type, or null
+        if (slot == null) {
+            throw new GarageFull();
+        }
+        Ticket t = new Ticket(UUID.randomUUID(), vehicleNumber, type, slot, now());
+        tickets.put(t.ticketId(), t);
+        parkedNow.put(vehicleNumber, t.ticketId());
+        return t;
+    }
+
+    /** Exiting twice (a retry at the gate) returns the first receipt: no second charge, no second free slot. */
+    synchronized Receipt exit(UUID ticketId) {
+        Receipt earlier = receipts.get(ticketId);
+        if (earlier != null) {
+            return earlier;
+        }
+        Ticket t = tickets.get(ticketId);
+        if (t == null) {
+            throw new TicketNotFound();
+        }
+        Instant out = now();
+        Duration parked = Duration.between(t.enteredAt(), out);
+        Receipt r = new Receipt(t.ticketId(), t.vehicleNumber(), t.slot().id(), t.enteredAt(), out,
+                parked.toMinutes(), Fee.hoursCharged(parked), Fee.feePaise(t.vehicleType(), parked));
+        receipts.put(ticketId, r);
+        parkedNow.remove(t.vehicleNumber());
+        free.get(t.slot().type()).add(t.slot()); // back in order: the next car may get it if it is the nearest
+        return r;
+    }
+
+    synchronized int freeCount(SlotType type) {
+        return free.get(type).size();
+    }
+
+    /** Empty building. Used at start-up, and by tests so each one starts clean. */
+    synchronized void reset() {
+        free.clear();
+        for (SlotType t : SlotType.values()) {
+            free.put(t, new TreeSet&lt;&gt;(Slot.NEAREST_FIRST));
+        }
+        layout().forEach(s -&gt; free.get(s.type()).add(s));
+        tickets.clear();
+        receipts.clear();
+        parkedNow.clear();
+    }
+
+    private Instant now() {
+        return clock.instant().truncatedTo(ChronoUnit.SECONDS);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/parkora/parking/VehicleType.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>An enum whose values carry their slot type and rates.</dd><dt>Why</dt><dd>Add a vehicle type in one place, with its own rules.</dd><dt>Without it</dt><dd>Rates and slot rules spread over <code>if</code>s.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+/**
+ * An enum with data: each vehicle type knows which slot it needs and what it pays.
+ * Fees are whole paise. The rates are demo rules for this station, not any city&#x27;s parking tariff.
+ */
+public enum VehicleType {
+    BIKE(SlotType.BIKE, 2_000, 1_000),  // Rs 20 for the first hour, Rs 10 for each hour after
+    CAR(SlotType.CAR, 4_000, 3_000);    // Rs 40 for the first hour, Rs 30 for each hour after
+
+    final SlotType slotType;
+    final int firstHourPaise;
+    final int extraHourPaise;
+
+    VehicleType(SlotType slotType, int firstHourPaise, int extraHourPaise) {
+        this.slotType = slotType;
+        this.firstHourPaise = firstHourPaise;
+        this.extraHourPaise = extraHourPaise;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/parkora/parking/Fee.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Started hours and the fee, as plain arithmetic.</dd><dt>Why</dt><dd>Tested without Spring, boundary by boundary.</dd><dt>Without it</dt><dd>Rounding hidden inside the garage.</dd></dl><ul><li><code>Math.ceilDiv(seconds, 3600)</code> rounds up; <code>seconds / 3600</code> would round down.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import java.time.Duration;
+
+/** The tariff, as plain arithmetic so it can be tested without Spring. */
+final class Fee {
+
+    private Fee() {
+    }
+
+    /** Every started hour counts: 60:00 is 1 hour, 60:01 is 2. Even a 5-minute stay pays the first hour. */
+    static long hoursCharged(Duration parked) {
+        return Math.max(1, Math.ceilDiv(parked.toSeconds(), 3600));
+    }
+
+    static long feePaise(VehicleType type, Duration parked) {
+        return type.firstHourPaise + (hoursCharged(parked) - 1) * type.extraHourPaise;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/parkora/parking/Slot.java</p><div class="notes"><p>A slot, and the comparator that defines "nearest".</p></div><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import java.util.Comparator;
+
+/**
+ * One parking slot. walkMetres is the walk from the slot to the ground-floor exit: each floor up adds a ramp,
+ * each slot further along a row adds a few metres. &quot;Nearest&quot; means the smallest walk.
+ */
+public record Slot(String id, int floor, int number, SlotType type, int walkMetres) {
+
+    /** Nearest first; two slots at the same distance are ordered by id, so the choice never depends on luck. */
+    static final Comparator&lt;Slot&gt; NEAREST_FIRST = Comparator.comparingInt(Slot::walkMetres).thenComparing(Slot::id);
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/parkora/parking/SlotType.java</p><div class="notes"><p>Bike or car.</p></div><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+/** The kinds of slot the building has. A bike slot is too small for a car; a car slot wasted on a bike is the bug. */
+public enum SlotType {
+    BIKE, CAR
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/parkora/parking/Ticket.java</p><div class="notes"><p>What the entry gate prints.</p></div><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import java.time.Instant;
+import java.util.UUID;
+
+/** Given at the entry gate: which slot to drive to, and when the clock started. */
+public record Ticket(UUID ticketId, String vehicleNumber, VehicleType vehicleType, Slot slot, Instant enteredAt) {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/java/com/parkora/parking/Receipt.java</p><div class="notes"><p>What the exit gate prints.</p></div><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import java.time.Instant;
+import java.util.UUID;
+
+/** Given at the exit gate. Stored with the ticket, so asking again returns exactly the same receipt. */
+public record Receipt(UUID ticketId, String vehicleNumber, String slotId, Instant enteredAt, Instant exitedAt,
+                      long minutesParked, long hoursCharged, long feePaise) {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">src/main/java/com/parkora/parking/ParkingApplication.java</p><div class="notes"><p>Entry point, and the <code>Clock</code> bean the garage uses for "now".</p></div><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+import java.time.Clock;
+
+@SpringBootApplication
+public class ParkingApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(ParkingApplication.class, args);
+    }
+
+    /** The garage asks this clock for &quot;now&quot;, so tests can move time forward instead of waiting two hours. */
+    @Bean
+    Clock clock() {
+        return Clock.systemUTC();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-9" aria-labelledby="code-9-b" hidden><p class="path">src/main/java/com/parkora/parking/ApiErrors.java</p><div class="notes"><p>Adds an <code>errors</code> map to validation failures (as in station 004).</p></div><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+
+import java.util.Map;
+import java.util.TreeMap;
+
+/**
+ * Spring already turns an invalid @Valid body into an RFC 9457 problem (the base class). We add an &quot;errors&quot; map,
+ * field -&gt; message, so the form can show each message next to its input. Station 006 covers error handling in depth.
+ */
+@RestControllerAdvice
+class ApiErrors extends ResponseEntityExceptionHandler {
+
+    @Override
+    protected ResponseEntity&lt;Object&gt; handleMethodArgumentNotValid(
+            MethodArgumentNotValidException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        Map&lt;String, String&gt; errors = new TreeMap&lt;&gt;();
+        ex.getBindingResult().getFieldErrors().forEach(e -&gt; errors.putIfAbsent(e.getField(), e.getDefaultMessage()));
+        ex.getBody().setDetail(&quot;The request has invalid fields.&quot;);
+        ex.getBody().setProperty(&quot;errors&quot;, errors);
+        return handleExceptionInternal(ex, null, headers, status, request);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>ParkingContractTest</code> (10)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>RescanEverySlotTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>This station</td><td>The tariff at every boundary</td><td><code>FeeTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.parkora.parking.RescanEverySlotTrapTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0 -- in com.parkora.parking.ParkingContractTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.parkora.parking.FeeTest
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">RescanEverySlotTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">ParkingContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">FeeTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">TestClock.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/parkora/parking/RescanEverySlotTrapTest.java</p><div class="notes"><p>Written first: the old allocator's wrong slots and its 64,980 looks; the real gate's nearest slots.</p></div><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+
+/**
+ * The first test written for this station: it reproduces the bug before the fix.
+ * An empty building; a bike arrives, then a car.
+ */
+class RescanEverySlotTrapTest extends ApiTest {
+
+    /** The &quot;before&quot; allocator: walk the slot sheet from the top and take the first free slot. Kept only in tests. */
+    static class OldAllocator {
+        final List&lt;Slot&gt; sheet = Garage.layout();
+        final Set&lt;String&gt; taken = new HashSet&lt;&gt;();
+        int slotsLookedAt;
+
+        Slot allocate() {
+            for (Slot s : sheet) {
+                slotsLookedAt++;
+                if (taken.add(s.id())) {
+                    return s;
+                }
+            }
+            return null;
+        }
+    }
+
+    @Test
+    void scanningTheSheetSendsTheBikeToACarSlotOnTheTopFloor() {
+        OldAllocator old = new OldAllocator();
+        Slot forBike = old.allocate();
+        Slot forCar = old.allocate();
+        assertThat(forBike.type()).isEqualTo(SlotType.CAR);          // a bike in a car slot
+        assertThat(forBike.floor()).isEqualTo(5);                     // on the top floor of an empty building
+        assertThat(forCar.walkMetres()).isEqualTo(5 * 80 + 2 * 6);    // the car walks 412 m, not 6 m
+
+        // and every entry re-reads the sheet: filling the building looks at 360 + 359 + ... + 1 slots
+        for (int i = 2; i &lt; 360; i++) {
+            old.allocate();
+        }
+        assertThat(old.slotsLookedAt).isEqualTo(360 * 361 / 2);
+    }
+
+    @Test
+    void theGarageGivesEachVehicleTheNearestSlotOfItsOwnType() throws Exception {
+        enter(&quot;KA01AB0001&quot;, &quot;BIKE&quot;).andExpect(jsonPath(&quot;$.slot.id&quot;).value(&quot;F0-B01&quot;))
+                .andExpect(jsonPath(&quot;$.slot.type&quot;).value(&quot;BIKE&quot;));
+        enter(&quot;KA01AB0002&quot;, &quot;CAR&quot;).andExpect(jsonPath(&quot;$.slot.id&quot;).value(&quot;F0-C01&quot;))
+                .andExpect(jsonPath(&quot;$.slot.walkMetres&quot;).value(6));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/parkora/parking/ParkingContractTest.java</p><div class="notes"><p>Entry, reuse of freed slots, plates, a full building, fees, repeated exits.</p></div><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import java.time.Duration;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP contract: entry, exit, fees, and every way a request can be refused. */
+class ParkingContractTest extends ApiTest {
+
+    @Test
+    void entryIs201WithATicketForTheNearestSlot() throws Exception {
+        enter(&quot;MH12AB1234&quot;, &quot;CAR&quot;)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath(&quot;$.ticketId&quot;).isNotEmpty())
+                .andExpect(jsonPath(&quot;$.vehicleNumber&quot;).value(&quot;MH12AB1234&quot;))
+                .andExpect(jsonPath(&quot;$.vehicleType&quot;).value(&quot;CAR&quot;))
+                .andExpect(jsonPath(&quot;$.slot.id&quot;).value(&quot;F0-C01&quot;))
+                .andExpect(jsonPath(&quot;$.slot.floor&quot;).value(0))
+                .andExpect(jsonPath(&quot;$.enteredAt&quot;).value(&quot;2026-10-19T09:00:00Z&quot;));
+    }
+
+    @Test
+    void carsFillTheNearestSlotsFirstAndAFreedNearSlotIsReused() throws Exception {
+        String first = ticketOf(enter(&quot;MH12AB0001&quot;, &quot;CAR&quot;));
+        enter(&quot;MH12AB0002&quot;, &quot;CAR&quot;).andExpect(jsonPath(&quot;$.slot.id&quot;).value(&quot;F0-C02&quot;));
+        exit(first);
+        enter(&quot;MH12AB0003&quot;, &quot;CAR&quot;).andExpect(jsonPath(&quot;$.slot.id&quot;).value(&quot;F0-C01&quot;)); // nearest again
+        enter(&quot;MH12AB0004&quot;, &quot;CAR&quot;).andExpect(jsonPath(&quot;$.slot.id&quot;).value(&quot;F0-C03&quot;));
+    }
+
+    @Test
+    void spacesHyphensAndLowerCaseInThePlateAreTheSameCar() throws Exception {
+        enter(&quot;mh 12 ab-1234&quot;, &quot;CAR&quot;).andExpect(jsonPath(&quot;$.vehicleNumber&quot;).value(&quot;MH12AB1234&quot;));
+        enter(&quot;MH12AB1234&quot;, &quot;CAR&quot;).andExpect(status().isConflict())
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Already parked&quot;))
+                .andExpect(jsonPath(&quot;$.ticketId&quot;).isNotEmpty());
+    }
+
+    @Test
+    void badInputIs400() throws Exception {
+        enter(&quot;12345&quot;, &quot;CAR&quot;).andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Invalid vehicle number&quot;));
+        enter(&quot;MH12AB1234&quot;, &quot;TRUCK&quot;).andExpect(status().isBadRequest());
+        mvcPostEmpty();
+    }
+
+    private void mvcPostEmpty() throws Exception {
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(&quot;/parking/entries&quot;)
+                        .contentType(MediaType.APPLICATION_JSON).content(&quot;{}&quot;))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath(&quot;$.errors.vehicleNumber&quot;).exists())
+                .andExpect(jsonPath(&quot;$.errors.vehicleType&quot;).exists());
+    }
+
+    @Test
+    void whenCarSlotsRunOutCarsGet409ButBikesStillEnter() throws Exception {
+        for (int i = 0; i &lt; Garage.FLOORS * Garage.CAR_SLOTS_PER_FLOOR; i++) {
+            garage.enter(&quot;MH12AB%04d&quot;.formatted(i), VehicleType.CAR);
+        }
+        enter(&quot;MH12ZZ9999&quot;, &quot;CAR&quot;).andExpect(status().isConflict()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;No free slot&quot;));
+        enter(&quot;MH12ZZ9998&quot;, &quot;BIKE&quot;).andExpect(status().isCreated());
+    }
+
+    @Test
+    void exitChargesEveryStartedHour() throws Exception {
+        String car = ticketOf(enter(&quot;MH12AB1234&quot;, &quot;CAR&quot;));
+        clock.advance(Duration.ofMinutes(150));
+        exit(car).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.minutesParked&quot;).value(150))
+                .andExpect(jsonPath(&quot;$.hoursCharged&quot;).value(3))
+                .andExpect(jsonPath(&quot;$.feePaise&quot;).value(4000 + 2 * 3000))
+                .andExpect(jsonPath(&quot;$.slotId&quot;).value(&quot;F0-C01&quot;));
+    }
+
+    @Test
+    void aShortBikeStayPaysTheFirstHour() throws Exception {
+        String bike = ticketOf(enter(&quot;KA05XY4321&quot;, &quot;BIKE&quot;));
+        clock.advance(Duration.ofMinutes(12));
+        exit(bike).andExpect(jsonPath(&quot;$.hoursCharged&quot;).value(1)).andExpect(jsonPath(&quot;$.feePaise&quot;).value(2000));
+    }
+
+    @Test
+    void exitingTwiceReturnsTheSameReceiptAndFreesTheSlotOnce() throws Exception {
+        String car = ticketOf(enter(&quot;MH12AB1234&quot;, &quot;CAR&quot;));
+        clock.advance(Duration.ofMinutes(30));
+        String first = exit(car).andReturn().getResponse().getContentAsString();
+        int freeAfterOne = garage.freeCount(SlotType.CAR);
+        clock.advance(Duration.ofHours(5));                       // the gate retries much later
+        String second = exit(car).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(second).isEqualTo(first);
+        assertThat(garage.freeCount(SlotType.CAR)).isEqualTo(freeAfterOne);
+    }
+
+    @Test
+    void theSameCarCanParkAgainAfterLeaving() throws Exception {
+        exit(ticketOf(enter(&quot;MH12AB1234&quot;, &quot;CAR&quot;)));
+        enter(&quot;MH12AB1234&quot;, &quot;CAR&quot;).andExpect(status().isCreated());
+    }
+
+    @Test
+    void anUnknownOrMalformedTicketIsRefused() throws Exception {
+        exit(UUID.randomUUID().toString()).andExpect(status().isNotFound()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Ticket not found&quot;));
+        exit(&quot;not-a-ticket&quot;).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/parkora/parking/FeeTest.java</p><div class="notes"><p>The tariff as plain arithmetic, at each boundary.</p></div><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** The tariff on its own: every boundary of &quot;every started hour&quot;. */
+class FeeTest {
+
+    @Test
+    void everyStartedHourCounts() {
+        assertThat(Fee.hoursCharged(Duration.ZERO)).isEqualTo(1);
+        assertThat(Fee.hoursCharged(Duration.ofMinutes(1))).isEqualTo(1);
+        assertThat(Fee.hoursCharged(Duration.ofMinutes(60))).isEqualTo(1);
+        assertThat(Fee.hoursCharged(Duration.ofMinutes(60).plusSeconds(1))).isEqualTo(2);
+        assertThat(Fee.hoursCharged(Duration.ofMinutes(120))).isEqualTo(2);
+        assertThat(Fee.hoursCharged(Duration.ofMinutes(121))).isEqualTo(3);
+    }
+
+    @Test
+    void feesInPaiseByVehicleType() {
+        assertThat(Fee.feePaise(VehicleType.CAR, Duration.ofMinutes(45))).isEqualTo(4_000);
+        assertThat(Fee.feePaise(VehicleType.CAR, Duration.ofHours(7))).isEqualTo(4_000 + 6 * 3_000);
+        assertThat(Fee.feePaise(VehicleType.BIKE, Duration.ofMinutes(61))).isEqualTo(2_000 + 1_000);
+    }
+
+    @Test
+    void integerDivisionWouldHaveRoundedDown() {
+        // The usual slip: minutes / 60 is 1 for 119 minutes. ceilDiv gives the 2 hours the sign at the gate promises.
+        assertThat(119 / 60).isEqualTo(1);
+        assertThat(Fee.hoursCharged(Duration.ofMinutes(119))).isEqualTo(2);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/parkora/parking/TestClock.java</p><div class="notes"><p>A clock the tests move forward: two hours pass in one line.</p></div><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+
+/** A clock the tests can move forward: &quot;park, then two hours pass&quot; in one line, without waiting. */
+class TestClock extends Clock {
+
+    static final Instant START = Instant.parse(&quot;2026-10-19T09:00:00Z&quot;);
+    private Instant now = START;
+
+    void reset() {
+        now = START;
+    }
+
+    void advance(Duration d) {
+        now = now.plus(d);
+    }
+
+    @Override
+    public Instant instant() {
+        return now;
+    }
+
+    @Override
+    public ZoneId getZone() {
+        return ZoneOffset.UTC;
+    }
+
+    @Override
+    public Clock withZone(ZoneId zone) {
+        return this;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/parkora/parking/ApiTest.java</p><div class="notes"><p>Shared setup: the test clock replaces the real one; an empty building and a reset clock before each test.</p></div><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/** Shared setup: the whole app through MockMvc, a clock the test controls, and an empty building and a reset clock before each test. */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(ApiTest.Clocks.class)
+abstract class ApiTest {
+
+    @TestConfiguration
+    static class Clocks {
+        @Bean
+        @Primary
+        TestClock testClock() {
+            return new TestClock();
+        }
+    }
+
+    @Autowired
+    MockMvc mvc;
+
+    @Autowired
+    Garage garage;
+
+    @Autowired
+    TestClock clock;
+
+    @BeforeEach
+    void emptyBuilding() {
+        garage.reset();
+        clock.reset();
+    }
+
+    ResultActions enter(String plate, String type) throws Exception {
+        return mvc.perform(post(&quot;/parking/entries&quot;).contentType(MediaType.APPLICATION_JSON)
+                .content(&quot;{\&quot;vehicleNumber\&quot;:\&quot;&quot; + plate + &quot;\&quot;,\&quot;vehicleType\&quot;:\&quot;&quot; + type + &quot;\&quot;}&quot;));
+    }
+
+    ResultActions exit(String ticketId) throws Exception {
+        return mvc.perform(post(&quot;/parking/exits/{id}&quot;, ticketId));
+    }
+
+    String ticketOf(ResultActions entry) throws Exception {
+        return com.jayway.jsonpath.JsonPath.read(entry.andReturn().getResponse().getContentAsString(), &quot;$.ticketId&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/parkora/parking/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=AvailabilityBoardChallengeTest</code></li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 15 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 20 tests pass (15 station tests and 5 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 25 minutes</p><h2>The display board</h2><p>Add <code>GET /parking/availability</code>: one entry per floor, ground floor first, with free car and bike slots.</p><p><b>Done when:</b> both tests in <code>AvailabilityBoardChallengeTest</code> pass, and the station's tests still pass.</p><details class="qa"><summary>Hints</summary><ul><li>The free sets already know every free slot and its floor.</li><li>Read inside a <code>synchronized</code> method, so the board never shows a half-finished entry.</li></ul></details><p class="path">challenge/AvailabilityBoardChallengeTest.java</p><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Challenge 1: the display board at the gate: free slots per floor, per type. */
+class AvailabilityBoardChallengeTest extends ApiTest {
+
+    @Test
+    void anEmptyBuildingShowsEveryFloorFull() throws Exception {
+        mvc.perform(get(&quot;/parking/availability&quot;))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$&quot;, hasSize(6)))
+                .andExpect(jsonPath(&quot;$[*].floor&quot;, contains(0, 1, 2, 3, 4, 5)))
+                .andExpect(jsonPath(&quot;$[0].freeCarSlots&quot;).value(40))
+                .andExpect(jsonPath(&quot;$[0].freeBikeSlots&quot;).value(20));
+    }
+
+    @Test
+    void parkedVehiclesAreSubtractedFromTheirFloorAndType() throws Exception {
+        enter(&quot;MH12AB0001&quot;, &quot;CAR&quot;);
+        enter(&quot;MH12AB0002&quot;, &quot;CAR&quot;);
+        String bike = ticketOf(enter(&quot;MH12AB0003&quot;, &quot;BIKE&quot;));
+        exit(bike);
+        mvc.perform(get(&quot;/parking/availability&quot;))
+                .andExpect(jsonPath(&quot;$[0].freeCarSlots&quot;).value(38))
+                .andExpect(jsonPath(&quot;$[0].freeBikeSlots&quot;).value(20))
+                .andExpect(jsonPath(&quot;$[1].freeCarSlots&quot;).value(40));
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/Garage.java</p><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import org.springframework.stereotype.Component;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeSet;
+import java.util.UUID;
+
+/**
+ * The building: 6 floors (0 to 5), each with 40 car slots and 20 bike slots.
+ *
+ * Free slots are kept already ordered, nearest first, in one TreeSet per slot type. Entry takes the first one
+ * (pollFirst, O(log n)); exit puts the slot back (add, O(log n)). Nothing ever scans all 360 slots.
+ * Every public method is synchronized: two cars at two gates must never get the same slot.
+ */
+@Component
+class Garage {
+
+    static final int FLOORS = 6, CAR_SLOTS_PER_FLOOR = 40, BIKE_SLOTS_PER_FLOOR = 20;
+
+    static class GarageFull extends RuntimeException {
+    }
+
+    static class AlreadyParked extends RuntimeException {
+        final UUID ticketId;
+
+        AlreadyParked(UUID ticketId) {
+            this.ticketId = ticketId;
+        }
+    }
+
+    static class TicketNotFound extends RuntimeException {
+    }
+
+    private final Clock clock;
+    private final Map&lt;SlotType, TreeSet&lt;Slot&gt;&gt; free = new EnumMap&lt;&gt;(SlotType.class);
+    private final Map&lt;UUID, Ticket&gt; tickets = new HashMap&lt;&gt;();
+    private final Map&lt;UUID, Receipt&gt; receipts = new HashMap&lt;&gt;();
+    private final Map&lt;String, UUID&gt; parkedNow = new HashMap&lt;&gt;(); // vehicle number -&gt; open ticket
+
+    Garage(Clock clock) {
+        this.clock = clock;
+        reset();
+    }
+
+    /** The whole layout, in the order a builder would list it. Package-private so the trap test can scan it. */
+    static List&lt;Slot&gt; layout() {
+        List&lt;Slot&gt; slots = new ArrayList&lt;&gt;();
+        for (int floor = FLOORS - 1; floor &gt;= 0; floor--) { // listed top floor first, as the building&#x27;s old sheet was
+            for (int n = 1; n &lt;= CAR_SLOTS_PER_FLOOR; n++) {
+                slots.add(new Slot(&quot;F%d-C%02d&quot;.formatted(floor, n), floor, n, SlotType.CAR, floor * 80 + n * 6));
+            }
+            for (int n = 1; n &lt;= BIKE_SLOTS_PER_FLOOR; n++) {
+                slots.add(new Slot(&quot;F%d-B%02d&quot;.formatted(floor, n), floor, n, SlotType.BIKE, floor * 80 + n * 3));
+            }
+        }
+        return slots;
+    }
+
+    synchronized Ticket enter(String vehicleNumber, VehicleType type) {
+        UUID open = parkedNow.get(vehicleNumber);
+        if (open != null) {
+            throw new AlreadyParked(open);
+        }
+        Slot slot = free.get(type.slotType).pollFirst(); // the nearest free slot of the right type, or null
+        if (slot == null) {
+            throw new GarageFull();
+        }
+        Ticket t = new Ticket(UUID.randomUUID(), vehicleNumber, type, slot, now());
+        tickets.put(t.ticketId(), t);
+        parkedNow.put(vehicleNumber, t.ticketId());
+        return t;
+    }
+
+    /** Exiting twice (a retry at the gate) returns the first receipt: no second charge, no second free slot. */
+    synchronized Receipt exit(UUID ticketId) {
+        Receipt earlier = receipts.get(ticketId);
+        if (earlier != null) {
+            return earlier;
+        }
+        Ticket t = tickets.get(ticketId);
+        if (t == null) {
+            throw new TicketNotFound();
+        }
+        Instant out = now();
+        Duration parked = Duration.between(t.enteredAt(), out);
+        Receipt r = new Receipt(t.ticketId(), t.vehicleNumber(), t.slot().id(), t.enteredAt(), out,
+                parked.toMinutes(), Fee.hoursCharged(parked), Fee.feePaise(t.vehicleType(), parked));
+        receipts.put(ticketId, r);
+        parkedNow.remove(t.vehicleNumber());
+        free.get(t.slot().type()).add(t.slot()); // back in order: the next car may get it if it is the nearest
+        return r;
+    }
+
+    /** Challenge 1: one line per floor, ground floor first. */
+    record FloorAvailability(int floor, long freeCarSlots, long freeBikeSlots) {
+    }
+
+    synchronized List&lt;FloorAvailability&gt; availability() {
+        List&lt;FloorAvailability&gt; board = new ArrayList&lt;&gt;();
+        for (int floor = 0; floor &lt; FLOORS; floor++) {
+            int f = floor;
+            board.add(new FloorAvailability(floor,
+                    free.get(SlotType.CAR).stream().filter(s -&gt; s.floor() == f).count(),
+                    free.get(SlotType.BIKE).stream().filter(s -&gt; s.floor() == f).count()));
+        }
+        return board;
+    }
+
+    synchronized int freeCount(SlotType type) {
+        return free.get(type).size();
+    }
+
+    /** Empty building. Used at start-up, and by tests so each one starts clean. */
+    synchronized void reset() {
+        free.clear();
+        for (SlotType t : SlotType.values()) {
+            free.put(t, new TreeSet&lt;&gt;(Slot.NEAREST_FIRST));
+        }
+        layout().forEach(s -&gt; free.get(s.type()).add(s));
+        tickets.clear();
+        receipts.clear();
+        parkedNow.clear();
+    }
+
+    private Instant now() {
+        return clock.instant().truncatedTo(ChronoUnit.SECONDS);
+    }
+}</code></pre></div><p class="path">challenge/solution/ParkingController.java</p><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
+import java.util.regex.Pattern;
+
+@RestController
+class ParkingController {
+
+    /** Indian-style plates: MH12AB1234, DL3CAF0001 (a demo rule; it does not cover every real format). */
+    private static final Pattern PLATE = Pattern.compile(&quot;[A-Z]{2}\\d{1,2}[A-Z]{0,3}\\d{4}&quot;);
+
+    record EntryRequest(@NotBlank String vehicleNumber, @NotNull VehicleType vehicleType) {
+    }
+
+    private final Garage garage;
+
+    ParkingController(Garage garage) {
+        this.garage = garage;
+    }
+
+    @PostMapping(&quot;/parking/entries&quot;)
+    @ResponseStatus(HttpStatus.CREATED)
+    Ticket enter(@Valid @RequestBody EntryRequest request) {
+        // &quot;mh 12 ab-1234&quot; and &quot;MH12AB1234&quot; are the same car. Locale.ROOT so a Turkish server keeps &quot;i&quot; as &quot;I&quot;.
+        String plate = request.vehicleNumber().replaceAll(&quot;[\\s-]&quot;, &quot;&quot;).toUpperCase(Locale.ROOT);
+        if (!PLATE.matcher(plate).matches()) {
+            throw new ErrorResponseException(HttpStatus.BAD_REQUEST,
+                    problem(HttpStatus.BAD_REQUEST, &quot;Invalid vehicle number&quot;, &quot;Use a number plate like MH12AB1234.&quot;), null);
+        }
+        return garage.enter(plate, request.vehicleType());
+    }
+
+    @PostMapping(&quot;/parking/exits/{ticketId}&quot;)
+    Receipt exit(@PathVariable UUID ticketId) {
+        return garage.exit(ticketId);
+    }
+
+    /** Challenge 1. */
+    @GetMapping(&quot;/parking/availability&quot;)
+    List&lt;Garage.FloorAvailability&gt; availability() {
+        return garage.availability();
+    }
+
+    @ExceptionHandler
+    ProblemDetail full(Garage.GarageFull e) {
+        return problem(HttpStatus.CONFLICT, &quot;No free slot&quot;, &quot;Every slot for this vehicle type is taken.&quot;);
+    }
+
+    @ExceptionHandler
+    ProblemDetail alreadyParked(Garage.AlreadyParked e) {
+        ProblemDetail p = problem(HttpStatus.CONFLICT, &quot;Already parked&quot;, &quot;This vehicle already has an open ticket.&quot;);
+        p.setProperty(&quot;ticketId&quot;, e.ticketId);
+        return p;
+    }
+
+    @ExceptionHandler
+    ProblemDetail unknownTicket(Garage.TicketNotFound e) {
+        return problem(HttpStatus.NOT_FOUND, &quot;Ticket not found&quot;, &quot;No ticket has this id.&quot;);
+    }
+
+    private static ProblemDetail problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return p;
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 35 minutes</p><h2>A daily cap</h2><p>Customers who park all day complain. Cap the fee: each full 24 hours costs at most ₹300 for a car and ₹150 for a bike; the hours after the last full day are charged normally, but never more than one more cap.</p><p><b>Done when:</b> all three tests in <code>DailyCapChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Give each <code>VehicleType</code> a <code>dailyCapPaise</code>: the enum already holds the other rates.</li><li><code>Duration.toDays()</code> gives the full days; subtract them to get the rest.</li><li>Exactly 24 hours is one cap, not one cap plus a first hour.</li></ul></details><p class="path">challenge/DailyCapChallengeTest.java</p><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Challenge 2: a daily cap. Each full 24 hours costs at most the cap (car Rs 300, bike Rs 150); the hours after
+ * the last full day are charged normally, but never more than one more cap.
+ */
+class DailyCapChallengeTest {
+
+    @Test
+    void aShortStayIsUnchanged() {
+        assertThat(Fee.feePaise(VehicleType.CAR, Duration.ofHours(2))).isEqualTo(7_000);
+    }
+
+    @Test
+    void aLongDayStopsAtTheCap() {
+        assertThat(Fee.feePaise(VehicleType.CAR, Duration.ofHours(10))).isEqualTo(30_000); // 31,000 without the cap
+        assertThat(Fee.feePaise(VehicleType.CAR, Duration.ofHours(24))).isEqualTo(30_000);
+    }
+
+    @Test
+    void theNextDayStartsCountingAgain() {
+        assertThat(Fee.feePaise(VehicleType.CAR, Duration.ofHours(25))).isEqualTo(30_000 + 4_000);
+        assertThat(Fee.feePaise(VehicleType.BIKE, Duration.ofHours(30))).isEqualTo(15_000 + 2_000 + 5 * 1_000);
+        assertThat(Fee.feePaise(VehicleType.CAR, Duration.ofHours(48))).isEqualTo(60_000);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/VehicleType.java</p><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+/**
+ * An enum with data: each vehicle type knows which slot it needs and what it pays.
+ * Fees are whole paise. The rates are demo rules for this station, not any city&#x27;s parking tariff.
+ */
+public enum VehicleType {
+    BIKE(SlotType.BIKE, 2_000, 1_000, 15_000),  // Rs 20 first hour, Rs 10 each hour after, at most Rs 150 a day
+    CAR(SlotType.CAR, 4_000, 3_000, 30_000);    // Rs 40 first hour, Rs 30 each hour after, at most Rs 300 a day
+
+    final SlotType slotType;
+    final int firstHourPaise;
+    final int extraHourPaise;
+    final int dailyCapPaise; // challenge 2
+
+    VehicleType(SlotType slotType, int firstHourPaise, int extraHourPaise, int dailyCapPaise) {
+        this.slotType = slotType;
+        this.firstHourPaise = firstHourPaise;
+        this.extraHourPaise = extraHourPaise;
+        this.dailyCapPaise = dailyCapPaise;
+    }
+}</code></pre></div><p class="path">challenge/solution/Fee.java</p><div class="src"><pre class="code"><code class="language-java">package com.parkora.parking;
+
+import java.time.Duration;
+
+/** The tariff, as plain arithmetic so it can be tested without Spring. */
+final class Fee {
+
+    private Fee() {
+    }
+
+    /** Every started hour counts: 60:00 is 1 hour, 60:01 is 2. Even a 5-minute stay pays the first hour. */
+    static long hoursCharged(Duration parked) {
+        return Math.max(1, Math.ceilDiv(parked.toSeconds(), 3600));
+    }
+
+    /** Challenge 2: full days cost the cap each; the rest is charged hourly, at most one more cap. */
+    static long feePaise(VehicleType type, Duration parked) {
+        long fullDays = parked.toDays();
+        Duration rest = parked.minusDays(fullDays);
+        long restFee = fullDays &gt; 0 &amp;&amp; rest.isZero() ? 0 : Math.min(type.dailyCapPaise, hourly(type, rest));
+        return fullDays * type.dailyCapPaise + restFee;
+    }
+
+    private static long hourly(VehicleType type, Duration parked) {
+        return type.firstHourPaise + (hoursCharged(parked) - 1) * type.extraHourPaise;
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Five buildings, one app</h2>
+<p>Parkora now runs five buildings and wants an app to show free slots and reserve one for 15 minutes. Where does the free-slot state live when several servers run the gates? What happens to a reservation that is never used? How do you stop two app users reserving the last slot?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design (none in this station)</li></ul><p class="rule">Short at Foundations: the choices that matter here.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: the scanning allocator picks wrong slots and does quadratic work.</li>
+<li>Model slots, slot types and vehicle types (with rates) as records and enums.</li>
+<li>Keep one <code>TreeSet</code> per slot type, ordered by walk then id.</li>
+<li>Entry: <code>pollFirst</code>; exit: store the receipt, <code>add</code> the slot back.</li>
+<li>Inject a <code>Clock</code>; test fees at every boundary.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td><code>TreeSet</code> per slot type</td><td>O(log n) take and return; can also remove a specific slot (for maintenance).</td><td><span class="pill ok">Chosen</span></td></tr><tr><td><code>PriorityQueue</code> per slot type</td><td>Same take and return cost; removing a specific slot is O(n), and duplicates are possible.</td><td><span class="pill warn">Possible</span></td></tr><tr><td>Scan every slot per entry</td><td>Wrong slots unless you also sort; O(n) per entry, O(n²) to fill (the trap).</td><td><span class="pill bad">Wrong</span></td></tr><tr><td>Bikes may use car slots when bike slots run out</td><td>More bikes in, fewer cars later. A business choice, not a technical one.</td><td><span class="pill warn">Ask the business</span></td></tr><tr><td>Read <code>Instant.now()</code> directly</td><td>Tests must wait real hours, or never test fees.</td><td><span class="pill bad">Untestable</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>None in this station. In a database, "nearest free slot" becomes <code>SELECT … WHERE type = ? AND free ORDER BY walk_metres LIMIT 1 FOR UPDATE SKIP LOCKED</code>, with an index on <code>(type, free, walk_metres)</code>; later stations cover row locks.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Concurrency</dt><dd>One lock around the garage is right for one building on one server. Several servers need the database to decide (row locks).</dd>
+<dt>Reliability</dt><dd>Gates retry; the stored receipt makes exits safe to repeat. Entries are not: a retried entry for the same plate gets <code>409</code> with the open ticket, which the gate can print again.</dd>
+<dt>Money</dt><dd>Fees are whole paise. Rounding rules are written as tests, because customers read receipts closely.</dd>
+<dt>Maintainability</dt><dd>A new vehicle type is one enum value with its rates and slot type.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>How would you find the nearest free slot quickly?</summary><p>Keep free slots in a sorted structure (TreeSet or PriorityQueue) ordered by distance. Taking the nearest is O(log n), and freeing a slot puts it back in order. Scanning all slots per entry is O(n), and O(n²) to fill the building.</p></details><details class="qa"><summary>TreeSet or PriorityQueue?</summary><p>Both give the smallest item in O(log n). TreeSet also removes any specific item in O(log n) and refuses duplicates; PriorityQueue&#x27;s remove(Object) is O(n). TreeSet treats items its comparator calls equal as duplicates, so the comparator needs a tie-breaker.</p></details><details class="qa"><summary>How do you round 61 minutes up to 2 hours?</summary><p>Math.ceilDiv(seconds, 3600), or (seconds + 3599) / 3600. Plain integer division rounds down. Test 60:00 and 60:01.</p></details><details class="qa"><summary>Why inject a Clock?</summary><p>Code that calls Instant.now() cannot be tested at &#x27;two hours later&#x27; without waiting. With a Clock bean, tests use a clock they move forward.</p></details><details class="qa"><summary>Why put rates on the enum?</summary><p>Each vehicle type&#x27;s data and rules live with it. Adding a type is one line, and switch statements cannot forget a rate.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 15 tests pass.</td><td>You can name the boundary each fee test guards.</td></tr><tr><td>Design</td><td>Sorted free slots per type; rates on the enum.</td><td>You can argue TreeSet against PriorityQueue.</td></tr><tr><td>Tests</td><td>Time moves with a test clock.</td><td>You added a test for midnight or a daylight-saving change.</td></tr><tr><td>Explanation</td><td>You can draw the two sets and one entry.</td><td>You can sketch the database version.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This Foundations station has no flawed version to review. Use this checklist on allocation code:</p>
+<ul class="rules">
+<li>Does anything loop over every item to find the best one, on every request?</li>
+<li>Does every sort have a tie-breaker?</li>
+<li>Is "now" injected, or read directly?</li>
+<li>Is every rounding rule pinned by a test at its boundary?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
