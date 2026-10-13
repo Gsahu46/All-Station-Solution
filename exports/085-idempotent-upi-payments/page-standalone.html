@@ -1,0 +1,1980 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 085 · Idempotent UPI Payments</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 085 · SAMPLE OF THE FULL STATION FORMAT</span>
+    <h1>Idempotent UPI-style payments</h1>
+    <p class="scenario">The app retried after a timeout and the customer was charged twice.</p>
+    <p class="sim"><b>Simulation</b><span>Payments are rows in this app's own database, marked <code>SUCCESS</code>. Nothing calls a bank or the UPI network, and no real money moves.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Payments</li>
+      <li><b>Types</b>Database · Concurrency · Idempotency</li>
+      <li><b>Reviewer view</b>Yes</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>008 Saved delivery addresses · 055 Checkout as one transaction</p>
+      <p><span class="eyebrow">Builds toward</span><br>086 One API for many payment providers · 108 Referral rewards without abuse · 112 Subscriptions with UPI AutoPay mandates</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · PostgreSQL 17 · Flyway · Testcontainers 2</p>
+    </div>
+  </header>
+
+  <details class="blueprint" open>
+    <summary>Page blueprint: 11 tabs in 3 levels, and what goes in each</summary>
+    <p>Every one of the 200 stations uses the same tabs; only the depth changes with the stage. <strong>Understand</strong> takes about 5 minutes and has no code. <strong>Build</strong> is the hands-on part. <strong>Go deeper</strong> is the engineering a 2–3 year developer is expected to explain.</p>
+    <div class="scroll"><table class=""><thead><tr><th>Level</th><th>Tab</th><th>What goes in it</th><th>When</th></tr></thead><tbody><tr><td><strong>1 · Understand</strong></td><td><strong>Understand</strong></td><td>The real-life story, what we build, an everyday analogy, how it works in 4 steps, a check-yourself question, what the station is not, key terms</td><td>About 5 minutes, no code</td></tr><tr><td><strong>2 · Build</strong></td><td><strong>Spec</strong></td><td>Business problem, acceptance criteria (Given/When/Then), requirements, learning objectives</td><td>Always</td></tr><tr><td></td><td><strong>API contract</strong></td><td>Endpoints, fields, status codes, the retry rule, error format; real captured examples, each with why the API answered that way</td><td>Always</td></tr><tr><td></td><td><strong>Edge cases & trap</strong></td><td>Every edge case mapped to its test; the plausible-but-wrong approach, shown failing</td><td>Always</td></tr><tr><td></td><td><strong>Set up & code</strong></td><td>What to install, commands for Windows and macOS/Linux, try-it commands with expected results, troubleshooting; every file in request order with what it does, why, and what breaks without it</td><td>Always</td></tr><tr><td></td><td><strong>Tests</strong></td><td>Required tests for the station's types, the saved real run, every test file</td><td>Always</td></tr><tr><td></td><td><strong>Practice</strong></td><td>2 coding challenges with ready tests and hidden solutions; design-on-paper tasks</td><td>Always</td></tr><tr><td><strong>3 · Go deeper</strong></td><td><strong>Design</strong></td><td>Numbered approach, sequence diagram, alternatives with costs, database design and transaction boundary</td><td>Always; database part when there is a database</td></tr><tr><td></td><td><strong>Production</strong></td><td>Security, performance, reliability, scale, cost, maintainability; full runbook and failure drill</td><td>Always; runbook only at Production Scale</td></tr><tr><td></td><td><strong>Interview</strong></td><td>Questions with hidden strong answers, self-check rubric</td><td>Always</td></tr><tr><td></td><td><strong>Review</strong></td><td>A flawed version, findings, and the real test results against it</td><td>Stations marked reviewer view (123 of 200)</td></tr></tbody></table></div>
+  </details>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms, for reference</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code, no database detail.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Asha pays Ravi</strong><p>Asha taps <em>Pay ₹125.50</em>. The server records the payment, but the internet is slow and the confirmation never reaches her phone.</p></li><li><strong>The app tries again</strong><p>Asha's app thinks the payment failed and sends it again. If the server treats this as a new payment, Asha is charged twice.</p></li><li><strong>The server recognises the retry</strong><p>With this station's API, the server sees the same payment reference, returns the saved result from the first time, and creates nothing new.</p></li></ol>
+<p class="lesson">A timeout does not mean the payment failed. It means the phone does not know. The server has to make a retry safe.</p>
+
+<h2>What are we building?</h2>
+<p>A Spring Boot API with two endpoints. One creates a payment; the other reads it back. Retrying the same payment never charges twice, even when the retries arrive at the same moment.</p>
+
+<h2>An everyday analogy</h2>
+<p>You order food at a counter and write a token number, say 42, on your order slip. If you come back with token 42 and the same order, the counter hands you the bill for your first order instead of cooking again. If you come back with token 42 and a <em>different</em> order, the counter refuses: one token, one order. The token is the idempotency key.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>The app creates a key</strong> for this payment and sends it with the request. It sends the <em>same</em> key on every retry of this payment.</li>
+<li><strong>The server checks the key</strong>: has this payer used it before?</li>
+<li><strong>The server decides.</strong> A new key: create the payment and save its result. A known key with the same details: return the saved result. A known key with different details: refuse.</li>
+<li><strong>The server saves safely.</strong> The payment, the key and the saved result are stored together, all or nothing. Then the app gets its answer.</li>
+</ol>
+
+<p class="limit"><b>One limit to remember:</b> the protection lasts only as long as the server keeps the key. The rule here is to keep keys for 24 hours and then delete them (you build that cleanup in Practice). A retry after its key is deleted is treated as a new payment, so apps must stop retrying long before then.</p>
+
+<details class="qa check"><summary>Check yourself: Asha's first request succeeded, but the reply never reached her phone. The app retries with the same key. What should the server do?</summary><p>Return the saved result of the first payment and create nothing new. The original payment record has already been created; the retry only needs the result it missed, not another payment record. If the app sent a <em>new</em> key instead, the server could not know it was a retry. That is why the app must reuse the key for every retry of the same payment.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>A simulation, not real money.</strong> Payments are rows in this app's own database, marked <code>SUCCESS</code> at once. Nothing calls a bank or the UPI network. Real payments have pending states, failures, bank callbacks and reconciliation; those come in stations 132 and 193.</li>
+<li><strong>No login.</strong> The payer is read from the request body to keep the station small. In production, identity comes from the signed-in user, never from the body, and <code>GET /payments/{id}</code> must check that the user may see that payment. Knowing a payment's id is not permission. An idempotency key is not authentication.</li>
+<li><strong>The ₹1,00,000 maximum is a demo rule</strong> for this station, not an official UPI limit.</li>
+<li><strong>Deleting old keys</strong> is left for you: Practice challenge 1.</li>
+</ul>
+
+<h2>Key terms</h2>
+<p class="muted">For reference while you read the other tabs.</p>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Idempotency</strong></td><td>Doing the same thing twice has the same effect as doing it once.</td><td>Pressing a lift button five times still calls the lift once.</td><td>Sending the same payment twice charges Asha once.</td></tr><tr><td><strong>Idempotency key</strong></td><td>A unique reference the app creates for one payment and repeats on every retry of it.</td><td>The token number you write on your order slip.</td><td>The header <code>Idempotency-Key: 7f3c9a2e-…</code></td></tr><tr><td><strong>Retry</strong></td><td>Sending the same request again because no answer came back.</td><td>Re-dialling when a call drops.</td><td>The app resends the payment after a 10-second timeout.</td></tr><tr><td><strong>Replay</strong></td><td>The server returns the saved answer from the first time instead of doing the work again.</td><td>The counter shows you the bill for your first order.</td><td>Response header <code>Idempotent-Replayed: true</code></td></tr><tr><td><strong>Request fingerprint</strong></td><td>A short code calculated from the payment details, used to check that a retry is really the same payment.</td><td>Checking that the order on your slip matches the order in the book.</td><td>SHA-256 of payer, payee, amount and note.</td></tr><tr><td><strong>HTTP 422</strong></td><td>"I understood your request, but I cannot accept it."</td><td>Token 42 comes back with a different order.</td><td>Same key, but a different amount.</td></tr><tr><td><strong>Transaction</strong></td><td>A group of database changes that all succeed together or all fail together.</td><td>A bank transfer: the amount leaves one account and reaches the other, or neither happens.</td><td>The key, the payment and the saved response are stored together.</td></tr><tr><td><strong>Unique constraint</strong></td><td>A database rule that no two rows may have the same value.</td><td>An app that lets only one account use a mobile number.</td><td><code>(payer, key)</code> can exist once, so the database itself blocks a second claim.</td></tr><tr><td><strong>Concurrency</strong></td><td>Two or more requests being handled at the same moment.</td><td>Two people booking the last train seat in the same second.</td><td>A retry arrives while the first request is still running.</td></tr><tr><td><strong>Paise</strong></td><td>One hundredth of a rupee. Whole numbers avoid rounding errors.</td><td>₹125.50 is 12550 paise.</td><td><code>"amountPaise": 12550</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build: precise enough to write the tests from.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Paysetu</strong> (a fictional UPI-style payments app) lets people pay each other from their phones. On a weak 4G signal, Asha taps <em>Pay ₹125.50 to ravi@oksbi</em>. The server charges her, but the reply never reaches the phone. After 10 seconds the app shows "Something went wrong", and its retry logic sends the same payment again. The server treats it as a new payment and charges Asha a second time.</p>
+<p>In a real payments app, Asha's money would be stuck until a refund went through, which takes days. (This station records payments only; see the simulation note at the top.) Support gets a "charged twice" ticket, and Paysetu loses her trust. The client cannot tell a timeout that happened <em>before</em> the charge from one that happened <em>after</em> it, so retries cannot be avoided. The server has to make them safe.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> a new <code>Idempotency-Key</code>, <b>when</b> the app sends a valid payment, <b>then</b> one payment is created and the API returns <code>201</code> with <code>Location</code> and <code>Idempotent-Replayed: false</code>.</li>
+<li><b>Given</b> a key already used with the same body, <b>when</b> the app retries, <b>then</b> no new payment is created and the API returns the original status, the original response body and the same <code>Location</code>, with <code>Idempotent-Replayed: true</code>.</li>
+<li><b>Given</b> a key already used with a different body, <b>when</b> the app sends it, <b>then</b> the API returns <code>422</code> and charges nothing.</li>
+<li><b>Given</b> 20 identical requests that arrive at the same moment, <b>then</b> exactly one payment exists and all 20 responses carry the same <code>paymentId</code>.</li>
+<li><b>Given</b> no <code>Idempotency-Key</code> header, <b>then</b> the API returns <code>400</code> and charges nothing.</li>
+<li><b>Given</b> the server fails after saving the payment but before saving the response, <b>then</b> nothing is kept, and a retry with the same key succeeds once.</li>
+<li><b>Given</b> two different payers who happen to send the same key string, <b>then</b> each gets their own payment.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li><code>POST /payments</code> requires an <code>Idempotency-Key</code> header: 8–64 characters from <code>A–Z a–z 0–9 - _</code>. The client creates one key per payment (a UUID works) and sends the same key on every retry of that payment.</li>
+<li>Keys are scoped to the payer: <code>(payerVpa, key)</code> is unique, not the key alone.</li>
+<li>A key is bound to its request. The fingerprint is a SHA-256 of payer, payee, amount and note. VPAs are compared in lower case using a fixed locale. A missing note and an empty note are the same; any other note text is part of the payment. JSON spacing and field order do not change it.</li>
+<li>A key belongs to one logical payment. The client reuses it only to resend <em>that</em> payment, never for a different one. The retry rules are in the API contract tab.</li>
+<li>Amounts are whole paise (<code>12550</code> = ₹125.50), from 1 up to 10,000,000 (₹1,00,000, a demo rule for this station). Never a decimal.</li>
+<li>Payer and payee must be different, in any letter case.</li>
+<li>The database enforces the amount range, different parties and a complete stored response too, so a bug or a script that skips Java validation still cannot break them.</li>
+<li>Every error is an RFC 9457 <code>application/problem+json</code> body. Validation errors list each field.</li>
+<li>Requests that fail validation do not use up the key.</li>
+<li><code>GET /payments/{id}</code> returns the payment, or <code>404</code>.</li>
+<li>Keys are kept for at least 24 hours, which is longer than any client retries. The cleanup job is out of scope; the index for it is provided.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<p>After this station you can:</p>
+<ul>
+<li>Explain why a timeout is ambiguous, and why that makes retries unavoidable.</li>
+<li>Design the idempotency flow: claim the key, do the work, store the response, replay it.</li>
+<li>Use a database unique constraint as the lock, instead of check-then-insert.</li>
+<li>Bind a key to a request fingerprint and reject reuse with <code>422</code>.</li>
+<li>Keep the key, the payment and the stored response in one transaction.</li>
+<li>Explain why Java validation and database constraints are partners, not alternatives.</li>
+<li>Prove the rule holds with a real concurrent test against real PostgreSQL.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract: methods, URLs, bodies, headers, status codes, error bodies</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/payments</code></td><td>Pay another VPA. Requires <code>Idempotency-Key</code>.</td></tr><tr><td><code>GET</code></td><td><code>/payments/{id}</code></td><td>Read one payment.</td></tr></tbody></table></div>
+<h2>Request body for <code>POST /payments</code></h2>
+<div class="scroll"><table class=""><thead><tr><th>Field</th><th>Type</th><th>Rule</th></tr></thead><tbody><tr><td><code>payerVpa</code></td><td>string</td><td>Required. <code>name@bank</code>, at most 255 characters.</td></tr><tr><td><code>payeeVpa</code></td><td>string</td><td>Required. Same format. Must differ from the payer.</td></tr><tr><td><code>amountPaise</code></td><td>integer</td><td>Required. 1 to 10,000,000 (₹0.01 to ₹1,00,000; the maximum is a demo rule).</td></tr><tr><td><code>note</code></td><td>string</td><td>Optional. At most 80 characters.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th><th>Body</th><th>Safe to retry with the same key?</th></tr></thead><tbody><tr><td><span class="pill ok">201</span></td><td>New payment created</td><td>Payment, <code>Idempotent-Replayed: false</code></td><td>Yes, you get a replay</td></tr><tr><td><span class="pill ok">201</span></td><td>Replay of an earlier success</td><td>The original status, body (byte for byte) and <code>Location</code>; <code>Idempotent-Replayed: true</code></td><td>Yes</td></tr><tr><td><span class="pill warn">400</span></td><td>Missing or malformed key, invalid fields, broken JSON</td><td>Problem with <code>errors</code> per field</td><td>Only after fixing the request</td></tr><tr><td><span class="pill warn">422</span></td><td>Key already used with a different body</td><td>Problem: <em>Idempotency key reused</em></td><td>No. Use a new key for a new payment</td></tr><tr><td><span class="pill warn">404</span></td><td><code>GET</code> for an unknown id</td><td>Problem: <em>Payment not found</em></td><td>n/a</td></tr><tr><td><span class="pill bad">500</span></td><td>Unexpected failure</td><td>Problem</td><td>Yes, with the same key. See the note below</td></tr></tbody></table></div>
+<div class="rulebox"><p class="eyebrow">Retry rules for the client</p>
+<p>A key is not just a request id. It is bound to one logical payment: its payer, payee, amount and note.</p><div class="scroll"><table class=""><thead><tr><th>What happened</th><th>Outcome</th><th>What the client does</th></tr></thead><tbody><tr><td>Timeout, dropped connection, <code>5xx</code></td><td>Unknown: the payment may or may not exist</td><td>Resend the <strong>same</strong> request with the <strong>same</strong> key. If the original committed, you get its saved result; if it rolled back, it runs fresh.</td></tr><tr><td><code>400</code> invalid request</td><td>Nothing was stored; the key was not used</td><td>Fix the request and send it. Reusing the same key is fine, because it was never bound.</td></tr><tr><td><code>422</code> key reused</td><td>The key is already bound to a different payment</td><td>Do not use this key for the new payment. Create a new key.</td></tr><tr><td><code>201</code></td><td>Done</td><td>Keep the key only for resending this same payment.</td></tr><tr><td>More than 24 hours since the first attempt</td><td>The key may have been deleted</td><td>Stop retrying. A retry now could create a second payment.</td></tr></tbody></table></div>
+</div>
+<p class="note"><strong>What "the same response" means here.</strong> A replay returns the original HTTP status, the original response body (byte for byte) and the same <code>Location</code>. One header differs on purpose: <code>Idempotent-Replayed</code> is <code>false</code> the first time and <code>true</code> on a replay. That is why a replay is <code>201</code> and not <code>200</code>: the app needs no special code for retries, and the header is there for logs and debugging.</p>
+<p class="note">Where <code>400</code> and <code>422</code> come from: they match what the IETF <em>Idempotency-Key</em> header draft recommends. That draft (draft-07, October 2025) has expired and is not a published standard, so read them as this API's deliberate design choices. Check the current status yourself on the <a href="https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/">IETF Datatracker</a>; checking a standard's status is part of the job.</p>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 11 Oct 2026. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: a new payment</h3><p><b>Why:</b> the key is new, so the server creates the payment. <code>201 Created</code>, and <code>Location</code> points to the new payment.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /payments HTTP/1.1
+Idempotency-Key: 7f3c9a2e-5b1d-4e8a-9c6f-2d4b8e1a0c37
+Content-Type: application/json
+
+{
+  &quot;payerVpa&quot;: &quot;asha@okpaysetu&quot;,
+  &quot;payeeVpa&quot;: &quot;ravi@oksbi&quot;,
+  &quot;amountPaise&quot;: 12550,
+  &quot;note&quot;: &quot;Dinner split&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /payments/cac03584-ce89-4936-901e-26a48da8105c
+Idempotent-Replayed: false
+Content-Type: application/json
+Content-Length: 207
+
+{
+  &quot;paymentId&quot;: &quot;cac03584-ce89-4936-901e-26a48da8105c&quot;,
+  &quot;payerVpa&quot;: &quot;asha@okpaysetu&quot;,
+  &quot;payeeVpa&quot;: &quot;ravi@oksbi&quot;,
+  &quot;amountPaise&quot;: 12550,
+  &quot;note&quot;: &quot;Dinner split&quot;,
+  &quot;status&quot;: &quot;SUCCESS&quot;,
+  &quot;createdAt&quot;: &quot;2026-10-11T07:16:26.550517Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: same key, same details</h3><p><b>Why:</b> the server recognises a retry. It returns the saved first response: same <code>paymentId</code>, same <code>createdAt</code>. <code>Idempotent-Replayed: true</code> says it is a replay. No new payment.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /payments HTTP/1.1
+Idempotency-Key: 7f3c9a2e-5b1d-4e8a-9c6f-2d4b8e1a0c37
+Content-Type: application/json
+
+{
+  &quot;payerVpa&quot;: &quot;asha@okpaysetu&quot;,
+  &quot;payeeVpa&quot;: &quot;ravi@oksbi&quot;,
+  &quot;amountPaise&quot;: 12550,
+  &quot;note&quot;: &quot;Dinner split&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /payments/cac03584-ce89-4936-901e-26a48da8105c
+Idempotent-Replayed: true
+Content-Type: application/json
+Content-Length: 207
+
+{
+  &quot;paymentId&quot;: &quot;cac03584-ce89-4936-901e-26a48da8105c&quot;,
+  &quot;payerVpa&quot;: &quot;asha@okpaysetu&quot;,
+  &quot;payeeVpa&quot;: &quot;ravi@oksbi&quot;,
+  &quot;amountPaise&quot;: 12550,
+  &quot;note&quot;: &quot;Dinner split&quot;,
+  &quot;status&quot;: &quot;SUCCESS&quot;,
+  &quot;createdAt&quot;: &quot;2026-10-11T07:16:26.550517Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: same key, different amount</h3><p><b>Why:</b> the amount changed from ₹125.50 to ₹999. One key must not stand for two different payments, so the server refuses with <code>422</code> and charges nothing. A genuinely new payment needs a new key.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /payments HTTP/1.1
+Idempotency-Key: 7f3c9a2e-5b1d-4e8a-9c6f-2d4b8e1a0c37
+Content-Type: application/json
+
+{
+  &quot;payerVpa&quot;: &quot;asha@okpaysetu&quot;,
+  &quot;payeeVpa&quot;: &quot;ravi@oksbi&quot;,
+  &quot;amountPaise&quot;: 99900,
+  &quot;note&quot;: &quot;Dinner split&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Idempotency-Key 7f3c9a2e-5b1d-4e8a-9c6f-2d4b8e1a0c37 was already used with a different request body. Use a new key for a new payment.&quot;,
+  &quot;instance&quot;: &quot;/payments&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Idempotency key reused&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: no key</h3><p><b>Why:</b> without a key the server cannot tell a retry from a new payment, so it refuses with <code>400</code> before touching the database.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /payments HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;payerVpa&quot;: &quot;asha@okpaysetu&quot;,
+  &quot;payeeVpa&quot;: &quot;ravi@oksbi&quot;,
+  &quot;amountPaise&quot;: 12550,
+  &quot;note&quot;: &quot;Dinner split&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Required header &#x27;Idempotency-Key&#x27; is not present.&quot;,
+  &quot;instance&quot;: &quot;/payments&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: invalid details</h3><p><b>Why:</b> the payer VPA has no <code>@bank</code> part and the amount is 0. <code>400</code> with one message per field, so the app can show each error next to its input. The key is not used up.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /payments HTTP/1.1
+Idempotency-Key: 0b8e4f6a-1c2d-4e3f-8a9b-7c6d5e4f3a2b
+Content-Type: application/json
+
+{
+  &quot;payerVpa&quot;: &quot;asha&quot;,
+  &quot;payeeVpa&quot;: &quot;ravi@oksbi&quot;,
+  &quot;amountPaise&quot;: 0
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;The payment request has invalid fields.&quot;,
+  &quot;instance&quot;: &quot;/payments&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;,
+  &quot;errors&quot;: {
+    &quot;amountPaise&quot;: &quot;must be greater than 0&quot;,
+    &quot;payerVpa&quot;: &quot;must look like name@bank&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 6: read a payment</h3><p><b>Why:</b> the same data as the create response, read back from the database.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /payments/cac03584-ce89-4936-901e-26a48da8105c HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 207
+
+{
+  &quot;paymentId&quot;: &quot;cac03584-ce89-4936-901e-26a48da8105c&quot;,
+  &quot;payerVpa&quot;: &quot;asha@okpaysetu&quot;,
+  &quot;payeeVpa&quot;: &quot;ravi@oksbi&quot;,
+  &quot;amountPaise&quot;: 12550,
+  &quot;note&quot;: &quot;Dinner split&quot;,
+  &quot;status&quot;: &quot;SUCCESS&quot;,
+  &quot;createdAt&quot;: &quot;2026-10-11T07:16:26.550517Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: unknown payment</h3><p><b>Why:</b> no payment has this id, so <code>404</code> with a problem body.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /payments/00000000-0000-0000-0000-000000000000 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No payment with id 00000000-0000-0000-0000-000000000000&quot;,
+  &quot;instance&quot;: &quot;/payments/00000000-0000-0000-0000-000000000000&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Payment not found&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap: the plausible-but-wrong approach, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it. The trap is the first test written.</p></aside>
+<h2>Edge cases and failure cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What the API does</th><th>Proved by</th></tr></thead><tbody><tr><td>Retry after a timeout, same body</td><td>Replays the stored response. One payment.</td><td><code>sameKeyAndBodyReplaysTheFirstResponseExactly</code></td></tr><tr><td>20 identical requests at the same moment</td><td>One payment. All 20 get the same <code>paymentId</code>.</td><td><code>twentyParallelRetriesWithTheSameKeyCreateOnePayment</code></td></tr><tr><td>20 different keys at the same moment</td><td>20 payments. No false de-duplication.</td><td><code>twentyParallelPaymentsWithDifferentKeysAllGoThrough</code></td></tr><tr><td>Same key, different amount</td><td><code>422</code>, nothing charged.</td><td><code>sameKeyWithADifferentAmountIs422AndChargesNothingMore</code></td></tr><tr><td>Same key string, different payer</td><td>Independent payments.</td><td><code>keysAreScopedPerPayerSoTwoCustomersCanPickTheSameKey</code></td></tr><tr><td>Same key, different payee</td><td><code>422</code>, nothing charged.</td><td><code>sameKeyWithADifferentPayeeIs422</code></td></tr><tr><td>Same content, JSON reordered or re-spaced</td><td>Treated as the same request: replay.</td><td><code>sameContentWithDifferentJsonFormattingIsStillAReplay</code></td></tr><tr><td>Note left out, then sent as <code>""</code></td><td>Same payment: replay. A written note, even a space, is a different payment.</td><td><code>omittedNoteThenEmptyNoteIsAReplay</code>, <code>anyWrittenNoteIsPartOfThePayment</code></td></tr><tr><td>VPA in different letter case</td><td>Same payer, same payment: replay.</td><td><code>mixedCaseVpaIsTheSamePayerAndTheSamePayment</code></td></tr><tr><td>Server running with a Turkish locale</td><td>Fingerprint unchanged (<code>Locale.ROOT</code>). Without it, <code>I</code> becomes a dotless <code>ı</code> and retries stop matching.</td><td><code>aTurkishServerLocaleDoesNotChangeTheFingerprint</code></td></tr><tr><td>Request fails validation</td><td><code>400</code>; the key stays free for the corrected request.</td><td><code>aFailedValidationDoesNotUseUpTheKey</code></td></tr><tr><td>Crash after the payment insert</td><td>Everything rolls back; the retry succeeds once.</td><td><code>aFailureAfterThePaymentInsertRollsBackTheKeyAndThePayment</code></td></tr><tr><td>Amount 0 or above the maximum slips past Java validation</td><td>The database <code>CHECK</code> still rejects it.</td><td><code>databaseRejectsAmountsOutsideTheRangeEvenWithoutJavaValidation</code></td></tr><tr><td>Paying yourself, written in a different case, slips past Java</td><td>The database <code>CHECK</code> still rejects it.</td><td><code>databaseRejectsPayingYourselfInAnyLetterCase</code></td></tr><tr><td>A stored response saved half-filled</td><td>The database rejects it; a replay always finds a complete response.</td><td><code>databaseRejectsAHalfFilledStoredResponse</code></td></tr><tr><td>Missing or short key</td><td><code>400</code></td><td><code>missingIdempotencyKeyIs400</code>, <code>malformedIdempotencyKeyIs400</code></td></tr><tr><td>Amount above ₹1,00,000; paying yourself; broken JSON</td><td><code>400</code> with field messages</td><td><code>PaymentContractTest</code></td></tr><tr><td>Unknown payment id</td><td><code>404</code> problem</td><td><code>unknownPaymentIs404Problem</code></td></tr><tr><td>Retry after the key was cleaned up</td><td>Charged again. Retention must be longer than any client retry window.</td><td>Design rule (no cleanup job in this station)</td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Retrying a timed-out payment without an idempotency key, which charges the customer twice.</p>
+<p>The "before" code charges on every <code>POST</code>. It looks fine in a demo, where the network never drops a reply. The first test in this station reproduces the bug. It passes because it asserts the bug: two attempts, two charges. The second test runs the fixed API and gets one charge.</p>
+</div>
+<pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * The first test written for this station: it reproduces the bug before the fix.
+ * The phone sends a payment, the network times out before the reply arrives, the app retries.
+ */
+@Import(RetryWithoutKeyTrapTest.NaivePaymentController.class)
+class RetryWithoutKeyTrapTest extends ApiTest {
+
+    /** The &quot;before&quot; code: every POST charges. Kept only in tests, to show the trap. */
+    @RestController
+    static class NaivePaymentController {
+        private final PaymentRepository payments;
+
+        NaivePaymentController(PaymentRepository payments) {
+            this.payments = payments;
+        }
+
+        @PostMapping(&quot;/naive/payments&quot;)
+        Payment pay(@RequestBody PaymentRequest req) {
+            return payments.insert(req);
+        }
+    }
+
+    @Test
+    void retryWithoutAKeyChargesTheCustomerTwice() {
+        for (int attempt = 1; attempt &lt;= 2; attempt++) { // attempt 1 &quot;timed out&quot; on the phone, attempt 2 is the retry
+            client.post().uri(&quot;/naive/payments&quot;).contentType(MediaType.APPLICATION_JSON).body(ASHA_PAYS_RAVI)
+                    .exchange().expectStatus().isOk();
+        }
+        assertThat(paymentCount()).as(&quot;the bug: Asha paid Rs 125.50 twice&quot;).isEqualTo(2);
+    }
+
+    @Test
+    void retryWithTheSameKeyChargesOnce() {
+        pay(&quot;phone-retry-0001&quot;, ASHA_PAYS_RAVI).expectStatus().isCreated();
+        pay(&quot;phone-retry-0001&quot;, ASHA_PAYS_RAVI).expectStatus().isCreated();
+        assertThat(paymentCount()).as(&quot;the fix&quot;).isEqualTo(1);
+    }
+}</code></pre>
+<h3>The subtler trap</h3>
+<p>Adding a key is not enough. The obvious way to use it (look up the key, charge if absent, then save the key) still double-charges when retries overlap. Against the flawed version in the <a href="#review" data-goto="review">Review</a> tab, 20 parallel retries with one key produced these results in 5 runs:</p>
+<div class="scroll"><table class="narrow"><thead><tr><th>Run</th><th>Payments charged</th><th>Responses</th></tr></thead><tbody><tr><td>1</td><td><span class="pill bad">19</span></td><td>2 × 201, 18 × 500</td></tr><tr><td>2</td><td><span class="pill bad">9</span></td><td>12 × 201, 8 × 500</td></tr><tr><td>3</td><td><span class="pill bad">2</span></td><td>19 × 201, 1 × 500</td></tr><tr><td>4</td><td><span class="pill bad">5</span></td><td>16 × 201, 4 × 500</td></tr><tr><td>5</td><td><span class="pill bad">4</span></td><td>17 × 201, 3 × 500</td></tr></tbody></table></div>
+<p>The correct answer is 1 every time. The fixed code gets 1 every time, which <code>PaymentConcurrencyTest</code> checks.</p>
+</section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: what to install, the commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself: send the requests and count the rows</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation: for each class, what it does, why it exists, what breaks without it</li></ul><p class="rule">Level 2. Every command here was run on 11 Oct 2026 and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper (<code>mvnw</code>)</td><td></td></tr><tr><td>curl</td><td>Built into Windows 10+, macOS and Linux</td><td><code>curl --version</code></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 31 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21 instead of 25, add <code>-Djava.version=21</code>, for example <code>./mvnw -Djava.version=21 test</code>. All 31 tests passed this way on JDK 21.0.12. Nothing in this station needs a Java 25 feature.</p>
+
+<h2>Try it yourself</h2>
+<p>With the app running, open a second terminal in the project folder. The request body is in <code>docs/payment.json</code>, so the same commands work in PowerShell and in bash.</p>
+<pre class="code"><code class="language-bash"># 1. Pay once: expect HTTP 201 and Idempotent-Replayed: false
+curl -i -X POST http://localhost:8080/payments -H &quot;Idempotency-Key: try-it-0001&quot; -H &quot;Content-Type: application/json&quot; -d &quot;@docs/payment.json&quot;
+
+# 2. Retry with the same key: expect HTTP 201 and Idempotent-Replayed: true
+curl -i -X POST http://localhost:8080/payments -H &quot;Idempotency-Key: try-it-0001&quot; -H &quot;Content-Type: application/json&quot; -d &quot;@docs/payment.json&quot;
+
+# 3. Same key, different amount: expect HTTP 422
+curl -i -X POST http://localhost:8080/payments -H &quot;Idempotency-Key: try-it-0001&quot; -H &quot;Content-Type: application/json&quot; -d &quot;@docs/payment-changed-amount.json&quot;
+
+# 4. Count payments in the database: expect 1
+docker compose exec postgres psql -U paysetu -d paysetu -c &quot;SELECT count(*) AS payments FROM payments&quot;</code></pre>
+<p>Three requests, one payment. Now try request 1 with a new key such as <code>try-it-0002</code>, count again, and explain the result to yourself. In PowerShell, write <code>curl.exe</code> instead of <code>curl</code> if <code>curl</code> opens a different command.</p>
+
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>Could not find a valid Docker environment</code></td><td>Docker is not running. Testcontainers needs it for the tests.</td><td>Start Docker Desktop, wait until it says running, then run the tests again.</td></tr><tr><td><code>release version 25 not supported</code></td><td>Maven is using an older JDK.</td><td>Point <code>JAVA_HOME</code> at JDK 25, or use the JDK 21 command below.</td></tr><tr><td><code>Connection to localhost:5432 refused</code></td><td>The app started before PostgreSQL, or compose is not up.</td><td>Run <code>docker compose up -d</code>, wait a few seconds, start the app again.</td></tr><tr><td><code>port 5432 is already allocated</code></td><td>A local PostgreSQL already uses the port.</td><td>Stop it, or change <code>"5432:5432"</code> to <code>"5433:5432"</code> in <code>compose.yaml</code> and the URL in <code>application.yaml</code>.</td></tr><tr><td><code>'./mvnw' is not recognized</code> on Windows</td><td>PowerShell needs the <code>.cmd</code> file.</td><td>Use <code>.\mvnw.cmd</code> instead of <code>./mvnw</code>.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/085-idempotent-upi-payments/
+├── README.md                      (this page, as Markdown)
+├── pom.xml, mvnw, mvnw.cmd        (Maven wrapper: no Maven install needed)
+├── compose.yaml                   (PostgreSQL 17 for running locally)
+├── src/main/java/com/paysetu/payments/
+│   ├── PaymentController.java     ├── PaymentRepository.java
+│   ├── PaymentRequest.java        ├── IdempotencyKeyRepository.java
+│   ├── PaymentService.java        ├── Payment.java
+│   ├── ApiErrors.java             └── PaymentsApplication.java
+├── src/main/resources/            (application.yaml, db/migration/V1__….sql)
+├── src/test/java/…                (8 test files, see Tests)
+├── challenge/                     (Practice tests; solutions ship in a separate pack)
+├── review/PaymentService.java     (flawed version, see Review)
+└── docs/                          (payment.json for curl, captures, saved test runs)</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">Files are listed in the order a request travels: in at the controller, through the service, out to the database.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">PaymentController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">PaymentRequest.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">PaymentService.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">IdempotencyKeyRepository.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">PaymentRepository.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">Payment.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">ApiErrors.java</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">V1__payments_and_idempotency_keys.sql</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">PaymentsApplication.java</button><button class="file-btn" role="tab" id="code-9-b" aria-controls="code-9" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-10-b" aria-controls="code-10" aria-selected="false" data-group="code">pom.xml</button><button class="file-btn" role="tab" id="code-11-b" aria-controls="code-11" aria-selected="false" data-group="code">compose.yaml</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/paysetu/payments/PaymentController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Receives <code>POST /payments</code> and <code>GET /payments/{id}</code>, checks the header format, and returns the stored response with <code>Location</code> and <code>Idempotent-Replayed</code>.</dd><dt>Why</dt><dd>Keeps HTTP details (headers, status codes) out of the business logic.</dd><dt>Without it</dt><dd>No endpoint. Put this logic in the service instead and it becomes hard to test without HTTP.</dd></dl><ul><li>Returns <code>ResponseEntity&lt;String&gt;</code> because the body is already JSON from the store. A replay has the original status, body and <code>Location</code>; only <code>Idempotent-Replayed</code> differs.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.util.UUID;
+
+@RestController
+@RequestMapping(&quot;/payments&quot;)
+class PaymentController {
+
+    private final PaymentService service;
+
+    PaymentController(PaymentService service) {
+        this.service = service;
+    }
+
+    @PostMapping
+    ResponseEntity&lt;String&gt; pay(
+            @RequestHeader(&quot;Idempotency-Key&quot;)
+            @Pattern(regexp = &quot;^[A-Za-z0-9_-]{8,64}$&quot;, message = &quot;must be 8-64 letters, digits, &#x27;-&#x27; or &#x27;_&#x27; (a UUID works)&quot;)
+            String idempotencyKey,
+            @Valid @RequestBody PaymentRequest request) {
+
+        var result = service.pay(idempotencyKey, request);
+        // A replay returns the original status, body (byte for byte) and Location; only Idempotent-Replayed differs.
+        return ResponseEntity.status(result.status())
+                .location(URI.create(&quot;/payments/&quot; + result.paymentId()))
+                .header(&quot;Idempotent-Replayed&quot;, String.valueOf(result.replayed()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(result.body());
+    }
+
+    @GetMapping(&quot;/{id}&quot;)
+    Payment get(@PathVariable UUID id) {
+        return service.get(id);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/paysetu/payments/PaymentRequest.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Holds the request fields with their validation rules, and computes the fingerprint.</dd><dt>Why</dt><dd>One place defines what a valid payment is and what makes two requests "the same payment".</dd><dt>Without it</dt><dd>Bad input reaches the database, and a retry with different formatting would not be recognised.</dd></dl><ul><li><code>normalise()</code> lower-cases VPAs with <code>Locale.ROOT</code>; every VPA comparison goes through it.</li><li>A missing note and an empty note give the same fingerprint, by design.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
+import java.util.Locale;
+import java.util.Objects;
+
+public record PaymentRequest(
+        @NotBlank @Size(max = 255) @Pattern(regexp = VPA, message = &quot;must look like name@bank&quot;) String payerVpa,
+        @NotBlank @Size(max = 255) @Pattern(regexp = VPA, message = &quot;must look like name@bank&quot;) String payeeVpa,
+        // Integer paise, never a decimal: 12550 means Rs 125.50.
+        @NotNull @Positive @Max(value = MAX_PAISE, message = &quot;must not exceed Rs 1,00,000 per payment&quot;) Long amountPaise,
+        @Size(max = 80) String note) {
+
+    static final String VPA = &quot;^[a-zA-Z0-9._-]{2,200}@[a-zA-Z]{2,50}$&quot;;
+    static final long MAX_PAISE = 10_000_000; // Rs 1,00,000: a demo rule for this station, not an official UPI limit
+
+    @AssertTrue(message = &quot;payer and payee must be different&quot;)
+    boolean isDifferentParties() {
+        return payerVpa == null || !payerVpa.equalsIgnoreCase(payeeVpa);
+    }
+
+    /** VPAs compare case-insensitively. Locale.ROOT, so a server set to Turkish does not turn &quot;I&quot; into a dotless &quot;ı&quot;. */
+    static String normalise(String vpa) {
+        return vpa.toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * SHA-256 of the fields that define &quot;the same payment&quot;. JSON whitespace or field order does not change it.
+     * Rule: a missing note and an empty note both mean &quot;no note&quot; and give the same fingerprint; any other text,
+     * spaces included, counts as written. &quot;|&quot; is a safe separator: VPAs and amounts cannot contain it, and the note is last.
+     */
+    String fingerprint() {
+        String canonical = String.join(&quot;|&quot;,
+                normalise(payerVpa), normalise(payeeVpa), amountPaise.toString(), Objects.toString(note, &quot;&quot;));
+        try {
+            byte[] hash = MessageDigest.getInstance(&quot;SHA-256&quot;).digest(canonical.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(&quot;SHA-256 is always available in the JDK&quot;, e);
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/paysetu/payments/PaymentService.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Runs the whole flow in one transaction: claim the key, compare the fingerprint, create the payment, store the response.</dd><dt>Why</dt><dd>The transaction is what makes the key, the payment and the response appear together or not at all.</dd><dt>Without it</dt><dd>Split this across separate calls and a crash between them leaves a payment with no key, which a retry charges again (see the Review tab).</dd></dl><ul><li><code>claim</code> returning <code>false</code> means another request owns this key (we may have waited for it to commit).</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.ErrorResponseException;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.UUID;
+
+@Service
+public class PaymentService {
+
+    /** What the controller sends back: the stored body, and whether it is a replay. */
+    public record PaymentResult(UUID paymentId, int status, String body, boolean replayed) {
+    }
+
+    private final PaymentRepository payments;
+    private final IdempotencyKeyRepository keys;
+    private final JsonMapper json;
+
+    PaymentService(PaymentRepository payments, IdempotencyKeyRepository keys, JsonMapper json) {
+        this.payments = payments;
+        this.keys = keys;
+        this.json = json;
+    }
+
+    // One transaction: the key, the payment and the stored response commit together or not at all.
+    @Transactional
+    public PaymentResult pay(String idempotencyKey, PaymentRequest req) {
+        String hash = req.fingerprint();
+
+        if (!keys.claim(req.payerVpa(), idempotencyKey, hash)) {
+            var stored = keys.find(req.payerVpa(), idempotencyKey);
+            if (!stored.requestHash().equals(hash)) {
+                throw keyReused(idempotencyKey);
+            }
+            return new PaymentResult(stored.paymentId(), stored.responseStatus(), stored.responseBody(), true);
+        }
+
+        Payment payment = payments.insert(req);
+        String body = json.writeValueAsString(payment);
+        keys.complete(req.payerVpa(), idempotencyKey, payment.paymentId(), HttpStatus.CREATED.value(), body);
+        return new PaymentResult(payment.paymentId(), HttpStatus.CREATED.value(), body, false);
+    }
+
+    public Payment get(UUID id) {
+        return payments.findById(id).orElseThrow(() -&gt; {
+            var problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No payment with id &quot; + id);
+            problem.setTitle(&quot;Payment not found&quot;);
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, problem, null);
+        });
+    }
+
+    private static ErrorResponseException keyReused(String key) {
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT,
+                &quot;Idempotency-Key &quot; + key + &quot; was already used with a different request body. Use a new key for a new payment.&quot;);
+        problem.setTitle(&quot;Idempotency key reused&quot;);
+        return new ErrorResponseException(HttpStatus.UNPROCESSABLE_CONTENT, problem, null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/paysetu/payments/IdempotencyKeyRepository.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Claims a key with <code>INSERT … ON CONFLICT DO NOTHING</code>, saves the response, and reads a stored one back.</dd><dt>Why</dt><dd>The database's unique key decides which of two simultaneous requests wins. No Java lock can do that across several servers.</dd><dt>Without it</dt><dd>Back to check-then-insert, which charged up to 19 times for one key in the Edge cases tab.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
+
+import java.util.UUID;
+
+@Repository
+public class IdempotencyKeyRepository {
+
+    public record StoredKey(String requestHash, UUID paymentId, int responseStatus, String responseBody) {
+    }
+
+    private final JdbcClient jdbc;
+
+    IdempotencyKeyRepository(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    /**
+     * Tries to take the key. Returns true if this transaction now owns it.
+     * If another transaction holds the same key, Postgres makes this insert wait until that
+     * transaction ends; then it returns false (it committed) or inserts (it rolled back).
+     */
+    public boolean claim(String payerVpa, String key, String requestHash) {
+        int inserted = jdbc.sql(&quot;&quot;&quot;
+                INSERT INTO idempotency_keys (payer_vpa, idem_key, request_hash)
+                VALUES (?, ?, ?)
+                ON CONFLICT (payer_vpa, idem_key) DO NOTHING
+                &quot;&quot;&quot;)
+                .params(PaymentRequest.normalise(payerVpa), key, requestHash)
+                .update();
+        return inserted == 1;
+    }
+
+    public void complete(String payerVpa, String key, UUID paymentId, int status, String body) {
+        jdbc.sql(&quot;&quot;&quot;
+                UPDATE idempotency_keys
+                SET payment_id = ?, response_status = ?, response_body = ?
+                WHERE payer_vpa = ? AND idem_key = ?
+                &quot;&quot;&quot;)
+                .params(paymentId, status, body, PaymentRequest.normalise(payerVpa), key)
+                .update();
+    }
+
+    public StoredKey find(String payerVpa, String key) {
+        return jdbc.sql(&quot;&quot;&quot;
+                SELECT request_hash, payment_id, response_status, response_body
+                FROM idempotency_keys WHERE payer_vpa = ? AND idem_key = ?
+                &quot;&quot;&quot;)
+                .params(PaymentRequest.normalise(payerVpa), key)
+                .query((rs, n) -&gt; new StoredKey(rs.getString(&quot;request_hash&quot;), rs.getObject(&quot;payment_id&quot;, UUID.class),
+                        rs.getInt(&quot;response_status&quot;), rs.getString(&quot;response_body&quot;)))
+                .single();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/paysetu/payments/PaymentRepository.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Inserts and reads payments with plain SQL.</dd><dt>Why</dt><dd>Every statement is visible, which helps while learning.</dd><dt>Without it</dt><dd>No payments. Use JPA instead and the SQL is hidden, which suits later stations.</dd></dl><ul><li>Times are truncated to microseconds, so the response matches what PostgreSQL stores and later returns.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
+
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public class PaymentRepository {
+
+    private final JdbcClient jdbc;
+
+    PaymentRepository(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    public Payment insert(PaymentRequest req) {
+        // Postgres stores microseconds; truncating here keeps the response equal to what a later GET returns.
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        Payment p = new Payment(UUID.randomUUID(), req.payerVpa(), req.payeeVpa(), req.amountPaise(),
+                req.note(), &quot;SUCCESS&quot;, now);
+        jdbc.sql(&quot;&quot;&quot;
+                INSERT INTO payments (id, payer_vpa, payee_vpa, amount_paise, note, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                &quot;&quot;&quot;)
+                .params(p.paymentId(), p.payerVpa(), p.payeeVpa(), p.amountPaise(), p.note(), p.status(),
+                        Timestamp.from(p.createdAt()))
+                .update();
+        return p;
+    }
+
+    public Optional&lt;Payment&gt; findById(UUID id) {
+        return jdbc.sql(&quot;&quot;&quot;
+                SELECT id, payer_vpa, payee_vpa, amount_paise, note, status, created_at
+                FROM payments WHERE id = ?
+                &quot;&quot;&quot;)
+                .param(id)
+                .query((rs, n) -&gt; new Payment(rs.getObject(&quot;id&quot;, UUID.class), rs.getString(&quot;payer_vpa&quot;),
+                        rs.getString(&quot;payee_vpa&quot;), rs.getLong(&quot;amount_paise&quot;), rs.getString(&quot;note&quot;),
+                        rs.getString(&quot;status&quot;), rs.getTimestamp(&quot;created_at&quot;).toInstant()))
+                .optional();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/paysetu/payments/Payment.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>One record that is both the stored payment and the response body.</dd><dt>Why</dt><dd>A separate response class would add nothing yet.</dd><dt>Without it</dt><dd>Nowhere to hold a payment.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import java.time.Instant;
+import java.util.UUID;
+
+/** Also the JSON response body for a payment. */
+public record Payment(
+        UUID paymentId,
+        String payerVpa,
+        String payeeVpa,
+        long amountPaise,
+        String note,
+        String status,
+        Instant createdAt) {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/paysetu/payments/ApiErrors.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Adds an <code>errors</code> map (field → message) to validation errors.</dd><dt>Why</dt><dd>Spring already returns RFC 9457 problem bodies; the app needs to know which field is wrong.</dd><dt>Without it</dt><dd>Clients get "invalid request" with no hint which field to fix.</dd></dl><ul><li>Because the header has a constraint, body errors arrive as <code>HandlerMethodValidationException</code>. Handling only <code>MethodArgumentNotValidException</code> was a real bug the contract tests caught while this station was built.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.method.ParameterErrors;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+
+import java.util.Map;
+import java.util.TreeMap;
+
+/**
+ * Every error is an RFC 9457 problem+json body. The base class already does that for
+ * missing headers, bad JSON, 404s and our ErrorResponseExceptions; we only add an
+ * &quot;errors&quot; map (field -&gt; message) so a client can show each message next to its input.
+ * Because the header has a constraint, Spring validates the whole method, so body
+ * errors also arrive here (not as MethodArgumentNotValidException).
+ */
+@RestControllerAdvice
+class ApiErrors extends ResponseEntityExceptionHandler {
+
+    @Override
+    protected ResponseEntity&lt;Object&gt; handleHandlerMethodValidationException(
+            HandlerMethodValidationException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        Map&lt;String, String&gt; errors = new TreeMap&lt;&gt;();
+        ex.getParameterValidationResults().forEach(result -&gt; {
+            if (result instanceof ParameterErrors body) {
+                body.getFieldErrors().forEach(e -&gt; errors.putIfAbsent(e.getField(), e.getDefaultMessage()));
+            } else {
+                String name = result.getMethodParameter().getParameterName();
+                result.getResolvableErrors().forEach(e -&gt; errors.putIfAbsent(name, e.getDefaultMessage()));
+            }
+        });
+        ex.getBody().setDetail(&quot;The payment request has invalid fields.&quot;);
+        ex.getBody().setProperty(&quot;errors&quot;, errors);
+        return handleExceptionInternal(ex, null, headers, status, request);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/resources/db/migration/V1__payments_and_idempotency_keys.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Creates both tables with their constraints when the app starts (Flyway).</dd><dt>Why</dt><dd>The schema is versioned with the code. Later changes are new files (<code>V2__…</code>), never edits to a released one.</dd><dt>Without it</dt><dd>Someone creates tables by hand, and the constraints that protect the payment records are missing.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">-- The same business rules as PaymentRequest, enforced again by the database.
+-- Java validation gives friendly messages; these constraints hold even when Java is bypassed
+-- (a script, another service, a bug). They are partners, not alternatives.
+CREATE TABLE payments (
+    id           UUID         PRIMARY KEY,
+    payer_vpa    VARCHAR(255) NOT NULL,
+    payee_vpa    VARCHAR(255) NOT NULL,
+    amount_paise BIGINT       NOT NULL,
+    note         VARCHAR(80),
+    status       VARCHAR(16)  NOT NULL,
+    created_at   TIMESTAMPTZ  NOT NULL,
+    CONSTRAINT payments_amount_range      CHECK (amount_paise BETWEEN 1 AND 10000000), -- Rs 0.01 to Rs 1,00,000 (demo rule)
+    CONSTRAINT payments_different_parties CHECK (lower(payer_vpa) &lt;&gt; lower(payee_vpa))
+);
+
+-- One row per (payer, key). The primary key is the lock: a second insert of the
+-- same pair waits for the first transaction, then sees its committed row.
+CREATE TABLE idempotency_keys (
+    payer_vpa       VARCHAR(255) NOT NULL,
+    idem_key        VARCHAR(64)  NOT NULL,
+    request_hash    CHAR(64)     NOT NULL,
+    payment_id      UUID         REFERENCES payments (id),
+    response_status SMALLINT,
+    response_body   TEXT,
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (payer_vpa, idem_key),
+    -- The three result columns are empty while the claiming transaction runs, and all filled before it commits.
+    -- Never half-filled: a replay must always find a complete stored response.
+    CONSTRAINT idempotency_keys_result_complete CHECK (
+        (payment_id IS NULL AND response_status IS NULL AND response_body IS NULL)
+        OR (payment_id IS NOT NULL AND response_status IS NOT NULL AND response_body IS NOT NULL))
+);
+
+-- Lets a cleanup job delete keys older than the retention window without a full scan.
+CREATE INDEX idx_idempotency_keys_created_at ON idempotency_keys (created_at);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">src/main/java/com/paysetu/payments/PaymentsApplication.java</p><div class="notes"><p>Standard Spring Boot entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class PaymentsApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(PaymentsApplication.class, args);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-9" aria-labelledby="code-9-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Local database settings. Tests replace them with their own container automatically.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: paysetu-payments
+  datasource:
+    url: jdbc:postgresql://localhost:5432/paysetu
+    username: paysetu
+    password: paysetu</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-10" aria-labelledby="code-10-b" hidden><p class="path">pom.xml</p><div class="notes"><p>Spring Boot 4.1.1, Java 25. Only the starters this station uses. Test side: Testcontainers 2 for a real PostgreSQL, and <code>RestTestClient</code> for real HTTP calls.</p></div><div class="src"><pre class="code"><code class="language-xml">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;project xmlns=&quot;http://maven.apache.org/POM/4.0.0&quot;
+         xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot;
+         xsi:schemaLocation=&quot;http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd&quot;&gt;
+    &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+
+    &lt;parent&gt;
+        &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+        &lt;artifactId&gt;spring-boot-starter-parent&lt;/artifactId&gt;
+        &lt;version&gt;4.1.1&lt;/version&gt;
+        &lt;relativePath/&gt;
+    &lt;/parent&gt;
+
+    &lt;groupId&gt;com.paysetu&lt;/groupId&gt;
+    &lt;artifactId&gt;idempotent-upi-payments&lt;/artifactId&gt;
+    &lt;version&gt;1.0.0&lt;/version&gt;
+    &lt;name&gt;Station 085 - Idempotent UPI-style payments&lt;/name&gt;
+
+    &lt;properties&gt;
+        &lt;java.version&gt;25&lt;/java.version&gt;
+    &lt;/properties&gt;
+
+    &lt;dependencies&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-webmvc&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-validation&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-jdbc&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-flyway&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.flywaydb&lt;/groupId&gt;
+            &lt;artifactId&gt;flyway-database-postgresql&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.postgresql&lt;/groupId&gt;
+            &lt;artifactId&gt;postgresql&lt;/artifactId&gt;
+            &lt;scope&gt;runtime&lt;/scope&gt;
+        &lt;/dependency&gt;
+
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-test&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-resttestclient&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-testcontainers&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.testcontainers&lt;/groupId&gt;
+            &lt;artifactId&gt;testcontainers-postgresql&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.testcontainers&lt;/groupId&gt;
+            &lt;artifactId&gt;testcontainers-junit-jupiter&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+    &lt;/dependencies&gt;
+
+    &lt;build&gt;
+        &lt;plugins&gt;
+            &lt;plugin&gt;
+                &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+                &lt;artifactId&gt;spring-boot-maven-plugin&lt;/artifactId&gt;
+            &lt;/plugin&gt;
+        &lt;/plugins&gt;
+    &lt;/build&gt;
+&lt;/project&gt;</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-11" aria-labelledby="code-11-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app locally. Tests do not need it; they start their own container.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: paysetu
+      POSTGRES_USER: paysetu
+      POSTGRES_PASSWORD: paysetu
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U paysetu -d paysetu&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>The test that reproduces the failure before the fix</li><li>Real run output</li></ul><p class="rule">Required tests come from the station's types. The validator fails a station that is missing any of them.</p></aside>
+<h2>Required tests for this station</h2>
+<p>Station types: <span class="chip">Database</span> <span class="chip">Concurrency</span> <span class="chip">Idempotency</span></p>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>PaymentContractTest</code> (9)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>RetryWithoutKeyTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>PaymentDatabaseTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Concurrency</td><td>A real concurrency test that proves the invariant holds</td><td><code>PaymentConcurrencyTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Idempotency</td><td>Replay: the same request twice gives one effect</td><td><code>IdempotencyReplayTest</code> (8), <code>PaymentRequestTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, PostgreSQL 17 in Docker via Testcontainers 2.0.5. Run on 11 Oct 2026. Nothing skipped, and no in-memory database. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.paysetu.payments.PaymentConcurrencyTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.paysetu.payments.PaymentDatabaseTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.paysetu.payments.RetryWithoutKeyTrapTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.paysetu.payments.PaymentRequestTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0 -- in com.paysetu.payments.PaymentContractTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0 -- in com.paysetu.payments.IdempotencyReplayTest
+[INFO] Tests run: 31, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">RetryWithoutKeyTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">PaymentRequestTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">PaymentContractTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">IdempotencyReplayTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">PaymentConcurrencyTest.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">PaymentDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-6-b" aria-controls="tests-6" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-7-b" aria-controls="tests-7" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/paysetu/payments/RetryWithoutKeyTrapTest.java</p><div class="notes"><p>Written first. Reproduces the double charge, then shows the fix.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * The first test written for this station: it reproduces the bug before the fix.
+ * The phone sends a payment, the network times out before the reply arrives, the app retries.
+ */
+@Import(RetryWithoutKeyTrapTest.NaivePaymentController.class)
+class RetryWithoutKeyTrapTest extends ApiTest {
+
+    /** The &quot;before&quot; code: every POST charges. Kept only in tests, to show the trap. */
+    @RestController
+    static class NaivePaymentController {
+        private final PaymentRepository payments;
+
+        NaivePaymentController(PaymentRepository payments) {
+            this.payments = payments;
+        }
+
+        @PostMapping(&quot;/naive/payments&quot;)
+        Payment pay(@RequestBody PaymentRequest req) {
+            return payments.insert(req);
+        }
+    }
+
+    @Test
+    void retryWithoutAKeyChargesTheCustomerTwice() {
+        for (int attempt = 1; attempt &lt;= 2; attempt++) { // attempt 1 &quot;timed out&quot; on the phone, attempt 2 is the retry
+            client.post().uri(&quot;/naive/payments&quot;).contentType(MediaType.APPLICATION_JSON).body(ASHA_PAYS_RAVI)
+                    .exchange().expectStatus().isOk();
+        }
+        assertThat(paymentCount()).as(&quot;the bug: Asha paid Rs 125.50 twice&quot;).isEqualTo(2);
+    }
+
+    @Test
+    void retryWithTheSameKeyChargesOnce() {
+        pay(&quot;phone-retry-0001&quot;, ASHA_PAYS_RAVI).expectStatus().isCreated();
+        pay(&quot;phone-retry-0001&quot;, ASHA_PAYS_RAVI).expectStatus().isCreated();
+        assertThat(paymentCount()).as(&quot;the fix&quot;).isEqualTo(1);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/paysetu/payments/PaymentRequestTest.java</p><div class="notes"><p>Plain unit tests for the fingerprint rules: letter case, a Turkish server locale, missing versus empty note, every field. No Spring, so they run in milliseconds.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.Locale;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** Plain unit tests for the fingerprint rules. No Spring, no database: they run in milliseconds. */
+class PaymentRequestTest {
+
+    private static PaymentRequest req(String payer, String payee, long paise, String note) {
+        return new PaymentRequest(payer, payee, paise, note);
+    }
+
+    @Test
+    void vpaCaseDoesNotChangeTheFingerprint() {
+        assertThat(req(&quot;ASHA@OKPAYSETU&quot;, &quot;Ravi@OkSbi&quot;, 12550, &quot;x&quot;).fingerprint())
+                .isEqualTo(req(&quot;asha@okpaysetu&quot;, &quot;ravi@oksbi&quot;, 12550, &quot;x&quot;).fingerprint());
+    }
+
+    @Test
+    void aTurkishServerLocaleDoesNotChangeTheFingerprint() {
+        Locale original = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.forLanguageTag(&quot;tr-TR&quot;)); // here &quot;I&quot;.toLowerCase() is a dotless &quot;ı&quot;
+            assertThat(req(&quot;ISHAAN@OKICICI&quot;, &quot;ravi@oksbi&quot;, 100, null).fingerprint())
+                    .isEqualTo(req(&quot;ishaan@okicici&quot;, &quot;ravi@oksbi&quot;, 100, null).fingerprint());
+        } finally {
+            Locale.setDefault(original);
+        }
+    }
+
+    @Test
+    void aMissingNoteAndAnEmptyNoteAreTheSamePayment() {
+        assertThat(req(&quot;asha@okpaysetu&quot;, &quot;ravi@oksbi&quot;, 12550, null).fingerprint())
+                .isEqualTo(req(&quot;asha@okpaysetu&quot;, &quot;ravi@oksbi&quot;, 12550, &quot;&quot;).fingerprint());
+    }
+
+    @Test
+    void anyWrittenNoteIsPartOfThePayment() {
+        String none = req(&quot;asha@okpaysetu&quot;, &quot;ravi@oksbi&quot;, 12550, null).fingerprint();
+        assertThat(req(&quot;asha@okpaysetu&quot;, &quot;ravi@oksbi&quot;, 12550, &quot; &quot;).fingerprint()).isNotEqualTo(none);
+        assertThat(req(&quot;asha@okpaysetu&quot;, &quot;ravi@oksbi&quot;, 12550, &quot;Dinner&quot;).fingerprint()).isNotEqualTo(none);
+    }
+
+    @Test
+    void everyPaymentFieldChangesTheFingerprint() {
+        String base = req(&quot;asha@okpaysetu&quot;, &quot;ravi@oksbi&quot;, 12550, &quot;Dinner&quot;).fingerprint();
+        assertThat(req(&quot;meera@okhdfc&quot;, &quot;ravi@oksbi&quot;, 12550, &quot;Dinner&quot;).fingerprint()).isNotEqualTo(base);
+        assertThat(req(&quot;asha@okpaysetu&quot;, &quot;kiran@okaxis&quot;, 12550, &quot;Dinner&quot;).fingerprint()).isNotEqualTo(base);
+        assertThat(req(&quot;asha@okpaysetu&quot;, &quot;ravi@oksbi&quot;, 12551, &quot;Dinner&quot;).fingerprint()).isNotEqualTo(base);
+        assertThat(req(&quot;asha@okpaysetu&quot;, &quot;ravi@oksbi&quot;, 12550, &quot;Lunch&quot;).fingerprint()).isNotEqualTo(base);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/paysetu/payments/PaymentContractTest.java</p><div class="notes"><p>The HTTP contract: valid, invalid, not found, missing and malformed key, broken JSON.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** HTTP contract: status codes, headers and bodies a client can rely on. */
+class PaymentContractTest extends ApiTest {
+
+    @Test
+    void validPaymentReturns201WithLocationAndBody() {
+        pay(&quot;contract-key-001&quot;, ASHA_PAYS_RAVI)
+                .expectStatus().isCreated()
+                .expectHeader().valueMatches(&quot;Location&quot;, &quot;/payments/[0-9a-f-]{36}&quot;)
+                .expectHeader().valueEquals(&quot;Idempotent-Replayed&quot;, &quot;false&quot;)
+                .expectBody()
+                .jsonPath(&quot;$.paymentId&quot;).isNotEmpty()
+                .jsonPath(&quot;$.payerVpa&quot;).isEqualTo(&quot;asha@okpaysetu&quot;)
+                .jsonPath(&quot;$.payeeVpa&quot;).isEqualTo(&quot;ravi@oksbi&quot;)
+                .jsonPath(&quot;$.amountPaise&quot;).isEqualTo(12550)
+                .jsonPath(&quot;$.status&quot;).isEqualTo(&quot;SUCCESS&quot;)
+                .jsonPath(&quot;$.createdAt&quot;).isNotEmpty();
+    }
+
+    @Test
+    void createdPaymentCanBeReadBack() {
+        String created = pay(&quot;contract-key-002&quot;, ASHA_PAYS_RAVI)
+                .expectStatus().isCreated()
+                .expectBody(String.class).returnResult().getResponseBody();
+        String id = created.replaceAll(&quot;.*\&quot;paymentId\&quot;:\&quot;([^\&quot;]+)\&quot;.*&quot;, &quot;$1&quot;).trim();
+
+        client.get().uri(&quot;/payments/{id}&quot;, id).exchange()
+                .expectStatus().isOk()
+                .expectBody().json(created);
+    }
+
+    @Test
+    void unknownPaymentIs404Problem() {
+        client.get().uri(&quot;/payments/{id}&quot;, UUID.randomUUID()).exchange()
+                .expectStatus().isNotFound()
+                .expectHeader().contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .expectBody().jsonPath(&quot;$.title&quot;).isEqualTo(&quot;Payment not found&quot;);
+    }
+
+    @Test
+    void invalidFieldsAre400WithOneMessagePerField() {
+        pay(&quot;contract-key-003&quot;, &quot;&quot;&quot;
+                {&quot;payerVpa&quot;:&quot;asha&quot;,&quot;payeeVpa&quot;:&quot;ravi@oksbi&quot;,&quot;amountPaise&quot;:0}
+                &quot;&quot;&quot;)
+                .expectStatus().isBadRequest()
+                .expectHeader().contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .expectBody()
+                .jsonPath(&quot;$.errors.payerVpa&quot;).isEqualTo(&quot;must look like name@bank&quot;)
+                .jsonPath(&quot;$.errors.amountPaise&quot;).isEqualTo(&quot;must be greater than 0&quot;);
+        assertThat(paymentCount()).isZero();
+    }
+
+    @Test
+    void amountAboveTheLimitIs400() {
+        pay(&quot;contract-key-004&quot;, ASHA_PAYS_RAVI.replace(&quot;12550&quot;, &quot;10000001&quot;))
+                .expectStatus().isBadRequest()
+                .expectBody().jsonPath(&quot;$.errors.amountPaise&quot;).isEqualTo(&quot;must not exceed Rs 1,00,000 per payment&quot;);
+    }
+
+    @Test
+    void payingYourselfIs400() {
+        pay(&quot;contract-key-005&quot;, ASHA_PAYS_RAVI.replace(&quot;ravi@oksbi&quot;, &quot;ASHA@okpaysetu&quot;))
+                .expectStatus().isBadRequest()
+                .expectBody().jsonPath(&quot;$.errors.differentParties&quot;).isEqualTo(&quot;payer and payee must be different&quot;);
+    }
+
+    @Test
+    void missingIdempotencyKeyIs400() {
+        client.post().uri(&quot;/payments&quot;).contentType(MediaType.APPLICATION_JSON).body(ASHA_PAYS_RAVI).exchange()
+                .expectStatus().isBadRequest()
+                .expectBody().jsonPath(&quot;$.detail&quot;).isEqualTo(&quot;Required header &#x27;Idempotency-Key&#x27; is not present.&quot;);
+        assertThat(paymentCount()).isZero();
+    }
+
+    @Test
+    void malformedIdempotencyKeyIs400() {
+        pay(&quot;short&quot;, ASHA_PAYS_RAVI)
+                .expectStatus().isBadRequest()
+                .expectBody().jsonPath(&quot;$.errors.idempotencyKey&quot;).exists();
+    }
+
+    @Test
+    void brokenJsonIs400() {
+        pay(&quot;contract-key-006&quot;, &quot;{\&quot;payerVpa\&quot;:&quot;)
+                .expectStatus().isBadRequest()
+                .expectHeader().contentType(MediaType.APPLICATION_PROBLEM_JSON);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/paysetu/payments/IdempotencyReplayTest.java</p><div class="notes"><p>Replays; key reuse with a different amount or payee; JSON formatting; missing versus empty note; letter case; per-payer scope; validation failures not using up the key.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** Replay: the same request twice gives one effect and the same answer. */
+class IdempotencyReplayTest extends ApiTest {
+
+    @Test
+    void sameKeyAndBodyReplaysTheFirstResponseExactly() {
+        String first = pay(&quot;replay-key-0001&quot;, ASHA_PAYS_RAVI)
+                .expectStatus().isCreated()
+                .expectHeader().valueEquals(&quot;Idempotent-Replayed&quot;, &quot;false&quot;)
+                .expectBody(String.class).returnResult().getResponseBody();
+
+        String second = pay(&quot;replay-key-0001&quot;, ASHA_PAYS_RAVI)
+                .expectStatus().isCreated()
+                .expectHeader().valueEquals(&quot;Idempotent-Replayed&quot;, &quot;true&quot;)
+                .expectBody(String.class).returnResult().getResponseBody();
+
+        assertThat(second).isEqualTo(first);
+        assertThat(paymentCount()).isEqualTo(1);
+    }
+
+    @Test
+    void sameKeyWithADifferentAmountIs422AndChargesNothingMore() {
+        pay(&quot;replay-key-0002&quot;, ASHA_PAYS_RAVI).expectStatus().isCreated();
+
+        pay(&quot;replay-key-0002&quot;, ASHA_PAYS_RAVI.replace(&quot;12550&quot;, &quot;99900&quot;))
+                .expectStatus().isEqualTo(422)
+                .expectHeader().contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .expectBody().jsonPath(&quot;$.title&quot;).isEqualTo(&quot;Idempotency key reused&quot;);
+
+        assertThat(paymentCount()).isEqualTo(1);
+    }
+
+    @Test
+    void sameKeyWithADifferentPayeeIs422() {
+        pay(&quot;replay-key-0005&quot;, ASHA_PAYS_RAVI).expectStatus().isCreated();
+        pay(&quot;replay-key-0005&quot;, ASHA_PAYS_RAVI.replace(&quot;ravi@oksbi&quot;, &quot;kiran@okaxis&quot;))
+                .expectStatus().isEqualTo(422);
+        assertThat(paymentCount()).isEqualTo(1);
+    }
+
+    @Test
+    void omittedNoteThenEmptyNoteIsAReplay() {
+        String noNote = ASHA_PAYS_RAVI.replace(&quot;,\&quot;note\&quot;:\&quot;Dinner split\&quot;&quot;, &quot;&quot;);
+        pay(&quot;replay-key-0006&quot;, noNote).expectStatus().isCreated();
+        pay(&quot;replay-key-0006&quot;, ASHA_PAYS_RAVI.replace(&quot;Dinner split&quot;, &quot;&quot;))
+                .expectStatus().isCreated()
+                .expectHeader().valueEquals(&quot;Idempotent-Replayed&quot;, &quot;true&quot;);
+        assertThat(paymentCount()).isEqualTo(1);
+    }
+
+    @Test
+    void mixedCaseVpaIsTheSamePayerAndTheSamePayment() {
+        pay(&quot;replay-key-0007&quot;, ASHA_PAYS_RAVI).expectStatus().isCreated();
+        pay(&quot;replay-key-0007&quot;, ASHA_PAYS_RAVI.replace(&quot;asha@okpaysetu&quot;, &quot;Asha@OKPaysetu&quot;))
+                .expectStatus().isCreated()
+                .expectHeader().valueEquals(&quot;Idempotent-Replayed&quot;, &quot;true&quot;);
+        assertThat(paymentCount()).isEqualTo(1);
+    }
+
+    @Test
+    void sameContentWithDifferentJsonFormattingIsStillAReplay() {
+        pay(&quot;replay-key-0003&quot;, ASHA_PAYS_RAVI).expectStatus().isCreated();
+
+        String reordered = &quot;&quot;&quot;
+                { &quot;note&quot;: &quot;Dinner split&quot;,  &quot;amountPaise&quot;: 12550,
+                  &quot;payeeVpa&quot;: &quot;ravi@oksbi&quot;, &quot;payerVpa&quot;: &quot;asha@okpaysetu&quot; }
+                &quot;&quot;&quot;;
+        pay(&quot;replay-key-0003&quot;, reordered)
+                .expectStatus().isCreated()
+                .expectHeader().valueEquals(&quot;Idempotent-Replayed&quot;, &quot;true&quot;);
+        assertThat(paymentCount()).isEqualTo(1);
+    }
+
+    @Test
+    void keysAreScopedPerPayerSoTwoCustomersCanPickTheSameKey() {
+        pay(&quot;my-first-payment&quot;, ASHA_PAYS_RAVI).expectStatus().isCreated();
+        pay(&quot;my-first-payment&quot;, ASHA_PAYS_RAVI.replace(&quot;asha@okpaysetu&quot;, &quot;meera@okhdfc&quot;))
+                .expectStatus().isCreated()
+                .expectHeader().valueEquals(&quot;Idempotent-Replayed&quot;, &quot;false&quot;);
+        assertThat(paymentCount()).isEqualTo(2);
+    }
+
+    @Test
+    void aFailedValidationDoesNotUseUpTheKey() {
+        pay(&quot;replay-key-0004&quot;, ASHA_PAYS_RAVI.replace(&quot;12550&quot;, &quot;0&quot;)).expectStatus().isBadRequest();
+        pay(&quot;replay-key-0004&quot;, ASHA_PAYS_RAVI)
+                .expectStatus().isCreated()
+                .expectHeader().valueEquals(&quot;Idempotent-Replayed&quot;, &quot;false&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/paysetu/payments/PaymentConcurrencyTest.java</p><div class="notes"><p>20 real HTTP requests released together on virtual threads. One test proves one payment per key; the other proves different keys are not merged.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * The invariant under real parallel HTTP requests: one key, one payment.
+ * A single-threaded replay test cannot catch a check-then-insert race; this one can.
+ */
+class PaymentConcurrencyTest extends ApiTest {
+
+    private static final int REQUESTS = 20;
+
+    @Test
+    void twentyParallelRetriesWithTheSameKeyCreateOnePayment() throws Exception {
+        List&lt;String&gt; bodies = fireTogether(i -&gt; &quot;same-key-burst-01&quot;);
+
+        assertThat(paymentCount()).isEqualTo(1);
+        assertThat(bodies).hasSize(REQUESTS).containsOnly(bodies.getFirst()); // everyone got the same paymentId
+    }
+
+    @Test
+    void twentyParallelPaymentsWithDifferentKeysAllGoThrough() throws Exception {
+        List&lt;String&gt; bodies = fireTogether(i -&gt; &quot;different-key-&quot; + i);
+
+        assertThat(paymentCount()).isEqualTo(REQUESTS);
+        assertThat(bodies).doesNotHaveDuplicates();
+    }
+
+    private List&lt;String&gt; fireTogether(java.util.function.IntFunction&lt;String&gt; keyFor) throws Exception {
+        CountDownLatch startGate = new CountDownLatch(1);
+        List&lt;Future&lt;String&gt;&gt; results = new ArrayList&lt;&gt;();
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; REQUESTS; i++) {
+                String key = keyFor.apply(i);
+                results.add(pool.submit(() -&gt; {
+                    startGate.await(); // all threads wait here, then hit the API at the same moment
+                    return pay(key, ASHA_PAYS_RAVI).expectStatus().isCreated()
+                            .expectBody(String.class).returnResult().getResponseBody();
+                }));
+            }
+            startGate.countDown();
+            List&lt;String&gt; bodies = new ArrayList&lt;&gt;();
+            for (Future&lt;String&gt; f : results) {
+                bodies.add(f.get());
+            }
+            return bodies;
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/paysetu/payments/PaymentDatabaseTest.java</p><div class="notes"><p>Amount range, different parties and a complete stored response hold without Java validation. A crash injected after the payment insert rolls back the key and the payment.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.reset;
+
+/** The database is the last line of defence: constraints hold even if Java validation is bypassed, and failures roll back. */
+class PaymentDatabaseTest extends ApiTest {
+
+    @MockitoSpyBean
+    IdempotencyKeyRepository keys;
+
+    @Test
+    void databaseRejectsAmountsOutsideTheRangeEvenWithoutJavaValidation() {
+        for (long paise : new long[] {0, 10_000_001}) {
+            assertThatThrownBy(() -&gt; insertPayment(&quot;asha@okpaysetu&quot;, &quot;ravi@oksbi&quot;, paise))
+                    .isInstanceOf(DataIntegrityViolationException.class)
+                    .hasMessageContaining(&quot;payments_amount_range&quot;);
+        }
+        insertPayment(&quot;asha@okpaysetu&quot;, &quot;ravi@oksbi&quot;, 10_000_000); // the maximum itself is allowed
+    }
+
+    @Test
+    void databaseRejectsPayingYourselfInAnyLetterCase() {
+        assertThatThrownBy(() -&gt; insertPayment(&quot;asha@okpaysetu&quot;, &quot;ASHA@okpaysetu&quot;, 100))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining(&quot;payments_different_parties&quot;);
+    }
+
+    @Test
+    void databaseRejectsAHalfFilledStoredResponse() {
+        UUID paymentId = insertPayment(&quot;asha@okpaysetu&quot;, &quot;ravi@oksbi&quot;, 100);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;&quot;&quot;
+                INSERT INTO idempotency_keys (payer_vpa, idem_key, request_hash, payment_id, response_status)
+                VALUES (&#x27;asha@okpaysetu&#x27;, &#x27;k-0002&#x27;, ?, ?, 201)
+                &quot;&quot;&quot;).params(&quot;a&quot;.repeat(64), paymentId).update()) // body missing
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining(&quot;idempotency_keys_result_complete&quot;);
+    }
+
+    private UUID insertPayment(String payer, String payee, long paise) {
+        UUID id = UUID.randomUUID();
+        jdbc.sql(&quot;&quot;&quot;
+                INSERT INTO payments (id, payer_vpa, payee_vpa, amount_paise, status, created_at)
+                VALUES (?, ?, ?, ?, &#x27;SUCCESS&#x27;, ?)
+                &quot;&quot;&quot;).params(id, payer, payee, paise, Timestamp.from(Instant.now())).update();
+        return id;
+    }
+
+    @Test
+    void databaseRejectsTheSameKeyTwiceForOnePayer() {
+        String insert = &quot;INSERT INTO idempotency_keys (payer_vpa, idem_key, request_hash) VALUES (&#x27;asha@okpaysetu&#x27;, &#x27;k-0001&#x27;, ?)&quot;;
+        jdbc.sql(insert).param(&quot;a&quot;.repeat(64)).update();
+
+        assertThatThrownBy(() -&gt; jdbc.sql(insert).param(&quot;b&quot;.repeat(64)).update())
+                .isInstanceOf(DuplicateKeyException.class);
+    }
+
+    @Test
+    void aFailureAfterThePaymentInsertRollsBackTheKeyAndThePayment() {
+        doThrow(new IllegalStateException(&quot;simulated crash while saving the response&quot;))
+                .when(keys).complete(any(), any(), any(), anyInt(), any());
+
+        pay(&quot;rollback-key-01&quot;, ASHA_PAYS_RAVI).expectStatus().is5xxServerError();
+
+        assertThat(paymentCount()).as(&quot;no half-finished payment&quot;).isZero();
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM idempotency_keys&quot;).query(Long.class).single())
+                .as(&quot;the key is free again&quot;).isZero();
+
+        reset(keys);
+        pay(&quot;rollback-key-01&quot;, ASHA_PAYS_RAVI)
+                .expectStatus().isCreated()
+                .expectHeader().valueEquals(&quot;Idempotent-Replayed&quot;, &quot;false&quot;);
+        assertThat(paymentCount()).as(&quot;the client&#x27;s retry succeeds&quot;).isEqualTo(1);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-6" aria-labelledby="tests-6-b" hidden><p class="path">src/test/java/com/paysetu/payments/ApiTest.java</p><div class="notes"><p>Shared setup: the whole app on a random port, real HTTP, tables emptied before each test.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.client.RestTestClient;
+
+/** Shared setup: the whole app on a random port, real HTTP, real Postgres, empty tables before each test. */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureRestTestClient
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    static final String ASHA_PAYS_RAVI = &quot;&quot;&quot;
+            {&quot;payerVpa&quot;:&quot;asha@okpaysetu&quot;,&quot;payeeVpa&quot;:&quot;ravi@oksbi&quot;,&quot;amountPaise&quot;:12550,&quot;note&quot;:&quot;Dinner split&quot;}
+            &quot;&quot;&quot;;
+
+    @Autowired
+    RestTestClient client;
+
+    @Autowired
+    JdbcClient jdbc;
+
+    @BeforeEach
+    void emptyTables() {
+        jdbc.sql(&quot;TRUNCATE idempotency_keys, payments&quot;).update();
+    }
+
+    RestTestClient.ResponseSpec pay(String idempotencyKey, String json) {
+        return client.post().uri(&quot;/payments&quot;)
+                .header(&quot;Idempotency-Key&quot;, idempotencyKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(json)
+                .exchange();
+    }
+
+    long paymentCount() {
+        return jdbc.sql(&quot;SELECT count(*) FROM payments&quot;).query(Long.class).single();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-7" aria-labelledby="tests-7-b" hidden><p class="path">src/test/java/com/paysetu/payments/PostgresTestConfig.java</p><div class="notes"><p>A real PostgreSQL 17 in Docker via Testcontainers. Spring wires it in with <code>@ServiceConnection</code>.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real Postgres 17 in Docker for every test. No H2: unique-key waits and CHECK constraints must behave like production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges: tasks the learner builds, each with a ready test in <code>challenge/</code> and a solution to open after trying</li><li>One design-on-paper task with no code</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Download the starter project; the solutions are a separate pack, and on this page they open only when you click. Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/paysetu/payments/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=KeyCleanupChallengeTest</code></li>
+<li>Write the code until it passes. Then run <code>./mvnw test</code> to check the other 31 tests still pass.</li>
+</ol>
+<p class="muted">Checked on 11 Oct 2026 (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 34 tests pass (31 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 45 minutes</p><h2>Old keys expire after 24 hours</h2><p>Right now <code>idempotency_keys</code> grows forever. Add a Spring bean <code>IdempotencyKeyCleanup</code> with a method <code>int deleteKeysOlderThan(Duration age)</code> that deletes old keys and returns how many it deleted. Then run it every night.</p><p><b>Done when:</b> both tests in <code>KeyCleanupChallengeTest</code> pass. The second test shows why retention must be longer than any client retry: after cleanup, the same key creates a new payment.</p><details class="qa"><summary>Hints</summary><ul><li>The table already has an index on <code>created_at</code>; your <code>DELETE</code> should use it.</li><li>Delete keys, never payments. A payment is a financial record.</li><li><code>@Scheduled(cron = …)</code> runs a method on a timetable. It needs <code>@EnableScheduling</code> somewhere.</li></ul></details><p class="path">challenge/KeyCleanupChallengeTest.java</p><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.time.Duration;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * CHALLENGE 1: keys must not live forever.
+ * Copy this file into src/test/java/com/paysetu/payments/ and make it pass.
+ * You need a Spring bean IdempotencyKeyCleanup with: int deleteKeysOlderThan(Duration age)
+ */
+class KeyCleanupChallengeTest extends ApiTest {
+
+    @Autowired
+    IdempotencyKeyCleanup cleanup;
+
+    @Test
+    void deletesOnlyKeysOlderThanTheRetentionWindow() {
+        pay(&quot;old-key-000001&quot;, ASHA_PAYS_RAVI).expectStatus().isCreated();
+        pay(&quot;new-key-000001&quot;, ASHA_PAYS_RAVI.replace(&quot;12550&quot;, &quot;500&quot;)).expectStatus().isCreated();
+        ageKey(&quot;old-key-000001&quot;, 25);
+
+        int deleted = cleanup.deleteKeysOlderThan(Duration.ofHours(24));
+
+        assertThat(deleted).isEqualTo(1);
+        assertThat(jdbc.sql(&quot;SELECT idem_key FROM idempotency_keys&quot;).query(String.class).list())
+                .containsExactly(&quot;new-key-000001&quot;);
+        assertThat(paymentCount()).as(&quot;payments are records; only keys expire&quot;).isEqualTo(2);
+    }
+
+    @Test
+    void aRetryAfterCleanupIsTreatedAsANewPayment() {
+        pay(&quot;late-retry-0001&quot;, ASHA_PAYS_RAVI).expectStatus().isCreated();
+        ageKey(&quot;late-retry-0001&quot;, 25);
+        cleanup.deleteKeysOlderThan(Duration.ofHours(24));
+
+        pay(&quot;late-retry-0001&quot;, ASHA_PAYS_RAVI)
+                .expectStatus().isCreated()
+                .expectHeader().valueEquals(&quot;Idempotent-Replayed&quot;, &quot;false&quot;);
+        // This is why retention must be longer than the longest client retry window.
+        assertThat(paymentCount()).isEqualTo(2);
+    }
+
+    private void ageKey(String key, int hours) {
+        jdbc.sql(&quot;UPDATE idempotency_keys SET created_at = now() - make_interval(hours =&gt; ?) WHERE idem_key = ?&quot;)
+                .params(hours, key)
+                .update();
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/IdempotencyKeyCleanup.java</p><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.sql.Timestamp;
+import java.time.Duration;
+import java.time.Instant;
+
+/** SOLUTION to challenge 1. Try it yourself first. */
+@Component
+@EnableScheduling
+public class IdempotencyKeyCleanup {
+
+    private static final Duration RETENTION = Duration.ofHours(24);
+
+    private final JdbcClient jdbc;
+
+    IdempotencyKeyCleanup(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    /** Uses the created_at index from V1, so it does not scan the whole table. */
+    public int deleteKeysOlderThan(Duration age) {
+        return jdbc.sql(&quot;DELETE FROM idempotency_keys WHERE created_at &lt; ?&quot;)
+                .param(Timestamp.from(Instant.now().minus(age)))
+                .update();
+    }
+
+    @Scheduled(cron = &quot;0 15 3 * * *&quot;) // 03:15 every night, when traffic is lowest
+    void nightly() {
+        deleteKeysOlderThan(RETENTION);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 30 minutes</p><h2>Count replays and key reuse</h2><p>On-call engineers need to see retries. Count two events with Micrometer: <code>paysetu.payments.replayed</code> when a saved response is returned, and <code>paysetu.payments.key_reused</code> when a key comes back with different details.</p><p><b>Done when:</b> <code>ReplayMetricsChallengeTest</code> passes and the other tests still pass.</p><details class="qa"><summary>Hints</summary><ul><li>Add <code>spring-boot-starter-actuator</code> to <code>pom.xml</code>; it provides a <code>MeterRegistry</code> bean.</li><li>Create both counters once, in the constructor, not on every request.</li><li>Increment only on the replay and 422 paths, not on the first payment.</li></ul></details><p class="path">challenge/ReplayMetricsChallengeTest.java</p><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * CHALLENGE 2: make retries visible to the on-call engineer.
+ * Copy this file into src/test/java/com/paysetu/payments/ and make it pass.
+ * Count two things with Micrometer:
+ *   paysetu.payments.replayed    - a stored response was returned
+ *   paysetu.payments.key_reused  - a key came back with a different body (422)
+ * Hint: add spring-boot-starter-actuator to pom.xml to get a MeterRegistry.
+ */
+class ReplayMetricsChallengeTest extends ApiTest {
+
+    @Autowired
+    MeterRegistry meters;
+
+    @Test
+    void countsReplaysAndKeyReuse() {
+        double replayedBefore = count(&quot;paysetu.payments.replayed&quot;);
+        double reusedBefore = count(&quot;paysetu.payments.key_reused&quot;);
+
+        pay(&quot;metrics-key-001&quot;, ASHA_PAYS_RAVI).expectStatus().isCreated();
+        pay(&quot;metrics-key-001&quot;, ASHA_PAYS_RAVI).expectStatus().isCreated();
+        pay(&quot;metrics-key-001&quot;, ASHA_PAYS_RAVI.replace(&quot;12550&quot;, &quot;99900&quot;)).expectStatus().isEqualTo(422);
+
+        assertThat(count(&quot;paysetu.payments.replayed&quot;) - replayedBefore).isEqualTo(1);
+        assertThat(count(&quot;paysetu.payments.key_reused&quot;) - reusedBefore).isEqualTo(1);
+    }
+
+    private double count(String name) {
+        return meters.counter(name).count();
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/PaymentService.java</p><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.ErrorResponseException;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.UUID;
+
+/**
+ * SOLUTION to challenge 2. Try it yourself first.
+ * Same as the station&#x27;s PaymentService, plus two counters. Also add to pom.xml:
+ *   &lt;dependency&gt;&lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;&lt;artifactId&gt;spring-boot-starter-actuator&lt;/artifactId&gt;&lt;/dependency&gt;
+ */
+@Service
+public class PaymentService {
+
+    public record PaymentResult(UUID paymentId, int status, String body, boolean replayed) {
+    }
+
+    private final PaymentRepository payments;
+    private final IdempotencyKeyRepository keys;
+    private final JsonMapper json;
+    private final Counter replayed;
+    private final Counter keyReused;
+
+    PaymentService(PaymentRepository payments, IdempotencyKeyRepository keys, JsonMapper json, MeterRegistry meters) {
+        this.payments = payments;
+        this.keys = keys;
+        this.json = json;
+        this.replayed = meters.counter(&quot;paysetu.payments.replayed&quot;);
+        this.keyReused = meters.counter(&quot;paysetu.payments.key_reused&quot;);
+    }
+
+    @Transactional
+    public PaymentResult pay(String idempotencyKey, PaymentRequest req) {
+        String hash = req.fingerprint();
+
+        if (!keys.claim(req.payerVpa(), idempotencyKey, hash)) {
+            var stored = keys.find(req.payerVpa(), idempotencyKey);
+            if (!stored.requestHash().equals(hash)) {
+                keyReused.increment();
+                throw keyReused(idempotencyKey);
+            }
+            replayed.increment();
+            return new PaymentResult(stored.paymentId(), stored.responseStatus(), stored.responseBody(), true);
+        }
+
+        Payment payment = payments.insert(req);
+        String body = json.writeValueAsString(payment);
+        keys.complete(req.payerVpa(), idempotencyKey, payment.paymentId(), HttpStatus.CREATED.value(), body);
+        return new PaymentResult(payment.paymentId(), HttpStatus.CREATED.value(), body, false);
+    }
+
+    public Payment get(UUID id) {
+        return payments.findById(id).orElseThrow(() -&gt; {
+            var problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No payment with id &quot; + id);
+            problem.setTitle(&quot;Payment not found&quot;);
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, problem, null);
+        });
+    }
+
+    private static ErrorResponseException keyReused(String key) {
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT,
+                &quot;Idempotency-Key &quot; + key + &quot; was already used with a different request body. Use a new key for a new payment.&quot;);
+        problem.setTitle(&quot;Idempotency key reused&quot;);
+        return new ErrorResponseException(HttpStatus.UNPROCESSABLE_CONTENT, problem, null);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · Go deeper · design on paper, no code</p>
+<h2>The charge becomes a call to a bank</h2>
+<p>The payment is no longer a row in your database. It is an HTTP call to a bank that takes 2 to 8 seconds and cannot be rolled back. Redesign the flow on paper and answer:</p>
+<ol>
+<li>Where does your database transaction start and end now? Why can it not stay open during the bank call?</li>
+<li>What does a second request with the same key see while the first is still waiting for the bank? Which status code do you return?</li>
+<li>The bank says yes, then your server crashes before saving the result. What happens on the retry, and how do you find out what the bank did?</li>
+</ol>
+<p>Compare your answer with the interview question about a bank call and the two-phase row in the Design tab's alternatives.</p>
+</section>
+<section class="challenge"><p class="eyebrow">Challenge 4 · Go deeper · design on paper, no code</p>
+<h2>Keep the keys table small at 50 million payments a day</h2>
+<p>Daily <code>DELETE</code>s of millions of rows are slow and bloat the table. Dropping a whole day's partition is instant. But PostgreSQL requires a primary key on a partitioned table to include the partition column, and <code>(payer_vpa, idem_key)</code> does not include <code>created_at</code>.</p>
+<ol>
+<li>If you partition by day and change the key to <code>(payer_vpa, idem_key, created_at)</code>, what can now go wrong when a retry arrives just after midnight?</li>
+<li>What do you gain and lose by hash-partitioning on <code>payer_vpa</code> instead?</li>
+<li>Would you keep deleting in batches, accept the bloat, or move keys to a store with built-in expiry? Which number would make you change your mind?</li>
+</ol>
+<p class="muted">Background: the PostgreSQL documentation on table partitioning, "Limitations" section.</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach: numbered steps before any code</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, indexes, migration, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li><strong>Validate</strong> the header and body. A bad request gets <code>400</code> before the database is touched, so it does not use up the key.</li>
+<li><strong>Fingerprint</strong> the request: SHA-256 of payer, payee, amount and note.</li>
+<li><strong>Begin</strong> one transaction.</li>
+<li><strong>Claim</strong> the key: <code>INSERT … ON CONFLICT DO NOTHING</code>. One row inserted means this request owns the key. If another transaction is inserting the same key, PostgreSQL makes this insert wait until that transaction ends.</li>
+<li><strong>If not claimed</strong>, read the stored row. If the fingerprint differs, return <code>422</code>. Otherwise return the stored status and body with <code>Idempotent-Replayed: true</code>.</li>
+<li><strong>Charge</strong>: insert the payment.</li>
+<li><strong>Store the response</strong>: serialise it once and save it on the key row with the payment id.</li>
+<li><strong>Commit.</strong> The key, the payment and the response become visible together, or not at all.</li>
+<li><strong>Return</strong> the stored status and body as-is, with the same <code>Location</code>. Only <code>Idempotent-Replayed</code> tells a replay apart.</li>
+</ol>
+
+<h2>Two retries at the same moment</h2>
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant A as Phone, attempt 1
+    participant B as Phone, retry
+    participant API as Payments API
+    participant DB as PostgreSQL
+    A->>API: POST /payments (key K)
+    API->>DB: INSERT key K ON CONFLICT DO NOTHING
+    DB-->>API: 1 row: A owns K
+    B->>API: POST /payments (key K)
+    API->>DB: INSERT key K ON CONFLICT DO NOTHING
+    Note over DB: B waits: A's insert of K is not committed yet
+    API->>DB: INSERT payment, UPDATE key K with response
+    API->>DB: COMMIT (A)
+    API-->>A: 201 (reply lost on the network)
+    DB-->>API: 0 rows: K already exists
+    API->>DB: SELECT key K
+    DB-->>API: same fingerprint, stored 201 body
+    API-->>B: 201, same body, Idempotent-Replayed: true
+</pre>
+
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td><strong>Unique constraint claims the key</strong>, all in one transaction</td><td>A waiting retry holds a DB connection until the first finishes. Works only when the effect is in the same database.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Check-then-insert: <code>SELECT</code> the key, charge, then <code>INSERT</code> the key</td><td>Two requests both see "no key" and both charge. Measured above: up to 19 charges.</td><td><span class="pill bad">Wrong</span></td></tr><tr><td><code>SELECT … FOR UPDATE</code></td><td>You cannot lock a row that does not exist yet, which is exactly the first-request case.</td><td><span class="pill bad">Wrong</span></td></tr><tr><td>Redis <code>SET NX</code> with a TTL</td><td>Fast, with expiry built in. But the key and the payment live in two stores with no shared transaction; a crash between them leaves them out of step.</td><td><span class="pill warn">When the effect is elsewhere</span></td></tr><tr><td>PostgreSQL advisory lock on a hash of the key</td><td>Works, but a hash can collide and the rule is invisible in the schema. A constraint documents itself.</td><td><span class="pill warn">Possible</span></td></tr><tr><td>Two-phase key: commit <code>IN_PROGRESS</code>, call the bank, then mark <code>COMPLETED</code>; a concurrent retry gets <code>409</code></td><td>Needed when the charge is an external call that cannot sit inside your database transaction, as with a real bank or PSP. Costs a recovery job for keys stuck in progress.</td><td><span class="pill warn">Later stations</span></td></tr><tr><td>De-duplicate by business fields (same payer, payee and amount within 5 minutes)</td><td>Blocks real repeat payments, such as two ₹20 chai payments to the same stall.</td><td><span class="pill bad">Wrong</span></td></tr><tr><td>Server-issued intent: the client first creates a payment intent or order, then confirms it</td><td>Also correct, and common at large PSPs. Costs one extra round trip and a new resource to manage.</td><td><span class="pill warn">Valid alternative</span></td></tr></tbody></table></div>
+<p class="note">One deliberate difference from Stripe's API v1: Stripe stores and replays even a <code>500</code> response, because its side effects may already have happened. Here, a <code>500</code> raised inside <code>pay()</code> rolls the transaction back, so a same-key retry runs fresh. A failure the client sees <em>after</em> the commit (a lost reply, a proxy error) is answered by a replay. Both cases are safe only because the key, the payment and the response share one transaction.</p>
+
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Table</th><th>Key and constraints</th><th>Why</th></tr></thead><tbody><tr><td><code>payments</code></td><td>PK <code>id</code> (UUID). <code>payments_amount_range</code>: 1 to 10,000,000 paise. <code>payments_different_parties</code>: payer ≠ payee, any case. <code>BIGINT</code> paise.</td><td>The effect. The same rules as <code>PaymentRequest</code>, enforced again: Java gives friendly messages, the database guarantees them even when Java is bypassed.</td></tr><tr><td><code>idempotency_keys</code></td><td>PK <code>(payer_vpa, idem_key)</code>. FK <code>payment_id → payments.id</code>. <code>idempotency_keys_result_complete</code>: the three result columns are all empty or all filled. Index on <code>created_at</code>.</td><td>The PK is the lock and the per-payer scope. The result columns are empty only inside the claiming transaction, which no one else can see, and the check stops a half-saved response. The index serves the cleanup job in Practice.</td></tr></tbody></table></div>
+<p><strong>Transaction boundary:</strong> <code>PaymentService.pay</code> is <code>@Transactional</code> at PostgreSQL's default <code>READ COMMITTED</code>. That level is enough: after the waiting insert returns 0 rows, the next <code>SELECT</code> takes a fresh snapshot and sees the committed row.</p>
+<pre class="code"><code class="language-sql">-- The same business rules as PaymentRequest, enforced again by the database.
+-- Java validation gives friendly messages; these constraints hold even when Java is bypassed
+-- (a script, another service, a bug). They are partners, not alternatives.
+CREATE TABLE payments (
+    id           UUID         PRIMARY KEY,
+    payer_vpa    VARCHAR(255) NOT NULL,
+    payee_vpa    VARCHAR(255) NOT NULL,
+    amount_paise BIGINT       NOT NULL,
+    note         VARCHAR(80),
+    status       VARCHAR(16)  NOT NULL,
+    created_at   TIMESTAMPTZ  NOT NULL,
+    CONSTRAINT payments_amount_range      CHECK (amount_paise BETWEEN 1 AND 10000000), -- Rs 0.01 to Rs 1,00,000 (demo rule)
+    CONSTRAINT payments_different_parties CHECK (lower(payer_vpa) &lt;&gt; lower(payee_vpa))
+);
+
+-- One row per (payer, key). The primary key is the lock: a second insert of the
+-- same pair waits for the first transaction, then sees its committed row.
+CREATE TABLE idempotency_keys (
+    payer_vpa       VARCHAR(255) NOT NULL,
+    idem_key        VARCHAR(64)  NOT NULL,
+    request_hash    CHAR(64)     NOT NULL,
+    payment_id      UUID         REFERENCES payments (id),
+    response_status SMALLINT,
+    response_body   TEXT,
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (payer_vpa, idem_key),
+    -- The three result columns are empty while the claiming transaction runs, and all filled before it commits.
+    -- Never half-filled: a replay must always find a complete stored response.
+    CONSTRAINT idempotency_keys_result_complete CHECK (
+        (payment_id IS NULL AND response_status IS NULL AND response_body IS NULL)
+        OR (payment_id IS NOT NULL AND response_status IS NOT NULL AND response_body IS NOT NULL))
+);
+
+-- Lets a cleanup job delete keys older than the retention window without a full scan.
+CREATE INDEX idx_idempotency_keys_created_at ON idempotency_keys (created_at);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations: security, performance, reliability, scale, cost, maintainability</li><li>14. Operations: metric, alert, rollback, runbook, failure drill (Production Scale stations only)</li></ul><p class="rule">This is a Working Systems station, so the full Operations section is not required. This tab shows the signals to know; the runbook and failure drill start at Production Scale.</p></aside>
+<h2>Real-world considerations</h2>
+<dl class="facts">
+<dt>Security</dt><dd>Keys are scoped per payer. With a global scope, anyone who reuses another person's key would receive that person's payment details. In production the payer comes from the authenticated token, never from the request body. <code>GET /payments/{id}</code> must also check that the signed-in user is the payer or the payee; a UUID is hard to guess, but knowing it is not permission. Answer <code>404</code> rather than <code>403</code>, so the API does not confirm the payment exists. A VPA is personal data under India's DPDP rules, so mask it in logs. All of this is taught in the Security stations.</dd>
+<dt>Performance</dt><dd>Each payment costs one extra insert and one update. Retries of the same key queue behind each other and hold a database connection while they wait, so a retry storm can drain the pool. Size the pool and keep client retries spaced out with backoff.</dd>
+<dt>Reliability</dt><dd>Retrying with the same key is safe <em>while the key is retained</em> (24 hours here): a replay if the original committed, a fresh run if it rolled back, or a <code>422</code> if the details changed. After cleanup the server has forgotten the key, and the same request creates a new payment. So the retention window must be longer than the longest client retry, and clients must give up before it ends (Practice challenge 1 shows this with a test). Real UPI payments are asynchronous (pending, then success or failure from the bank). This station simplifies to an immediate success; bank callbacks come in station 132.</dd>
+<dt>Scale</dt><dd><code>idempotency_keys</code> grows by one row per payment. A daily cleanup of rows older than the retention window keeps it bounded (Practice challenge 1). Partitioning by day so old days can be dropped is <em>not</em> a drop-in change: PostgreSQL requires a primary key on a partitioned table to include the partition column, and <code>(payer_vpa, idem_key)</code> does not. Practice challenge 4 works through the trade-offs.</dd>
+<dt>Cost</dt><dd>About 200 bytes of stored response per payment, for 24 hours. Small next to the cost of one refund ticket.</dd>
+<dt>Maintainability</dt><dd>The flow lives in one service method. Pull it out into a shared filter or aspect only when a third endpoint needs it, not before.</dd>
+</dl>
+<h2>Signals to know</h2>
+<div class="scroll"><table class=""><thead><tr><th>Signal</th><th>What it tells you</th></tr></thead><tbody><tr><td>Replay rate: responses with <code>Idempotent-Replayed: true</code> as a share of all</td><td>A jump means the network or a client is retrying more than usual.</td></tr><tr><td>Rate of <code>422</code> key-reused responses</td><td>Almost always a client bug: one key used for two different payments.</td></tr><tr><td>p99 latency of <code>POST /payments</code></td><td>Lock waits from same-key retries show up here first.</td></tr><tr><td>Rows in <code>idempotency_keys</code> older than 24 hours</td><td>Cleanup is not running.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways: questions to answer out loud, with strong answers</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<p class="muted">Say your answer out loud, then open the strong answer.</p>
+<details class="qa"><summary>What does idempotent mean, and is POST idempotent?</summary><p>An operation is idempotent if doing it twice has the same effect as doing it once. HTTP defines GET, PUT and DELETE (among others) as idempotent, but not POST. A payment POST becomes idempotent only when the server makes it so, here with a client-supplied key.</p></details><details class="qa"><summary>Why can&#x27;t the app check whether the payment went through before retrying?</summary><p>The check can time out too, and it races with the original request, which may still be in progress. Only the server, which sees both requests, can decide safely. The key gives it the information to do that.</p></details><details class="qa"><summary>Why a unique constraint and not SELECT, then INSERT?</summary><p>Two requests can both run the SELECT before either inserts, so both see &quot;no key&quot; and both charge. A unique constraint makes the database pick exactly one winner, atomically. In PostgreSQL the loser&#x27;s insert waits for the winner to commit, then reports a conflict.</p></details><details class="qa"><summary>Same key, different amount: what do you return, and why?</summary><p>422 Unprocessable Content. The (now expired) IETF Idempotency-Key draft suggested the same, but it is our design choice, not a standard requirement. Returning the old payment would make the client think the new amount was paid. Charging would break the key&#x27;s promise. The client must use a new key for a new payment.</p></details><details class="qa"><summary>Two requests with the same key arrive together. Walk through your design.</summary><p>Both try the insert. One gets the row; the other waits on the unique index. The first inserts the payment, stores the response and commits. The waiting insert then returns 0 rows; a fresh SELECT under READ COMMITTED sees the stored response, compares the fingerprint, and replays it.</p></details><details class="qa"><summary>What changes if the charge is an HTTP call to a bank?</summary><p>You cannot hold a database transaction open across a slow external call, and you cannot roll the call back. Commit the key as IN_PROGRESS first, call the bank with your own idempotency reference, then mark it COMPLETED with the response. A concurrent retry gets 409 Conflict, and a recovery job resolves keys stuck in progress by asking the bank for the status.</p></details><details class="qa"><summary>A client got a 500 from a payment API. Should it retry, and with which key?</summary><p>Yes, with the same key. If the server&#x27;s transaction rolled back, the retry runs as a fresh payment. If it committed and only the reply was lost or mangled by a proxy, the retry gets the saved response. A new key is the mistake that charges twice. One limit: this holds only while the server still keeps the key (24 hours here); a retry after cleanup is a new payment.</p></details><details class="qa"><summary>How long do you keep keys?</summary><p>Longer than any client will retry. Stripe&#x27;s docs, for example, say keys can be pruned once they are at least 24 hours old. After pruning, the same key is treated as a new request, so a very late retry would charge again.</p></details><details class="qa"><summary>Redis or PostgreSQL for the keys?</summary><p>If the effect is a row in PostgreSQL, keep the key there and use one transaction; correctness comes for free. Redis fits when the effect is somewhere else and you want built-in expiry, but then you must handle a crash between &quot;key saved&quot; and &quot;effect done&quot;.</p></details><details class="qa"><summary>Why amounts in paise as integers?</summary><p>Binary floating point cannot represent most decimal amounts exactly, so sums drift. Whole paise in a BIGINT are exact, and the API states the unit in the field name.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 31 tests pass.</td><td>You can say why each test would fail without the fix.</td></tr><tr><td>Robustness</td><td>Every edge case in the table is handled.</td><td>You found a case the table does not list, and added a test.</td></tr><tr><td>Design</td><td>One transaction; the unique constraint is the lock.</td><td>You can argue when the two-phase design is needed instead.</td></tr><tr><td>Tests</td><td>Real PostgreSQL and real parallel requests.</td><td>You broke the code on purpose and watched the right test go red.</td></tr><tr><td>Explanation</td><td>You can explain the flow in two minutes.</td><td>You can draw the sequence diagram from memory.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate's version was approved and shipped. It passes the "send twice, get one payment" test. Read it and list every problem before opening the findings.</p>
+<pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponseException;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.UUID;
+
+/**
+ * REVIEW EXERCISE: this version was &quot;approved&quot; in a pull request and shipped.
+ * It passes a simple &quot;send twice, get one payment&quot; test. Find what is wrong before reading the answers.
+ * To see it fail: copy it over src/main/java/com/paysetu/payments/PaymentService.java and run mvn test.
+ */
+@Service
+public class PaymentService {
+
+    public record PaymentResult(UUID paymentId, int status, String body, boolean replayed) {
+    }
+
+    private record Earlier(UUID paymentId, String body) {
+    }
+
+    private final PaymentRepository payments;
+    private final JdbcClient jdbc;
+    private final JsonMapper json;
+
+    PaymentService(PaymentRepository payments, JdbcClient jdbc, JsonMapper json) {
+        this.payments = payments;
+        this.jdbc = jdbc;
+        this.json = json;
+    }
+
+    public PaymentResult pay(String idempotencyKey, PaymentRequest req) {
+        // 1. Was this key used before?
+        var earlier = jdbc.sql(&quot;SELECT payment_id, response_body FROM idempotency_keys WHERE idem_key = ?&quot;)
+                .param(idempotencyKey)
+                .query((rs, n) -&gt; new Earlier(rs.getObject(&quot;payment_id&quot;, UUID.class), rs.getString(&quot;response_body&quot;)))
+                .optional();
+        if (earlier.isPresent()) {
+            return new PaymentResult(earlier.get().paymentId(), 201, earlier.get().body(), true);
+        }
+
+        // 2. No: charge the customer.
+        Payment payment = payments.insert(req);
+        String body = json.writeValueAsString(payment);
+
+        // 3. Remember the key for next time.
+        jdbc.sql(&quot;&quot;&quot;
+                INSERT INTO idempotency_keys (payer_vpa, idem_key, request_hash, payment_id, response_status, response_body)
+                VALUES (?, ?, ?, ?, 201, ?)
+                &quot;&quot;&quot;)
+                .params(PaymentRequest.normalise(req.payerVpa()), idempotencyKey, req.fingerprint(), payment.paymentId(), body)
+                .update();
+        return new PaymentResult(payment.paymentId(), 201, body, false);
+    }
+
+    public Payment get(UUID id) {
+        return payments.findById(id).orElseThrow(() -&gt; {
+            var problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No payment with id &quot; + id);
+            problem.setTitle(&quot;Payment not found&quot;);
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, problem, null);
+        });
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>No transaction</summary><p>The payment insert commits on its own. When the key insert then fails (a parallel retry got there first), the customer is already charged and the client gets a 500.</p><p class="evidence"><b>Test evidence:</b> <code>twentyParallelRetriesWithTheSameKeyCreateOnePayment</code>: 500 instead of 201. The probe counted 2 to 19 charges for one key.</p></details><details class="finding"><summary><span class="sev">2</span>Check-then-act race</summary><p>Two retries both run the SELECT, both see no key, and both charge. A single-threaded test never sees this.</p><p class="evidence"><b>Test evidence:</b> Same concurrency test. The simple "send twice" trap test still passes, which is how this got approved.</p></details><details class="finding"><summary><span class="sev">3</span>Key not scoped to the payer</summary><p>The lookup uses only <code>idem_key</code>. If Meera's app picks the same key string as Asha's, Meera receives Asha's payment details, and Meera's payment never happens.</p><p class="evidence"><b>Test evidence:</b> <code>keysAreScopedPerPayerSoTwoCustomersCanPickTheSameKey</code>: replay header was true, expected false.</p></details><details class="finding"><summary><span class="sev">4</span>Fingerprint saved but never compared</summary><p>Same key, new amount returns the old payment as 201. The client believes ₹999 was paid when only ₹125.50 was.</p><p class="evidence"><b>Test evidence:</b> <code>sameKeyWithADifferentAmountIs422AndChargesNothingMore</code> and <code>sameKeyWithADifferentPayeeIs422</code>: got 201, expected 422.</p></details><details class="finding"><summary><span class="sev">5</span>A crash leaves a charge without a key</summary><p>If the process dies between the two inserts, the payment exists but the key does not, so the retry charges again.</p><p class="evidence"><b>Test evidence:</b> <code>aFailureAfterThePaymentInsertRollsBackTheKeyAndThePayment</code> fails: it injects its crash in the step this version skips, so the crash never happens. With no transaction there is nothing to roll back anyway.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the flawed <code>PaymentService</code> copied over the real one, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>PaymentContractTest</code></td><td><span class="pill ok">9 / 9</span></td><td><span class="pill ok">9 / 9</span></td></tr><tr><td><code>PaymentRequestTest</code></td><td><span class="pill ok">5 / 5</span></td><td><span class="pill ok">5 / 5</span></td></tr><tr><td><code>RetryWithoutKeyTrapTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill ok">2 / 2</span></td></tr><tr><td><code>IdempotencyReplayTest</code></td><td><span class="pill ok">8 / 8</span></td><td><span class="pill bad">5 / 8</span></td></tr><tr><td><code>PaymentConcurrencyTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">1 / 2</span></td></tr><tr><td><code>PaymentDatabaseTest</code></td><td><span class="pill ok">5 / 5</span></td><td><span class="pill bad">4 / 5</span></td></tr></tbody></table></div>
+<p class="note">The lesson: the tests a reviewer usually sees (contract and a simple retry) all pass. Only the concurrency, scope and key-reuse tests catch these bugs, which is why each station type requires its own tests.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>

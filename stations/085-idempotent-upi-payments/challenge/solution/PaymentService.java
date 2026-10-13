@@ -1,0 +1,73 @@
+package com.paysetu.payments;
+
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.ErrorResponseException;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.UUID;
+
+/**
+ * SOLUTION to challenge 2. Try it yourself first.
+ * Same as the station's PaymentService, plus two counters. Also add to pom.xml:
+ *   <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId></dependency>
+ */
+@Service
+public class PaymentService {
+
+    public record PaymentResult(UUID paymentId, int status, String body, boolean replayed) {
+    }
+
+    private final PaymentRepository payments;
+    private final IdempotencyKeyRepository keys;
+    private final JsonMapper json;
+    private final Counter replayed;
+    private final Counter keyReused;
+
+    PaymentService(PaymentRepository payments, IdempotencyKeyRepository keys, JsonMapper json, MeterRegistry meters) {
+        this.payments = payments;
+        this.keys = keys;
+        this.json = json;
+        this.replayed = meters.counter("paysetu.payments.replayed");
+        this.keyReused = meters.counter("paysetu.payments.key_reused");
+    }
+
+    @Transactional
+    public PaymentResult pay(String idempotencyKey, PaymentRequest req) {
+        String hash = req.fingerprint();
+
+        if (!keys.claim(req.payerVpa(), idempotencyKey, hash)) {
+            var stored = keys.find(req.payerVpa(), idempotencyKey);
+            if (!stored.requestHash().equals(hash)) {
+                keyReused.increment();
+                throw keyReused(idempotencyKey);
+            }
+            replayed.increment();
+            return new PaymentResult(stored.paymentId(), stored.responseStatus(), stored.responseBody(), true);
+        }
+
+        Payment payment = payments.insert(req);
+        String body = json.writeValueAsString(payment);
+        keys.complete(req.payerVpa(), idempotencyKey, payment.paymentId(), HttpStatus.CREATED.value(), body);
+        return new PaymentResult(payment.paymentId(), HttpStatus.CREATED.value(), body, false);
+    }
+
+    public Payment get(UUID id) {
+        return payments.findById(id).orElseThrow(() -> {
+            var problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "No payment with id " + id);
+            problem.setTitle("Payment not found");
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, problem, null);
+        });
+    }
+
+    private static ErrorResponseException keyReused(String key) {
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT,
+                "Idempotency-Key " + key + " was already used with a different request body. Use a new key for a new payment.");
+        problem.setTitle("Idempotency key reused");
+        return new ErrorResponseException(HttpStatus.UNPROCESSABLE_CONTENT, problem, null);
+    }
+}
