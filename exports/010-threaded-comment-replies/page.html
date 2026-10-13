@@ -540,7 +540,7 @@ class UnboundedRecursionTrapTest extends ApiTest {
 <div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr><tr><td>Docker</td><td>Not needed for this station</td><td></td></tr></tbody></table></div>
 <p><strong>macOS / Linux</strong></p>
 <pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
-./mvnw test                 # all 13 tests</code></pre>
+./mvnw test                 # all 14 tests</code></pre>
 <p><strong>Windows (PowerShell)</strong></p>
 <pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
 .\mvnw.cmd test</code></pre>
@@ -660,11 +660,14 @@ final class ThreadBuilder {
     /** All replies below a comment, at any depth, counted with a stack instead of recursion. */
     static int countBelow(long id, Map&lt;Long, List&lt;Comment&gt;&gt; children) {
         int count = 0;
+        Set&lt;Long&gt; seen = new HashSet&lt;&gt;(List.of(id)); // corrupt data can loop (A replies to B, B to A): count each comment once
         Deque&lt;Long&gt; todo = new ArrayDeque&lt;&gt;(List.of(id));
         while (!todo.isEmpty()) {
             for (Comment reply : children.getOrDefault(todo.pop(), List.of())) {
-                count++;
-                todo.push(reply.id());
+                if (seen.add(reply.id())) {
+                    count++;
+                    todo.push(reply.id());
+                }
             }
         }
         return count;
@@ -776,13 +779,13 @@ public class ThreadsApplication {
     }
 }</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
 <h2>Required tests for this station</h2>
-<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>CommentTreeContractTest</code> (6)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>UnboundedRecursionTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>This station</td><td>The builder on broken, deep and wide data</td><td><code>ThreadBuilderTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>CommentTreeContractTest</code> (6)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>UnboundedRecursionTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>This station</td><td>The builder on broken, deep and wide data</td><td><code>ThreadBuilderTest</code> (6)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
 <h2>Run output</h2>
 <p class="muted">JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
 <pre class="console">[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.threads.UnboundedRecursionTrapTest
-[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.threads.ThreadBuilderTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.threads.ThreadBuilderTest
 [INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.threads.CommentTreeContractTest
-[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0
 [INFO] BUILD SUCCESS</pre>
 <h2>Test files</h2>
 <div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">UnboundedRecursionTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">CommentTreeContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">ThreadBuilderTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/chaupal/threads/UnboundedRecursionTrapTest.java</p><div class="notes"><p>Written first: the naive builder overflows on post 2; the endpoint answers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.threads;
@@ -933,6 +936,14 @@ class ThreadBuilderTest {
     }
 
     @Test
+    void countingInsideALoopStops() {
+        // 2 and 3 reply to each other. Starting the count inside the loop must still end.
+        var children = java.util.Map.of(2L, List.of(c(3, 2L, 1)), 3L, List.of(c(2, 3L, 2)));
+        int below = assertTimeoutPreemptively(Duration.ofSeconds(2), () -&gt; ThreadBuilder.countBelow(2, children));
+        assertThat(below).isEqualTo(1);
+    }
+
+    @Test
     void siblingsAreOldestFirstThenById() {
         var tree = ThreadBuilder.build(List.of(c(5, null, 9), c(3, null, 1), c(4, null, 1), c(2, null, 5)), 1);
         assertThat(tree).extracting(Node::id).containsExactly(3L, 4L, 2L, 5L);
@@ -975,9 +986,9 @@ abstract class ApiTest {
 <ol class="steps">
 <li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/chaupal/threads/</code>.</li>
 <li>Run it and watch it fail: <code>./mvnw test -Dtest=TotalRepliesChallengeTest</code></li>
-<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 13 tests.</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 14 tests.</li>
 </ol>
-<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 18 tests pass (13 station tests and 5 challenge tests).</p>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 19 tests pass (14 station tests and 5 challenge tests).</p>
 <section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 25 minutes</p><h2>"12 replies" on every comment</h2><p>Add <code>totalReplies</code> to every node: all comments below it at any depth, shown or not. It must work on the 100,000-deep thread.</p><p><b>Done when:</b> both tests in <code>TotalRepliesChallengeTest</code> pass, and the station's tests still pass.</p><details class="qa"><summary>Hints</summary><ul><li><code>countBelow</code> already counts without recursion; call it for every node you build.</li><li>Adding a field to the <code>Node</code> record breaks <code>new Node(...)</code> calls in the tests: keep a six-argument constructor.</li><li>Notice the cost: a node and its parent count the same comments again. Fine for 10 levels; think about it for larger trees.</li></ul></details><p class="path">challenge/TotalRepliesChallengeTest.java</p><pre class="code"><code class="language-java">package com.chaupal.threads;
 
 import org.junit.jupiter.api.Test;
@@ -1087,11 +1098,14 @@ final class ThreadBuilder {
     /** All replies below a comment, at any depth, counted with a stack instead of recursion. */
     static int countBelow(long id, Map&lt;Long, List&lt;Comment&gt;&gt; children) {
         int count = 0;
+        Set&lt;Long&gt; seen = new HashSet&lt;&gt;(List.of(id)); // corrupt data can loop (A replies to B, B to A): count each comment once
         Deque&lt;Long&gt; todo = new ArrayDeque&lt;&gt;(List.of(id));
         while (!todo.isEmpty()) {
             for (Comment reply : children.getOrDefault(todo.pop(), List.of())) {
-                count++;
-                todo.push(reply.id());
+                if (seen.add(reply.id())) {
+                    count++;
+                    todo.push(reply.id());
+                }
             }
         }
         return count;
@@ -1196,11 +1210,14 @@ final class ThreadBuilder {
     /** All replies below a comment, at any depth, counted with a stack instead of recursion. */
     static int countBelow(long id, Map&lt;Long, List&lt;Comment&gt;&gt; children) {
         int count = 0;
+        Set&lt;Long&gt; seen = new HashSet&lt;&gt;(List.of(id)); // corrupt data can loop (A replies to B, B to A): count each comment once
         Deque&lt;Long&gt; todo = new ArrayDeque&lt;&gt;(List.of(id));
         while (!todo.isEmpty()) {
             for (Comment reply : children.getOrDefault(todo.pop(), List.of())) {
-                count++;
-                todo.push(reply.id());
+                if (seen.add(reply.id())) {
+                    count++;
+                    todo.push(reply.id());
+                }
             }
         }
         return count;
@@ -1277,7 +1294,7 @@ class CommentTreeController {
 <h2>Interview takeaways</h2>
 <details class="qa"><summary>How do you build a tree from a flat list of (id, parentId)?</summary><p>One pass to group children by parentId in a HashMap; roots are those with no parent (or a missing one). Then walk from the roots, looking up each node&#x27;s children in the map. O(n) to group, instead of O(n²) searching.</p></details><details class="qa"><summary>Why did the recursive version crash?</summary><p>Each recursive call uses a stack frame. The JVM thread stack is limited (often around 1 MB), so tens of thousands of nested calls exceed it and throw StackOverflowError. The depth came from user data, so it had no limit.</p></details><details class="qa"><summary>How do you turn recursion into a loop?</summary><p>Keep your own stack (an ArrayDeque) of work still to do. Pop one item, process it, push its children. The depth now lives in heap memory, which is much larger, instead of the call stack.</p></details><details class="qa"><summary>Why still use recursion for nesting?</summary><p>Because its depth is capped by maxDepth (at most 10), not by the data. Bounded recursion is fine and easier to read.</p></details><details class="qa"><summary>What can go wrong with real comment data?</summary><p>Parents deleted (orphans), loops from bad migrations or bugs, and very wide or deep threads. Decide what to show for each and test it.</p></details>
 <h2>Self-check rubric</h2>
-<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 13 tests pass.</td><td>You can say which tests fail with a recursive <code>countBelow</code>.</td></tr><tr><td>Design</td><td>Grouping by map; capped nesting.</td><td>You can explain why <code>-Xss</code> is not a fix.</td></tr><tr><td>Tests</td><td>A test at 100,000 levels.</td><td>You added a test for another kind of broken data.</td></tr><tr><td>Explanation</td><td>You can turn a small recursion into a loop on paper.</td><td>You can sketch the SQL version.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 14 tests pass.</td><td>You can say which tests fail with a recursive <code>countBelow</code>.</td></tr><tr><td>Design</td><td>Grouping by map; capped nesting.</td><td>You can explain why <code>-Xss</code> is not a fix.</td></tr><tr><td>Tests</td><td>A test at 100,000 levels.</td><td>You added a test for another kind of broken data.</td></tr><tr><td>Explanation</td><td>You can turn a small recursion into a loop on paper.</td><td>You can sketch the SQL version.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
 <h2>No reviewer view for this station</h2>
 <p>This Foundations station has no flawed version to review. Use this checklist on any code that walks user data:</p>
 <ul class="rules">

@@ -277,7 +277,7 @@ Response
 
 ``` code
 HTTP/1.1 405 
-Allow: PATCH, DELETE, PUT, GET
+Allow: DELETE, PATCH, PUT, GET
 Content-Type: application/problem+json
 
 {

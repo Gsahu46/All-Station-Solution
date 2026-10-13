@@ -6,7 +6,7 @@ Spring Boot 4.1.1 · Java 25 · Spring MVC · HashMap · recursion with a limit 
 
 **Simulation:** Three posts are fixed in the code: a normal discussion, one reply chain 100,000 comments deep (a bot replying to itself), and an empty post. Everything is in memory.
 
-Read in three levels: 1 Understand (about 5 minutes, no code), 2 Build, 3 Go deeper. Run `./mvnw test` for all 13 tests.
+Read in three levels: 1 Understand (about 5 minutes, no code), 2 Build, 3 Go deeper. Run `./mvnw test` for all 14 tests.
 
 # 1 · Understand
 
@@ -482,7 +482,7 @@ class UnboundedRecursionTrapTest extends ApiTest {
 
 ``` code
 ./mvnw spring-boot:run      # the API on http://localhost:8080
-./mvnw test                 # all 13 tests
+./mvnw test                 # all 14 tests
 ```
 
 **Windows (PowerShell)**
@@ -593,7 +593,7 @@ Standard Spring Boot entry point.
 |---------------|-------------------------------------------|----------------------------------|--------|
 | Every station | HTTP contract: valid, invalid, not found  | `CommentTreeContractTest` (6)    | pass   |
 | Every station | Reproduce the failure before the fix      | `UnboundedRecursionTrapTest` (2) | pass   |
-| This station  | The builder on broken, deep and wide data | `ThreadBuilderTest` (5)          | pass   |
+| This station  | The builder on broken, deep and wide data | `ThreadBuilderTest` (6)          | pass   |
 
 ## Run output
 
@@ -601,9 +601,9 @@ JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in `docs/test-run.txt`.
 
 ``` console
 [INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.threads.UnboundedRecursionTrapTest
-[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.threads.ThreadBuilderTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.threads.ThreadBuilderTest
 [INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.threads.CommentTreeContractTest
-[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0
 [INFO] BUILD SUCCESS
 ```
 
@@ -631,9 +631,9 @@ Shared setup: the whole app through MockMvc.
 
 1.  Copy the challenge test from `challenge/` into `src/test/java/com/chaupal/threads/`.
 2.  Run it and watch it fail: `./mvnw test -Dtest=TotalRepliesChallengeTest`
-3.  Change the code until it passes, then run `./mvnw test` to check the other 13 tests.
+3.  Change the code until it passes, then run `./mvnw test` to check the other 14 tests.
 
-Checked (`docs/challenge-run.txt`): with the reference solutions copied in, all 18 tests pass (13 station tests and 5 challenge tests).
+Checked (`docs/challenge-run.txt`): with the reference solutions copied in, all 19 tests pass (14 station tests and 5 challenge tests).
 
 Challenge 1 · Beginner-friendly · about 25 minutes
 
@@ -808,7 +808,7 @@ Parents deleted (orphans), loops from bad migrations or bugs, and very wide or d
 
 | Area        | Meets the bar                                        | Above the bar                                               |
 |-------------|------------------------------------------------------|-------------------------------------------------------------|
-| Correctness | All 13 tests pass.                                   | You can say which tests fail with a recursive `countBelow`. |
+| Correctness | All 14 tests pass.                                   | You can say which tests fail with a recursive `countBelow`. |
 | Design      | Grouping by map; capped nesting.                     | You can explain why `-Xss` is not a fix.                    |
 | Tests       | A test at 100,000 levels.                            | You added a test for another kind of broken data.           |
 | Explanation | You can turn a small recursion into a loop on paper. | You can sketch the SQL version.                             |

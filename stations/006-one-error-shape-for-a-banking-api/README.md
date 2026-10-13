@@ -155,7 +155,7 @@ Response
 
 ``` code
 HTTP/1.1 201 
-Location: /beneficiaries/4ac7e2db-782c-4453-b3ed-81381e897ebe
+Location: /beneficiaries/8894430a-352e-49e1-87c7-32352534f2f5
 X-Content-Type-Options: nosniff
 X-XSS-Protection: 0
 Cache-Control: no-cache, no-store, max-age=0, must-revalidate
@@ -165,12 +165,12 @@ X-Frame-Options: DENY
 Content-Type: application/json
 
 {
-  "id": "4ac7e2db-782c-4453-b3ed-81381e897ebe",
+  "id": "8894430a-352e-49e1-87c7-32352534f2f5",
   "name": "Ravi Menon",
   "accountNumberMasked": "XXXXXXXXXX7890",
   "ifsc": "HDFC0001234",
   "bankBranch": "HDFC Bank, Koramangala, Bengaluru",
-  "createdAt": "2026-10-13T13:53:04.961Z"
+  "createdAt": "2026-10-13T16:16:19.505Z"
 }
 ```
 
@@ -293,7 +293,7 @@ Content-Type: application/problem+json
   "status": 409,
   "title": "Already a beneficiary",
   "type": "https://tijori.example/problems/duplicate-beneficiary",
-  "existingBeneficiaryId": "4ac7e2db-782c-4453-b3ed-81381e897ebe"
+  "existingBeneficiaryId": "8894430a-352e-49e1-87c7-32352534f2f5"
 }
 ```
 
@@ -304,7 +304,7 @@ Content-Type: application/problem+json
 Request
 
 ``` code
-GET /beneficiaries/4ac7e2db-782c-4453-b3ed-81381e897ebe HTTP/1.1
+GET /beneficiaries/8894430a-352e-49e1-87c7-32352534f2f5 HTTP/1.1
 Authorization: Basic cmF2aTpyYXZpLWRlbW8tcGFzcw==
 ```
 
@@ -322,7 +322,7 @@ Content-Type: application/problem+json
 
 {
   "detail": "No beneficiary with this id on your account.",
-  "instance": "/beneficiaries/4ac7e2db-782c-4453-b3ed-81381e897ebe",
+  "instance": "/beneficiaries/8894430a-352e-49e1-87c7-32352534f2f5",
   "status": 404,
   "title": "Beneficiary not found",
   "type": "https://tijori.example/problems/beneficiary-not-found"
@@ -336,7 +336,7 @@ Content-Type: application/problem+json
 Request
 
 ``` code
-GET /beneficiaries/4ac7e2db-782c-4453-b3ed-81381e897ebe HTTP/1.1
+GET /beneficiaries/8894430a-352e-49e1-87c7-32352534f2f5 HTTP/1.1
 ```
 
 Response
@@ -358,7 +358,7 @@ Content-Length: 214
   "title": "Sign-in required",
   "status": 401,
   "detail": "Send valid credentials to use this API.",
-  "instance": "/beneficiaries/4ac7e2db-782c-4453-b3ed-81381e897ebe"
+  "instance": "/beneficiaries/8894430a-352e-49e1-87c7-32352534f2f5"
 }
 ```
 

@@ -71,25 +71,27 @@ class AddressController {
     Address patch(@PathVariable long customerId, @PathVariable String label, @RequestBody JsonNode patch) {
         requireCustomer(customerId);
         String key = normalise(label);
-        Address current = book.get(customerId, key).orElseThrow(AddressController::notFound);
-        Address patched;
-        try {
-            patched = MergePatch.apply(current, patch);
-        } catch (IllegalArgumentException e) {
-            throw problem(HttpStatus.BAD_REQUEST, "Invalid patch", e.getMessage());
-        }
-        var violations = validator.validate(patched);
-        if (!violations.isEmpty()) {
-            Map<String, String> errors = new TreeMap<>();
-            for (ConstraintViolation<Address> v : violations) {
-                errors.putIfAbsent(v.getPropertyPath().toString(), v.getMessage());
+        synchronized (book) { // read, merge and save as one step, or a PATCH arriving in between is overwritten
+            Address current = book.get(customerId, key).orElseThrow(AddressController::notFound);
+            Address patched;
+            try {
+                patched = MergePatch.apply(current, patch);
+            } catch (IllegalArgumentException e) {
+                throw problem(HttpStatus.BAD_REQUEST, "Invalid patch", e.getMessage());
             }
-            ErrorResponseException ex = problem(HttpStatus.BAD_REQUEST, "Invalid patch", "The patched address would be invalid.");
-            ex.getBody().setProperty("errors", errors);
-            throw ex;
+            var violations = validator.validate(patched);
+            if (!violations.isEmpty()) {
+                Map<String, String> errors = new TreeMap<>();
+                for (ConstraintViolation<Address> v : violations) {
+                    errors.putIfAbsent(v.getPropertyPath().toString(), v.getMessage());
+                }
+                ErrorResponseException ex = problem(HttpStatus.BAD_REQUEST, "Invalid patch", "The patched address would be invalid.");
+                ex.getBody().setProperty("errors", errors);
+                throw ex;
+            }
+            book.put(customerId, key, patched);
+            return patched;
         }
-        book.put(customerId, key, patched);
-        return patched;
     }
 
     /** 204 whether or not it was there: "make sure it is gone" can be retried safely and always gives the same answer. */

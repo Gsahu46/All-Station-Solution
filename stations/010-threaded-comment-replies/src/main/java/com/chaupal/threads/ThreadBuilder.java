@@ -56,11 +56,14 @@ final class ThreadBuilder {
     /** All replies below a comment, at any depth, counted with a stack instead of recursion. */
     static int countBelow(long id, Map<Long, List<Comment>> children) {
         int count = 0;
+        Set<Long> seen = new HashSet<>(List.of(id)); // corrupt data can loop (A replies to B, B to A): count each comment once
         Deque<Long> todo = new ArrayDeque<>(List.of(id));
         while (!todo.isEmpty()) {
             for (Comment reply : children.getOrDefault(todo.pop(), List.of())) {
-                count++;
-                todo.push(reply.id());
+                if (seen.add(reply.id())) {
+                    count++;
+                    todo.push(reply.id());
+                }
             }
         }
         return count;

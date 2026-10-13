@@ -33,6 +33,14 @@ class ThreadBuilderTest {
     }
 
     @Test
+    void countingInsideALoopStops() {
+        // 2 and 3 reply to each other. Starting the count inside the loop must still end.
+        var children = java.util.Map.of(2L, List.of(c(3, 2L, 1)), 3L, List.of(c(2, 3L, 2)));
+        int below = assertTimeoutPreemptively(Duration.ofSeconds(2), () -> ThreadBuilder.countBelow(2, children));
+        assertThat(below).isEqualTo(1);
+    }
+
+    @Test
     void siblingsAreOldestFirstThenById() {
         var tree = ThreadBuilder.build(List.of(c(5, null, 9), c(3, null, 1), c(4, null, 1), c(2, null, 5)), 1);
         assertThat(tree).extracting(Node::id).containsExactly(3L, 4L, 2L, 5L);
