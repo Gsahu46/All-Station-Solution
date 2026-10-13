@@ -9,6 +9,7 @@ page.py holds only the station's content. It runs with every helper below alread
 Header facts (title, stage, types, before/after) come from curriculum/roadmap.json, so they never drift from the roadmap.
 Code, tests and captures are read from the station folder, so the page always shows the exact files that passed.
 """
+import base64
 import html
 import json
 import pathlib
@@ -66,6 +67,8 @@ def capture(name):
             method = next(args)
         elif a == "-H":
             headers.append(next(args))
+        elif a == "-u":  # demo credentials only: shown as the header curl actually sends
+            headers.append("Authorization: Basic " + base64.b64encode(next(args).encode()).decode())
         elif a in ("-d", "--data-raw"):
             body = next(args)
         elif a.startswith("http"):
