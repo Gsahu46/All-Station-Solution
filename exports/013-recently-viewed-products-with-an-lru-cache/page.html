@@ -1,0 +1,1379 @@
+<title>Station 013 · Recently viewed products with an LRU cache</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 013</span>
+    <h1>Recently viewed products with an LRU cache</h1>
+    <p class="scenario">The &#x27;recently viewed&#x27; strip keeps every product a user ever opened and slowly fills the server&#x27;s memory.</p>
+    <p class="sim"><b>Simulation</b><span>Histories live in each server's memory. The trap test starts two real copies of the app on two ports and plays the load balancer itself. Product ids are just numbers: there is no catalogue.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>E-commerce</li>
+      <li><b>Types</b>Concurrency</li>
+      <li><b>Reviewer view</b>Yes</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>009 Wishlist without duplicates</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring MVC · LinkedHashMap (LRU) · virtual threads · MockMvc</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Ravi browses phones on Kartwala</strong><p>The "recently viewed" strip shows what he looked at. Behind it, the server keeps every product every user ever opened, and its memory slowly fills up.</p></li><li><strong>Kartwala adds a second server</strong><p>Now Ravi's views land on either server. Refresh, and the strip shows a different half of his history each time.</p></li><li><strong>The fix</strong><p>Keep only the last 10 per user and at most 10,000 users per server, evicting the least recently used. Make the deployment route each user to one server, and say plainly that this memory is per server.</p></li></ol>
+<p class="lesson">Memory inside one server is fast, limited and private to that server. Treat it as a cache with limits, never as the one shared truth.</p>
+
+<h2>What are we building?</h2>
+<p><code>POST /users/{id}/recently-viewed</code> records a view; <code>GET</code> returns the last 10 products, newest first, each once. Memory stays bounded, many requests at once stay correct, and the page is honest about what happens with several servers.</p>
+
+<h2>An everyday analogy</h2>
+<p>A chai stall owner remembers the last few orders of each regular. If a regular reorders, that order comes to the front of the owner's memory. When there are too many regulars to remember, the one who has not visited for longest is forgotten. And if the owner opens a second stall with a second person, that person remembers nothing of the first stall's customers unless each customer keeps going to the same stall.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>A view arrives</strong>. The store takes its one lock.</li>
+<li><strong>The user's history</strong>, a small access-order map, puts the product at the end; viewing it again just moves it.</li>
+<li><strong>If the history has 11</strong>, the least recently used product drops out. The same rule caps the number of users.</li>
+<li><strong>The answer</strong> is a copy of the history, newest first.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: why can't reads skip the lock, if they only read?</summary><p>In access order, reading is not only reading: <code>get</code> moves the entry to the end, which changes the map's links. Two threads doing that at once can corrupt the map. Every call, reads included, must hold the lock.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>Not a shared cache.</strong> Each server has its own memory; a restart forgets everything. Moving the history to Valkey, shared by all servers, is a later station.</li>
+<li><strong>No login and no catalogue.</strong> User and product ids are just numbers.</li>
+<li><strong>Limits are demo rules.</strong> 10 products and 10,000 users per server.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Cache</strong></td><td>A fast, limited store of things you are likely to need again.</td><td>The few books on your desk, the rest on the shelf.</td><td>Each user's last 10 products.</td></tr><tr><td><strong>LRU (least recently used)</strong></td><td>When full, throw out what was used longest ago.</td><td>Clearing the desk: the book untouched for weeks goes back first.</td><td>The 11th product pushes out the oldest.</td></tr><tr><td><strong>Access order</strong></td><td>A <code>LinkedHashMap</code> mode where every read or write moves the entry to the end.</td><td>Putting a book on top of the pile each time you open it.</td><td><code>new LinkedHashMap&lt;&gt;(16, 0.75f, true)</code></td></tr><tr><td><strong>Bounded memory</strong></td><td>A hard limit on how much a structure can hold.</td><td>A desk only so big.</td><td>10 products per user, 10,000 users per server.</td></tr><tr><td><strong>Thread safety</strong></td><td>Correct even when many requests touch the same data at the same moment.</td><td>One pen for the register, passed hand to hand.</td><td>One lock (<code>synchronized</code>) around the store.</td></tr><tr><td><strong>Load balancer</strong></td><td>Spreads requests across several servers.</td><td>A receptionist sending visitors to any free counter.</td><td>Two app servers in the trap test.</td></tr><tr><td><strong>Sticky routing</strong></td><td>Sending the same user to the same server every time.</td><td>Always seeing the same bank teller.</td><td>The fix this station can make without new infrastructure.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Kartwala</strong> (the marketplace from stations 003 and 009) shows a "recently viewed" strip. The first version kept every product a user ever opened, in a plain map that only grew; memory alarms started a few weeks after launch. When a second server was added for the sale, customers saw a different strip on every refresh.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> views of 101, 102, 103, <b>then</b> the history is 103, 102, 101.</li>
+<li><b>Given</b> 101 viewed again, <b>then</b> it moves to the front and is listed once.</li>
+<li><b>Given</b> an 11th product, <b>then</b> the least recently viewed one is dropped; a re-viewed old product is kept.</li>
+<li><b>Given</b> more than 10,000 users on a server, <b>then</b> the least recently active user's history is dropped.</li>
+<li><b>Given</b> 200 views by one user at the same moment, <b>then</b> every request succeeds and the history holds 10 distinct products.</li>
+<li><b>Given</b> two servers and round-robin routing, <b>then</b> histories split (the trap); <b>given</b> routing by user, <b>then</b> one server holds the whole history.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>At most 10 products per user and 10,000 users per server (demo rules), least recently used out first.</li>
+<li>Every operation on the store holds one lock; responses are copies.</li>
+<li>User and product ids are positive numbers; anything else is <code>400</code>.</li>
+<li>Deployment rule: with several servers, route by user id, and accept that a restart forgets histories.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Build an LRU cache with <code>LinkedHashMap</code> in access order and <code>removeEldestEntry</code>.</li>
+<li>Bound every in-memory structure that grows with users.</li>
+<li>Explain why access-order reads need a lock, and prove thread safety with a real parallel test.</li>
+<li>Explain what per-server memory means behind a load balancer, and the options.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/users/{userId}/recently-viewed</code></td><td>Body <code>{"productId": 101}</code>. Records the view; returns the history.</td></tr><tr><td><code>GET</code></td><td><code>/users/{userId}/recently-viewed</code></td><td>The history: <code>userId</code>, <code>productIds</code> newest first (empty for a new user).</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>Recorded, or read</td></tr><tr><td><span class="pill warn">400</span></td><td>User id or product id not a positive number; missing product id</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 13 Oct 2026, after viewing 101, 102 and 103. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: product 101 viewed again</h3><p><b>Why:</b> in access order, putting 101 again moves it to the end, which the API lists first. Still three products.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /users/7/recently-viewed HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;productId&quot;: 101
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 39
+
+{
+  &quot;userId&quot;: 7,
+  &quot;productIds&quot;: [
+    101,
+    103,
+    102
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 2: after eleven different products</h3><p><b>Why:</b> the history stops at 10. Product 102 was untouched the longest, so it went; 101 survived because it was viewed again.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /users/7/recently-viewed HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 67
+
+{
+  &quot;userId&quot;: 7,
+  &quot;productIds&quot;: [
+    111,
+    110,
+    109,
+    108,
+    107,
+    106,
+    105,
+    104,
+    101,
+    103
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 3: a user with no views</h3><p><b>Why:</b> an empty history is <code>200</code> with an empty list.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /users/8/recently-viewed HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 28
+
+{
+  &quot;userId&quot;: 8,
+  &quot;productIds&quot;: []
+}</code></pre></div></div></section><section class="example"><h3>Case 4: user 0</h3><p><b>Why:</b> ids are positive: <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /users/0/recently-viewed HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;productId&quot;: 101
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Validation failure&quot;,
+  &quot;instance&quot;: &quot;/users/0/recently-viewed&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>Three views</td><td>Newest first</td><td><code>viewsAreListedNewestFirst</code></td></tr><tr><td>The same product again</td><td>Moves to the front, listed once</td><td><code>viewingAgainMovesTheProductToTheFrontWithoutADuplicate</code></td></tr><tr><td>11th product</td><td>The oldest drops out</td><td><code>theEleventhProductPushesOutTheOldest</code></td></tr><tr><td>An old product re-viewed before the 11th</td><td>Kept; the next oldest drops</td><td><code>reViewingAnOldProductSavesItFromEviction</code></td></tr><tr><td>Reading counts as using</td><td><code>get</code> saves an entry from eviction</td><td><code>theLeastRecentlyUsedEntryIsEvicted</code></td></tr><tr><td>10,005 users</td><td>10,000 kept; the least recently active dropped</td><td><code>theServerKeepsAtMostMaxUsersAndDropsTheLeastRecentlyActive</code></td></tr><tr><td>A list kept by the caller</td><td>Does not change later</td><td><code>aReturnedListDoesNotChangeAfterwards</code></td></tr><tr><td>Two users; a new user</td><td>Separate; empty</td><td><code>usersHaveSeparateHistoriesAndANewUserHasNone</code></td></tr><tr><td>User 0, product -5, no product, user "abc"</td><td><code>400</code></td><td><code>badInputIs400</code></td></tr><tr><td>200 views by one user at once</td><td>All <code>200</code>; 10 distinct</td><td><code>twoHundredViewsByOneUserAtOnceLeaveTenDistinctProducts</code></td></tr><tr><td>1,000 mixed reads and writes for 50 users at once</td><td>All <code>200</code>; limits hold</td><td><code>readsAndWritesForManyUsersAtOnceNeverBreakTheLimits</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Treating a per-server in-memory cache as shared: each server shows different history.</p>
+<p>On one laptop, memory looks like "the" store. The trap test starts two real copies of the app and plays a round-robin load balancer: the first view lands on server A, the second on B, and each server shows half the history. The second test routes user 8 to the same server every time, and the history stays whole. That is the fix this station can make without new infrastructure; its limits (a restart forgets, adding a server moves users) are why a shared store comes in a later station.</p>
+</div>
+<pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.boot.web.server.context.WebServerApplicationContext;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.http.MediaType;
+import org.springframework.web.client.RestClient;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * The first test written for this station: it reproduces the bug before the fix.
+ * Kartwala runs two servers behind a load balancer. Each request may land on either one.
+ * This test starts two real copies of the app, on two ports, and plays the load balancer.
+ */
+class PerServerCacheTrapTest {
+
+    static ConfigurableApplicationContext serverA, serverB;
+    static List&lt;RestClient&gt; servers;
+
+    @BeforeAll
+    static void startTwoServers() {
+        serverA = new SpringApplicationBuilder(RecentlyViewedApplication.class).properties(&quot;server.port=0&quot;).run();
+        serverB = new SpringApplicationBuilder(RecentlyViewedApplication.class).properties(&quot;server.port=0&quot;).run();
+        servers = List.of(client(serverA), client(serverB));
+    }
+
+    @AfterAll
+    static void stopServers() {
+        serverA.close();
+        serverB.close();
+    }
+
+    static RestClient client(ConfigurableApplicationContext app) {
+        int port = ((WebServerApplicationContext) app).getWebServer().getPort();
+        return RestClient.create(&quot;http://localhost:&quot; + port);
+    }
+
+    static void view(RestClient server, long user, long product) {
+        server.post().uri(&quot;/users/{id}/recently-viewed&quot;, user).contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of(&quot;productId&quot;, product)).retrieve().toBodilessEntity();
+    }
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    static List&lt;Integer&gt; history(RestClient server, long user) {
+        return (List&lt;Integer&gt;) server.get().uri(&quot;/users/{id}/recently-viewed&quot;, user).retrieve().body(Map.class).get(&quot;productIds&quot;);
+    }
+
+    @Test
+    void roundRobinSendsTheReadToTheServerThatNeverSawTheViews() {
+        // The &quot;before&quot; assumption: the in-memory history is &quot;the&quot; history. Round robin: A, B, A, B...
+        view(servers.get(0), 7, 501);
+        view(servers.get(1), 7, 502);
+        assertThat(history(servers.get(0), 7)).containsExactly(501); // the strip shows half the history
+        assertThat(history(servers.get(1), 7)).containsExactly(502); // and a different half on the next refresh
+    }
+
+    @Test
+    void routingEachUserToOneServerKeepsTheirHistoryTogether() {
+        // The fix this station can make without new infrastructure: the load balancer sends a user to the same
+        // server every time (sticky routing by user id). Its limits are on the page: a restart or a new server
+        // loses or moves histories. A shared store (Valkey, a later station) removes them.
+        RestClient home = servers.get((int) (8 % servers.size()));
+        view(home, 8, 601);
+        view(home, 8, 602);
+        assertThat(history(home, 8)).containsExactly(602, 601);
+    }
+}</code></pre>
+<h3>Measured while building: what the lock is worth</h3>
+<p>With <code>synchronized</code> removed from the store, the 200-parallel-views test failed in 3 runs out of 3, with <code>ArrayIndexOutOfBoundsException</code> from inside the corrupted map. With only the read method unlocked ("reads are safe"), the same tests passed 5 runs out of 5, even though that version is broken by design. A race that tests do not catch is still a race; the rule is "every call holds the lock", not "the tests are green".</p>
+</section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr><tr><td>Docker</td><td>Not needed for this station</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 13 tests (the trap test starts two more servers on free ports)</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Virtual threads, used by the concurrency test, are in Java 21 and later.</p>
+<h2>Try it yourself: two servers</h2>
+<p>Start two copies on two ports, in two terminals, and view products on each:</p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run -Dspring-boot.run.arguments=--server.port=8081
+./mvnw spring-boot:run -Dspring-boot.run.arguments=--server.port=8082
+
+curl -X POST http://localhost:8081/users/7/recently-viewed -H &quot;Content-Type: application/json&quot; -d &quot;@docs/view.json&quot;
+curl http://localhost:8081/users/7/recently-viewed     # [101]
+curl http://localhost:8082/users/7/recently-viewed     # []  the other server has never seen it</code></pre>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>Port 8081 was already in use</code></td><td>Something else uses the port.</td><td>Pick other ports.</td></tr><tr><td>An empty history after a restart</td><td>Memory does not survive restarts.</td><td>Expected: see the trap.</td></tr><tr><td><code>release version 25 not supported</code></td><td>Maven is using an older JDK.</td><td>Point <code>JAVA_HOME</code> at JDK 25, or add <code>-Djava.version=21</code>.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/013-recently-viewed-products-with-an-lru-cache/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/kartwala/recent/
+│   ├── RecentlyViewedController.java   ├── RecentlyViewed.java   ├── LruMap.java
+│   └── RecentlyViewedApplication.java
+├── src/test/java/com/kartwala/recent/   (see Tests)
+├── review/                   the flawed version (see Review)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">RecentlyViewedController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">RecentlyViewed.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">LruMap.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">RecentlyViewedApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/kartwala/recent/RecentlyViewedController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Two endpoints; validates ids.</dd><dt>Why</dt><dd>HTTP in one place.</dd><dt>Without it</dt><dd>No API.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+@RequestMapping(&quot;/users/{userId}/recently-viewed&quot;)
+class RecentlyViewedController {
+
+    record View(@NotNull @Positive Long productId) {
+    }
+
+    record History(long userId, List&lt;Long&gt; productIds) {
+    }
+
+    private final RecentlyViewed recentlyViewed;
+
+    RecentlyViewedController(RecentlyViewed recentlyViewed) {
+        this.recentlyViewed = recentlyViewed;
+    }
+
+    /** Record a view and return the history. Viewing the same product again moves it to the front; it is never listed twice. */
+    @PostMapping
+    History view(@PathVariable @Positive long userId, @Valid @RequestBody View view) {
+        return new History(userId, recentlyViewed.record(userId, view.productId()));
+    }
+
+    @GetMapping
+    History history(@PathVariable @Positive long userId) {
+        return new History(userId, recentlyViewed.list(userId));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/kartwala/recent/RecentlyViewed.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The store: a bounded LRU of users, each with a bounded LRU of products, behind one lock.</dd><dt>Why</dt><dd>Both limits make memory bounded whatever the traffic; one lock makes every operation safe.</dd><dt>Without it</dt><dd>A plain map that grows forever, and races on access-order maps.</dd></dl><ul><li><code>list</code> returns a copy, so a caller's list never changes underneath it.</li><li>The class comment states the per-server limit: the next developer must see it.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * Recently viewed products, kept in this server&#x27;s memory, with two limits so memory cannot grow without end:
+ * each user keeps their last 10 products, and the server keeps at most 10,000 users (the least recently active
+ * user is dropped first). Both limits are demo rules.
+ *
+ * One lock for the whole store: simple and correct. In access-order maps even reads change the order, so a
+ * &quot;reads don&#x27;t need the lock&quot; shortcut corrupts them (see the Review tab).
+ *
+ * This memory belongs to ONE server. With several servers, each has its own copy; see the trap.
+ */
+@Component
+class RecentlyViewed {
+
+    static final int PER_USER = 10;
+    static final int MAX_USERS = 10_000;
+
+    private final LruMap&lt;Long, LruMap&lt;Long, Boolean&gt;&gt; users = new LruMap&lt;&gt;(MAX_USERS);
+
+    synchronized List&lt;Long&gt; record(long userId, long productId) {
+        users.computeIfAbsent(userId, id -&gt; new LruMap&lt;&gt;(PER_USER)).put(productId, Boolean.TRUE);
+        return list(userId);
+    }
+
+    /** Newest first. A copy: the caller can keep it while the history changes. */
+    synchronized List&lt;Long&gt; list(long userId) {
+        LruMap&lt;Long, Boolean&gt; history = users.get(userId);
+        if (history == null) {
+            return List.of();
+        }
+        List&lt;Long&gt; newestFirst = new ArrayList&lt;&gt;(history.keySet());
+        Collections.reverse(newestFirst);
+        return newestFirst;
+    }
+
+    synchronized int userCount() {
+        return users.size();
+    }
+
+    /** For tests only. */
+    synchronized void clear() {
+        users.clear();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/kartwala/recent/LruMap.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>A <code>LinkedHashMap</code> in access order that removes its eldest entry above a size.</dd><dt>Why</dt><dd>Ten lines give a correct LRU: the JDK already keeps the order.</dd><dt>Without it</dt><dd>Hand-written linked lists and eviction code.</dd></dl><ul><li><code>true</code> in the constructor is access order; <code>false</code> (the default) is insertion order, where re-viewing moves nothing.</li><li><code>size() &gt; maxSize</code>, not <code>&gt;=</code>: the check runs after the new entry is added.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/**
+ * A LinkedHashMap in access order that drops its least recently used entry when it grows past maxSize.
+ * accessOrder = true: every get or put moves the entry to the end, so the first entry is always the one
+ * untouched the longest, and removeEldestEntry removes exactly that one.
+ *
+ * Not thread-safe, and in access order even get() changes the map. Callers must lock around every call.
+ */
+class LruMap&lt;K, V&gt; extends LinkedHashMap&lt;K, V&gt; {
+
+    private final int maxSize;
+
+    LruMap(int maxSize) {
+        super(16, 0.75f, true);
+        this.maxSize = maxSize;
+    }
+
+    @Override
+    protected boolean removeEldestEntry(Map.Entry&lt;K, V&gt; eldest) {
+        return size() &gt; maxSize;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>RFC 9457 problem bodies for every error.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: kartwala-recently-viewed
+  mvc:
+    problemdetails:
+      enabled: true # every error, ours and Spring&#x27;s, as an RFC 9457 problem body</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/kartwala/recent/RecentlyViewedApplication.java</p><div class="notes"><p>Standard Spring Boot entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class RecentlyViewedApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(RecentlyViewedApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>The test that reproduces the failure before the fix</li><li>Real run output</li></ul><p class="rule">Required tests come from the station's types. The validator fails a station that is missing any of them.</p></aside>
+<h2>Required tests for this station</h2>
+<p>Station type: <span class="chip">Concurrency</span></p>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>RecentlyViewedContractTest</code> (6)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>PerServerCacheTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Concurrency</td><td>A real concurrency test that proves the invariant holds</td><td><code>RecentlyViewedConcurrencyTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>This station</td><td>LRU rules and the user bound</td><td><code>LruMapTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="note">"Not found" here is a user with no history: <code>200</code> with an empty list.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.recent.PerServerCacheTrapTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.recent.LruMapTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.recent.RecentlyViewedContractTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.recent.RecentlyViewedConcurrencyTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">PerServerCacheTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">RecentlyViewedConcurrencyTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">RecentlyViewedContractTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">LruMapTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/kartwala/recent/PerServerCacheTrapTest.java</p><div class="notes"><p>Written first: two real servers, round robin against routing by user.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.boot.web.server.context.WebServerApplicationContext;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.http.MediaType;
+import org.springframework.web.client.RestClient;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * The first test written for this station: it reproduces the bug before the fix.
+ * Kartwala runs two servers behind a load balancer. Each request may land on either one.
+ * This test starts two real copies of the app, on two ports, and plays the load balancer.
+ */
+class PerServerCacheTrapTest {
+
+    static ConfigurableApplicationContext serverA, serverB;
+    static List&lt;RestClient&gt; servers;
+
+    @BeforeAll
+    static void startTwoServers() {
+        serverA = new SpringApplicationBuilder(RecentlyViewedApplication.class).properties(&quot;server.port=0&quot;).run();
+        serverB = new SpringApplicationBuilder(RecentlyViewedApplication.class).properties(&quot;server.port=0&quot;).run();
+        servers = List.of(client(serverA), client(serverB));
+    }
+
+    @AfterAll
+    static void stopServers() {
+        serverA.close();
+        serverB.close();
+    }
+
+    static RestClient client(ConfigurableApplicationContext app) {
+        int port = ((WebServerApplicationContext) app).getWebServer().getPort();
+        return RestClient.create(&quot;http://localhost:&quot; + port);
+    }
+
+    static void view(RestClient server, long user, long product) {
+        server.post().uri(&quot;/users/{id}/recently-viewed&quot;, user).contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of(&quot;productId&quot;, product)).retrieve().toBodilessEntity();
+    }
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    static List&lt;Integer&gt; history(RestClient server, long user) {
+        return (List&lt;Integer&gt;) server.get().uri(&quot;/users/{id}/recently-viewed&quot;, user).retrieve().body(Map.class).get(&quot;productIds&quot;);
+    }
+
+    @Test
+    void roundRobinSendsTheReadToTheServerThatNeverSawTheViews() {
+        // The &quot;before&quot; assumption: the in-memory history is &quot;the&quot; history. Round robin: A, B, A, B...
+        view(servers.get(0), 7, 501);
+        view(servers.get(1), 7, 502);
+        assertThat(history(servers.get(0), 7)).containsExactly(501); // the strip shows half the history
+        assertThat(history(servers.get(1), 7)).containsExactly(502); // and a different half on the next refresh
+    }
+
+    @Test
+    void routingEachUserToOneServerKeepsTheirHistoryTogether() {
+        // The fix this station can make without new infrastructure: the load balancer sends a user to the same
+        // server every time (sticky routing by user id). Its limits are on the page: a restart or a new server
+        // loses or moves histories. A shared store (Valkey, a later station) removes them.
+        RestClient home = servers.get((int) (8 % servers.size()));
+        view(home, 8, 601);
+        view(home, 8, 602);
+        assertThat(history(home, 8)).containsExactly(602, 601);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/kartwala/recent/RecentlyViewedConcurrencyTest.java</p><div class="notes"><p>200 and 1,000 requests released together on virtual threads; a 60-second timeout in case a broken map loops.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Concurrency: many requests at the same moment, released together on virtual threads, as a busy sale page sends them.
+ * The invariants: every request succeeds, a history never exceeds 10, never holds a duplicate.
+ * The timeout stops the build if a broken map ever loops forever.
+ */
+@Timeout(value = 60, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+class RecentlyViewedConcurrencyTest extends ApiTest {
+
+    /** Runs each task on its own virtual thread; all wait at the start line, then go at once. Returns the HTTP statuses. */
+    private List&lt;Integer&gt; together(List&lt;Callable&gt; tasks) throws Exception {
+        CountDownLatch start = new CountDownLatch(1);
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            List&lt;Future&lt;Integer&gt;&gt; results = new ArrayList&lt;&gt;();
+            for (Callable task : tasks) {
+                results.add(pool.submit(() -&gt; {
+                    start.await();
+                    return task.call();
+                }));
+            }
+            start.countDown();
+            List&lt;Integer&gt; statuses = new ArrayList&lt;&gt;();
+            for (Future&lt;Integer&gt; f : results) {
+                statuses.add(f.get());
+            }
+            return statuses;
+        }
+    }
+
+    interface Callable {
+        int call() throws Exception;
+    }
+
+    @Test
+    void twoHundredViewsByOneUserAtOnceLeaveTenDistinctProducts() throws Exception {
+        List&lt;Callable&gt; tasks = new ArrayList&lt;&gt;();
+        for (long p = 1; p &lt;= 200; p++) {
+            long product = p;
+            tasks.add(() -&gt; view(7, product).andReturn().getResponse().getStatus());
+        }
+        assertThat(together(tasks)).containsOnly(200);
+        List&lt;Long&gt; history = recentlyViewed.list(7);
+        assertThat(history).hasSize(10).doesNotHaveDuplicates().allMatch(p -&gt; p &gt;= 1 &amp;&amp; p &lt;= 200);
+    }
+
+    @Test
+    void readsAndWritesForManyUsersAtOnceNeverBreakTheLimits() throws Exception {
+        List&lt;Callable&gt; tasks = new ArrayList&lt;&gt;();
+        for (int i = 0; i &lt; 1_000; i++) {
+            long user = i % 50, product = i % 37;
+            tasks.add(i % 3 == 0
+                    ? () -&gt; mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                            .get(&quot;/users/{id}/recently-viewed&quot;, user + 1)).andReturn().getResponse().getStatus()
+                    : () -&gt; view(user + 1, product + 1).andReturn().getResponse().getStatus());
+        }
+        assertThat(together(tasks)).containsOnly(200);
+        for (long user = 1; user &lt;= 50; user++) {
+            List&lt;Long&gt; h = recentlyViewed.list(user);
+            assertThat(h.size()).isLessThanOrEqualTo(10);
+            assertThat(new HashSet&lt;&gt;(h)).hasSameSizeAs(h);
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/kartwala/recent/RecentlyViewedContractTest.java</p><div class="notes"><p>Order, moves, eviction, separate users, bad input.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP contract: newest first, no duplicates, at most 10, and the refusals. */
+class RecentlyViewedContractTest extends ApiTest {
+
+    @Test
+    void viewsAreListedNewestFirst() throws Exception {
+        view(7, 101);
+        view(7, 102);
+        view(7, 103).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.userId&quot;).value(7))
+                .andExpect(jsonPath(&quot;$.productIds&quot;, contains(103, 102, 101)));
+        mvc.perform(get(&quot;/users/7/recently-viewed&quot;)).andExpect(jsonPath(&quot;$.productIds&quot;, contains(103, 102, 101)));
+    }
+
+    @Test
+    void viewingAgainMovesTheProductToTheFrontWithoutADuplicate() throws Exception {
+        view(7, 101);
+        view(7, 102);
+        view(7, 101).andExpect(jsonPath(&quot;$.productIds&quot;, contains(101, 102)));
+    }
+
+    @Test
+    void theEleventhProductPushesOutTheOldest() throws Exception {
+        for (long p = 1; p &lt;= 11; p++) {
+            view(7, p);
+        }
+        mvc.perform(get(&quot;/users/7/recently-viewed&quot;))
+                .andExpect(jsonPath(&quot;$.productIds&quot;, hasSize(10)))
+                .andExpect(jsonPath(&quot;$.productIds[0]&quot;).value(11))
+                .andExpect(jsonPath(&quot;$.productIds[9]&quot;).value(2));   // product 1 is gone
+    }
+
+    @Test
+    void reViewingAnOldProductSavesItFromEviction() throws Exception {
+        for (long p = 1; p &lt;= 10; p++) {
+            view(7, p);
+        }
+        view(7, 1);            // product 1 is used again, so product 2 is now the least recent
+        view(7, 11);
+        mvc.perform(get(&quot;/users/7/recently-viewed&quot;)).andExpect(jsonPath(&quot;$.productIds&quot;, contains(11, 1, 10, 9, 8, 7, 6, 5, 4, 3)));
+    }
+
+    @Test
+    void usersHaveSeparateHistoriesAndANewUserHasNone() throws Exception {
+        view(7, 101);
+        view(8, 201);
+        mvc.perform(get(&quot;/users/8/recently-viewed&quot;)).andExpect(jsonPath(&quot;$.productIds&quot;, contains(201)));
+        mvc.perform(get(&quot;/users/9/recently-viewed&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.productIds&quot;, hasSize(0)));
+    }
+
+    @Test
+    void badInputIs400() throws Exception {
+        view(0, 101).andExpect(status().isBadRequest()).andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+        view(7, -5).andExpect(status().isBadRequest());
+        mvc.perform(post(&quot;/users/7/recently-viewed&quot;).contentType(MediaType.APPLICATION_JSON).content(&quot;{}&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/users/abc/recently-viewed&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/kartwala/recent/LruMapTest.java</p><div class="notes"><p>Access order, the 10,000-user bound, copies.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** The LRU rules on their own: access order, eviction, and the bound on the number of users. */
+class LruMapTest {
+
+    @Test
+    void theLeastRecentlyUsedEntryIsEvicted() {
+        LruMap&lt;String, Integer&gt; lru = new LruMap&lt;&gt;(3);
+        lru.put(&quot;a&quot;, 1);
+        lru.put(&quot;b&quot;, 2);
+        lru.put(&quot;c&quot;, 3);
+        lru.get(&quot;a&quot;);          // in access order, reading counts as using
+        lru.put(&quot;d&quot;, 4);       // so &quot;b&quot;, untouched the longest, goes
+        assertThat(lru.keySet()).containsExactly(&quot;c&quot;, &quot;a&quot;, &quot;d&quot;);
+    }
+
+    @Test
+    void theServerKeepsAtMostMaxUsersAndDropsTheLeastRecentlyActive() {
+        RecentlyViewed store = new RecentlyViewed();
+        for (long user = 1; user &lt;= RecentlyViewed.MAX_USERS + 5; user++) {
+            store.record(user, 1);
+        }
+        assertThat(store.userCount()).isEqualTo(RecentlyViewed.MAX_USERS);
+        assertThat(store.list(1)).isEmpty();                       // users 1..5 were dropped
+        assertThat(store.list(RecentlyViewed.MAX_USERS + 5)).containsExactly(1L);
+    }
+
+    @Test
+    void aReturnedListDoesNotChangeAfterwards() {
+        RecentlyViewed store = new RecentlyViewed();
+        store.record(7, 1);
+        List&lt;Long&gt; before = store.list(7);
+        store.record(7, 2);
+        assertThat(before).containsExactly(1L);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/kartwala/recent/ApiTest.java</p><div class="notes"><p>Shared setup: the whole app through MockMvc, empty history before each test.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/** Shared setup: the whole app through MockMvc, empty history before each test. */
+@SpringBootTest
+@AutoConfigureMockMvc
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+
+    @Autowired
+    RecentlyViewed recentlyViewed;
+
+    @BeforeEach
+    void emptyHistory() {
+        recentlyViewed.clear();
+    }
+
+    ResultActions view(long userId, long productId) throws Exception {
+        return mvc.perform(post(&quot;/users/{id}/recently-viewed&quot;, userId)
+                .contentType(MediaType.APPLICATION_JSON).content(&quot;{\&quot;productId\&quot;:&quot; + productId + &quot;}&quot;));
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/kartwala/recent/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=RemoveProductChallengeTest</code></li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 13 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 17 tests pass (13 station tests and 4 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>Remove a product from the strip</h2><p>Add <code>DELETE /users/{userId}/recently-viewed/{productId}</code>: <code>204</code>, also when the product (or the user) was never there.</p><p><b>Done when:</b> both tests in <code>RemoveProductChallengeTest</code> pass, and the station's tests still pass.</p><details class="qa"><summary>Hints</summary><ul><li>Take the store's lock like every other method.</li><li>Deleting what is not there gives the same result as deleting it: <code>204</code> (station 008).</li></ul></details><p class="path">challenge/RemoveProductChallengeTest.java</p><pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Challenge 1: the &quot;x&quot; on a product in the strip: DELETE /users/{id}/recently-viewed/{productId}, safe to repeat. */
+class RemoveProductChallengeTest extends ApiTest {
+
+    @Test
+    void removingAProductIs204AndItIsGone() throws Exception {
+        view(7, 101);
+        view(7, 102);
+        mvc.perform(delete(&quot;/users/7/recently-viewed/101&quot;)).andExpect(status().isNoContent());
+        mvc.perform(get(&quot;/users/7/recently-viewed&quot;)).andExpect(jsonPath(&quot;$.productIds&quot;, contains(102)));
+    }
+
+    @Test
+    void removingTwiceOrRemovingSomethingNeverViewedIsStill204() throws Exception {
+        view(7, 101);
+        mvc.perform(delete(&quot;/users/7/recently-viewed/101&quot;)).andExpect(status().isNoContent());
+        mvc.perform(delete(&quot;/users/7/recently-viewed/101&quot;)).andExpect(status().isNoContent());
+        mvc.perform(delete(&quot;/users/99/recently-viewed/5&quot;)).andExpect(status().isNoContent());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/RecentlyViewed.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Challenge 1 adds remove; challenge 2 stores when each product was viewed, and hides views older than 30 days.
+ * Old entries are not deleted on read: they fall out through the LRU limit, so reading stays cheap.
+ */
+@Component
+class RecentlyViewed {
+
+    static final int PER_USER = 10;
+    static final int MAX_USERS = 10_000;
+    static final Duration KEEP = Duration.ofDays(30);
+
+    private final LruMap&lt;Long, LruMap&lt;Long, Instant&gt;&gt; users = new LruMap&lt;&gt;(MAX_USERS);
+    private final Clock clock;
+
+    /** The station&#x27;s tests build the store without Spring. */
+    RecentlyViewed() {
+        this(Clock.systemUTC());
+    }
+
+    @Autowired
+    RecentlyViewed(Clock clock) {
+        this.clock = clock;
+    }
+
+    synchronized List&lt;Long&gt; record(long userId, long productId) {
+        users.computeIfAbsent(userId, id -&gt; new LruMap&lt;&gt;(PER_USER)).put(productId, clock.instant());
+        return list(userId);
+    }
+
+    synchronized List&lt;Long&gt; list(long userId) {
+        LruMap&lt;Long, Instant&gt; history = users.get(userId);
+        if (history == null) {
+            return List.of();
+        }
+        Instant oldest = clock.instant().minus(KEEP);
+        List&lt;Long&gt; newestFirst = new ArrayList&lt;&gt;();
+        for (Map.Entry&lt;Long, Instant&gt; e : history.entrySet()) {
+            if (e.getValue().isAfter(oldest)) {
+                newestFirst.addFirst(e.getKey());
+            }
+        }
+        return newestFirst;
+    }
+
+    /** Challenge 1. Removing what is not there is fine: the result is the same. */
+    synchronized void remove(long userId, long productId) {
+        LruMap&lt;Long, Instant&gt; history = users.get(userId);
+        if (history != null) {
+            history.remove(productId);
+        }
+    }
+
+    synchronized int userCount() {
+        return users.size();
+    }
+
+    synchronized void clear() {
+        users.clear();
+    }
+}</code></pre></div><p class="path">challenge/solution/RecentlyViewedController.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+@RequestMapping(&quot;/users/{userId}/recently-viewed&quot;)
+class RecentlyViewedController {
+
+    record View(@NotNull @Positive Long productId) {
+    }
+
+    record History(long userId, List&lt;Long&gt; productIds) {
+    }
+
+    private final RecentlyViewed recentlyViewed;
+
+    RecentlyViewedController(RecentlyViewed recentlyViewed) {
+        this.recentlyViewed = recentlyViewed;
+    }
+
+    /** Record a view and return the history. Viewing the same product again moves it to the front; it is never listed twice. */
+    @PostMapping
+    History view(@PathVariable @Positive long userId, @Valid @RequestBody View view) {
+        return new History(userId, recentlyViewed.record(userId, view.productId()));
+    }
+
+    /** Challenge 1: 204 whether or not it was there. */
+    @DeleteMapping(&quot;/{productId}&quot;)
+    ResponseEntity&lt;Void&gt; remove(@PathVariable @Positive long userId, @PathVariable long productId) {
+        recentlyViewed.remove(userId, productId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping
+    History history(@PathVariable @Positive long userId) {
+        return new History(userId, recentlyViewed.list(userId));
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 40 minutes</p><h2>Forget views after 30 days</h2><p>Views older than 30 days should not be shown. Store when each product was viewed, and filter on read. Viewing again restarts the 30 days.</p><p><b>Done when:</b> both tests in <code>ExpiryChallengeTest</code> pass. The test brings its own movable clock.</p><details class="qa"><summary>Hints</summary><ul><li>Store an <code>Instant</code> instead of <code>Boolean.TRUE</code> as the map value.</li><li>Inject a <code>Clock</code> bean so the test can move time; keep a no-argument constructor for the station's tests.</li><li>Filtering on read is enough: old entries leave through the LRU limit anyway.</li></ul></details><p class="path">challenge/ExpiryChallengeTest.java</p><pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+
+import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+
+/** Challenge 2: views older than 30 days are not shown. Time is moved by a test clock, not waited for. */
+@Import(ExpiryChallengeTest.Clocks.class)
+class ExpiryChallengeTest extends ApiTest {
+
+    static class MovableClock extends Clock {
+        Instant now = Instant.parse(&quot;2026-10-01T10:00:00Z&quot;);
+
+        @Override
+        public Instant instant() {
+            return now;
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+    }
+
+    @TestConfiguration
+    static class Clocks {
+        @Bean
+        @Primary
+        MovableClock movableClock() {
+            return new MovableClock();
+        }
+    }
+
+    @Autowired
+    MovableClock clock;
+
+    @Test
+    void aViewOlderThanThirtyDaysDisappears() throws Exception {
+        view(7, 101);
+        clock.now = clock.now.plus(Duration.ofDays(29));
+        view(7, 102);
+        mvc.perform(get(&quot;/users/7/recently-viewed&quot;)).andExpect(jsonPath(&quot;$.productIds&quot;, contains(102, 101)));
+        clock.now = clock.now.plus(Duration.ofDays(2));    // 101 is now 31 days old
+        mvc.perform(get(&quot;/users/7/recently-viewed&quot;)).andExpect(jsonPath(&quot;$.productIds&quot;, contains(102)));
+    }
+
+    @Test
+    void viewingAgainRestartsTheThirtyDays() throws Exception {
+        view(7, 201);
+        clock.now = clock.now.plus(Duration.ofDays(25));
+        view(7, 201);
+        clock.now = clock.now.plus(Duration.ofDays(25));
+        mvc.perform(get(&quot;/users/7/recently-viewed&quot;)).andExpect(jsonPath(&quot;$.productIds&quot;, contains(201)));
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/RecentlyViewed.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Challenge 1 adds remove; challenge 2 stores when each product was viewed, and hides views older than 30 days.
+ * Old entries are not deleted on read: they fall out through the LRU limit, so reading stays cheap.
+ */
+@Component
+class RecentlyViewed {
+
+    static final int PER_USER = 10;
+    static final int MAX_USERS = 10_000;
+    static final Duration KEEP = Duration.ofDays(30);
+
+    private final LruMap&lt;Long, LruMap&lt;Long, Instant&gt;&gt; users = new LruMap&lt;&gt;(MAX_USERS);
+    private final Clock clock;
+
+    /** The station&#x27;s tests build the store without Spring. */
+    RecentlyViewed() {
+        this(Clock.systemUTC());
+    }
+
+    @Autowired
+    RecentlyViewed(Clock clock) {
+        this.clock = clock;
+    }
+
+    synchronized List&lt;Long&gt; record(long userId, long productId) {
+        users.computeIfAbsent(userId, id -&gt; new LruMap&lt;&gt;(PER_USER)).put(productId, clock.instant());
+        return list(userId);
+    }
+
+    synchronized List&lt;Long&gt; list(long userId) {
+        LruMap&lt;Long, Instant&gt; history = users.get(userId);
+        if (history == null) {
+            return List.of();
+        }
+        Instant oldest = clock.instant().minus(KEEP);
+        List&lt;Long&gt; newestFirst = new ArrayList&lt;&gt;();
+        for (Map.Entry&lt;Long, Instant&gt; e : history.entrySet()) {
+            if (e.getValue().isAfter(oldest)) {
+                newestFirst.addFirst(e.getKey());
+            }
+        }
+        return newestFirst;
+    }
+
+    /** Challenge 1. Removing what is not there is fine: the result is the same. */
+    synchronized void remove(long userId, long productId) {
+        LruMap&lt;Long, Instant&gt; history = users.get(userId);
+        if (history != null) {
+            history.remove(productId);
+        }
+    }
+
+    synchronized int userCount() {
+        return users.size();
+    }
+
+    synchronized void clear() {
+        users.clear();
+    }
+}</code></pre></div><p class="path">challenge/solution/RecentlyViewedApplication.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+import java.time.Clock;
+
+@SpringBootApplication
+public class RecentlyViewedApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(RecentlyViewedApplication.class, args);
+    }
+
+    /** Challenge 2: the store asks this clock for &quot;now&quot;, so tests can move time. */
+    @Bean
+    Clock clock() {
+        return Clock.systemUTC();
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Moving the history out of the servers</h2>
+<p>Kartwala will run 8 servers and restart them during deploys. Compare three designs: sticky routing (this station), a shared Valkey list per user (<code>LPUSH</code>, <code>LREM</code>, <code>LTRIM</code>), and keeping the history on the phone. For each: what is lost on a restart, what happens when two servers update the same user at once, and what it costs.</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design (none in this station)</li></ul><p class="rule">Short at Foundations: the choices that matter here.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: two real servers, round robin, split history.</li>
+<li>Write <code>LruMap</code>: access order plus <code>removeEldestEntry</code>.</li>
+<li>Nest two of them: users, then products per user. Put one lock around every method.</li>
+<li>Prove the lock with real parallel requests; prove the bounds with unit tests.</li>
+<li>Write the deployment rule down where developers will read it: in the class comment and on this page.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Access-order <code>LinkedHashMap</code> + one lock</td><td>One lock is a bottleneck at very high traffic on one server; fine here.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td><code>HashMap</code> of lists that only grow</td><td>Memory grows forever.</td><td><span class="pill bad">Wrong</span></td></tr><tr><td><code>ConcurrentHashMap</code> and no lock</td><td>The outer map is safe, the per-user maps are not, and it has no size limit.</td><td><span class="pill bad">Wrong</span> (see Review)</td></tr><tr><td>Caffeine cache</td><td>A tested library with size limits, expiry and good concurrency; one more dependency.</td><td><span class="pill warn">At scale</span></td></tr><tr><td>Shared store (Valkey)</td><td>Every server sees the same history and it survives restarts; another system to run.</td><td><span class="pill warn">Later station</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>None. If history had to be kept for a long time, it would be a table of (user, product, viewed_at) with a job deleting old rows; a cache is the wrong place for data you cannot lose.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Memory</dt><dd>Worst case is 10,000 users × 10 products per server: about 100,000 small entries. Bounded, so it cannot cause a memory alarm on its own.</dd>
+<dt>Concurrency</dt><dd>One lock serialises every request to the store. Each operation takes microseconds, so it is fine at this scale; at much higher traffic, use a concurrent cache library.</dd>
+<dt>Reliability</dt><dd>Restarts and deploys forget histories. That is acceptable for a "recently viewed" strip, not for anything a customer would miss.</dd>
+<dt>Scale</dt><dd>With several servers, route by user (sticky) or move the history to a shared store. Adding a server changes the routing, so some users see an empty strip once.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>How do you build an LRU cache in Java?</summary><p>LinkedHashMap with accessOrder = true and an override of removeEldestEntry that returns size() &gt; max. Every get or put moves the entry to the end; the eldest is the least recently used.</p></details><details class="qa"><summary>Is a LinkedHashMap in access order safe to read from several threads?</summary><p>No. In access order, get() moves the entry, which changes the map&#x27;s internal links. Every call needs a lock (or use a concurrent cache library).</p></details><details class="qa"><summary>Why does ConcurrentHashMap not make this store thread-safe?</summary><p>It makes the outer map&#x27;s own operations safe, but the per-user maps inside are ordinary LinkedHashMaps changed from many threads. It also has no size limit.</p></details><details class="qa"><summary>What happens to in-memory caches behind a load balancer?</summary><p>Each server has its own copy. Users see different data depending on which server they hit, and a restart empties it. Use sticky routing or a shared cache, and decide what losing it means.</p></details><details class="qa"><summary>How do you test thread safety?</summary><p>Release many real requests at the same moment (a latch and virtual threads), then check the invariants. Remember that a passing test does not prove the absence of races; the design must make races impossible.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 13 tests pass.</td><td>You can predict which tests the flawed version fails.</td></tr><tr><td>Concurrency</td><td>Every method holds the lock.</td><td>You can explain why a green test did not catch unlocked reads.</td></tr><tr><td>Design</td><td>Two bounded LRUs.</td><td>You can compare sticky routing with a shared cache.</td></tr><tr><td>Explanation</td><td>Access order in one sentence.</td><td>You can explain the trap to someone who has only ever run one server.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>"Performance: removed the global lock, ConcurrentHashMap is thread-safe. Also simplified LruMap." Read both files and list every problem before opening the findings.</p>
+<p class="path">review/RecentlyViewed.java</p>
+<pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/** Recently viewed products. ConcurrentHashMap makes it thread-safe, so no synchronized needed (faster). */
+@Component
+class RecentlyViewed {
+
+    static final int PER_USER = 10;
+    static final int MAX_USERS = 10_000;
+
+    private final Map&lt;Long, LruMap&lt;Long, Boolean&gt;&gt; users = new ConcurrentHashMap&lt;&gt;();
+
+    List&lt;Long&gt; record(long userId, long productId) {
+        users.computeIfAbsent(userId, id -&gt; new LruMap&lt;&gt;(PER_USER)).put(productId, Boolean.TRUE);
+        return list(userId);
+    }
+
+    List&lt;Long&gt; list(long userId) {
+        LruMap&lt;Long, Boolean&gt; history = users.get(userId);
+        if (history == null) {
+            return List.of();
+        }
+        List&lt;Long&gt; newestFirst = new ArrayList&lt;&gt;(history.keySet());
+        Collections.reverse(newestFirst);
+        return newestFirst;
+    }
+
+    int userCount() {
+        return users.size();
+    }
+
+    void clear() {
+        users.clear();
+    }
+}</code></pre>
+<p class="path">review/LruMap.java</p>
+<pre class="code"><code class="language-java">package com.kartwala.recent;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/** A bounded map: once it holds maxSize entries, the oldest one is removed. */
+class LruMap&lt;K, V&gt; extends LinkedHashMap&lt;K, V&gt; {
+
+    private final int maxSize;
+
+    LruMap(int maxSize) {
+        super(16, 0.75f);
+        this.maxSize = maxSize;
+    }
+
+    @Override
+    protected boolean removeEldestEntry(Map.Entry&lt;K, V&gt; eldest) {
+        return size() &gt;= maxSize;
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span><code>LinkedHashMap</code> in insertion order</summary><p><code>super(16, 0.75f)</code> leaves access order off. Re-viewing a product does not move it, and the product the user just looked at can be the one evicted.</p><p class="evidence"><b>Test evidence:</b> <code>viewingAgainMovesTheProductToTheFrontWithoutADuplicate</code>, <code>reViewingAnOldProductSavesItFromEviction</code>, <code>theLeastRecentlyUsedEntryIsEvicted</code>.</p></details><details class="finding"><summary><span class="sev">2</span>Off by one in <code>removeEldestEntry</code></summary><p><code>size() &gt;= maxSize</code> runs after the new entry is added, so the map keeps 9, not 10.</p><p class="evidence"><b>Test evidence:</b> <code>theEleventhProductPushesOutTheOldest</code> (9 items) and the 200-parallel-views test, which expects 10.</p></details><details class="finding"><summary><span class="sev">3</span>"ConcurrentHashMap makes it thread-safe"</summary><p>The outer map is safe, but every user's history is a plain <code>LinkedHashMap</code> changed by many threads with no lock, and the outer map has no size limit at all.</p><p class="evidence"><b>Test evidence:</b> <code>theServerKeepsAtMostMaxUsersAndDropsTheLeastRecentlyActive</code> (10,005 users kept). The concurrency test failed too in our runs (see the table).</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the two flawed files copied over the real ones, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>PerServerCacheTrapTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill ok">2 / 2</span></td></tr><tr><td><code>LruMapTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill bad">1 / 3</span></td></tr><tr><td><code>RecentlyViewedConcurrencyTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">1 / 2</span></td></tr><tr><td><code>RecentlyViewedContractTest</code></td><td><span class="pill ok">6 / 6</span></td><td><span class="pill bad">3 / 6</span></td></tr></tbody></table></div>
+<p class="note">The trap test passes on the flawed version: it is about deployment, not about this code. Each test answers its own question.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
