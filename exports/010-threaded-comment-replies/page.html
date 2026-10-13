@@ -1,0 +1,1353 @@
+<title>Station 010 · Threaded comment replies</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 010</span>
+    <h1>Threaded comment replies</h1>
+    <p class="scenario">Replies are stored flat; the app shows replies above the comments they answer, and deep threads crash it.</p>
+    <p class="sim"><b>Simulation</b><span>Three posts are fixed in the code: a normal discussion, one reply chain 100,000 comments deep (a bot replying to itself), and an empty post. Everything is in memory.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Social</li>
+      <li><b>Types</b>None</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>009 Wishlist without duplicates</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring MVC · HashMap · recursion with a limit · MockMvc</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Comments are stored flat</strong><p>Each reply just remembers which comment it answers. The app showed them in storage order, so replies sometimes appeared above the comment they answered.</p></li><li><strong>A bot replies to itself 100,000 times</strong><p>The new "nested replies" feature built the tree with recursion that went as deep as the data. On that thread the server ran out of stack and every reader got an error page.</p></li><li><strong>The fix</strong><p>Group replies by parent with one map, nest them up to a depth limit, and below the limit only count them, without recursion.</p></li></ol>
+<p class="lesson">Data from users has no natural limits. Any code whose depth or size follows the data needs a limit of its own.</p>
+
+<h2>What are we building?</h2>
+<p><code>GET /posts/{id}/comment-tree?maxDepth=5</code>: the post's comments as a tree, replies under the comment they answer, oldest first. Below <code>maxDepth</code>, replies are not nested; the last shown comment says how many are hidden.</p>
+
+<h2>An everyday analogy</h2>
+<p>A wedding invitation list grows as "Sharma family → Rahul's family → Rahul's cousins → …". To print it, you first sort every name into a folder labelled with whose guest they are. Then you print a few levels deep and write "+ 37 more" for the rest, instead of following every branch to the end.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Group</strong>: one pass over the comments puts each into a map under its parent's id. Top-level comments, and replies whose parent is missing, go in a separate list.</li>
+<li><strong>Sort</strong> each group oldest first (ties by id).</li>
+<li><strong>Nest</strong> from the top, one level at a time, up to <code>maxDepth</code> levels.</li>
+<li><strong>Count</strong> what is below the last level with a loop and a to-do list, not recursion: <code>moreReplies</code>.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: recursion is used in step 3 too. Why is that safe and step 4 not?</summary><p>Step 3 stops at <code>maxDepth</code>, at most 10 levels, whatever the data. Step 4 must go all the way down, and that depth comes from the data: 100,000 on post 2. So step 4 uses a loop with its own list of comments still to visit.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No database.</strong> Comments are fixed in memory; post 2's chain is generated at start-up.</li>
+<li><strong>No posting.</strong> Station 007 covers adding comments safely.</li>
+<li><strong>No paging of wide threads.</strong> A comment with 5,000 replies returns all 5,000.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Flat list</strong></td><td>Every comment stored side by side, each with the id of the comment it answers.</td><td>A pile of letters, each saying "in reply to letter 4".</td><td><code>parentId</code> on each comment.</td></tr><tr><td><strong>Tree</strong></td><td>Comments nested inside the comments they answer.</td><td>A family tree.</td><td><code>replies</code> inside each node.</td></tr><tr><td><strong>Map lookup by parent id</strong></td><td>Group replies by the comment they answer, once, so finding them later is instant.</td><td>Sorting letters into folders by "in reply to".</td><td><code>Map&lt;Long, List&lt;Comment&gt;&gt;</code></td></tr><tr><td><strong>Recursion</strong></td><td>A method that calls itself for a smaller piece of the problem.</td><td>Opening a box to find a smaller box inside.</td><td>Building each node's replies.</td></tr><tr><td><strong>Stack overflow</strong></td><td>The crash when recursion goes deeper than the thread's memory for method calls allows.</td><td>Boxes nested so deep you run out of hands.</td><td><code>StackOverflowError</code> on the 100,000-deep thread.</td></tr><tr><td><strong>Depth limit</strong></td><td>Stop nesting after N levels and show "n more replies" instead.</td><td>"Continue this thread →" on forums.</td><td><code>maxDepth</code>, 1 to 10.</td></tr><tr><td><strong>Siblings</strong></td><td>Replies to the same comment.</td><td>Children of the same parents.</td><td>Ordered oldest first, then by id.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Chaupal</strong> (the forum from station 007) stores comments flat. Its app showed them in storage order, so replies sometimes came before the comments they answered. The first version of "nested replies" fixed the order but crashed on a thread where a misconfigured bot had replied to itself 100,000 times: the recursive builder threw <code>StackOverflowError</code> and the post became unreadable for everyone.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> a post, <b>then</b> top-level comments come oldest first, and each reply sits under the comment it answers, oldest first; equal times are ordered by id.</li>
+<li><b>Given</b> <code>maxDepth=N</code>, <b>then</b> at most N levels are nested; a comment on level N has empty <code>replies</code> and <code>moreReplies</code> = the number of comments below it.</li>
+<li><b>Given</b> the 100,000-deep thread, <b>then</b> <code>200</code>, quickly, with <code>moreReplies</code> counting the rest.</li>
+<li><b>Given</b> a reply whose parent is gone, <b>then</b> it is shown at the top level. <b>Given</b> comments in a loop (corrupt data), <b>then</b> the request still finishes.</li>
+<li><b>Given</b> <code>maxDepth</code> outside 1–10, <b>then</b> <code>400</code>. <b>Given</b> an unknown post, <b>then</b> <code>404</code>. <b>Given</b> a post with no comments, <b>then</b> an empty list.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>One pass to group by parent id; no searching the list for each comment's replies.</li>
+<li>No recursion whose depth depends on the data.</li>
+<li><code>maxDepth</code>: default 5, 1 to 10.</li>
+<li>Errors are RFC 9457 problems.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Build a tree from a flat list with a map from parent id to children.</li>
+<li>Order siblings with a comparator and a tie-breaker.</li>
+<li>Explain why unbounded recursion fails on user data, and bound it.</li>
+<li>Rewrite a recursive count as a loop with an explicit stack.</li>
+<li>Handle broken data: missing parents and loops.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/posts/{postId}/comment-tree?maxDepth</code></td><td>The post's comments as a tree, up to <code>maxDepth</code> levels (default 5, 1–10).</td></tr></tbody></table></div>
+<h2>Each node</h2>
+<div class="scroll"><table class=""><thead><tr><th>Field</th><th>Meaning</th></tr></thead><tbody><tr><td><code>id</code>, <code>author</code>, <code>text</code>, <code>createdAt</code></td><td>The comment.</td></tr><tr><td><code>replies</code></td><td>Its replies, oldest first, each a node of the same shape. Empty at the depth limit.</td></tr><tr><td><code>moreReplies</code></td><td>How many comments are below this one but not shown (0 above the limit).</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>The post exists (an empty <code>comments</code> list if it has none)</td></tr><tr><td><span class="pill warn">400</span></td><td><code>maxDepth</code> outside 1–10, or not a number</td></tr><tr><td><span class="pill warn">404</span></td><td>No such post</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 13 Oct 2026. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: the chai discussion</h3><p><b>Why:</b> two top-level comments; the deepest reply ("Closed on Mondays") is 5 levels down, within the default limit. Comments 2 and 3 were posted in the same minute, so they are ordered by id.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /posts/1/comment-tree HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 1126
+
+{
+  &quot;postId&quot;: 1,
+  &quot;maxDepth&quot;: 5,
+  &quot;comments&quot;: [
+    {
+      &quot;id&quot;: 1,
+      &quot;author&quot;: &quot;asha&quot;,
+      &quot;text&quot;: &quot;Best cutting chai near FC Road?&quot;,
+      &quot;createdAt&quot;: &quot;2026-10-12T04:30:00Z&quot;,
+      &quot;replies&quot;: [
+        {
+          &quot;id&quot;: 2,
+          &quot;author&quot;: &quot;ravi&quot;,
+          &quot;text&quot;: &quot;Amruttulya, every time.&quot;,
+          &quot;createdAt&quot;: &quot;2026-10-12T04:32:00Z&quot;,
+          &quot;replies&quot;: [
+            {
+              &quot;id&quot;: 4,
+              &quot;author&quot;: &quot;asha&quot;,
+              &quot;text&quot;: &quot;The one near the college?&quot;,
+              &quot;createdAt&quot;: &quot;2026-10-12T04:34:00Z&quot;,
+              &quot;replies&quot;: [
+                {
+                  &quot;id&quot;: 5,
+                  &quot;author&quot;: &quot;ravi&quot;,
+                  &quot;text&quot;: &quot;Yes, opposite the gate.&quot;,
+                  &quot;createdAt&quot;: &quot;2026-10-12T04:35:00Z&quot;,
+                  &quot;replies&quot;: [
+                    {
+                      &quot;id&quot;: 8,
+                      &quot;author&quot;: &quot;tara&quot;,
+                      &quot;text&quot;: &quot;Closed on Mondays though.&quot;,
+                      &quot;createdAt&quot;: &quot;2026-10-12T04:38:00Z&quot;,
+                      &quot;replies&quot;: [],
+                      &quot;moreReplies&quot;: 0
+                    }
+                  ],
+                  &quot;moreReplies&quot;: 0
+                }
+              ],
+              &quot;moreReplies&quot;: 0
+            }
+          ],
+          &quot;moreReplies&quot;: 0
+        },
+        {
+          &quot;id&quot;: 3,
+          &quot;author&quot;: &quot;kabir&quot;,
+          &quot;text&quot;: &quot;Yewale is better.&quot;,
+          &quot;createdAt&quot;: &quot;2026-10-12T04:32:00Z&quot;,
+          &quot;replies&quot;: [
+            {
+              &quot;id&quot;: 7,
+              &quot;author&quot;: &quot;kabir&quot;,
+              &quot;text&quot;: &quot;And cheaper.&quot;,
+              &quot;createdAt&quot;: &quot;2026-10-12T04:37:00Z&quot;,
+              &quot;replies&quot;: [],
+              &quot;moreReplies&quot;: 0
+            }
+          ],
+          &quot;moreReplies&quot;: 0
+        }
+      ],
+      &quot;moreReplies&quot;: 0
+    },
+    {
+      &quot;id&quot;: 6,
+      &quot;author&quot;: &quot;meera&quot;,
+      &quot;text&quot;: &quot;Anyone tried the new place in Baner?&quot;,
+      &quot;createdAt&quot;: &quot;2026-10-12T04:36:00Z&quot;,
+      &quot;replies&quot;: [
+        {
+          &quot;id&quot;: 9,
+          &quot;author&quot;: &quot;asha&quot;,
+          &quot;text&quot;: &quot;Not yet!&quot;,
+          &quot;createdAt&quot;: &quot;2026-10-12T04:39:00Z&quot;,
+          &quot;replies&quot;: [],
+          &quot;moreReplies&quot;: 0
+        }
+      ],
+      &quot;moreReplies&quot;: 0
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 2: only two levels</h3><p><b>Why:</b> level-2 comments show no replies, and <code>moreReplies</code> says how many are hidden below each.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /posts/1/comment-tree?maxDepth=2 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 648
+
+{
+  &quot;postId&quot;: 1,
+  &quot;maxDepth&quot;: 2,
+  &quot;comments&quot;: [
+    {
+      &quot;id&quot;: 1,
+      &quot;author&quot;: &quot;asha&quot;,
+      &quot;text&quot;: &quot;Best cutting chai near FC Road?&quot;,
+      &quot;createdAt&quot;: &quot;2026-10-12T04:30:00Z&quot;,
+      &quot;replies&quot;: [
+        {
+          &quot;id&quot;: 2,
+          &quot;author&quot;: &quot;ravi&quot;,
+          &quot;text&quot;: &quot;Amruttulya, every time.&quot;,
+          &quot;createdAt&quot;: &quot;2026-10-12T04:32:00Z&quot;,
+          &quot;replies&quot;: [],
+          &quot;moreReplies&quot;: 3
+        },
+        {
+          &quot;id&quot;: 3,
+          &quot;author&quot;: &quot;kabir&quot;,
+          &quot;text&quot;: &quot;Yewale is better.&quot;,
+          &quot;createdAt&quot;: &quot;2026-10-12T04:32:00Z&quot;,
+          &quot;replies&quot;: [],
+          &quot;moreReplies&quot;: 1
+        }
+      ],
+      &quot;moreReplies&quot;: 0
+    },
+    {
+      &quot;id&quot;: 6,
+      &quot;author&quot;: &quot;meera&quot;,
+      &quot;text&quot;: &quot;Anyone tried the new place in Baner?&quot;,
+      &quot;createdAt&quot;: &quot;2026-10-12T04:36:00Z&quot;,
+      &quot;replies&quot;: [
+        {
+          &quot;id&quot;: 9,
+          &quot;author&quot;: &quot;asha&quot;,
+          &quot;text&quot;: &quot;Not yet!&quot;,
+          &quot;createdAt&quot;: &quot;2026-10-12T04:39:00Z&quot;,
+          &quot;replies&quot;: [],
+          &quot;moreReplies&quot;: 0
+        }
+      ],
+      &quot;moreReplies&quot;: 0
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 3: the 100,000-deep thread</h3><p><b>Why:</b> three levels are nested, then the rest is counted with a loop: <code>moreReplies: 99997</code>. No stack overflow, no error page.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /posts/2/comment-tree?maxDepth=3 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 385
+
+{
+  &quot;postId&quot;: 2,
+  &quot;maxDepth&quot;: 3,
+  &quot;comments&quot;: [
+    {
+      &quot;id&quot;: 200001,
+      &quot;author&quot;: &quot;echo-bot&quot;,
+      &quot;text&quot;: &quot;Reply 0&quot;,
+      &quot;createdAt&quot;: &quot;2026-10-12T04:30:00Z&quot;,
+      &quot;replies&quot;: [
+        {
+          &quot;id&quot;: 200002,
+          &quot;author&quot;: &quot;echo-bot&quot;,
+          &quot;text&quot;: &quot;Reply 1&quot;,
+          &quot;createdAt&quot;: &quot;2026-10-12T04:30:01Z&quot;,
+          &quot;replies&quot;: [
+            {
+              &quot;id&quot;: 200003,
+              &quot;author&quot;: &quot;echo-bot&quot;,
+              &quot;text&quot;: &quot;Reply 2&quot;,
+              &quot;createdAt&quot;: &quot;2026-10-12T04:30:02Z&quot;,
+              &quot;replies&quot;: [],
+              &quot;moreReplies&quot;: 99997
+            }
+          ],
+          &quot;moreReplies&quot;: 0
+        }
+      ],
+      &quot;moreReplies&quot;: 0
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 4: maxDepth=1000</h3><p><b>Why:</b> the limit is part of the contract; a client cannot switch it off. <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /posts/1/comment-tree?maxDepth=1000 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;The request parameters are invalid.&quot;,
+  &quot;instance&quot;: &quot;/posts/1/comment-tree&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;,
+  &quot;errors&quot;: {
+    &quot;maxDepth&quot;: &quot;must be less than or equal to 10&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 5: unknown post</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /posts/99/comment-tree HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No post has this id.&quot;,
+  &quot;instance&quot;: &quot;/posts/99/comment-tree&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Post not found&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>Normal thread</td><td>Nested, oldest first, ties by id</td><td><code>repliesAreNestedUnderTheCommentTheyAnswerOldestFirst</code>, <code>siblingsAreOldestFirstThenById</code></td></tr><tr><td>Depth limit</td><td>Replies counted, not shown</td><td><code>atTheDepthLimitRepliesAreCountedNotShown</code>, <code>maxDepthOneShowsOnlyTopLevelComments</code></td></tr><tr><td>100,000-deep thread over HTTP</td><td><code>200</code>, <code>moreReplies: 99997</code></td><td><code>theRealEndpointStopsAtTheDepthLimitAndCountsWhatIsBelow</code></td></tr><tr><td>Counting 100,000 levels directly</td><td>No recursion, no overflow</td><td><code>countingBelowAHundredThousandLevelsUsesNoRecursion</code></td></tr><tr><td>5,000 replies to one comment</td><td>All kept</td><td><code>aWideThreadKeepsEveryReply</code></td></tr><tr><td>Parent deleted</td><td>Reply shown at the top</td><td><code>aReplyWhoseParentIsGoneIsShownAtTheTop</code></td></tr><tr><td>Comments in a loop; a comment replying to itself</td><td>Finishes in time; loop left out</td><td><code>commentsInALoopDoNotHangTheBuilder</code></td></tr><tr><td>No comments</td><td>Empty list</td><td><code>aPostWithNoCommentsIsAnEmptyTree</code></td></tr><tr><td>maxDepth 0, 11, 100000, -1, "deep"</td><td><code>400</code></td><td><code>maxDepthOutsideOneToTenIs400</code></td></tr><tr><td>Unknown post</td><td><code>404</code></td><td><code>anUnknownPostIs404</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Unbounded recursion on deep threads, crashing with <code>StackOverflowError</code>.</p>
+<p>"A node's replies are the nodes of its children" is a beautiful three-line method, and every normal thread works. The first test runs it on post 2: <code>StackOverflowError</code>. In a controller that is a <code>500</code> for every reader of the post. The second test asks the real endpoint for the same thread and gets an answer. Rewriting <code>countBelow</code> recursively was tried while building: 2 tests went red with <code>StackOverflowError</code>.</p>
+</div>
+<pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * The first test written for this station: it reproduces the crash before the fix.
+ * Post 2 is one reply chain, 100,000 comments deep.
+ */
+class UnboundedRecursionTrapTest extends ApiTest {
+
+    @Autowired
+    CommentStore store;
+
+    /** The &quot;before&quot; code: nest every reply inside its parent, as deep as the data goes. Kept only in tests. */
+    static Node naive(Comment c, Map&lt;Long, List&lt;Comment&gt;&gt; children) {
+        List&lt;Node&gt; replies = children.getOrDefault(c.id(), List.of()).stream().map(r -&gt; naive(r, children)).toList();
+        return new Node(c.id(), c.author(), c.text(), c.createdAt(), replies, 0);
+    }
+
+    @Test
+    void recursionWithoutALimitOverflowsTheStackOnADeepThread() {
+        List&lt;Comment&gt; chain = store.forPost(2).orElseThrow();
+        Map&lt;Long, List&lt;Comment&gt;&gt; children = chain.stream().filter(c -&gt; c.parentId() != null)
+                .collect(Collectors.groupingBy(Comment::parentId));
+        Comment root = chain.getFirst();
+        assertThatThrownBy(() -&gt; naive(root, children)).isInstanceOf(StackOverflowError.class); // a 500 for every reader
+    }
+
+    @Test
+    void theRealEndpointStopsAtTheDepthLimitAndCountsWhatIsBelow() throws Exception {
+        mvc.perform(get(&quot;/posts/2/comment-tree&quot;).param(&quot;maxDepth&quot;, &quot;3&quot;))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.comments[0].text&quot;).value(&quot;Reply 0&quot;))
+                .andExpect(jsonPath(&quot;$.comments[0].replies[0].replies[0].text&quot;).value(&quot;Reply 2&quot;))
+                .andExpect(jsonPath(&quot;$.comments[0].replies[0].replies[0].replies&quot;).isEmpty())
+                .andExpect(jsonPath(&quot;$.comments[0].replies[0].replies[0].moreReplies&quot;).value(99_997));
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr><tr><td>Docker</td><td>Not needed for this station</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 13 tests</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<pre class="code"><code class="language-bash">curl &quot;http://localhost:8080/posts/1/comment-tree&quot;
+curl &quot;http://localhost:8080/posts/1/comment-tree?maxDepth=2&quot;
+
+# The thread that crashed the old code: expect &quot;moreReplies&quot;:99997
+curl &quot;http://localhost:8080/posts/2/comment-tree?maxDepth=3&quot;</code></pre>
+<p>Then copy the trap test's <code>naive</code> method into a scratch class and call it on post 2 yourself: seeing the <code>StackOverflowError</code> once makes the lesson stick.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>400</code></td><td><code>maxDepth</code> outside 1–10.</td><td>Use a value from 1 to 10.</td></tr><tr><td>Only part of the URL is used</td><td>The shell cut at <code>?</code> or <code>&amp;</code>.</td><td>Put the URL in double quotes.</td></tr><tr><td><code>release version 25 not supported</code></td><td>Maven is using an older JDK.</td><td>Point <code>JAVA_HOME</code> at JDK 25, or add <code>-Djava.version=21</code>.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/010-threaded-comment-replies/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/chaupal/threads/
+│   ├── CommentTreeController.java   ├── ThreadBuilder.java   ├── CommentStore.java
+│   ├── Comment.java                 ├── Node.java            ├── ApiErrors.java
+│   └── ThreadsApplication.java
+├── src/test/java/com/chaupal/threads/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">CommentTreeController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">ThreadBuilder.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">CommentStore.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">Comment.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">Node.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">ApiErrors.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">ThreadsApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/chaupal/threads/CommentTreeController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Reads <code>maxDepth</code> (1–10), finds the post, and returns the tree.</dd><dt>Why</dt><dd>The limit is checked at the door, so no request can ask for unlimited depth.</dd><dt>Without it</dt><dd>No endpoint; without the cap, <code>maxDepth=100000</code> would bring the overflow back.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+class CommentTreeController {
+
+    record CommentTree(long postId, int maxDepth, List&lt;Node&gt; comments) {
+    }
+
+    private final CommentStore store;
+
+    CommentTreeController(CommentStore store) {
+        this.store = store;
+    }
+
+    /** maxDepth is capped at 10: deep enough for any conversation, shallow enough for any phone and any JSON parser. */
+    @GetMapping(&quot;/posts/{postId}/comment-tree&quot;)
+    CommentTree tree(@PathVariable long postId, @RequestParam(defaultValue = &quot;5&quot;) @Min(1) @Max(10) int maxDepth) {
+        List&lt;Comment&gt; comments = store.forPost(postId).orElseThrow(() -&gt; {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No post has this id.&quot;);
+            p.setTitle(&quot;Post not found&quot;);
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        });
+        return new CommentTree(postId, maxDepth, ThreadBuilder.build(comments, maxDepth));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/chaupal/threads/ThreadBuilder.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Groups comments by parent id, sorts siblings, nests up to <code>maxDepth</code>, and counts the rest with a loop.</dd><dt>Why</dt><dd>Each step has a cost that does not depend on how deep users go.</dd><dt>Without it</dt><dd>The trap.</dd></dl><ul><li>Replies whose parent is missing become top-level comments, so nothing is silently lost.</li><li><code>countBelow</code> keeps its own to-do list (<code>ArrayDeque</code>) instead of using the call stack.</li><li>Comments in a loop never have a top-level ancestor, so they are never visited and cannot hang the request.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Builds the reply tree from a flat list, in two passes and without unbounded recursion:
+ * 1. one pass over the list groups comments by parent id in a map (each lookup is O(1), no searching);
+ * 2. nodes are built from the top-level comments down, at most maxDepth levels; below that, replies are
+ *    only counted, with an explicit stack instead of recursion, so a 100,000-deep thread cannot overflow.
+ */
+final class ThreadBuilder {
+
+    /** Oldest first; two comments with the same time are ordered by id, so the order never changes between requests. */
+    static final Comparator&lt;Comment&gt; ORDER = Comparator.comparing(Comment::createdAt).thenComparingLong(Comment::id);
+
+    private ThreadBuilder() {
+    }
+
+    static List&lt;Node&gt; build(List&lt;Comment&gt; comments, int maxDepth) {
+        Set&lt;Long&gt; ids = new HashSet&lt;&gt;();
+        comments.forEach(c -&gt; ids.add(c.id()));
+        Map&lt;Long, List&lt;Comment&gt;&gt; children = new HashMap&lt;&gt;();
+        List&lt;Comment&gt; roots = new ArrayList&lt;&gt;();
+        for (Comment c : comments) {
+            // A reply whose parent is missing (deleted, or never existed) is shown at the top, not lost.
+            if (c.parentId() == null || !ids.contains(c.parentId())) {
+                roots.add(c);
+            } else {
+                children.computeIfAbsent(c.parentId(), k -&gt; new ArrayList&lt;&gt;()).add(c);
+            }
+        }
+        // Comments in a loop (A replies to B, B replies to A) have no top-level ancestor, so they are never reached.
+        roots.sort(ORDER);
+        children.values().forEach(list -&gt; list.sort(ORDER));
+        return roots.stream().map(r -&gt; node(r, 1, maxDepth, children)).toList();
+    }
+
+    /** Recursion here is safe: it goes at most maxDepth levels deep, and maxDepth is capped at 10. */
+    private static Node node(Comment c, int depth, int maxDepth, Map&lt;Long, List&lt;Comment&gt;&gt; children) {
+        List&lt;Comment&gt; replies = children.getOrDefault(c.id(), List.of());
+        if (depth == maxDepth) {
+            return new Node(c.id(), c.author(), c.text(), c.createdAt(), List.of(), countBelow(c.id(), children));
+        }
+        List&lt;Node&gt; nested = replies.stream().map(r -&gt; node(r, depth + 1, maxDepth, children)).toList();
+        return new Node(c.id(), c.author(), c.text(), c.createdAt(), nested, 0);
+    }
+
+    /** All replies below a comment, at any depth, counted with a stack instead of recursion. */
+    static int countBelow(long id, Map&lt;Long, List&lt;Comment&gt;&gt; children) {
+        int count = 0;
+        Deque&lt;Long&gt; todo = new ArrayDeque&lt;&gt;(List.of(id));
+        while (!todo.isEmpty()) {
+            for (Comment reply : children.getOrDefault(todo.pop(), List.of())) {
+                count++;
+                todo.push(reply.id());
+            }
+        }
+        return count;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/chaupal/threads/CommentStore.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The three posts. Post 1 is stored newest first on purpose; post 2's chain is generated.</dd><dt>Why</dt><dd>Realistic and hostile data in one place.</dd><dt>Without it</dt><dd>Nothing to show.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * Comments per post, flat, in memory. Post 1 is a normal discussion, stored newest first on purpose: the builder
+ * must sort, not trust storage order. Post 2 is one reply chain 100,000 deep (a bot replying to itself), the
+ * thread that crashed the old code. Post 3 has no comments.
+ */
+@Component
+class CommentStore {
+
+    static final int DEEP_THREAD = 100_000;
+    private static final Instant T0 = Instant.parse(&quot;2026-10-12T04:30:00Z&quot;);
+    private final Map&lt;Long, List&lt;Comment&gt;&gt; byPost;
+
+    CommentStore() {
+        List&lt;Comment&gt; chai = List.of(
+                c(9, 6L, &quot;asha&quot;, &quot;Not yet!&quot;, 9),
+                c(8, 5L, &quot;tara&quot;, &quot;Closed on Mondays though.&quot;, 8),
+                c(7, 3L, &quot;kabir&quot;, &quot;And cheaper.&quot;, 7),
+                c(6, null, &quot;meera&quot;, &quot;Anyone tried the new place in Baner?&quot;, 6),
+                c(5, 4L, &quot;ravi&quot;, &quot;Yes, opposite the gate.&quot;, 5),
+                c(4, 2L, &quot;asha&quot;, &quot;The one near the college?&quot;, 4),
+                c(3, 1L, &quot;kabir&quot;, &quot;Yewale is better.&quot;, 2),
+                c(2, 1L, &quot;ravi&quot;, &quot;Amruttulya, every time.&quot;, 2),
+                c(1, null, &quot;asha&quot;, &quot;Best cutting chai near FC Road?&quot;, 0));
+        List&lt;Comment&gt; chain = new ArrayList&lt;&gt;(DEEP_THREAD);
+        for (int i = 0; i &lt; DEEP_THREAD; i++) {
+            long id = 200_001L + i;
+            chain.add(new Comment(id, 2, i == 0 ? null : id - 1, &quot;echo-bot&quot;, &quot;Reply &quot; + i, T0.plusSeconds(i)));
+        }
+        byPost = Map.of(1L, chai, 2L, List.copyOf(chain), 3L, List.of());
+    }
+
+    private static Comment c(long id, Long parentId, String author, String text, int minutes) {
+        return new Comment(id, 1, parentId, author, text, T0.plusSeconds(60L * minutes));
+    }
+
+    Optional&lt;List&lt;Comment&gt;&gt; forPost(long postId) {
+        return Optional.ofNullable(byPost.get(postId));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/chaupal/threads/Comment.java</p><div class="notes"><p>A stored comment, with <code>parentId</code> (null at the top).</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import java.time.Instant;
+
+/** A comment as it is stored: flat, with the id of the comment it replies to (null for a top-level comment). */
+record Comment(long id, long postId, Long parentId, String author, String text, Instant createdAt) {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/chaupal/threads/Node.java</p><div class="notes"><p>A comment in the tree, with <code>replies</code> and <code>moreReplies</code>.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import java.time.Instant;
+import java.util.List;
+
+/**
+ * One comment in the tree, with its replies nested inside. At the depth limit, replies is empty and
+ * moreReplies says how many are hidden below, so the app can show &quot;Continue this thread (n)&quot;.
+ */
+public record Node(long id, String author, String text, Instant createdAt, List&lt;Node&gt; replies, int moreReplies) {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/chaupal/threads/ApiErrors.java</p><div class="notes"><p>Adds an <code>errors</code> map to parameter validation failures (as in station 002).</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+
+import java.util.Map;
+import java.util.TreeMap;
+
+/**
+ * Spring already turns bad parameters into RFC 9457 problem bodies (the base class). We add an &quot;errors&quot; map,
+ * parameter -&gt; message, so the app can say which parameter is wrong.
+ */
+@RestControllerAdvice
+class ApiErrors extends ResponseEntityExceptionHandler {
+
+    @Override
+    protected ResponseEntity&lt;Object&gt; handleHandlerMethodValidationException(
+            HandlerMethodValidationException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        Map&lt;String, String&gt; errors = new TreeMap&lt;&gt;();
+        ex.getParameterValidationResults().forEach(r -&gt; r.getResolvableErrors()
+                .forEach(e -&gt; errors.putIfAbsent(r.getMethodParameter().getParameterName(), e.getDefaultMessage())));
+        ex.getBody().setDetail(&quot;The request parameters are invalid.&quot;);
+        ex.getBody().setProperty(&quot;errors&quot;, errors);
+        return handleExceptionInternal(ex, null, headers, status, request);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/chaupal/threads/ThreadsApplication.java</p><div class="notes"><p>Standard Spring Boot entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class ThreadsApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(ThreadsApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>CommentTreeContractTest</code> (6)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>UnboundedRecursionTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>This station</td><td>The builder on broken, deep and wide data</td><td><code>ThreadBuilderTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.threads.UnboundedRecursionTrapTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.threads.ThreadBuilderTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.threads.CommentTreeContractTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">UnboundedRecursionTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">CommentTreeContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">ThreadBuilderTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/chaupal/threads/UnboundedRecursionTrapTest.java</p><div class="notes"><p>Written first: the naive builder overflows on post 2; the endpoint answers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * The first test written for this station: it reproduces the crash before the fix.
+ * Post 2 is one reply chain, 100,000 comments deep.
+ */
+class UnboundedRecursionTrapTest extends ApiTest {
+
+    @Autowired
+    CommentStore store;
+
+    /** The &quot;before&quot; code: nest every reply inside its parent, as deep as the data goes. Kept only in tests. */
+    static Node naive(Comment c, Map&lt;Long, List&lt;Comment&gt;&gt; children) {
+        List&lt;Node&gt; replies = children.getOrDefault(c.id(), List.of()).stream().map(r -&gt; naive(r, children)).toList();
+        return new Node(c.id(), c.author(), c.text(), c.createdAt(), replies, 0);
+    }
+
+    @Test
+    void recursionWithoutALimitOverflowsTheStackOnADeepThread() {
+        List&lt;Comment&gt; chain = store.forPost(2).orElseThrow();
+        Map&lt;Long, List&lt;Comment&gt;&gt; children = chain.stream().filter(c -&gt; c.parentId() != null)
+                .collect(Collectors.groupingBy(Comment::parentId));
+        Comment root = chain.getFirst();
+        assertThatThrownBy(() -&gt; naive(root, children)).isInstanceOf(StackOverflowError.class); // a 500 for every reader
+    }
+
+    @Test
+    void theRealEndpointStopsAtTheDepthLimitAndCountsWhatIsBelow() throws Exception {
+        mvc.perform(get(&quot;/posts/2/comment-tree&quot;).param(&quot;maxDepth&quot;, &quot;3&quot;))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.comments[0].text&quot;).value(&quot;Reply 0&quot;))
+                .andExpect(jsonPath(&quot;$.comments[0].replies[0].replies[0].text&quot;).value(&quot;Reply 2&quot;))
+                .andExpect(jsonPath(&quot;$.comments[0].replies[0].replies[0].replies&quot;).isEmpty())
+                .andExpect(jsonPath(&quot;$.comments[0].replies[0].replies[0].moreReplies&quot;).value(99_997));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/chaupal/threads/CommentTreeContractTest.java</p><div class="notes"><p>Shape, order, depth limits and every refusal.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP contract: the tree&#x27;s shape and order, the depth limit, and every way a request can be refused. */
+class CommentTreeContractTest extends ApiTest {
+
+    @Test
+    void repliesAreNestedUnderTheCommentTheyAnswerOldestFirst() throws Exception {
+        mvc.perform(get(&quot;/posts/1/comment-tree&quot;))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.postId&quot;).value(1))
+                .andExpect(jsonPath(&quot;$.maxDepth&quot;).value(5))
+                .andExpect(jsonPath(&quot;$.comments[*].id&quot;, contains(1, 6)))
+                .andExpect(jsonPath(&quot;$.comments[0].replies[*].id&quot;, contains(2, 3)))       // same minute: ordered by id
+                .andExpect(jsonPath(&quot;$.comments[0].replies[0].replies[0].id&quot;).value(4))
+                .andExpect(jsonPath(&quot;$.comments[0].replies[0].replies[0].replies[0].replies[0].text&quot;).value(&quot;Closed on Mondays though.&quot;))
+                .andExpect(jsonPath(&quot;$.comments[1].replies[0].text&quot;).value(&quot;Not yet!&quot;))
+                .andExpect(jsonPath(&quot;$.comments[0].moreReplies&quot;).value(0));
+    }
+
+    @Test
+    void atTheDepthLimitRepliesAreCountedNotShown() throws Exception {
+        mvc.perform(get(&quot;/posts/1/comment-tree&quot;).param(&quot;maxDepth&quot;, &quot;2&quot;))
+                .andExpect(jsonPath(&quot;$.comments[0].replies[0].id&quot;).value(2))
+                .andExpect(jsonPath(&quot;$.comments[0].replies[0].replies&quot;).isEmpty())
+                .andExpect(jsonPath(&quot;$.comments[0].replies[0].moreReplies&quot;).value(3))  // 4, 5 and 8 below comment 2
+                .andExpect(jsonPath(&quot;$.comments[0].replies[1].moreReplies&quot;).value(1));
+    }
+
+    @Test
+    void maxDepthOneShowsOnlyTopLevelComments() throws Exception {
+        mvc.perform(get(&quot;/posts/1/comment-tree&quot;).param(&quot;maxDepth&quot;, &quot;1&quot;))
+                .andExpect(jsonPath(&quot;$.comments[0].replies&quot;).isEmpty())
+                .andExpect(jsonPath(&quot;$.comments[0].moreReplies&quot;).value(6))
+                .andExpect(jsonPath(&quot;$.comments[1].moreReplies&quot;).value(1));
+    }
+
+    @Test
+    void aPostWithNoCommentsIsAnEmptyTree() throws Exception {
+        mvc.perform(get(&quot;/posts/3/comment-tree&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.comments&quot;).isEmpty());
+    }
+
+    @Test
+    void maxDepthOutsideOneToTenIs400() throws Exception {
+        for (String bad : new String[]{&quot;0&quot;, &quot;11&quot;, &quot;100000&quot;, &quot;-1&quot;}) {
+            mvc.perform(get(&quot;/posts/1/comment-tree&quot;).param(&quot;maxDepth&quot;, bad))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                    .andExpect(jsonPath(&quot;$.errors.maxDepth&quot;).exists());
+        }
+        mvc.perform(get(&quot;/posts/1/comment-tree&quot;).param(&quot;maxDepth&quot;, &quot;deep&quot;)).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void anUnknownPostIs404() throws Exception {
+        mvc.perform(get(&quot;/posts/99/comment-tree&quot;)).andExpect(status().isNotFound())
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Post not found&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/chaupal/threads/ThreadBuilderTest.java</p><div class="notes"><p>Missing parents, loops (with a 2-second timeout), ties, 100,000 deep, 5,000 wide.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
+
+/** The builder on its own: broken data, ordering, and very deep or very wide threads. */
+class ThreadBuilderTest {
+
+    private static final Instant T = Instant.parse(&quot;2026-10-12T04:30:00Z&quot;);
+
+    private static Comment c(long id, Long parent, int second) {
+        return new Comment(id, 1, parent, &quot;u&quot; + id, &quot;text &quot; + id, T.plusSeconds(second));
+    }
+
+    @Test
+    void aReplyWhoseParentIsGoneIsShownAtTheTop() {
+        var tree = ThreadBuilder.build(List.of(c(1, null, 0), c(2, 99L, 1)), 5);
+        assertThat(tree).extracting(Node::id).containsExactly(1L, 2L);
+    }
+
+    @Test
+    void commentsInALoopDoNotHangTheBuilder() {
+        // Corrupt data: 2 replies to 3, 3 replies to 2, 4 replies to itself. None has a top-level ancestor.
+        var comments = List.of(c(1, null, 0), c(2, 3L, 1), c(3, 2L, 2), c(4, 4L, 3));
+        var tree = assertTimeoutPreemptively(Duration.ofSeconds(2), () -&gt; ThreadBuilder.build(comments, 10));
+        assertThat(tree).extracting(Node::id).containsExactly(1L);
+    }
+
+    @Test
+    void siblingsAreOldestFirstThenById() {
+        var tree = ThreadBuilder.build(List.of(c(5, null, 9), c(3, null, 1), c(4, null, 1), c(2, null, 5)), 1);
+        assertThat(tree).extracting(Node::id).containsExactly(3L, 4L, 2L, 5L);
+    }
+
+    @Test
+    void countingBelowAHundredThousandLevelsUsesNoRecursion() {
+        var chain = new java.util.ArrayList&lt;Comment&gt;();
+        for (int i = 0; i &lt; 100_000; i++) {
+            chain.add(c(i + 1, i == 0 ? null : (long) i, i));
+        }
+        var tree = ThreadBuilder.build(chain, 1);
+        assertThat(tree.getFirst().moreReplies()).isEqualTo(99_999);
+    }
+
+    @Test
+    void aWideThreadKeepsEveryReply() {
+        var wide = new java.util.ArrayList&lt;Comment&gt;(List.of(c(1, null, 0)));
+        for (int i = 2; i &lt;= 5_000; i++) {
+            wide.add(c(i, 1L, i));
+        }
+        assertThat(ThreadBuilder.build(wide, 2).getFirst().replies()).hasSize(4_999);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/chaupal/threads/ApiTest.java</p><div class="notes"><p>Shared setup: the whole app through MockMvc.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
+
+/** Shared setup: the whole app, called through MockMvc. No server port and no network: requests go straight to Spring MVC. */
+@SpringBootTest
+@AutoConfigureMockMvc
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/chaupal/threads/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=TotalRepliesChallengeTest</code></li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 13 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 18 tests pass (13 station tests and 5 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 25 minutes</p><h2>"12 replies" on every comment</h2><p>Add <code>totalReplies</code> to every node: all comments below it at any depth, shown or not. It must work on the 100,000-deep thread.</p><p><b>Done when:</b> both tests in <code>TotalRepliesChallengeTest</code> pass, and the station's tests still pass.</p><details class="qa"><summary>Hints</summary><ul><li><code>countBelow</code> already counts without recursion; call it for every node you build.</li><li>Adding a field to the <code>Node</code> record breaks <code>new Node(...)</code> calls in the tests: keep a six-argument constructor.</li><li>Notice the cost: a node and its parent count the same comments again. Fine for 10 levels; think about it for larger trees.</li></ul></details><p class="path">challenge/TotalRepliesChallengeTest.java</p><pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+
+/** Challenge 1: every comment shows how many replies it has in total, at any depth (&quot;12 replies&quot;). */
+class TotalRepliesChallengeTest extends ApiTest {
+
+    @Test
+    void everyNodeCountsAllItsReplies() throws Exception {
+        mvc.perform(get(&quot;/posts/1/comment-tree&quot;))
+                .andExpect(jsonPath(&quot;$.comments[0].totalReplies&quot;).value(6))
+                .andExpect(jsonPath(&quot;$.comments[0].replies[0].totalReplies&quot;).value(3))
+                .andExpect(jsonPath(&quot;$.comments[0].replies[1].totalReplies&quot;).value(1))
+                .andExpect(jsonPath(&quot;$.comments[1].totalReplies&quot;).value(1))
+                .andExpect(jsonPath(&quot;$.comments[1].replies[0].totalReplies&quot;).value(0));
+    }
+
+    @Test
+    void theDeepThreadIsCountedWithoutCrashing() throws Exception {
+        mvc.perform(get(&quot;/posts/2/comment-tree&quot;).param(&quot;maxDepth&quot;, &quot;2&quot;))
+                .andExpect(jsonPath(&quot;$.comments[0].totalReplies&quot;).value(99_999))
+                .andExpect(jsonPath(&quot;$.comments[0].replies[0].totalReplies&quot;).value(99_998));
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/Node.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import java.time.Instant;
+import java.util.List;
+
+/**
+ * Challenge 1 adds totalReplies: every reply below this comment, at any depth, shown or not.
+ * The six-argument constructor keeps older code (and the station&#x27;s tests) compiling.
+ */
+public record Node(long id, String author, String text, Instant createdAt, List&lt;Node&gt; replies, int moreReplies, int totalReplies) {
+
+    public Node(long id, String author, String text, Instant createdAt, List&lt;Node&gt; replies, int moreReplies) {
+        this(id, author, text, createdAt, replies, moreReplies, 0);
+    }
+}</code></pre></div><p class="path">challenge/solution/ThreadBuilder.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Builds the reply tree from a flat list, in two passes and without unbounded recursion:
+ * 1. one pass over the list groups comments by parent id in a map (each lookup is O(1), no searching);
+ * 2. nodes are built from the top-level comments down, at most maxDepth levels; below that, replies are
+ *    only counted, with an explicit stack instead of recursion, so a 100,000-deep thread cannot overflow.
+ */
+final class ThreadBuilder {
+
+    /** Oldest first; two comments with the same time are ordered by id, so the order never changes between requests. */
+    static final Comparator&lt;Comment&gt; ORDER = Comparator.comparing(Comment::createdAt).thenComparingLong(Comment::id);
+
+    private ThreadBuilder() {
+    }
+
+    static List&lt;Node&gt; build(List&lt;Comment&gt; comments, int maxDepth) {
+        return build(comments, maxDepth, null);
+    }
+
+    /** Challenge 2: with a rootId, the tree starts at that comment. Empty if no comment in the list has that id. */
+    static List&lt;Node&gt; build(List&lt;Comment&gt; comments, int maxDepth, Long rootId) {
+        Set&lt;Long&gt; ids = new HashSet&lt;&gt;();
+        comments.forEach(c -&gt; ids.add(c.id()));
+        Map&lt;Long, List&lt;Comment&gt;&gt; children = new HashMap&lt;&gt;();
+        List&lt;Comment&gt; roots = new ArrayList&lt;&gt;();
+        for (Comment c : comments) {
+            // A reply whose parent is missing (deleted, or never existed) is shown at the top, not lost.
+            if (c.parentId() == null || !ids.contains(c.parentId())) {
+                roots.add(c);
+            } else {
+                children.computeIfAbsent(c.parentId(), k -&gt; new ArrayList&lt;&gt;()).add(c);
+            }
+        }
+        // Comments in a loop (A replies to B, B replies to A) have no top-level ancestor, so they are never reached.
+        roots.sort(ORDER);
+        children.values().forEach(list -&gt; list.sort(ORDER));
+        if (rootId != null) {
+            return comments.stream().filter(c -&gt; c.id() == rootId).map(c -&gt; node(c, 1, maxDepth, children)).toList();
+        }
+        return roots.stream().map(r -&gt; node(r, 1, maxDepth, children)).toList();
+    }
+
+    /** Recursion here is safe: it goes at most maxDepth levels deep, and maxDepth is capped at 10. */
+    private static Node node(Comment c, int depth, int maxDepth, Map&lt;Long, List&lt;Comment&gt;&gt; children) {
+        List&lt;Comment&gt; replies = children.getOrDefault(c.id(), List.of());
+        // Challenge 1. countBelow per shown node: at most maxDepth levels of nodes, each counted without recursion.
+        // shortcut: recounts shared subtrees (O(shown nodes x thread size)); precompute subtree sizes once if threads get huge.
+        int total = countBelow(c.id(), children);
+        if (depth == maxDepth) {
+            return new Node(c.id(), c.author(), c.text(), c.createdAt(), List.of(), total, total);
+        }
+        List&lt;Node&gt; nested = replies.stream().map(r -&gt; node(r, depth + 1, maxDepth, children)).toList();
+        return new Node(c.id(), c.author(), c.text(), c.createdAt(), nested, 0, total);
+    }
+
+    /** All replies below a comment, at any depth, counted with a stack instead of recursion. */
+    static int countBelow(long id, Map&lt;Long, List&lt;Comment&gt;&gt; children) {
+        int count = 0;
+        Deque&lt;Long&gt; todo = new ArrayDeque&lt;&gt;(List.of(id));
+        while (!todo.isEmpty()) {
+            for (Comment reply : children.getOrDefault(todo.pop(), List.of())) {
+                count++;
+                todo.push(reply.id());
+            }
+        }
+        return count;
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 30 minutes</p><h2>Continue this thread</h2><p>Behind "moreReplies" the app shows "Continue this thread". Add an optional <code>rootId</code>: the tree then starts at that comment. An unknown comment, or one from another post, is <code>404</code>.</p><p><b>Done when:</b> all three tests in <code>ContinueThreadChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>The grouping by parent does not change; only the starting point does.</li><li>Look the root up in this post's comments only, or one post could read another's thread.</li></ul></details><p class="path">challenge/ContinueThreadChallengeTest.java</p><pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Challenge 2: &quot;Continue this thread&quot;: rootId starts the tree at one comment, so the app can open what was cut off. */
+class ContinueThreadChallengeTest extends ApiTest {
+
+    @Test
+    void theTreeStartsAtTheGivenComment() throws Exception {
+        mvc.perform(get(&quot;/posts/2/comment-tree&quot;).param(&quot;rootId&quot;, &quot;200006&quot;).param(&quot;maxDepth&quot;, &quot;2&quot;))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.comments[0].id&quot;).value(200006))
+                .andExpect(jsonPath(&quot;$.comments[0].replies[0].id&quot;).value(200007))
+                .andExpect(jsonPath(&quot;$.comments[0].replies[0].moreReplies&quot;).value(99_993));
+    }
+
+    @Test
+    void aSmallSubtreeOnPostOne() throws Exception {
+        mvc.perform(get(&quot;/posts/1/comment-tree&quot;).param(&quot;rootId&quot;, &quot;2&quot;))
+                .andExpect(jsonPath(&quot;$.comments[0].replies[0].replies[0].replies[0].text&quot;).value(&quot;Closed on Mondays though.&quot;));
+    }
+
+    @Test
+    void anUnknownCommentOrOneFromAnotherPostIs404() throws Exception {
+        mvc.perform(get(&quot;/posts/1/comment-tree&quot;).param(&quot;rootId&quot;, &quot;12345&quot;)).andExpect(status().isNotFound());
+        mvc.perform(get(&quot;/posts/1/comment-tree&quot;).param(&quot;rootId&quot;, &quot;200006&quot;)).andExpect(status().isNotFound());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/ThreadBuilder.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Builds the reply tree from a flat list, in two passes and without unbounded recursion:
+ * 1. one pass over the list groups comments by parent id in a map (each lookup is O(1), no searching);
+ * 2. nodes are built from the top-level comments down, at most maxDepth levels; below that, replies are
+ *    only counted, with an explicit stack instead of recursion, so a 100,000-deep thread cannot overflow.
+ */
+final class ThreadBuilder {
+
+    /** Oldest first; two comments with the same time are ordered by id, so the order never changes between requests. */
+    static final Comparator&lt;Comment&gt; ORDER = Comparator.comparing(Comment::createdAt).thenComparingLong(Comment::id);
+
+    private ThreadBuilder() {
+    }
+
+    static List&lt;Node&gt; build(List&lt;Comment&gt; comments, int maxDepth) {
+        return build(comments, maxDepth, null);
+    }
+
+    /** Challenge 2: with a rootId, the tree starts at that comment. Empty if no comment in the list has that id. */
+    static List&lt;Node&gt; build(List&lt;Comment&gt; comments, int maxDepth, Long rootId) {
+        Set&lt;Long&gt; ids = new HashSet&lt;&gt;();
+        comments.forEach(c -&gt; ids.add(c.id()));
+        Map&lt;Long, List&lt;Comment&gt;&gt; children = new HashMap&lt;&gt;();
+        List&lt;Comment&gt; roots = new ArrayList&lt;&gt;();
+        for (Comment c : comments) {
+            // A reply whose parent is missing (deleted, or never existed) is shown at the top, not lost.
+            if (c.parentId() == null || !ids.contains(c.parentId())) {
+                roots.add(c);
+            } else {
+                children.computeIfAbsent(c.parentId(), k -&gt; new ArrayList&lt;&gt;()).add(c);
+            }
+        }
+        // Comments in a loop (A replies to B, B replies to A) have no top-level ancestor, so they are never reached.
+        roots.sort(ORDER);
+        children.values().forEach(list -&gt; list.sort(ORDER));
+        if (rootId != null) {
+            return comments.stream().filter(c -&gt; c.id() == rootId).map(c -&gt; node(c, 1, maxDepth, children)).toList();
+        }
+        return roots.stream().map(r -&gt; node(r, 1, maxDepth, children)).toList();
+    }
+
+    /** Recursion here is safe: it goes at most maxDepth levels deep, and maxDepth is capped at 10. */
+    private static Node node(Comment c, int depth, int maxDepth, Map&lt;Long, List&lt;Comment&gt;&gt; children) {
+        List&lt;Comment&gt; replies = children.getOrDefault(c.id(), List.of());
+        // Challenge 1. countBelow per shown node: at most maxDepth levels of nodes, each counted without recursion.
+        // shortcut: recounts shared subtrees (O(shown nodes x thread size)); precompute subtree sizes once if threads get huge.
+        int total = countBelow(c.id(), children);
+        if (depth == maxDepth) {
+            return new Node(c.id(), c.author(), c.text(), c.createdAt(), List.of(), total, total);
+        }
+        List&lt;Node&gt; nested = replies.stream().map(r -&gt; node(r, depth + 1, maxDepth, children)).toList();
+        return new Node(c.id(), c.author(), c.text(), c.createdAt(), nested, 0, total);
+    }
+
+    /** All replies below a comment, at any depth, counted with a stack instead of recursion. */
+    static int countBelow(long id, Map&lt;Long, List&lt;Comment&gt;&gt; children) {
+        int count = 0;
+        Deque&lt;Long&gt; todo = new ArrayDeque&lt;&gt;(List.of(id));
+        while (!todo.isEmpty()) {
+            for (Comment reply : children.getOrDefault(todo.pop(), List.of())) {
+                count++;
+                todo.push(reply.id());
+            }
+        }
+        return count;
+    }
+}</code></pre></div><p class="path">challenge/solution/CommentTreeController.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.threads;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+class CommentTreeController {
+
+    record CommentTree(long postId, int maxDepth, List&lt;Node&gt; comments) {
+    }
+
+    private final CommentStore store;
+
+    CommentTreeController(CommentStore store) {
+        this.store = store;
+    }
+
+    /** maxDepth is capped at 10: deep enough for any conversation, shallow enough for any phone and any JSON parser. */
+    @GetMapping(&quot;/posts/{postId}/comment-tree&quot;)
+    CommentTree tree(@PathVariable long postId, @RequestParam(defaultValue = &quot;5&quot;) @Min(1) @Max(10) int maxDepth,
+                     @RequestParam(required = false) Long rootId) {
+        List&lt;Comment&gt; comments = store.forPost(postId).orElseThrow(() -&gt; {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No post has this id.&quot;);
+            p.setTitle(&quot;Post not found&quot;);
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        });
+        List&lt;Node&gt; tree = ThreadBuilder.build(comments, maxDepth, rootId);
+        if (rootId != null &amp;&amp; tree.isEmpty()) { // challenge 2: not a comment on this post
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No comment with this id on this post.&quot;);
+            p.setTitle(&quot;Comment not found&quot;);
+            throw new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        }
+        return new CommentTree(postId, maxDepth, tree);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>A post with 2 lakh comments</h2>
+<p>A viral post has 2 lakh comments. Loading all of them for every reader to build a 5-level tree is wasteful. Which comments would you load first, and how would you page through top-level comments? How could a database help (for example, storing each comment's depth and its top-level ancestor)? What would "continue this thread" load?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design (none in this station)</li></ul><p class="rule">Short at Foundations: the choices that matter here.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: the naive recursive builder overflows on 100,000 levels.</li>
+<li>Group by parent id in one pass; treat missing parents as top level.</li>
+<li>Sort siblings with a comparator and a tie-breaker.</li>
+<li>Nest with recursion capped by <code>maxDepth</code>; count below the cap with a loop.</li>
+<li>Test broken data: missing parents and loops.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Map by parent id, capped nesting, iterative counting</td><td>One pass to group; work below the cap is a loop.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Recursion as deep as the data</td><td><code>StackOverflowError</code> on deep threads (the trap).</td><td><span class="pill bad">Wrong</span></td></tr><tr><td>For each comment, search the list for its replies</td><td>Correct but O(n²): 100,000 comments means 10 billion comparisons.</td><td><span class="pill bad">Too slow</span></td></tr><tr><td>Increase the thread stack size (<code>-Xss</code>)</td><td>Moves the crash further away; a deeper thread still crashes, and every thread pays the memory.</td><td><span class="pill bad">Not a fix</span></td></tr><tr><td>Return the flat list; let the app build the tree</td><td>Moves the same problem to every client, on weaker devices.</td><td><span class="pill warn">Possible</span></td></tr><tr><td>Recursive SQL (<code>WITH RECURSIVE</code>) with a depth column</td><td>The database does the walk and can stop at a depth; the right tool once comments are in a database.</td><td><span class="pill warn">Later stations</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>None in this station. A table would have <code>id</code>, <code>post_id</code>, <code>parent_id</code> (nullable, foreign key to <code>id</code>), <code>created_at</code>, and an index on <code>(post_id, parent_id, created_at)</code> so each group of siblings comes back already sorted.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Reliability</dt><dd>One hostile thread must not make a post unreadable. Every loop or recursion that follows user data needs a limit, and a test at that limit.</dd>
+<dt>Performance</dt><dd>Grouping is one pass; nesting is bounded. Very wide threads (thousands of replies to one comment) are the next limit: page them.</dd>
+<dt>Security</dt><dd>A depth or size parameter is an attack surface: the cap of 10 is enforced by the server, whatever the client asks.</dd>
+<dt>Data quality</dt><dd>Missing parents and loops are real in old data. Show what you can, never hang, and log loops for someone to repair.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>How do you build a tree from a flat list of (id, parentId)?</summary><p>One pass to group children by parentId in a HashMap; roots are those with no parent (or a missing one). Then walk from the roots, looking up each node&#x27;s children in the map. O(n) to group, instead of O(n²) searching.</p></details><details class="qa"><summary>Why did the recursive version crash?</summary><p>Each recursive call uses a stack frame. The JVM thread stack is limited (often around 1 MB), so tens of thousands of nested calls exceed it and throw StackOverflowError. The depth came from user data, so it had no limit.</p></details><details class="qa"><summary>How do you turn recursion into a loop?</summary><p>Keep your own stack (an ArrayDeque) of work still to do. Pop one item, process it, push its children. The depth now lives in heap memory, which is much larger, instead of the call stack.</p></details><details class="qa"><summary>Why still use recursion for nesting?</summary><p>Because its depth is capped by maxDepth (at most 10), not by the data. Bounded recursion is fine and easier to read.</p></details><details class="qa"><summary>What can go wrong with real comment data?</summary><p>Parents deleted (orphans), loops from bad migrations or bugs, and very wide or deep threads. Decide what to show for each and test it.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 13 tests pass.</td><td>You can say which tests fail with a recursive <code>countBelow</code>.</td></tr><tr><td>Design</td><td>Grouping by map; capped nesting.</td><td>You can explain why <code>-Xss</code> is not a fix.</td></tr><tr><td>Tests</td><td>A test at 100,000 levels.</td><td>You added a test for another kind of broken data.</td></tr><tr><td>Explanation</td><td>You can turn a small recursion into a loop on paper.</td><td>You can sketch the SQL version.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This Foundations station has no flawed version to review. Use this checklist on any code that walks user data:</p>
+<ul class="rules">
+<li>Does any recursion or loop depth depend on user data? What caps it?</li>
+<li>Is there a nested loop that searches a list for every item?</li>
+<li>What happens with a missing parent, or a loop?</li>
+<li>Is there a test at the limit, not just below it?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
