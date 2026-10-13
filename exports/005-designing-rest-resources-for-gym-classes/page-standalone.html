@@ -1,0 +1,1644 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 005 · Designing REST resources for gym classes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 005</span>
+    <h1>Designing REST resources for gym classes</h1>
+    <p class="scenario">The class-booking API has verbs in URLs (/bookClass, /cancelBooking) and returns 200 for everything.</p>
+    <p class="sim"><b>Simulation</b><span>Four classes and three members are fixed in the code; bookings live in memory and are lost on restart. No login: the member id is sent in the body.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Fitness</li>
+      <li><b>Types</b>None</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>004 Event registration form</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring MVC · Bean Validation · MockMvc</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Rohan books a 6:30 yoga class</strong><p>The FitNest app calls <code>/bookClass</code>. The answer is <code>200</code>, with <code>{"success": false}</code>.</p></li><li><strong>The app shows "Something went wrong"</strong><p>Was the class full? Had he already booked it? Did the class exist? The answer was the same in all three cases, so the app could only guess.</p></li><li><strong>The fix</strong><p>Name things, not actions: <code>POST /classes/1/bookings</code>. Answer each outcome with its own status: <code>201</code> booked, <code>409</code> full or already yours, <code>404</code> no such class.</p></li></ol>
+<p class="lesson">A status code is the first thing a client reads. When every answer is <code>200</code>, every client has to dig through the body and guess.</p>
+
+<h2>What are we building?</h2>
+<p>A small class-booking API designed around resources: list classes by date, book a class, cancel a booking, list a member's bookings. Every outcome has the status code that means it.</p>
+
+<h2>An everyday analogy</h2>
+<p>A library does not have a counter called "doBorrowBook". It has books (things), and you borrow, return or renew them (actions). When something fails, the librarian says why: "someone has it" is different from "we don't have that book". URLs are the things; HTTP methods are the actions; status codes are the librarian's reasons.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>See the timetable</strong>: <code>GET /classes?date=2026-10-19</code>. The date filters the collection, so it is a query parameter.</li>
+<li><strong>Book</strong>: <code>POST /classes/1/bookings</code> with your member id. A booking belongs to a class, so it is created under the class.</li>
+<li><strong>The answer says what happened</strong>: <code>201</code> with the new booking's address, or <code>409</code> (full, already booked), or <code>404</code> (no such class).</li>
+<li><strong>Cancel</strong>: <code>DELETE /bookings/{id}</code>. The booking has its own address now; the answer is <code>204</code>.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: the class is full. Why 409 and not 404 or 400?</summary><p>404 would mean the class does not exist, but it does. 400 would mean the request is malformed, but it is fine; the same request would have worked an hour ago. 409 says the request conflicts with the current state: the class is full right now.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No login.</strong> The member id is sent in the body, so anyone could book for anyone. Real APIs take the member from the signed-in user (security stations).</li>
+<li><strong>No database.</strong> Bookings live in memory.</li>
+<li><strong>No waitlist and no cancellation deadline.</strong> The deadline is a design task in Practice.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Resource</strong></td><td>A thing the API lets you work with, named by a noun.</td><td>A book in a library.</td><td>A class, a booking, a member's bookings.</td></tr><tr><td><strong>URL path</strong></td><td>The address of one resource or one collection.</td><td>Shelf 4, row 2.</td><td><code>/bookings/{id}</code></td></tr><tr><td><strong>HTTP method</strong></td><td>The action: read (<code>GET</code>), create (<code>POST</code>), remove (<code>DELETE</code>).</td><td>Borrow, return, renew: the same book, different actions.</td><td><code>DELETE /bookings/{id}</code> cancels.</td></tr><tr><td><strong>Nested resource</strong></td><td>A collection that only makes sense inside its parent.</td><td>The chapters of one book.</td><td><code>/classes/{id}/bookings</code>, <code>/members/{id}/bookings</code></td></tr><tr><td><strong>Query parameter</strong></td><td>A filter or option on a collection, after <code>?</code>.</td><td>"Only books by this author."</td><td><code>/classes?date=2026-10-19</code></td></tr><tr><td><strong>204 No Content</strong></td><td>"Done. Nothing to send back."</td><td>A nod instead of a letter.</td><td>A cancelled booking.</td></tr><tr><td><strong>409 Conflict</strong></td><td>"Your request clashes with how things are right now."</td><td>Trying to borrow a book someone else has.</td><td>The class is full, or you already booked it.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>FitNest</strong> (a fictional chain of gyms) has a class-booking API with URLs like <code>/bookClass</code>, <code>/cancelBooking</code> and <code>/getMemberBookings</code>, and it answers <code>200</code> to everything, with <code>{"success": false, "message": …}</code> on failure. The app team cannot show members why a booking failed, monitoring cannot count errors (every request "succeeded"), and each new feature adds another verb URL.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> a date, <b>when</b> the app asks for classes, <b>then</b> <code>200</code> with that day's classes in start-time order, each with spots left.</li>
+<li><b>Given</b> a class with space, <b>when</b> a member books, <b>then</b> <code>201</code> with <code>Location: /bookings/{id}</code>, and that URL returns the booking.</li>
+<li><b>Given</b> a full class, <b>then</b> <code>409</code> <em>Class is full</em>. <b>Given</b> the member already booked it, <b>then</b> <code>409</code> <em>Already booked</em>, naming the existing booking.</li>
+<li><b>Given</b> an unknown class, <b>then</b> <code>404</code>. <b>Given</b> an unknown or missing member id, <b>then</b> <code>400</code>.</li>
+<li><b>Given</b> a booking, <b>when</b> it is cancelled, <b>then</b> <code>204</code> with no body, the spot is free again, and the booking's URL returns <code>404</code>.</li>
+<li><b>Given</b> a member, <b>then</b> <code>GET /members/{id}/bookings</code> lists their bookings; an unknown member is <code>404</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>URLs are nouns. Methods are the verbs. No <code>/bookClass</code>, no <code>/cancelBooking</code>.</li>
+<li>Path parameters identify a resource; query parameters filter a collection.</li>
+<li>Status codes by meaning: <code>200</code> read, <code>201</code> created, <code>204</code> done with no body, <code>400</code> bad request, <code>404</code> no such resource, <code>409</code> conflicts with current state.</li>
+<li>Dates are ISO (<code>2026-10-19</code>); times are the gym's local time.</li>
+<li>Errors are RFC 9457 problems.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Name resources with nouns and choose between nested and top-level URLs.</li>
+<li>Choose a path or a query parameter.</li>
+<li>Pick 200, 201, 204, 400, 404 or 409 by what happened.</li>
+<li>Return <code>Location</code> on create and <code>204</code> on delete.</li>
+<li>Keep "what happened" (the outcome) separate from "which status code" (the HTTP answer).</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th><th>Success</th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/classes?date={yyyy-mm-dd}</code></td><td>That day's classes, with spots left</td><td><code>200</code></td></tr><tr><td><code>POST</code></td><td><code>/classes/{classId}/bookings</code></td><td>Book a class. Body: <code>{"memberId": 101}</code></td><td><code>201</code> + <code>Location</code></td></tr><tr><td><code>GET</code></td><td><code>/bookings/{id}</code></td><td>Read one booking</td><td><code>200</code></td></tr><tr><td><code>DELETE</code></td><td><code>/bookings/{id}</code></td><td>Cancel a booking</td><td><code>204</code></td></tr><tr><td><code>GET</code></td><td><code>/members/{memberId}/bookings</code></td><td>A member's bookings</td><td><code>200</code></td></tr></tbody></table></div>
+<h2>Why these URLs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Choice</th><th>Reason</th></tr></thead><tbody><tr><td>Bookings are <em>created</em> under <code>/classes/{id}/bookings</code></td><td>You cannot book without a class; the class is part of the address, not repeated in the body.</td></tr><tr><td>Bookings are <em>read and cancelled</em> at <code>/bookings/{id}</code></td><td>Once it exists, a booking has its own id. The app should not need the class id to cancel it.</td></tr><tr><td><code>/members/{id}/bookings</code></td><td>"My bookings" is the member's collection, so it is nested under the member.</td></tr><tr><td><code>date</code> is a query parameter</td><td>It filters the collection of classes; it does not name one thing.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>Meaning here</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>Here is what you asked to read.</td></tr><tr><td><span class="pill ok">201</span></td><td>Booking created; <code>Location</code> says where.</td></tr><tr><td><span class="pill ok">204</span></td><td>Booking cancelled; nothing to return.</td></tr><tr><td><span class="pill warn">400</span></td><td>The request is wrong: missing or malformed date, missing or unknown member id.</td></tr><tr><td><span class="pill warn">404</span></td><td>No such class, booking or member.</td></tr><tr><td><span class="pill warn">405</span></td><td>That method is not allowed on that URL.</td></tr><tr><td><span class="pill warn">409</span></td><td>Class is full, or this member already booked it.</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 13 Oct 2026. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: Monday's timetable</h3><p><b>Why:</b> a filtered read of a collection: <code>200</code>, ordered by start time, each class with its spots left.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /classes?date=2026-10-19 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 353
+
+[
+  {
+    &quot;id&quot;: 1,
+    &quot;name&quot;: &quot;Morning Yoga&quot;,
+    &quot;trainer&quot;: &quot;Kavya&quot;,
+    &quot;date&quot;: &quot;2026-10-19&quot;,
+    &quot;startTime&quot;: &quot;06:30:00&quot;,
+    &quot;capacity&quot;: 2,
+    &quot;spotsLeft&quot;: 2
+  },
+  {
+    &quot;id&quot;: 2,
+    &quot;name&quot;: &quot;HIIT Blast&quot;,
+    &quot;trainer&quot;: &quot;Arjun&quot;,
+    &quot;date&quot;: &quot;2026-10-19&quot;,
+    &quot;startTime&quot;: &quot;07:30:00&quot;,
+    &quot;capacity&quot;: 20,
+    &quot;spotsLeft&quot;: 20
+  },
+  {
+    &quot;id&quot;: 3,
+    &quot;name&quot;: &quot;Zumba&quot;,
+    &quot;trainer&quot;: &quot;Kavya&quot;,
+    &quot;date&quot;: &quot;2026-10-19&quot;,
+    &quot;startTime&quot;: &quot;18:00:00&quot;,
+    &quot;capacity&quot;: 15,
+    &quot;spotsLeft&quot;: 15
+  }
+]</code></pre></div></div></section><section class="example"><h3>Case 2: Rohan (member 101) books Morning Yoga</h3><p><b>Why:</b> a new booking, so <code>201</code>; <code>Location</code> is the booking's own address.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /classes/1/bookings HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;memberId&quot;: 101
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /bookings/77c720f8-40ca-41ef-af02-39aa3f4444b2
+Content-Type: application/json
+
+{
+  &quot;id&quot;: &quot;77c720f8-40ca-41ef-af02-39aa3f4444b2&quot;,
+  &quot;classId&quot;: 1,
+  &quot;memberId&quot;: 101,
+  &quot;bookedAt&quot;: &quot;2026-10-13T13:41:50.187Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: a third member tries the same class</h3><p><b>Why:</b> Morning Yoga has 2 spots and both are taken. The request is fine, the class is not: <code>409</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /classes/1/bookings HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;memberId&quot;: 103
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 409 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Every spot in this class is taken.&quot;,
+  &quot;instance&quot;: &quot;/classes/1/bookings&quot;,
+  &quot;status&quot;: 409,
+  &quot;title&quot;: &quot;Class is full&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: Rohan taps Book again</h3><p><b>Why:</b> also <code>409</code>, with a different title, and the detail names his existing booking so the app can show it.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /classes/1/bookings HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;memberId&quot;: 101
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 409 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;This member already has booking 77c720f8-40ca-41ef-af02-39aa3f4444b2 for this class.&quot;,
+  &quot;instance&quot;: &quot;/classes/1/bookings&quot;,
+  &quot;status&quot;: 409,
+  &quot;title&quot;: &quot;Already booked&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: an old timetable</h3><p><b>Why:</b> class 999 does not exist: <code>404</code>. The app should refresh its timetable.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /classes/999/bookings HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;memberId&quot;: 101
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No class has the id 999.&quot;,
+  &quot;instance&quot;: &quot;/classes/999/bookings&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Class not found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: Rohan's bookings</h3><p><b>Why:</b> the member's own collection, nested under the member.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /members/101/bookings HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 112
+
+[
+  {
+    &quot;id&quot;: &quot;77c720f8-40ca-41ef-af02-39aa3f4444b2&quot;,
+    &quot;classId&quot;: 1,
+    &quot;memberId&quot;: 101,
+    &quot;bookedAt&quot;: &quot;2026-10-13T13:41:50.187Z&quot;
+  }
+]</code></pre></div></div></section><section class="example"><h3>Case 7: Rohan cancels</h3><p><b>Why:</b> <code>204</code>: the booking is gone and there is nothing to return.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">DELETE /bookings/77c720f8-40ca-41ef-af02-39aa3f4444b2 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 204</code></pre></div></div></section><section class="example"><h3>Case 8: cancel the same booking again</h3><p><b>Why:</b> the booking no longer exists, so <code>404</code>. Whether a repeat delete should be <code>404</code> or <code>204</code> is station 008's topic.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">DELETE /bookings/77c720f8-40ca-41ef-af02-39aa3f4444b2 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No booking has the id 77c720f8-40ca-41ef-af02-39aa3f4444b2.&quot;,
+  &quot;instance&quot;: &quot;/bookings/77c720f8-40ca-41ef-af02-39aa3f4444b2&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Booking not found&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What the API does</th><th>Proved by</th></tr></thead><tbody><tr><td>Timetable for a date</td><td><code>200</code>, by start time, spots left</td><td><code>classesForADateAreListedByStartTimeWithSpotsLeft</code></td></tr><tr><td>A date with no classes</td><td><code>200</code>, empty list</td><td><code>aDateWithNoClassesIsAnEmptyList</code></td></tr><tr><td>Missing date, or <code>19-10-2026</code></td><td><code>400</code></td><td><code>theDateIsRequiredAndMustBeIso</code></td></tr><tr><td>Booking</td><td><code>201</code> + readable <code>Location</code></td><td><code>bookingIs201WithALocationThatCanBeRead</code></td></tr><tr><td>Full class</td><td><code>409</code> <em>Class is full</em></td><td><code>aFullClassIs409</code></td></tr><tr><td>Booking the same class twice</td><td><code>409</code> <em>Already booked</em>, names the booking</td><td><code>bookingTheSameClassTwiceIs409AndNamesTheExistingBooking</code></td></tr><tr><td>Unknown class</td><td><code>404</code></td><td><code>anUnknownClassIs404</code></td></tr><tr><td>Unknown or missing member</td><td><code>400</code></td><td><code>anUnknownOrMissingMemberIs400</code></td></tr><tr><td>Cancel</td><td><code>204</code>, empty body, spot freed</td><td><code>cancellingIs204WithNoBodyAndFreesTheSpot</code></td></tr><tr><td>Read or cancel a cancelled booking</td><td><code>404</code></td><td><code>aCancelledBookingIsGone</code></td></tr><tr><td>A member's bookings; none; unknown member</td><td><code>200</code> list; <code>200 []</code>; <code>404</code></td><td><code>aMembersBookingsAreANestedCollection</code></td></tr><tr><td>Old verb URLs; <code>PUT</code> on a booking</td><td><code>404</code>; <code>405</code></td><td><code>theOldVerbUrlsAndWrongMethodsAreNotPartOfTheApi</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Verbs in URLs and <code>200</code> for every outcome, so clients cannot tell what happened.</p>
+<p>It feels natural to name endpoints after actions, and <code>{"success": false}</code> looks informative. The first test shows the cost: a full class, a double booking and a class that does not exist all come back as the same <code>200</code> with the same message. The second test sends the same three requests to the resource API and gets <code>409</code>, <code>409</code> (with a different title) and <code>404</code>. Removing the capacity check was tried while building: 3 tests went red.</p>
+</div>
+<pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Import;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * The first test written for this station: it reproduces the problem before the fix.
+ * Three different things go wrong; the old API answers all three the same way.
+ */
+@Import(VerbsAndAlways200TrapTest.OldBookingController.class)
+class VerbsAndAlways200TrapTest extends ApiTest {
+
+    /** The &quot;before&quot; API: verbs in the URL, everything in query parameters, and 200 whatever happens. */
+    @RestController
+    static class OldBookingController {
+        private final ClassSchedule schedule;
+
+        OldBookingController(ClassSchedule schedule) {
+            this.schedule = schedule;
+        }
+
+        @PostMapping(&quot;/bookClass&quot;)
+        Map&lt;String, Object&gt; bookClass(@RequestParam long classId, @RequestParam long memberId) {
+            return switch (schedule.book(classId, memberId)) {
+                case BookingOutcome.Booked b -&gt; Map.of(&quot;success&quot;, true, &quot;message&quot;, &quot;Booked&quot;);
+                default -&gt; Map.of(&quot;success&quot;, false, &quot;message&quot;, &quot;Could not book&quot;);
+            };
+        }
+    }
+
+    @Test
+    void theOldApiAnswers200ForAFullClassAnUnknownClassAndADoubleBooking() throws Exception {
+        mvc.perform(post(&quot;/bookClass&quot;).param(&quot;classId&quot;, &quot;1&quot;).param(&quot;memberId&quot;, &quot;101&quot;)).andExpect(status().isOk());
+        mvc.perform(post(&quot;/bookClass&quot;).param(&quot;classId&quot;, &quot;1&quot;).param(&quot;memberId&quot;, &quot;102&quot;)).andExpect(status().isOk());
+
+        // Three different problems, one answer. The app cannot tell &quot;full&quot; (try another class)
+        // from &quot;already yours&quot; (nothing to do) from &quot;no such class&quot; (refresh the timetable).
+        for (String[] attempt : new String[][]{{&quot;1&quot;, &quot;103&quot;}, {&quot;1&quot;, &quot;101&quot;}, {&quot;999&quot;, &quot;101&quot;}}) {
+            mvc.perform(post(&quot;/bookClass&quot;).param(&quot;classId&quot;, attempt[0]).param(&quot;memberId&quot;, attempt[1]))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath(&quot;$.success&quot;).value(false))
+                    .andExpect(jsonPath(&quot;$.message&quot;).value(&quot;Could not book&quot;));
+        }
+    }
+
+    @Test
+    void theResourceApiGivesEachOutcomeItsOwnStatus() throws Exception {
+        book(1, 101).andExpect(status().isCreated());
+        book(1, 102).andExpect(status().isCreated());
+
+        book(1, 103).andExpect(status().isConflict()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Class is full&quot;));
+        book(1, 101).andExpect(status().isConflict()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Already booked&quot;));
+        book(999, 101).andExpect(status().isNotFound()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Class not found&quot;));
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr><tr><td>Docker</td><td>Not needed for this station</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 14 tests</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>The booking body is in <code>docs/booking.json</code> (<code>{"memberId":101}</code>), so the commands work in every shell.</p>
+<pre class="code"><code class="language-bash">curl &quot;http://localhost:8080/classes?date=2026-10-19&quot;
+
+# Book Morning Yoga twice: expect 201, then 409 &quot;Already booked&quot;
+curl -i -X POST http://localhost:8080/classes/1/bookings -H &quot;Content-Type: application/json&quot; -d &quot;@docs/booking.json&quot;
+curl -i -X POST http://localhost:8080/classes/1/bookings -H &quot;Content-Type: application/json&quot; -d &quot;@docs/booking.json&quot;
+
+# Cancel: paste the Location from the first answer; expect 204
+curl -i -X DELETE http://localhost:8080/bookings/PASTE-THE-ID</code></pre>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>400</code> for <code>/classes?date=19/10/2026</code></td><td>Only ISO dates are accepted.</td><td>Use <code>2026-10-19</code>.</td></tr><tr><td><code>415 Unsupported Media Type</code></td><td>The JSON header is missing.</td><td>Add <code>-H "Content-Type: application/json"</code>.</td></tr><tr><td><code>release version 25 not supported</code></td><td>Maven is using an older JDK.</td><td>Point <code>JAVA_HOME</code> at JDK 25, or add <code>-Djava.version=21</code>.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/005-designing-rest-resources-for-gym-classes/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/fitnest/classes/
+│   ├── ClassController.java   ├── BookingOutcome.java   ├── ClassSchedule.java
+│   ├── GymClass.java          ├── Booking.java          ├── BookingRequest.java
+│   ├── ApiErrors.java         └── ClassesApplication.java
+├── src/test/java/com/fitnest/classes/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">ClassController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">BookingOutcome.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">ClassSchedule.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">GymClass.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">Booking.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">BookingRequest.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">ApiErrors.java</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">ClassesApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/fitnest/classes/ClassController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Defines the five endpoints and turns each booking outcome into its status code.</dd><dt>Why</dt><dd>All the HTTP decisions (URLs, methods, codes) are in one readable place.</dd><dt>Without it</dt><dd>No API.</dd></dl><ul><li>The <code>switch</code> over <code>BookingOutcome</code> must handle every outcome: the compiler refuses to build if one is missing.</li><li><code>@DateTimeFormat(iso = DATE)</code> makes <code>2026-10-19</code> the only accepted date format.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * URLs name things (nouns); the HTTP method says what to do with them. Each outcome has its own status code:
+ * 200 here it is, 201 created, 204 done with nothing to return, 404 no such thing, 409 conflicts with the current state.
+ */
+@RestController
+class ClassController {
+
+    private final ClassSchedule schedule;
+
+    ClassController(ClassSchedule schedule) {
+        this.schedule = schedule;
+    }
+
+    /** A filter on a collection is a query parameter: /classes?date=2026-10-19. */
+    @GetMapping(&quot;/classes&quot;)
+    List&lt;GymClass&gt; classes(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return schedule.on(date);
+    }
+
+    /** A booking is created under the class it is for: the class is in the path, the member in the body. */
+    @PostMapping(&quot;/classes/{classId}/bookings&quot;)
+    ResponseEntity&lt;Booking&gt; book(@PathVariable long classId, @Valid @RequestBody BookingRequest request) {
+        if (!schedule.memberExists(request.memberId())) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;Unknown member&quot;, &quot;No member has the id &quot; + request.memberId() + &quot;.&quot;);
+        }
+        return switch (schedule.book(classId, request.memberId())) {
+            case BookingOutcome.Booked(Booking b) -&gt; ResponseEntity.created(URI.create(&quot;/bookings/&quot; + b.id())).body(b);
+            case BookingOutcome.ClassNotFound() -&gt; throw problem(HttpStatus.NOT_FOUND, &quot;Class not found&quot;, &quot;No class has the id &quot; + classId + &quot;.&quot;);
+            case BookingOutcome.ClassFull() -&gt; throw problem(HttpStatus.CONFLICT, &quot;Class is full&quot;, &quot;Every spot in this class is taken.&quot;);
+            case BookingOutcome.AlreadyBooked(UUID existing) -&gt; throw problem(HttpStatus.CONFLICT, &quot;Already booked&quot;,
+                    &quot;This member already has booking &quot; + existing + &quot; for this class.&quot;);
+        };
+    }
+
+    /** Once created, a booking is addressed on its own: /bookings/{id}. Nobody needs the class id to find it. */
+    @GetMapping(&quot;/bookings/{id}&quot;)
+    Booking booking(@PathVariable UUID id) {
+        return schedule.booking(id).orElseThrow(() -&gt; bookingNotFound(id));
+    }
+
+    @DeleteMapping(&quot;/bookings/{id}&quot;)
+    ResponseEntity&lt;Void&gt; cancel(@PathVariable UUID id) {
+        if (!schedule.cancel(id)) {
+            throw bookingNotFound(id);
+        }
+        return ResponseEntity.noContent().build(); // 204: cancelled, nothing to send back
+    }
+
+    @GetMapping(&quot;/members/{memberId}/bookings&quot;)
+    List&lt;Booking&gt; memberBookings(@PathVariable long memberId) {
+        if (!schedule.memberExists(memberId)) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;Member not found&quot;, &quot;No member has the id &quot; + memberId + &quot;.&quot;);
+        }
+        return schedule.forMember(memberId);
+    }
+
+    private static ErrorResponseException bookingNotFound(UUID id) {
+        return problem(HttpStatus.NOT_FOUND, &quot;Booking not found&quot;, &quot;No booking has the id &quot; + id + &quot;.&quot;);
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail body = ProblemDetail.forStatusAndDetail(status, detail);
+        body.setTitle(title);
+        return new ErrorResponseException(status, body, null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/fitnest/classes/BookingOutcome.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Lists everything that can happen when booking: booked, class not found, class full, already booked.</dd><dt>Why</dt><dd>The schedule reports <em>what happened</em>; only the controller knows HTTP. Each outcome can then get its own code.</dd><dt>Without it</dt><dd>The schedule would return <code>true</code>/<code>false</code>, and the reason for a failure would be lost (the trap).</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import java.util.UUID;
+
+/**
+ * Everything that can happen when a member books. The schedule says what happened; the controller decides
+ * which status code means that. Keeping the two apart is what lets each outcome get its own code.
+ */
+sealed interface BookingOutcome {
+
+    record Booked(Booking booking) implements BookingOutcome {
+    }
+
+    record ClassNotFound() implements BookingOutcome {
+    }
+
+    record ClassFull() implements BookingOutcome {
+    }
+
+    record AlreadyBooked(UUID existingBookingId) implements BookingOutcome {
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/fitnest/classes/ClassSchedule.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Holds classes, members and bookings; books, cancels and lists.</dd><dt>Why</dt><dd>One place owns the rules: capacity and one booking per member per class.</dd><dt>Without it</dt><dd>Rules scattered across endpoints.</dd></dl><ul><li><code>synchronized</code>: "count, then add" cannot interleave with another request, so a class of 2 never gets 3.</li><li><code>clearBookings</code> exists for tests only, so each test starts empty.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * Classes, members and bookings, in memory. Every method that reads or changes bookings is synchronized:
+ * &quot;count the bookings, then add one&quot; must not interleave with another request, or a class of 2 could get 3.
+ * (One lock is fine for one gym in memory; a database does this with constraints and transactions in later stations.)
+ */
+@Component
+class ClassSchedule {
+
+    private static final LocalDate MON = LocalDate.of(2026, 10, 19);
+    private final Map&lt;Long, GymClass&gt; classes = Map.of(
+            1L, new GymClass(1, &quot;Morning Yoga&quot;, &quot;Kavya&quot;, MON, LocalTime.of(6, 30), 2, 0),
+            2L, new GymClass(2, &quot;HIIT Blast&quot;, &quot;Arjun&quot;, MON, LocalTime.of(7, 30), 20, 0),
+            3L, new GymClass(3, &quot;Zumba&quot;, &quot;Kavya&quot;, MON, LocalTime.of(18, 0), 15, 0),
+            4L, new GymClass(4, &quot;Pilates&quot;, &quot;Meher&quot;, MON.plusDays(1), LocalTime.of(7, 0), 10, 0));
+    private final Set&lt;Long&gt; members = Set.of(101L, 102L, 103L);
+    private final Map&lt;UUID, Booking&gt; bookings = new LinkedHashMap&lt;&gt;();
+
+    synchronized List&lt;GymClass&gt; on(LocalDate date) {
+        return classes.values().stream()
+                .filter(c -&gt; c.date().equals(date))
+                .sorted(Comparator.comparing(GymClass::startTime))
+                .map(c -&gt; c.withSpotsLeft(c.capacity() - booked(c.id())))
+                .toList();
+    }
+
+    boolean memberExists(long memberId) {
+        return members.contains(memberId);
+    }
+
+    synchronized BookingOutcome book(long classId, long memberId) {
+        GymClass c = classes.get(classId);
+        if (c == null) {
+            return new BookingOutcome.ClassNotFound();
+        }
+        Optional&lt;Booking&gt; existing = bookings.values().stream()
+                .filter(b -&gt; b.classId() == classId &amp;&amp; b.memberId() == memberId).findFirst();
+        if (existing.isPresent()) {
+            return new BookingOutcome.AlreadyBooked(existing.get().id());
+        }
+        if (booked(classId) &gt;= c.capacity()) {
+            return new BookingOutcome.ClassFull();
+        }
+        Booking b = new Booking(UUID.randomUUID(), classId, memberId, Instant.now().truncatedTo(ChronoUnit.MILLIS));
+        bookings.put(b.id(), b);
+        return new BookingOutcome.Booked(b);
+    }
+
+    synchronized Optional&lt;Booking&gt; booking(UUID id) {
+        return Optional.ofNullable(bookings.get(id));
+    }
+
+    /** True if a booking was removed; false if there was none with this id. */
+    synchronized boolean cancel(UUID id) {
+        return bookings.remove(id) != null;
+    }
+
+    synchronized List&lt;Booking&gt; forMember(long memberId) {
+        return bookings.values().stream().filter(b -&gt; b.memberId() == memberId).toList();
+    }
+
+    /** For tests only: start each test from an empty booking list. */
+    synchronized void clearBookings() {
+        bookings.clear();
+    }
+
+    private int booked(long classId) {
+        return (int) bookings.values().stream().filter(b -&gt; b.classId() == classId).count();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/fitnest/classes/GymClass.java</p><div class="notes"><p>A class with its date, start time, capacity and spots left.</p></div><div class="src"><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import java.time.LocalDate;
+import java.time.LocalTime;
+
+/** A scheduled class. Times are local to the gym (India Standard Time). spotsLeft is worked out per response. */
+public record GymClass(long id, String name, String trainer, LocalDate date, LocalTime startTime, int capacity, int spotsLeft) {
+
+    GymClass withSpotsLeft(int spots) {
+        return new GymClass(id, name, trainer, date, startTime, capacity, spots);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/fitnest/classes/Booking.java</p><div class="notes"><p>A booking: its own id, the class, the member and when it was made.</p></div><div class="src"><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import java.time.Instant;
+import java.util.UUID;
+
+/** One member&#x27;s place in one class. A resource of its own, with its own URL: /bookings/{id}. */
+public record Booking(UUID id, long classId, long memberId, Instant bookedAt) {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/fitnest/classes/BookingRequest.java</p><div class="notes"><p>The body of a booking: only the member id. The class is in the URL.</p></div><div class="src"><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+
+/** Body of POST /classes/{id}/bookings. The class comes from the URL, so it is not repeated here. */
+public record BookingRequest(@NotNull @Positive Long memberId) {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/fitnest/classes/ApiErrors.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Adds an <code>errors</code> map (field → message) to validation failures.</dd><dt>Why</dt><dd>The app learns which field was wrong.</dd><dt>Without it</dt><dd>A bare "Bad Request".</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+
+import java.util.Map;
+import java.util.TreeMap;
+
+/**
+ * Spring already turns an invalid @Valid body into an RFC 9457 problem (the base class). We add an &quot;errors&quot; map,
+ * field -&gt; message, so the app can show each message next to its input. Station 006 covers error handling in depth.
+ */
+@RestControllerAdvice
+class ApiErrors extends ResponseEntityExceptionHandler {
+
+    @Override
+    protected ResponseEntity&lt;Object&gt; handleMethodArgumentNotValid(
+            MethodArgumentNotValidException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        Map&lt;String, String&gt; errors = new TreeMap&lt;&gt;();
+        ex.getBindingResult().getFieldErrors().forEach(e -&gt; errors.putIfAbsent(e.getField(), e.getDefaultMessage()));
+        ex.getBody().setDetail(&quot;The booking request has invalid fields.&quot;);
+        ex.getBody().setProperty(&quot;errors&quot;, errors);
+        return handleExceptionInternal(ex, null, headers, status, request);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/java/com/fitnest/classes/ClassesApplication.java</p><div class="notes"><p>Standard Spring Boot entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class ClassesApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(ClassesApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>BookingContractTest</code> (12)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>VerbsAndAlways200TrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.fitnest.classes.VerbsAndAlways200TrapTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0 -- in com.fitnest.classes.BookingContractTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">VerbsAndAlways200TrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">BookingContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/fitnest/classes/VerbsAndAlways200TrapTest.java</p><div class="notes"><p>Written first: three different failures, one <code>200</code> from the old API; three distinct answers from the new one.</p></div><div class="src"><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Import;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * The first test written for this station: it reproduces the problem before the fix.
+ * Three different things go wrong; the old API answers all three the same way.
+ */
+@Import(VerbsAndAlways200TrapTest.OldBookingController.class)
+class VerbsAndAlways200TrapTest extends ApiTest {
+
+    /** The &quot;before&quot; API: verbs in the URL, everything in query parameters, and 200 whatever happens. */
+    @RestController
+    static class OldBookingController {
+        private final ClassSchedule schedule;
+
+        OldBookingController(ClassSchedule schedule) {
+            this.schedule = schedule;
+        }
+
+        @PostMapping(&quot;/bookClass&quot;)
+        Map&lt;String, Object&gt; bookClass(@RequestParam long classId, @RequestParam long memberId) {
+            return switch (schedule.book(classId, memberId)) {
+                case BookingOutcome.Booked b -&gt; Map.of(&quot;success&quot;, true, &quot;message&quot;, &quot;Booked&quot;);
+                default -&gt; Map.of(&quot;success&quot;, false, &quot;message&quot;, &quot;Could not book&quot;);
+            };
+        }
+    }
+
+    @Test
+    void theOldApiAnswers200ForAFullClassAnUnknownClassAndADoubleBooking() throws Exception {
+        mvc.perform(post(&quot;/bookClass&quot;).param(&quot;classId&quot;, &quot;1&quot;).param(&quot;memberId&quot;, &quot;101&quot;)).andExpect(status().isOk());
+        mvc.perform(post(&quot;/bookClass&quot;).param(&quot;classId&quot;, &quot;1&quot;).param(&quot;memberId&quot;, &quot;102&quot;)).andExpect(status().isOk());
+
+        // Three different problems, one answer. The app cannot tell &quot;full&quot; (try another class)
+        // from &quot;already yours&quot; (nothing to do) from &quot;no such class&quot; (refresh the timetable).
+        for (String[] attempt : new String[][]{{&quot;1&quot;, &quot;103&quot;}, {&quot;1&quot;, &quot;101&quot;}, {&quot;999&quot;, &quot;101&quot;}}) {
+            mvc.perform(post(&quot;/bookClass&quot;).param(&quot;classId&quot;, attempt[0]).param(&quot;memberId&quot;, attempt[1]))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath(&quot;$.success&quot;).value(false))
+                    .andExpect(jsonPath(&quot;$.message&quot;).value(&quot;Could not book&quot;));
+        }
+    }
+
+    @Test
+    void theResourceApiGivesEachOutcomeItsOwnStatus() throws Exception {
+        book(1, 101).andExpect(status().isCreated());
+        book(1, 102).andExpect(status().isCreated());
+
+        book(1, 103).andExpect(status().isConflict()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Class is full&quot;));
+        book(1, 101).andExpect(status().isConflict()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Already booked&quot;));
+        book(999, 101).andExpect(status().isNotFound()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Class not found&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/fitnest/classes/BookingContractTest.java</p><div class="notes"><p>Every endpoint and every status code, each for its own reason.</p></div><div class="src"><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import java.util.UUID;
+
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.matchesPattern;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP contract: every endpoint, every status code, each for its own reason. */
+class BookingContractTest extends ApiTest {
+
+    @Test
+    void classesForADateAreListedByStartTimeWithSpotsLeft() throws Exception {
+        book(1, 101);
+        mvc.perform(get(&quot;/classes&quot;).param(&quot;date&quot;, &quot;2026-10-19&quot;))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$[*].name&quot;, contains(&quot;Morning Yoga&quot;, &quot;HIIT Blast&quot;, &quot;Zumba&quot;)))
+                .andExpect(jsonPath(&quot;$[0].startTime&quot;).value(&quot;06:30:00&quot;))
+                .andExpect(jsonPath(&quot;$[0].capacity&quot;).value(2))
+                .andExpect(jsonPath(&quot;$[0].spotsLeft&quot;).value(1));
+    }
+
+    @Test
+    void aDateWithNoClassesIsAnEmptyList() throws Exception {
+        mvc.perform(get(&quot;/classes&quot;).param(&quot;date&quot;, &quot;2026-12-25&quot;))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$&quot;, hasSize(0)));
+    }
+
+    @Test
+    void theDateIsRequiredAndMustBeIso() throws Exception {
+        mvc.perform(get(&quot;/classes&quot;)).andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+        mvc.perform(get(&quot;/classes&quot;).param(&quot;date&quot;, &quot;19-10-2026&quot;)).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void bookingIs201WithALocationThatCanBeRead() throws Exception {
+        String location = book(2, 101)
+                .andExpect(status().isCreated())
+                .andExpect(header().string(&quot;Location&quot;, matchesPattern(&quot;/bookings/[0-9a-f-]{36}&quot;)))
+                .andExpect(jsonPath(&quot;$.classId&quot;).value(2))
+                .andExpect(jsonPath(&quot;$.memberId&quot;).value(101))
+                .andReturn().getResponse().getHeader(&quot;Location&quot;);
+        mvc.perform(get(location)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.classId&quot;).value(2));
+    }
+
+    @Test
+    void aFullClassIs409() throws Exception {
+        book(1, 101);
+        book(1, 102);
+        book(1, 103).andExpect(status().isConflict())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Class is full&quot;));
+    }
+
+    @Test
+    void bookingTheSameClassTwiceIs409AndNamesTheExistingBooking() throws Exception {
+        String location = bookAndGetLocation(3, 101);
+        book(3, 101).andExpect(status().isConflict())
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Already booked&quot;))
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(org.hamcrest.Matchers.containsString(location.substring(&quot;/bookings/&quot;.length()))));
+    }
+
+    @Test
+    void anUnknownClassIs404() throws Exception {
+        book(999, 101).andExpect(status().isNotFound()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Class not found&quot;));
+    }
+
+    @Test
+    void anUnknownOrMissingMemberIs400() throws Exception {
+        book(2, 999).andExpect(status().isBadRequest()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Unknown member&quot;));
+        mvc.perform(post(&quot;/classes/2/bookings&quot;).contentType(MediaType.APPLICATION_JSON).content(&quot;{}&quot;))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath(&quot;$.errors.memberId&quot;).value(&quot;must not be null&quot;));
+    }
+
+    @Test
+    void cancellingIs204WithNoBodyAndFreesTheSpot() throws Exception {
+        String first = bookAndGetLocation(1, 101);
+        book(1, 102);
+        mvc.perform(delete(first))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(&quot;&quot;));
+        book(1, 103).andExpect(status().isCreated());
+    }
+
+    @Test
+    void aCancelledBookingIsGone() throws Exception {
+        String location = bookAndGetLocation(2, 102);
+        mvc.perform(delete(location)).andExpect(status().isNoContent());
+        mvc.perform(get(location)).andExpect(status().isNotFound());
+        mvc.perform(delete(location)).andExpect(status().isNotFound())  // nothing left to cancel (station 008 revisits repeat deletes)
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Booking not found&quot;));
+    }
+
+    @Test
+    void aMembersBookingsAreANestedCollection() throws Exception {
+        book(2, 103);
+        book(4, 103);
+        book(2, 101);
+        mvc.perform(get(&quot;/members/103/bookings&quot;))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$[*].classId&quot;, contains(2, 4)));
+        mvc.perform(get(&quot;/members/102/bookings&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$&quot;, hasSize(0)));
+        mvc.perform(get(&quot;/members/999/bookings&quot;)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void theOldVerbUrlsAndWrongMethodsAreNotPartOfTheApi() throws Exception {
+        mvc.perform(post(&quot;/bookClass&quot;).param(&quot;classId&quot;, &quot;1&quot;).param(&quot;memberId&quot;, &quot;101&quot;)).andExpect(status().isNotFound());
+        mvc.perform(post(&quot;/cancelBooking&quot;)).andExpect(status().isNotFound());
+        mvc.perform(put(&quot;/bookings/{id}&quot;, UUID.randomUUID())).andExpect(status().isMethodNotAllowed());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/fitnest/classes/ApiTest.java</p><div class="notes"><p>Shared setup: the whole app through MockMvc, and an empty booking list before each test.</p></div><div class="src"><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/** Shared setup: the whole app through MockMvc, and no bookings at the start of each test. */
+@SpringBootTest
+@AutoConfigureMockMvc
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+
+    @Autowired
+    ClassSchedule schedule;
+
+    @BeforeEach
+    void noBookings() {
+        schedule.clearBookings();
+    }
+
+    ResultActions book(long classId, long memberId) throws Exception {
+        return mvc.perform(post(&quot;/classes/{id}/bookings&quot;, classId)
+                .contentType(MediaType.APPLICATION_JSON).content(&quot;{\&quot;memberId\&quot;:&quot; + memberId + &quot;}&quot;));
+    }
+
+    String bookAndGetLocation(long classId, long memberId) throws Exception {
+        return book(classId, memberId).andReturn().getResponse().getHeader(&quot;Location&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/fitnest/classes/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=ClassRosterChallengeTest</code></li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 14 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 21 tests pass (14 station tests and 7 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>The trainer's roster</h2><p>Trainers want to see who booked their class. Add <code>GET /classes/{classId}/bookings</code>: the class's bookings in the order they were made; an empty list for nobody; <code>404</code> for an unknown class.</p><p><b>Done when:</b> all three tests in <code>ClassRosterChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Same URL as booking, different method: <code>GET</code> reads the collection, <code>POST</code> adds to it.</li><li>Return an <code>Optional</code> from the schedule so "no such class" and "no bookings" stay different.</li></ul></details><p class="path">challenge/ClassRosterChallengeTest.java</p><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Challenge 1: the trainer&#x27;s roster, GET /classes/{id}/bookings: who booked this class, in booking order. */
+class ClassRosterChallengeTest extends ApiTest {
+
+    @Test
+    void theRosterListsTheClassBookingsInTheOrderTheyWereMade() throws Exception {
+        book(3, 102);
+        book(2, 101);
+        book(3, 101);
+        mvc.perform(get(&quot;/classes/3/bookings&quot;))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$[*].memberId&quot;, contains(102, 101)));
+    }
+
+    @Test
+    void aClassNobodyBookedHasAnEmptyRoster() throws Exception {
+        mvc.perform(get(&quot;/classes/4/bookings&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$&quot;, hasSize(0)));
+    }
+
+    @Test
+    void anUnknownClassIs404() throws Exception {
+        mvc.perform(get(&quot;/classes/999/bookings&quot;)).andExpect(status().isNotFound())
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Class not found&quot;));
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/ClassSchedule.java</p><div class="src"><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * Classes, members and bookings, in memory. Every method that reads or changes bookings is synchronized:
+ * &quot;count the bookings, then add one&quot; must not interleave with another request, or a class of 2 could get 3.
+ * (One lock is fine for one gym in memory; a database does this with constraints and transactions in later stations.)
+ */
+@Component
+class ClassSchedule {
+
+    private static final LocalDate MON = LocalDate.of(2026, 10, 19);
+    /** Challenge 2: capacity can change, so the map must accept updates (all access is synchronized). */
+    private final Map&lt;Long, GymClass&gt; classes = new HashMap&lt;&gt;(Map.of(
+            1L, new GymClass(1, &quot;Morning Yoga&quot;, &quot;Kavya&quot;, MON, LocalTime.of(6, 30), 2, 0),
+            2L, new GymClass(2, &quot;HIIT Blast&quot;, &quot;Arjun&quot;, MON, LocalTime.of(7, 30), 20, 0),
+            3L, new GymClass(3, &quot;Zumba&quot;, &quot;Kavya&quot;, MON, LocalTime.of(18, 0), 15, 0),
+            4L, new GymClass(4, &quot;Pilates&quot;, &quot;Meher&quot;, MON.plusDays(1), LocalTime.of(7, 0), 10, 0)));
+    private final Set&lt;Long&gt; members = Set.of(101L, 102L, 103L);
+    private final Map&lt;UUID, Booking&gt; bookings = new LinkedHashMap&lt;&gt;();
+
+    synchronized List&lt;GymClass&gt; on(LocalDate date) {
+        return classes.values().stream()
+                .filter(c -&gt; c.date().equals(date))
+                .sorted(Comparator.comparing(GymClass::startTime))
+                .map(c -&gt; c.withSpotsLeft(c.capacity() - booked(c.id())))
+                .toList();
+    }
+
+    boolean memberExists(long memberId) {
+        return members.contains(memberId);
+    }
+
+    synchronized BookingOutcome book(long classId, long memberId) {
+        GymClass c = classes.get(classId);
+        if (c == null) {
+            return new BookingOutcome.ClassNotFound();
+        }
+        Optional&lt;Booking&gt; existing = bookings.values().stream()
+                .filter(b -&gt; b.classId() == classId &amp;&amp; b.memberId() == memberId).findFirst();
+        if (existing.isPresent()) {
+            return new BookingOutcome.AlreadyBooked(existing.get().id());
+        }
+        if (booked(classId) &gt;= c.capacity()) {
+            return new BookingOutcome.ClassFull();
+        }
+        Booking b = new Booking(UUID.randomUUID(), classId, memberId, Instant.now().truncatedTo(ChronoUnit.MILLIS));
+        bookings.put(b.id(), b);
+        return new BookingOutcome.Booked(b);
+    }
+
+    synchronized Optional&lt;Booking&gt; booking(UUID id) {
+        return Optional.ofNullable(bookings.get(id));
+    }
+
+    /** True if a booking was removed; false if there was none with this id. */
+    synchronized boolean cancel(UUID id) {
+        return bookings.remove(id) != null;
+    }
+
+    synchronized List&lt;Booking&gt; forMember(long memberId) {
+        return bookings.values().stream().filter(b -&gt; b.memberId() == memberId).toList();
+    }
+
+    /** Challenge 1: one class&#x27;s bookings, in the order they were made (the map keeps insertion order). */
+    synchronized Optional&lt;List&lt;Booking&gt;&gt; roster(long classId) {
+        if (!classes.containsKey(classId)) {
+            return Optional.empty();
+        }
+        return Optional.of(bookings.values().stream().filter(b -&gt; b.classId() == classId).toList());
+    }
+
+    /** Challenge 2. The outcome, not a status code: the controller decides what each one means in HTTP. */
+    enum CapacityChange { UPDATED, CLASS_NOT_FOUND, BELOW_BOOKINGS }
+
+    synchronized CapacityChange setCapacity(long classId, int capacity) {
+        GymClass c = classes.get(classId);
+        if (c == null) {
+            return CapacityChange.CLASS_NOT_FOUND;
+        }
+        if (capacity &lt; booked(classId)) {
+            return CapacityChange.BELOW_BOOKINGS;
+        }
+        classes.put(classId, new GymClass(c.id(), c.name(), c.trainer(), c.date(), c.startTime(), capacity, 0));
+        return CapacityChange.UPDATED;
+    }
+
+    synchronized Optional&lt;GymClass&gt; find(long classId) {
+        return Optional.ofNullable(classes.get(classId)).map(c -&gt; c.withSpotsLeft(c.capacity() - booked(c.id())));
+    }
+
+    /** For tests only: start each test from an empty booking list. */
+    synchronized void clearBookings() {
+        bookings.clear();
+    }
+
+    private int booked(long classId) {
+        return (int) bookings.values().stream().filter(b -&gt; b.classId() == classId).count();
+    }
+}</code></pre></div><p class="path">challenge/solution/ClassController.java</p><div class="src"><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * URLs name things (nouns); the HTTP method says what to do with them. Each outcome has its own status code:
+ * 200 here it is, 201 created, 204 done with nothing to return, 404 no such thing, 409 conflicts with the current state.
+ */
+@RestController
+class ClassController {
+
+    private final ClassSchedule schedule;
+
+    ClassController(ClassSchedule schedule) {
+        this.schedule = schedule;
+    }
+
+    /** A filter on a collection is a query parameter: /classes?date=2026-10-19. */
+    @GetMapping(&quot;/classes&quot;)
+    List&lt;GymClass&gt; classes(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return schedule.on(date);
+    }
+
+    /** A booking is created under the class it is for: the class is in the path, the member in the body. */
+    @PostMapping(&quot;/classes/{classId}/bookings&quot;)
+    ResponseEntity&lt;Booking&gt; book(@PathVariable long classId, @Valid @RequestBody BookingRequest request) {
+        if (!schedule.memberExists(request.memberId())) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;Unknown member&quot;, &quot;No member has the id &quot; + request.memberId() + &quot;.&quot;);
+        }
+        return switch (schedule.book(classId, request.memberId())) {
+            case BookingOutcome.Booked(Booking b) -&gt; ResponseEntity.created(URI.create(&quot;/bookings/&quot; + b.id())).body(b);
+            case BookingOutcome.ClassNotFound() -&gt; throw classNotFound(classId);
+            case BookingOutcome.ClassFull() -&gt; throw problem(HttpStatus.CONFLICT, &quot;Class is full&quot;, &quot;Every spot in this class is taken.&quot;);
+            case BookingOutcome.AlreadyBooked(UUID existing) -&gt; throw problem(HttpStatus.CONFLICT, &quot;Already booked&quot;,
+                    &quot;This member already has booking &quot; + existing + &quot; for this class.&quot;);
+        };
+    }
+
+    /** Challenge 1: the roster is the class&#x27;s own collection of bookings, so it is nested under the class. */
+    @GetMapping(&quot;/classes/{classId}/bookings&quot;)
+    List&lt;Booking&gt; roster(@PathVariable long classId) {
+        return schedule.roster(classId).orElseThrow(() -&gt; classNotFound(classId));
+    }
+
+    /** Challenge 2: PATCH changes part of the class. 409 when the change conflicts with the bookings already made. */
+    @PatchMapping(&quot;/classes/{classId}&quot;)
+    GymClass setCapacity(@PathVariable long classId, @Valid @RequestBody CapacityRequest request) {
+        return switch (schedule.setCapacity(classId, request.capacity())) {
+            case UPDATED -&gt; schedule.find(classId).orElseThrow();
+            case CLASS_NOT_FOUND -&gt; throw classNotFound(classId);
+            case BELOW_BOOKINGS -&gt; throw problem(HttpStatus.CONFLICT, &quot;Capacity below bookings&quot;,
+                    &quot;More members have booked this class than the new capacity allows.&quot;);
+        };
+    }
+
+    /** Once created, a booking is addressed on its own: /bookings/{id}. Nobody needs the class id to find it. */
+    @GetMapping(&quot;/bookings/{id}&quot;)
+    Booking booking(@PathVariable UUID id) {
+        return schedule.booking(id).orElseThrow(() -&gt; bookingNotFound(id));
+    }
+
+    @DeleteMapping(&quot;/bookings/{id}&quot;)
+    ResponseEntity&lt;Void&gt; cancel(@PathVariable UUID id) {
+        if (!schedule.cancel(id)) {
+            throw bookingNotFound(id);
+        }
+        return ResponseEntity.noContent().build(); // 204: cancelled, nothing to send back
+    }
+
+    @GetMapping(&quot;/members/{memberId}/bookings&quot;)
+    List&lt;Booking&gt; memberBookings(@PathVariable long memberId) {
+        if (!schedule.memberExists(memberId)) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;Member not found&quot;, &quot;No member has the id &quot; + memberId + &quot;.&quot;);
+        }
+        return schedule.forMember(memberId);
+    }
+
+    private static ErrorResponseException classNotFound(long classId) {
+        return problem(HttpStatus.NOT_FOUND, &quot;Class not found&quot;, &quot;No class has the id &quot; + classId + &quot;.&quot;);
+    }
+
+    private static ErrorResponseException bookingNotFound(UUID id) {
+        return problem(HttpStatus.NOT_FOUND, &quot;Booking not found&quot;, &quot;No booking has the id &quot; + id + &quot;.&quot;);
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail body = ProblemDetail.forStatusAndDetail(status, detail);
+        body.setTitle(title);
+        return new ErrorResponseException(status, body, null);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 35 minutes</p><h2>Change a class's capacity</h2><p>Add <code>PATCH /classes/{classId}</code> with <code>{"capacity": 12}</code>: 1 to 50. Lowering capacity below the bookings already made is a <code>409</code>, and nothing changes.</p><p><b>Done when:</b> all four tests in <code>CapacityChangeChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li><code>PATCH</code> changes part of a resource; the body holds only what changes.</li><li>The class map was built with <code>Map.of</code>, which cannot change. Copy it into a <code>HashMap</code>.</li><li>Return an outcome from the schedule (updated, not found, below bookings) and let the controller pick the status, as booking does.</li></ul></details><p class="path">challenge/CapacityChangeChallengeTest.java</p><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.ResultActions;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Challenge 2: a trainer changes a class&#x27;s capacity with PATCH /classes/{id}. */
+class CapacityChangeChallengeTest extends ApiTest {
+
+    ResultActions setCapacity(long classId, String json) throws Exception {
+        return mvc.perform(patch(&quot;/classes/{id}&quot;, classId).contentType(MediaType.APPLICATION_JSON).content(json));
+    }
+
+    @AfterEach
+    void restoreZumba() throws Exception {
+        schedule.clearBookings();
+        setCapacity(3, &quot;{\&quot;capacity\&quot;:15}&quot;);
+    }
+
+    @Test
+    void raisingOrLoweringCapacityIs200WithTheUpdatedClass() throws Exception {
+        book(3, 101);
+        setCapacity(3, &quot;{\&quot;capacity\&quot;:5}&quot;)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.capacity&quot;).value(5))
+                .andExpect(jsonPath(&quot;$.spotsLeft&quot;).value(4));
+    }
+
+    @Test
+    void capacityBelowTheCurrentBookingsIs409AndNothingChanges() throws Exception {
+        book(3, 101);
+        book(3, 102);
+        setCapacity(3, &quot;{\&quot;capacity\&quot;:1}&quot;)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Capacity below bookings&quot;));
+        setCapacity(3, &quot;{\&quot;capacity\&quot;:15}&quot;).andExpect(jsonPath(&quot;$.spotsLeft&quot;).value(13));
+    }
+
+    @Test
+    void capacityOutsideOneToFiftyIs400() throws Exception {
+        setCapacity(3, &quot;{\&quot;capacity\&quot;:0}&quot;).andExpect(status().isBadRequest())
+                .andExpect(jsonPath(&quot;$.errors.capacity&quot;).exists());
+        setCapacity(3, &quot;{\&quot;capacity\&quot;:51}&quot;).andExpect(status().isBadRequest());
+        setCapacity(3, &quot;{}&quot;).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void anUnknownClassIs404() throws Exception {
+        setCapacity(999, &quot;{\&quot;capacity\&quot;:10}&quot;).andExpect(status().isNotFound());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/CapacityRequest.java</p><div class="src"><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+
+/** Challenge 2: body of PATCH /classes/{id}. Only the field that changes. */
+public record CapacityRequest(@NotNull @Min(1) @Max(50) Integer capacity) {
+}</code></pre></div><p class="path">challenge/solution/ClassSchedule.java</p><div class="src"><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * Classes, members and bookings, in memory. Every method that reads or changes bookings is synchronized:
+ * &quot;count the bookings, then add one&quot; must not interleave with another request, or a class of 2 could get 3.
+ * (One lock is fine for one gym in memory; a database does this with constraints and transactions in later stations.)
+ */
+@Component
+class ClassSchedule {
+
+    private static final LocalDate MON = LocalDate.of(2026, 10, 19);
+    /** Challenge 2: capacity can change, so the map must accept updates (all access is synchronized). */
+    private final Map&lt;Long, GymClass&gt; classes = new HashMap&lt;&gt;(Map.of(
+            1L, new GymClass(1, &quot;Morning Yoga&quot;, &quot;Kavya&quot;, MON, LocalTime.of(6, 30), 2, 0),
+            2L, new GymClass(2, &quot;HIIT Blast&quot;, &quot;Arjun&quot;, MON, LocalTime.of(7, 30), 20, 0),
+            3L, new GymClass(3, &quot;Zumba&quot;, &quot;Kavya&quot;, MON, LocalTime.of(18, 0), 15, 0),
+            4L, new GymClass(4, &quot;Pilates&quot;, &quot;Meher&quot;, MON.plusDays(1), LocalTime.of(7, 0), 10, 0)));
+    private final Set&lt;Long&gt; members = Set.of(101L, 102L, 103L);
+    private final Map&lt;UUID, Booking&gt; bookings = new LinkedHashMap&lt;&gt;();
+
+    synchronized List&lt;GymClass&gt; on(LocalDate date) {
+        return classes.values().stream()
+                .filter(c -&gt; c.date().equals(date))
+                .sorted(Comparator.comparing(GymClass::startTime))
+                .map(c -&gt; c.withSpotsLeft(c.capacity() - booked(c.id())))
+                .toList();
+    }
+
+    boolean memberExists(long memberId) {
+        return members.contains(memberId);
+    }
+
+    synchronized BookingOutcome book(long classId, long memberId) {
+        GymClass c = classes.get(classId);
+        if (c == null) {
+            return new BookingOutcome.ClassNotFound();
+        }
+        Optional&lt;Booking&gt; existing = bookings.values().stream()
+                .filter(b -&gt; b.classId() == classId &amp;&amp; b.memberId() == memberId).findFirst();
+        if (existing.isPresent()) {
+            return new BookingOutcome.AlreadyBooked(existing.get().id());
+        }
+        if (booked(classId) &gt;= c.capacity()) {
+            return new BookingOutcome.ClassFull();
+        }
+        Booking b = new Booking(UUID.randomUUID(), classId, memberId, Instant.now().truncatedTo(ChronoUnit.MILLIS));
+        bookings.put(b.id(), b);
+        return new BookingOutcome.Booked(b);
+    }
+
+    synchronized Optional&lt;Booking&gt; booking(UUID id) {
+        return Optional.ofNullable(bookings.get(id));
+    }
+
+    /** True if a booking was removed; false if there was none with this id. */
+    synchronized boolean cancel(UUID id) {
+        return bookings.remove(id) != null;
+    }
+
+    synchronized List&lt;Booking&gt; forMember(long memberId) {
+        return bookings.values().stream().filter(b -&gt; b.memberId() == memberId).toList();
+    }
+
+    /** Challenge 1: one class&#x27;s bookings, in the order they were made (the map keeps insertion order). */
+    synchronized Optional&lt;List&lt;Booking&gt;&gt; roster(long classId) {
+        if (!classes.containsKey(classId)) {
+            return Optional.empty();
+        }
+        return Optional.of(bookings.values().stream().filter(b -&gt; b.classId() == classId).toList());
+    }
+
+    /** Challenge 2. The outcome, not a status code: the controller decides what each one means in HTTP. */
+    enum CapacityChange { UPDATED, CLASS_NOT_FOUND, BELOW_BOOKINGS }
+
+    synchronized CapacityChange setCapacity(long classId, int capacity) {
+        GymClass c = classes.get(classId);
+        if (c == null) {
+            return CapacityChange.CLASS_NOT_FOUND;
+        }
+        if (capacity &lt; booked(classId)) {
+            return CapacityChange.BELOW_BOOKINGS;
+        }
+        classes.put(classId, new GymClass(c.id(), c.name(), c.trainer(), c.date(), c.startTime(), capacity, 0));
+        return CapacityChange.UPDATED;
+    }
+
+    synchronized Optional&lt;GymClass&gt; find(long classId) {
+        return Optional.ofNullable(classes.get(classId)).map(c -&gt; c.withSpotsLeft(c.capacity() - booked(c.id())));
+    }
+
+    /** For tests only: start each test from an empty booking list. */
+    synchronized void clearBookings() {
+        bookings.clear();
+    }
+
+    private int booked(long classId) {
+        return (int) bookings.values().stream().filter(b -&gt; b.classId() == classId).count();
+    }
+}</code></pre></div><p class="path">challenge/solution/ClassController.java</p><div class="src"><pre class="code"><code class="language-java">package com.fitnest.classes;
+
+import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * URLs name things (nouns); the HTTP method says what to do with them. Each outcome has its own status code:
+ * 200 here it is, 201 created, 204 done with nothing to return, 404 no such thing, 409 conflicts with the current state.
+ */
+@RestController
+class ClassController {
+
+    private final ClassSchedule schedule;
+
+    ClassController(ClassSchedule schedule) {
+        this.schedule = schedule;
+    }
+
+    /** A filter on a collection is a query parameter: /classes?date=2026-10-19. */
+    @GetMapping(&quot;/classes&quot;)
+    List&lt;GymClass&gt; classes(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return schedule.on(date);
+    }
+
+    /** A booking is created under the class it is for: the class is in the path, the member in the body. */
+    @PostMapping(&quot;/classes/{classId}/bookings&quot;)
+    ResponseEntity&lt;Booking&gt; book(@PathVariable long classId, @Valid @RequestBody BookingRequest request) {
+        if (!schedule.memberExists(request.memberId())) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;Unknown member&quot;, &quot;No member has the id &quot; + request.memberId() + &quot;.&quot;);
+        }
+        return switch (schedule.book(classId, request.memberId())) {
+            case BookingOutcome.Booked(Booking b) -&gt; ResponseEntity.created(URI.create(&quot;/bookings/&quot; + b.id())).body(b);
+            case BookingOutcome.ClassNotFound() -&gt; throw classNotFound(classId);
+            case BookingOutcome.ClassFull() -&gt; throw problem(HttpStatus.CONFLICT, &quot;Class is full&quot;, &quot;Every spot in this class is taken.&quot;);
+            case BookingOutcome.AlreadyBooked(UUID existing) -&gt; throw problem(HttpStatus.CONFLICT, &quot;Already booked&quot;,
+                    &quot;This member already has booking &quot; + existing + &quot; for this class.&quot;);
+        };
+    }
+
+    /** Challenge 1: the roster is the class&#x27;s own collection of bookings, so it is nested under the class. */
+    @GetMapping(&quot;/classes/{classId}/bookings&quot;)
+    List&lt;Booking&gt; roster(@PathVariable long classId) {
+        return schedule.roster(classId).orElseThrow(() -&gt; classNotFound(classId));
+    }
+
+    /** Challenge 2: PATCH changes part of the class. 409 when the change conflicts with the bookings already made. */
+    @PatchMapping(&quot;/classes/{classId}&quot;)
+    GymClass setCapacity(@PathVariable long classId, @Valid @RequestBody CapacityRequest request) {
+        return switch (schedule.setCapacity(classId, request.capacity())) {
+            case UPDATED -&gt; schedule.find(classId).orElseThrow();
+            case CLASS_NOT_FOUND -&gt; throw classNotFound(classId);
+            case BELOW_BOOKINGS -&gt; throw problem(HttpStatus.CONFLICT, &quot;Capacity below bookings&quot;,
+                    &quot;More members have booked this class than the new capacity allows.&quot;);
+        };
+    }
+
+    /** Once created, a booking is addressed on its own: /bookings/{id}. Nobody needs the class id to find it. */
+    @GetMapping(&quot;/bookings/{id}&quot;)
+    Booking booking(@PathVariable UUID id) {
+        return schedule.booking(id).orElseThrow(() -&gt; bookingNotFound(id));
+    }
+
+    @DeleteMapping(&quot;/bookings/{id}&quot;)
+    ResponseEntity&lt;Void&gt; cancel(@PathVariable UUID id) {
+        if (!schedule.cancel(id)) {
+            throw bookingNotFound(id);
+        }
+        return ResponseEntity.noContent().build(); // 204: cancelled, nothing to send back
+    }
+
+    @GetMapping(&quot;/members/{memberId}/bookings&quot;)
+    List&lt;Booking&gt; memberBookings(@PathVariable long memberId) {
+        if (!schedule.memberExists(memberId)) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;Member not found&quot;, &quot;No member has the id &quot; + memberId + &quot;.&quot;);
+        }
+        return schedule.forMember(memberId);
+    }
+
+    private static ErrorResponseException classNotFound(long classId) {
+        return problem(HttpStatus.NOT_FOUND, &quot;Class not found&quot;, &quot;No class has the id &quot; + classId + &quot;.&quot;);
+    }
+
+    private static ErrorResponseException bookingNotFound(UUID id) {
+        return problem(HttpStatus.NOT_FOUND, &quot;Booking not found&quot;, &quot;No booking has the id &quot; + id + &quot;.&quot;);
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail body = ProblemDetail.forStatusAndDetail(status, detail);
+        body.setTitle(title);
+        return new ErrorResponseException(status, body, null);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>No cancelling in the last 2 hours</h2>
+<p>FitNest wants a rule: a booking cannot be cancelled less than 2 hours before the class. Which status code would you return, and what would the problem body say? The class time is in India Standard Time and the server runs in UTC; how do you compare them? How would you test "1 hour 59 minutes before" without waiting for the clock? (Hint: give the schedule a <code>java.time.Clock</code> and fix it in tests.)</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design (none in this station)</li></ul><p class="rule">Short at Foundations: the choices that matter here.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: three different failures, one answer.</li>
+<li>List the resources (classes, bookings, members' bookings) and give each a noun URL.</li>
+<li>Write <code>BookingOutcome</code>: every way booking can end.</li>
+<li>Map each outcome to the status code that means it.</li>
+<li>Return <code>Location</code> on create and <code>204</code> on cancel.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Nouns in URLs, methods as verbs, status by meaning</td><td>Takes a little design up front.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Verb URLs, <code>200</code> + <code>success</code> flag</td><td>Clients parse every body; monitoring sees no errors; one URL per action.</td><td><span class="pill bad">Wrong</span></td></tr><tr><td><code>DELETE /classes/{classId}/bookings/{id}</code></td><td>Also valid, but every caller must know the class id to cancel.</td><td><span class="pill warn">Possible</span></td></tr><tr><td><code>POST /bookings</code> with <code>classId</code> in the body</td><td>Also valid and common. Nesting makes "a booking needs a class" visible in the URL.</td><td><span class="pill warn">Possible</span></td></tr><tr><td><code>422</code> for a full class</td><td>422 is for a request that cannot be processed as written. A full class is about the current state, which is what 409 means.</td><td><span class="pill warn">Debatable</span></td></tr><tr><td><code>404</code> for an unknown member in the body</td><td>404 is about the URL. The URL exists; the body is wrong, so 400 (some APIs choose 422).</td><td><span class="pill bad">Misleading</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>None in this station. With a database, "one booking per member per class" becomes a unique constraint on <code>(class_id, member_id)</code>, and capacity is checked inside a transaction.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Security</dt><dd>Anyone can book or cancel for any member id: there is no login. Real systems take the member from the signed-in user and check that a booking belongs to the caller before cancelling it.</dd>
+<dt>Reliability</dt><dd>Correct status codes let monitoring count real failures: a spike in <code>409</code> means classes are filling up, a spike in <code>404</code> means an app is showing an old timetable.</dd>
+<dt>Concurrency</dt><dd>One lock around the schedule keeps capacity correct for one server. With several servers, the database must enforce it.</dd>
+<dt>Maintainability</dt><dd>A new feature is a new resource or method, not a new verb URL.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>Why are verbs in URLs a problem?</summary><p>The HTTP method already is the verb. Verb URLs multiply (one per action), hide which resource is affected, and lose the built-in meaning of methods: caches, proxies and clients know GET is safe and DELETE removes, but nothing knows what /cancelBooking does.</p></details><details class="qa"><summary>Nested or top-level: /classes/{id}/bookings or /bookings?</summary><p>Nest when the child only makes sense inside its parent and you create or list it there. Give it a top-level address once it has its own id, so callers do not need the parent&#x27;s id to read or cancel it. This station does both.</p></details><details class="qa"><summary>Path parameter or query parameter?</summary><p>A path parameter identifies a resource (/bookings/{id}). A query parameter filters, sorts or pages a collection (/classes?date=...).</p></details><details class="qa"><summary>409 or 400 for a full class?</summary><p>400 means the request itself is wrong. A full class is a conflict with the current state: the same request would succeed with a free spot. That is 409.</p></details><details class="qa"><summary>What should DELETE return?</summary><p>204 No Content when it succeeds and there is nothing useful to send. Here, a repeat DELETE is 404 because the booking is gone; station 008 discusses when 204 for both is the better contract.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 14 tests pass.</td><td>You can say which test fails if the capacity check goes.</td></tr><tr><td>Design</td><td>Noun URLs; every outcome has its own code.</td><td>You can defend nested-then-top-level for bookings.</td></tr><tr><td>Tests</td><td>A test for each status code.</td><td>You wrote the trap test before designing the URLs.</td></tr><tr><td>Explanation</td><td>You can explain 409 against 400 and 404.</td><td>You can explain why the outcome type keeps HTTP out of the schedule.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This Foundations station has no flawed version to review. Use this checklist on any API design you are asked to review:</p>
+<ul class="rules">
+<li>Is there a verb in any URL?</li>
+<li>Does any failure come back as <code>200</code>?</li>
+<li>Does every create return <code>201</code> and a <code>Location</code> that can be read?</li>
+<li>Can two different failures be told apart by status code (or at least by problem title)?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
