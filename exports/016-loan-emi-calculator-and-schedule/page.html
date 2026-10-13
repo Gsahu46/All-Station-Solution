@@ -1,0 +1,1589 @@
+<title>Station 016 · Loan EMI calculator and schedule</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 016</span>
+    <h1>Loan EMI calculator and schedule</h1>
+    <p class="scenario">The EMI shown before the loan differs from the bank&#x27;s by ₹3, and the last instalment never closes the loan to zero.</p>
+    <p class="sim"><b>Simulation</b><span>A quote is a record in the app's memory. No loan is sanctioned and no money moves. The rates are demo numbers, not any bank's, and nothing here is financial advice.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Fintech</li>
+      <li><b>Types</b>None</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>014 Fare estimates per vehicle type</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring MVC · BigDecimal · MathContext · TreeMap · MockMvc</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Meera checks her EMI in the Tijori app</strong><p>₹5 lakh, 24 months, 12.99%: the app says ₹23,766. The bank's letter says ₹23,769. She asks support which one is wrong.</p></li><li><strong>Two years later</strong><p>The app's schedule shows her last month leaving a balance of −₹11.91: she would have paid more than she owed, and the loan never shows "closed".</p></li><li><strong>The fix</strong><p>Compute the formula with full precision and round once, at the end. Then work out each month's interest on what is left, and let the last instalment pay exactly the remainder.</p></li></ol>
+<p class="lesson">Round once, as late as possible, and let the last instalment absorb what rounding left behind.</p>
+
+<h2>What are we building?</h2>
+<p><code>POST /loan-quotes</code> takes a product, an amount and a tenure, picks the rate valid today, and returns the EMI and the totals. <code>GET /loan-quotes/{id}/schedule</code> shows every month: interest, principal and the balance, ending at exactly zero.</p>
+
+<h2>An everyday analogy</h2>
+<p>Paying back a friend ₹1,000 in three goes: you say "₹334 each time". After two payments you owe ₹332, not ₹334. You pay ₹332 the last time; you don't pay ₹334 and ask for ₹2 back.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Pick the rate</strong> valid on today's date for the product.</li>
+<li><strong>Compute the EMI</strong> with the formula, every step at full precision; round once, to whole rupees.</li>
+<li><strong>Walk the months</strong>: interest on what is left, the rest of the EMI repays principal.</li>
+<li><strong>Close the loan</strong>: the month that would go below zero pays only what is left.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: the EMI was rounded up from ₹23,768.56 to ₹23,769. Does the customer pay too much?</summary><p>Each month a little more principal is repaid, so the last instalment is smaller by exactly the overpayment: ₹23,757.09. In total they pay interest only on what they actually owed.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>Not a real loan.</strong> No sanction, no credit check, no money moves.</li>
+<li><strong>Not a bank's exact method.</strong> Real lenders add processing fees, broken-period interest for the first month and their own rounding rules.</li>
+<li><strong>No database.</strong> Quotes live in memory and are gone when the app stops.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>EMI</strong></td><td>Equated Monthly Instalment: the same payment every month that repays a loan with its interest.</td><td>₹23,769 a month for 2 years on a ₹5 lakh personal loan.</td><td><code>emiPaise</code></td></tr><tr><td><strong>Principal</strong></td><td>The amount borrowed. Each EMI repays part of it.</td><td>The ₹5 lakh itself.</td><td><code>principalPaise</code></td></tr><tr><td><strong>Interest for a month</strong></td><td>What is still owed × the yearly rate ÷ 12.</td><td>₹5,00,000 × 12.99% ÷ 12 = ₹5,412.50 in month 1.</td><td><code>interestPaise</code> in each row</td></tr><tr><td><strong>Amortisation schedule</strong></td><td>A month-by-month table: how much of each EMI is interest, how much repays principal, and what is left.</td><td>The table a bank attaches to the loan agreement.</td><td><code>GET /loan-quotes/{id}/schedule</code></td></tr><tr><td><strong>Final adjustment</strong></td><td>The last instalment pays exactly what is left, so the loan closes at zero.</td><td>The last EMI is ₹11.91 smaller.</td><td><code>lastEmiPaise</code></td></tr><tr><td><strong>Dated rate</strong></td><td>A rate that applies from a given day until the next one starts.</td><td>"12.99% from 1 October".</td><td><code>tijori.rates</code> in <code>application.yaml</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Tijori</strong> (a fictional lending app) shows an EMI before the loan is booked. It differs from the bank's by ₹3, because the app rounds an intermediate step. Its schedule repeats the same rounded EMI every month, so the last month never closes the loan to zero. Both look like mistakes to customers, and both are.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> ₹5,00,000 at 12.99% for 24 months, <b>then</b> the EMI is ₹23,769 and the last instalment is ₹23,757.09.</li>
+<li><b>Given</b> ₹1,00,000 at 12% for 12 months, <b>then</b> the EMI is ₹8,885 (the textbook ₹8,884.88, rounded).</li>
+<li><b>Given</b> any schedule, <b>then</b> the principal parts add up to the loan exactly, no balance goes below zero, and the last balance is zero.</li>
+<li><b>Given</b> a quote on 19 October 2026, <b>then</b> the personal-loan rate is 12.99% (valid from 1 October), not 13.50%.</li>
+<li><b>Given</b> a product whose first rate starts later, <b>then</b> <code>422</code>.</li>
+<li><b>Given</b> an amount or tenure out of range, <b>then</b> <code>400</code>; an unknown quote id, <code>404</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>Amounts in paise: ₹10,000 to ₹1 crore (a demo rule). Tenure 6 to 360 months.</li>
+<li>The EMI is rounded half up to whole rupees, once. Monthly interest is rounded half up to the paisa.</li>
+<li>Rates come from configuration, each with a start date. A new rate is a new line, added ahead of time.</li>
+<li>The schedule is recomputed from the stored quote, with the rate the quote was given.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Implement the EMI formula with <code>BigDecimal</code> and a <code>MathContext</code>.</li>
+<li>Explain where rounding happens, and why the last instalment differs.</li>
+<li>Build an amortisation schedule and test that it always closes at zero.</li>
+<li>Pick a dated value with <code>TreeMap.floorEntry</code>, and make "today" testable with a <code>Clock</code>.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/loan-quotes</code></td><td>Quote a loan at today's rate. <code>201</code> with a <code>Location</code> to its schedule.</td></tr><tr><td><code>GET</code></td><td><code>/loan-quotes/{id}/schedule</code></td><td>Month-by-month rows for a quote.</td></tr></tbody></table></div>
+<h2>Request body</h2>
+<div class="scroll"><table class=""><thead><tr><th>Field</th><th>Rule</th></tr></thead><tbody><tr><td><code>product</code></td><td><code>PERSONAL</code>, <code>HOME</code> or <code>GOLD</code>.</td></tr><tr><td><code>principalPaise</code></td><td>1,000,000 to 1,000,000,000 (₹10,000 to ₹1 crore), whole number.</td></tr><tr><td><code>tenureMonths</code></td><td>6 to 360.</td></tr></tbody></table></div>
+<h2>Response</h2>
+<div class="scroll"><table class=""><thead><tr><th>Field</th><th>Meaning</th></tr></thead><tbody><tr><td><code>annualRatePercent</code>, <code>rateValidFrom</code></td><td>The rate used, and the day it started.</td></tr><tr><td><code>instalments</code></td><td>How many payments. Usually the tenure; fewer when a rounded-up EMI repays a small loan early.</td></tr><tr><td><code>emiPaise</code>, <code>lastEmiPaise</code></td><td>The monthly instalment, and the adjusted last one.</td></tr><tr><td><code>totalInterestPaise</code>, <code>totalPayablePaise</code></td><td>Sums over the schedule, not EMI × months.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">201</span></td><td>Quote created</td></tr><tr><td><span class="pill ok">200</span></td><td>Schedule</td></tr><tr><td><span class="pill warn">400</span></td><td>A field is missing, out of range or of the wrong type</td></tr><tr><td><span class="pill warn">404</span></td><td>No quote with this id</td></tr><tr><td><span class="pill warn">422</span></td><td>No rate for this product is valid today</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 13 Oct 2026, in this order, so "today" is that date. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: ₹5 lakh personal loan, 24 months</h3><p><b>Why:</b> the 12.99% rate started on 1 October 2026. The EMI ₹23,768.56 is rounded once to ₹23,769; the last instalment is ₹11.91 smaller, so the total is less than 24 × EMI.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /loan-quotes HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;product&quot;: &quot;PERSONAL&quot;,
+  &quot;principalPaise&quot;: 50000000,
+  &quot;tenureMonths&quot;: 24
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /loan-quotes/4a9db5e5-1c08-4e22-858c-e6676bac703f/schedule
+Content-Type: application/json
+
+{
+  &quot;quoteId&quot;: &quot;4a9db5e5-1c08-4e22-858c-e6676bac703f&quot;,
+  &quot;product&quot;: &quot;PERSONAL&quot;,
+  &quot;quoteDate&quot;: &quot;2026-10-13&quot;,
+  &quot;principalPaise&quot;: 50000000,
+  &quot;tenureMonths&quot;: 24,
+  &quot;annualRatePercent&quot;: 12.99,
+  &quot;rateValidFrom&quot;: &quot;2026-10-01&quot;,
+  &quot;instalments&quot;: 24,
+  &quot;emiPaise&quot;: 2376900,
+  &quot;lastEmiPaise&quot;: 2375709,
+  &quot;totalInterestPaise&quot;: 7044409,
+  &quot;totalPayablePaise&quot;: 57044409
+}</code></pre></div></div></section><section class="example"><h3>Case 2: its schedule</h3><p><b>Why:</b> each month's interest is on what is left, so the interest part shrinks and the principal part grows. Row 24 pays exactly the remaining balance and ends at 0.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /loan-quotes/4a9db5e5-1c08-4e22-858c-e6676bac703f/schedule HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 2532
+
+{
+  &quot;quoteId&quot;: &quot;4a9db5e5-1c08-4e22-858c-e6676bac703f&quot;,
+  &quot;rows&quot;: [
+    {
+      &quot;month&quot;: 1,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 541250,
+      &quot;principalPaise&quot;: 1835650,
+      &quot;balancePaise&quot;: 48164350
+    },
+    {
+      &quot;month&quot;: 2,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 521379,
+      &quot;principalPaise&quot;: 1855521,
+      &quot;balancePaise&quot;: 46308829
+    },
+    {
+      &quot;month&quot;: 3,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 501293,
+      &quot;principalPaise&quot;: 1875607,
+      &quot;balancePaise&quot;: 44433222
+    },
+    {
+      &quot;month&quot;: 4,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 480990,
+      &quot;principalPaise&quot;: 1895910,
+      &quot;balancePaise&quot;: 42537312
+    },
+    {
+      &quot;month&quot;: 5,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 460466,
+      &quot;principalPaise&quot;: 1916434,
+      &quot;balancePaise&quot;: 40620878
+    },
+    {
+      &quot;month&quot;: 6,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 439721,
+      &quot;principalPaise&quot;: 1937179,
+      &quot;balancePaise&quot;: 38683699
+    },
+    {
+      &quot;month&quot;: 7,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 418751,
+      &quot;principalPaise&quot;: 1958149,
+      &quot;balancePaise&quot;: 36725550
+    },
+    {
+      &quot;month&quot;: 8,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 397554,
+      &quot;principalPaise&quot;: 1979346,
+      &quot;balancePaise&quot;: 34746204
+    },
+    {
+      &quot;month&quot;: 9,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 376128,
+      &quot;principalPaise&quot;: 2000772,
+      &quot;balancePaise&quot;: 32745432
+    },
+    {
+      &quot;month&quot;: 10,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 354469,
+      &quot;principalPaise&quot;: 2022431,
+      &quot;balancePaise&quot;: 30723001
+    },
+    {
+      &quot;month&quot;: 11,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 332576,
+      &quot;principalPaise&quot;: 2044324,
+      &quot;balancePaise&quot;: 28678677
+    },
+    {
+      &quot;month&quot;: 12,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 310447,
+      &quot;principalPaise&quot;: 2066453,
+      &quot;balancePaise&quot;: 26612224
+    },
+    {
+      &quot;month&quot;: 13,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 288077,
+      &quot;principalPaise&quot;: 2088823,
+      &quot;balancePaise&quot;: 24523401
+    },
+    {
+      &quot;month&quot;: 14,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 265466,
+      &quot;principalPaise&quot;: 2111434,
+      &quot;balancePaise&quot;: 22411967
+    },
+    {
+      &quot;month&quot;: 15,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 242610,
+      &quot;principalPaise&quot;: 2134290,
+      &quot;balancePaise&quot;: 20277677
+    },
+    {
+      &quot;month&quot;: 16,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 219506,
+      &quot;principalPaise&quot;: 2157394,
+      &quot;balancePaise&quot;: 18120283
+    },
+    {
+      &quot;month&quot;: 17,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 196152,
+      &quot;principalPaise&quot;: 2180748,
+      &quot;balancePaise&quot;: 15939535
+    },
+    {
+      &quot;month&quot;: 18,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 172545,
+      &quot;principalPaise&quot;: 2204355,
+      &quot;balancePaise&quot;: 13735180
+    },
+    {
+      &quot;month&quot;: 19,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 148683,
+      &quot;principalPaise&quot;: 2228217,
+      &quot;balancePaise&quot;: 11506963
+    },
+    {
+      &quot;month&quot;: 20,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 124563,
+      &quot;principalPaise&quot;: 2252337,
+      &quot;balancePaise&quot;: 9254626
+    },
+    {
+      &quot;month&quot;: 21,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 100181,
+      &quot;principalPaise&quot;: 2276719,
+      &quot;balancePaise&quot;: 6977907
+    },
+    {
+      &quot;month&quot;: 22,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 75536,
+      &quot;principalPaise&quot;: 2301364,
+      &quot;balancePaise&quot;: 4676543
+    },
+    {
+      &quot;month&quot;: 23,
+      &quot;emiPaise&quot;: 2376900,
+      &quot;interestPaise&quot;: 50624,
+      &quot;principalPaise&quot;: 2326276,
+      &quot;balancePaise&quot;: 2350267
+    },
+    {
+      &quot;month&quot;: 24,
+      &quot;emiPaise&quot;: 2375709,
+      &quot;interestPaise&quot;: 25442,
+      &quot;principalPaise&quot;: 2350267,
+      &quot;balancePaise&quot;: 0
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 3: ₹50 lakh home loan, 20 years</h3><p><b>Why:</b> month 1's interest alone is ₹35,416.67 of the ₹43,391 EMI: long loans repay little principal at first.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /loan-quotes HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;product&quot;: &quot;HOME&quot;,
+  &quot;principalPaise&quot;: 500000000,
+  &quot;tenureMonths&quot;: 240
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /loan-quotes/bc9f1f17-ae3a-4894-a13f-b3e1d62780ec/schedule
+Content-Type: application/json
+
+{
+  &quot;quoteId&quot;: &quot;bc9f1f17-ae3a-4894-a13f-b3e1d62780ec&quot;,
+  &quot;product&quot;: &quot;HOME&quot;,
+  &quot;quoteDate&quot;: &quot;2026-10-13&quot;,
+  &quot;principalPaise&quot;: 500000000,
+  &quot;tenureMonths&quot;: 240,
+  &quot;annualRatePercent&quot;: 8.5,
+  &quot;rateValidFrom&quot;: &quot;2026-04-01&quot;,
+  &quot;instalments&quot;: 240,
+  &quot;emiPaise&quot;: 4339100,
+  &quot;lastEmiPaise&quot;: 4349255,
+  &quot;totalInterestPaise&quot;: 541394155,
+  &quot;totalPayablePaise&quot;: 1041394155
+}</code></pre></div></div></section><section class="example"><h3>Case 4: ₹10,000 for 30 years</h3><p><b>Why:</b> ₹110.54 rounds up to ₹111; 46 paise more each month repays the loan in 344 instalments, not 360. The schedule stops when the balance reaches zero instead of going below it.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /loan-quotes HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;product&quot;: &quot;PERSONAL&quot;,
+  &quot;principalPaise&quot;: 1000000,
+  &quot;tenureMonths&quot;: 360
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /loan-quotes/aa8adf06-acdb-49f0-ab22-00987d7d0782/schedule
+Content-Type: application/json
+
+{
+  &quot;quoteId&quot;: &quot;aa8adf06-acdb-49f0-ab22-00987d7d0782&quot;,
+  &quot;product&quot;: &quot;PERSONAL&quot;,
+  &quot;quoteDate&quot;: &quot;2026-10-13&quot;,
+  &quot;principalPaise&quot;: 1000000,
+  &quot;tenureMonths&quot;: 360,
+  &quot;annualRatePercent&quot;: 12.99,
+  &quot;rateValidFrom&quot;: &quot;2026-10-01&quot;,
+  &quot;instalments&quot;: 344,
+  &quot;emiPaise&quot;: 11100,
+  &quot;lastEmiPaise&quot;: 4945,
+  &quot;totalInterestPaise&quot;: 2812245,
+  &quot;totalPayablePaise&quot;: 3812245
+}</code></pre></div></div></section><section class="example"><h3>Case 5: a product with no rate today</h3><p><b>Why:</b> the gold-loan rate starts on 1 January 2027. No rate is guessed: <code>422</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /loan-quotes HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;product&quot;: &quot;GOLD&quot;,
+  &quot;principalPaise&quot;: 10000000,
+  &quot;tenureMonths&quot;: 12
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;There is no GOLD rate valid on 2026-10-13.&quot;,
+  &quot;instance&quot;: &quot;/loan-quotes&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;No rate on this date&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: 3 months</h3><p><b>Why:</b> below the 6-month minimum: <code>400</code>. Spring's default detail does not say which field; station 006 shows how to add that.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /loan-quotes HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;product&quot;: &quot;PERSONAL&quot;,
+  &quot;principalPaise&quot;: 50000000,
+  &quot;tenureMonths&quot;: 3
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Invalid request content.&quot;,
+  &quot;instance&quot;: &quot;/loan-quotes&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>₹1,00,000 at 12% for 12 months</td><td>EMI ₹8,885</td><td><code>aTextbookExample</code></td></tr><tr><td>80 combinations of amount, rate and tenure</td><td>Each closes at 0, repays the principal exactly, never goes negative</td><td><code>everyCombinationClosesAtZeroAndRepaysThePrincipalExactly</code></td></tr><tr><td>₹10,000 at 12.99% for 360 months</td><td>Repaid in 344 instalments</td><td><code>aSmallLongLoanWhoseEmiWasRoundedUpClosesEarlyInsteadOfGoingNegative</code></td></tr><tr><td>The day before and the day a new rate starts</td><td>Old rate; new rate</td><td><code>theRateIsTheOneValidOnTheDay</code></td></tr><tr><td>₹5 lakh personal loan</td><td>201, 12.99%, last EMI 11.91 smaller</td><td><code>aQuoteUsesTheRateValidTodayAndPointsToItsSchedule</code></td></tr><tr><td>₹50 lakh home loan, 240 months</td><td>240 rows; month 1 interest ₹35,416.67; ends at 0</td><td><code>theScheduleHasOneRowPerMonthAndEndsAtZero</code></td></tr><tr><td>GOLD before its first rate</td><td><code>422</code></td><td><code>aProductWithNoRateYetIs422</code></td></tr><tr><td>₹9,999.99; 5 or 361 months; CAR; empty body</td><td><code>400</code></td><td><code>outOfRangeOrMissingFieldsAre400</code></td></tr><tr><td>Unknown quote id</td><td><code>404</code></td><td><code>anUnknownQuoteIs404</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Rounding every instalment the same way, so the last one never closes the loan.</p>
+<p>A schedule that subtracts the same rounded EMI 24 times ends at −1,191 paise: the customer overpays ₹11.91. A calculator that keeps four decimals turns <code>(1+r)^24</code> = 1.294862 into 1.2949 and quotes ₹23,766 instead of ₹23,769: the ₹3 support tickets. The real schedule rounds once and adjusts the last instalment. Removing the final adjustment and the cap while building turned 5 tests red. Testing every combination also found a second case: a small loan over 30 years whose rounded-up EMI repays it before month 360. That month now pays only what is left, and the schedule ends there.</p>
+</div>
+<pre class="code"><code class="language-java">package com.tijori.loans;
+
+import org.junit.jupiter.api.Test;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * The first test written for this station: it reproduces the bugs before the fix.
+ * A Rs 5,00,000 personal loan at 12.99% a year, over 24 months.
+ */
+class LastInstalmentTrapTest {
+
+    static final long PRINCIPAL = 50_000_000;
+    static final BigDecimal RATE = new BigDecimal(&quot;12.99&quot;);
+
+    /** The &quot;before&quot; schedule: the same rounded EMI every month, including the last. Kept only in tests. */
+    static long oldFinalBalance() {
+        long emi = Emi.emiPaise(PRINCIPAL, RATE, 24);
+        BigDecimal r = Emi.monthlyRate(RATE);
+        long balance = PRINCIPAL;
+        for (int m = 1; m &lt;= 24; m++) {
+            long interest = BigDecimal.valueOf(balance).multiply(r).setScale(0, RoundingMode.HALF_UP).longValueExact();
+            balance -= emi - interest;
+        }
+        return balance;
+    }
+
+    @Test
+    void theSameEmiEveryMonthNeverLandsOnZero() {
+        assertThat(oldFinalBalance()).isEqualTo(-1_191);   // the customer overpays Rs 11.91 and the loan shows a negative balance
+    }
+
+    /** The &quot;before&quot; EMI: a calculator that keeps four decimals and rounds (1+r)^24 = 1.294862 to 1.2949 before dividing. */
+    static long oldEmiPaise() {
+        BigDecimal r = Emi.monthlyRate(RATE);
+        BigDecimal growth = BigDecimal.ONE.add(r).pow(24).setScale(4, RoundingMode.HALF_UP);
+        BigDecimal emi = BigDecimal.valueOf(PRINCIPAL, 2).multiply(r).multiply(growth)
+                .divide(growth.subtract(BigDecimal.ONE), 10, RoundingMode.HALF_UP);
+        return emi.setScale(0, RoundingMode.HALF_UP).movePointRight(2).longValueExact();
+    }
+
+    @Test
+    void roundingAnIntermediateStepMovesTheEmiByThreeRupees() {
+        assertThat(oldEmiPaise()).isEqualTo(2_376_600);                       // Rs 23,766: what the app showed
+        assertThat(Emi.emiPaise(PRINCIPAL, RATE, 24)).isEqualTo(2_376_900);   // Rs 23,769: what the bank charges
+    }
+
+    @Test
+    void theRealScheduleAdjustsTheLastInstalmentAndClosesAtZero() {
+        List&lt;Emi.Row&gt; rows = Emi.schedule(PRINCIPAL, RATE, 24);
+        assertThat(rows).hasSize(24);
+        assertThat(rows.getLast().balancePaise()).isZero();
+        assertThat(rows.getLast().emiPaise()).isEqualTo(2_376_900 - 1_191);   // the overpayment is taken off the last EMI
+        assertThat(rows.stream().mapToLong(Emi.Row::principalPaise).sum()).isEqualTo(PRINCIPAL);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr><tr><td>Docker</td><td>Not needed for this station</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 12 tests</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>The body is in <code>docs/personal-loan.json</code> (₹5 lakh, 24 months).</p>
+<pre class="code"><code class="language-bash"># Quote: expect emiPaise 2376900 and lastEmiPaise 2375709 (at the 12.99% rate valid from 1 Oct 2026)
+curl -i -X POST http://localhost:8080/loan-quotes -H &quot;Content-Type: application/json&quot; -d &quot;@docs/personal-loan.json&quot;
+
+# The schedule: use the Location header from the quote
+curl http://localhost:8080/loan-quotes/&lt;id&gt;/schedule</code></pre>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>A different rate than the examples</td><td>Rates depend on today's date.</td><td>Check <code>tijori.rates</code>: the latest <code>from</code> on or before today wins.</td></tr><tr><td><code>422</code> for GOLD</td><td>Its first rate starts on 1 Jan 2027.</td><td>Add an earlier line in <code>application.yaml</code> to experiment.</td></tr><tr><td><code>release version 25 not supported</code></td><td>Maven is using an older JDK.</td><td>Point <code>JAVA_HOME</code> at JDK 25, or add <code>-Djava.version=21</code>.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/016-loan-emi-calculator-and-schedule/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/tijori/loans/
+│   ├── LoanQuoteController.java   ├── Emi.java   ├── RateTable.java
+│   ├── Product.java               └── LoansApplication.java
+├── src/main/resources/application.yaml   the dated rates
+├── src/test/java/com/tijori/loans/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">LoanQuoteController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">Emi.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">RateTable.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">Product.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">LoansApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/tijori/loans/LoanQuoteController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Validates the request, picks today's rate, builds the schedule once for the totals, stores the quote.</dd><dt>Why</dt><dd>Totals are sums over the real schedule, so they include the adjusted last instalment.</dd><dt>Without it</dt><dd>EMI × months as the total payable.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.loans;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.math.BigDecimal;
+import java.net.URI;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+@RestController
+class LoanQuoteController {
+
+    record QuoteRequest(@NotNull Product product,
+                        @NotNull @Min(value = 1_000_000, message = &quot;must be at least Rs 10,000&quot;)
+                        @Max(value = 1_000_000_000, message = &quot;must be at most Rs 1,00,00,000 (a demo rule)&quot;) Long principalPaise,
+                        @NotNull @Min(6) @Max(360) Integer tenureMonths) {
+    }
+
+    record Quote(UUID quoteId, Product product, LocalDate quoteDate, long principalPaise, int tenureMonths,
+                 BigDecimal annualRatePercent, LocalDate rateValidFrom, int instalments, long emiPaise, long lastEmiPaise,
+                 long totalInterestPaise, long totalPayablePaise) {
+    }
+
+    record Schedule(UUID quoteId, List&lt;Emi.Row&gt; rows) {
+    }
+
+    private final RateTable rates;
+    private final Clock clock;
+    private final Map&lt;UUID, Quote&gt; quotes = new ConcurrentHashMap&lt;&gt;();
+
+    LoanQuoteController(RateTable rates, Clock clock) {
+        this.rates = rates;
+        this.clock = clock;
+    }
+
+    @PostMapping(&quot;/loan-quotes&quot;)
+    ResponseEntity&lt;Quote&gt; quote(@Valid @RequestBody QuoteRequest r) {
+        LocalDate today = LocalDate.now(clock);
+        RateTable.DatedRate rate = rates.rateOn(r.product(), today).orElseThrow(() -&gt; problem(HttpStatus.UNPROCESSABLE_CONTENT,
+                &quot;No rate on this date&quot;, &quot;There is no &quot; + r.product() + &quot; rate valid on &quot; + today + &quot;.&quot;));
+        List&lt;Emi.Row&gt; rows = Emi.schedule(r.principalPaise(), rate.annualPercent(), r.tenureMonths());
+        long totalInterest = rows.stream().mapToLong(Emi.Row::interestPaise).sum();
+        Quote q = new Quote(UUID.randomUUID(), r.product(), today, r.principalPaise(), r.tenureMonths(),
+                rate.annualPercent(), rate.from(), rows.size(), rows.getFirst().emiPaise(), rows.getLast().emiPaise(),
+                totalInterest, r.principalPaise() + totalInterest);
+        quotes.put(q.quoteId(), q);
+        return ResponseEntity.created(URI.create(&quot;/loan-quotes/&quot; + q.quoteId() + &quot;/schedule&quot;)).body(q);
+    }
+
+    /** The schedule is recomputed from the stored quote: same inputs, same rate, same rows every time. */
+    @GetMapping(&quot;/loan-quotes/{id}/schedule&quot;)
+    Schedule schedule(@PathVariable UUID id) {
+        Quote q = quotes.get(id);
+        if (q == null) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;Quote not found&quot;, &quot;No loan quote has this id.&quot;);
+        }
+        return new Schedule(id, Emi.schedule(q.principalPaise(), q.annualRatePercent(), q.tenureMonths()));
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/tijori/loans/Emi.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The formula and the schedule, in <code>BigDecimal</code>.</dd><dt>Why</dt><dd>All money arithmetic in one small class with its own tests.</dd><dt>Without it</dt><dd>The trap: rounding early, and the same EMI every month.</dd></dl><ul><li><code>MathContext.DECIMAL128</code>: 34 significant digits for every step, so rounding only happens where the code says.</li><li>The EMI is rounded once; each month's interest is rounded to the paisa.</li><li>The last month, or any month that would go below zero, pays exactly what is left.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.loans;
+
+import java.math.BigDecimal;
+import java.math.MathContext;
+import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * The EMI formula and the amortisation schedule, in BigDecimal. A learning exercise, not financial advice:
+ * real lenders also add fees, broken-period interest and their own rounding rules.
+ */
+final class Emi {
+
+    /** 34 significant digits for every intermediate step: far more than paise need, so rounding happens only where we say. */
+    static final MathContext MC = MathContext.DECIMAL128;
+
+    record Row(int month, long emiPaise, long interestPaise, long principalPaise, long balancePaise) {
+    }
+
+    private Emi() {
+    }
+
+    /** Monthly rate as a fraction: 12.99% a year is 0.1299 / 12 a month. */
+    static BigDecimal monthlyRate(BigDecimal annualPercent) {
+        return annualPercent.divide(BigDecimal.valueOf(1200), MC);
+    }
+
+    /** EMI = P x r x (1+r)^n / ((1+r)^n - 1), rounded half up to whole rupees, as most lenders quote it. In paise. */
+    static long emiPaise(long principalPaise, BigDecimal annualPercent, int months) {
+        BigDecimal p = BigDecimal.valueOf(principalPaise, 2);              // rupees, exactly
+        BigDecimal r = monthlyRate(annualPercent);
+        BigDecimal growth = BigDecimal.ONE.add(r).pow(months, MC);         // (1+r)^n
+        BigDecimal emi = p.multiply(r, MC).multiply(growth, MC).divide(growth.subtract(BigDecimal.ONE), MC);
+        return emi.setScale(0, RoundingMode.HALF_UP).movePointRight(2).longValueExact();
+    }
+
+    /**
+     * Month by month: interest on what is still owed (rounded to the paisa), the rest of the EMI repays principal.
+     * Because the EMI was rounded to a whole rupee, the last month would not land on zero; it is adjusted to pay
+     * exactly what is left, interest included, so the loan closes at 0. A whole-rupee EMI rounded up can also
+     * repay a small, long loan before its last month; then that month pays what is left and the schedule stops early.
+     */
+    static List&lt;Row&gt; schedule(long principalPaise, BigDecimal annualPercent, int months) {
+        long emi = emiPaise(principalPaise, annualPercent, months);
+        BigDecimal r = monthlyRate(annualPercent);
+        List&lt;Row&gt; rows = new ArrayList&lt;&gt;();
+        long balance = principalPaise;
+        for (int m = 1; m &lt;= months &amp;&amp; balance &gt; 0; m++) {
+            long interest = BigDecimal.valueOf(balance).multiply(r, MC).setScale(0, RoundingMode.HALF_UP).longValueExact();
+            long principal = m == months ? balance : Math.min(emi - interest, balance);   // the final adjustment
+            balance -= principal;
+            rows.add(new Row(m, interest + principal, interest, principal, balance));
+        }
+        return rows;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/tijori/loans/RateTable.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Dated rates from <code>application.yaml</code>; the rate on a day.</dd><dt>Why</dt><dd><code>TreeMap.floorEntry(date)</code> is "the latest start date on or before this day" in one call.</dd><dt>Without it</dt><dd>A single rate per product, edited on the day it changes.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.loans;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.TreeMap;
+
+/** Dated rates from application.yaml (tijori.rates). Each product&#x27;s list is turned into a TreeMap keyed by start date. */
+@ConfigurationProperties(&quot;tijori&quot;)
+record RateTable(Map&lt;Product, List&lt;DatedRate&gt;&gt; rates) {
+
+    record DatedRate(LocalDate from, BigDecimal annualPercent) {
+    }
+
+    /** The rate valid on a date: the entry with the latest start date on or before it (TreeMap.floorEntry). */
+    Optional&lt;DatedRate&gt; rateOn(Product product, LocalDate date) {
+        TreeMap&lt;LocalDate, DatedRate&gt; byStart = new TreeMap&lt;&gt;();
+        rates.getOrDefault(product, List.of()).forEach(r -&gt; byStart.put(r.from(), r));
+        return Optional.ofNullable(byStart.floorEntry(date)).map(Map.Entry::getValue);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/tijori/loans/Product.java</p><div class="notes"><p>The three products. An unknown name is a <code>400</code>.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.loans;
+
+public enum Product {
+    PERSONAL, HOME, GOLD
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>The dated rates (demo numbers), problem bodies for errors, and no silent truncation of <code>2.5</code> to <code>2</code>.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: tijori-loans
+  mvc:
+    problemdetails:
+      enabled: true
+  jackson:
+    deserialization:
+      accept-float-as-int: false
+
+# Interest rates by product, each valid from a date until the next one starts. Demo numbers for this learning
+# station, not Tijori&#x27;s (or any bank&#x27;s) real rates, and not financial advice. A rate change is a new line with a
+# future date, added ahead of time; old quotes keep the rate that was valid on their quote date.
+tijori:
+  rates:
+    PERSONAL:
+      - from: 2026-04-01
+        annual-percent: 13.50
+      - from: 2026-10-01
+        annual-percent: 12.99
+    HOME:
+      - from: 2026-04-01
+        annual-percent: 8.50
+    GOLD:
+      - from: 2027-01-01   # launches next year: quotes before then get 422
+        annual-percent: 9.25</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/tijori/loans/LoansApplication.java</p><div class="notes"><p>Entry point, and the <code>Clock</code> in India's time zone, so tests can fix "today".</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.loans;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
+import org.springframework.context.annotation.Bean;
+
+import java.time.Clock;
+import java.time.ZoneId;
+
+@SpringBootApplication
+@ConfigurationPropertiesScan
+public class LoansApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(LoansApplication.class, args);
+    }
+
+    /** &quot;Today&quot; for picking the rate, in India&#x27;s time zone: a quote at 00:30 IST on 1 Oct uses the 1 Oct rate. */
+    @Bean
+    Clock clock() {
+        return Clock.system(ZoneId.of(&quot;Asia/Kolkata&quot;));
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>LoanQuoteContractTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>LastInstalmentTrapTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>This station</td><td>The formula, every combination closing at zero, rate dates</td><td><code>EmiTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.tijori.loans.LastInstalmentTrapTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.tijori.loans.EmiTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.tijori.loans.LoanQuoteContractTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">LastInstalmentTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">LoanQuoteContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">EmiTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/tijori/loans/LastInstalmentTrapTest.java</p><div class="notes"><p>Written first: −₹11.91 left by the same EMI every month, ₹3 lost by an early rounding, and the real schedule closing at zero.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.loans;
+
+import org.junit.jupiter.api.Test;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * The first test written for this station: it reproduces the bugs before the fix.
+ * A Rs 5,00,000 personal loan at 12.99% a year, over 24 months.
+ */
+class LastInstalmentTrapTest {
+
+    static final long PRINCIPAL = 50_000_000;
+    static final BigDecimal RATE = new BigDecimal(&quot;12.99&quot;);
+
+    /** The &quot;before&quot; schedule: the same rounded EMI every month, including the last. Kept only in tests. */
+    static long oldFinalBalance() {
+        long emi = Emi.emiPaise(PRINCIPAL, RATE, 24);
+        BigDecimal r = Emi.monthlyRate(RATE);
+        long balance = PRINCIPAL;
+        for (int m = 1; m &lt;= 24; m++) {
+            long interest = BigDecimal.valueOf(balance).multiply(r).setScale(0, RoundingMode.HALF_UP).longValueExact();
+            balance -= emi - interest;
+        }
+        return balance;
+    }
+
+    @Test
+    void theSameEmiEveryMonthNeverLandsOnZero() {
+        assertThat(oldFinalBalance()).isEqualTo(-1_191);   // the customer overpays Rs 11.91 and the loan shows a negative balance
+    }
+
+    /** The &quot;before&quot; EMI: a calculator that keeps four decimals and rounds (1+r)^24 = 1.294862 to 1.2949 before dividing. */
+    static long oldEmiPaise() {
+        BigDecimal r = Emi.monthlyRate(RATE);
+        BigDecimal growth = BigDecimal.ONE.add(r).pow(24).setScale(4, RoundingMode.HALF_UP);
+        BigDecimal emi = BigDecimal.valueOf(PRINCIPAL, 2).multiply(r).multiply(growth)
+                .divide(growth.subtract(BigDecimal.ONE), 10, RoundingMode.HALF_UP);
+        return emi.setScale(0, RoundingMode.HALF_UP).movePointRight(2).longValueExact();
+    }
+
+    @Test
+    void roundingAnIntermediateStepMovesTheEmiByThreeRupees() {
+        assertThat(oldEmiPaise()).isEqualTo(2_376_600);                       // Rs 23,766: what the app showed
+        assertThat(Emi.emiPaise(PRINCIPAL, RATE, 24)).isEqualTo(2_376_900);   // Rs 23,769: what the bank charges
+    }
+
+    @Test
+    void theRealScheduleAdjustsTheLastInstalmentAndClosesAtZero() {
+        List&lt;Emi.Row&gt; rows = Emi.schedule(PRINCIPAL, RATE, 24);
+        assertThat(rows).hasSize(24);
+        assertThat(rows.getLast().balancePaise()).isZero();
+        assertThat(rows.getLast().emiPaise()).isEqualTo(2_376_900 - 1_191);   // the overpayment is taken off the last EMI
+        assertThat(rows.stream().mapToLong(Emi.Row::principalPaise).sum()).isEqualTo(PRINCIPAL);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/tijori/loans/LoanQuoteContractTest.java</p><div class="notes"><p>A quote at today's rate, its schedule, and every refusal.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.loans;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import java.util.UUID;
+
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.matchesPattern;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP contract: a quote with today&#x27;s dated rate, its schedule, and every refusal. */
+class LoanQuoteContractTest extends ApiTest {
+
+    @Test
+    void aQuoteUsesTheRateValidTodayAndPointsToItsSchedule() throws Exception {
+        quote(&quot;PERSONAL&quot;, 50_000_000, 24)
+                .andExpect(status().isCreated())
+                .andExpect(header().string(&quot;Location&quot;, matchesPattern(&quot;/loan-quotes/[0-9a-f-]{36}/schedule&quot;)))
+                .andExpect(jsonPath(&quot;$.quoteDate&quot;).value(&quot;2026-10-19&quot;))
+                .andExpect(jsonPath(&quot;$.annualRatePercent&quot;).value(12.99))      // not 13.50: that rate ended on 30 Sep
+                .andExpect(jsonPath(&quot;$.rateValidFrom&quot;).value(&quot;2026-10-01&quot;))
+                .andExpect(jsonPath(&quot;$.emiPaise&quot;).value(2_376_900))
+                .andExpect(jsonPath(&quot;$.lastEmiPaise&quot;).value(2_376_900 - 1_191))
+                .andExpect(jsonPath(&quot;$.totalPayablePaise&quot;).value(23 * 2_376_900 + 2_376_900 - 1_191));
+    }
+
+    @Test
+    void theScheduleHasOneRowPerMonthAndEndsAtZero() throws Exception {
+        String location = quote(&quot;HOME&quot;, 500_000_000, 240).andReturn().getResponse().getHeader(&quot;Location&quot;);
+        mvc.perform(get(location))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.rows&quot;, hasSize(240)))
+                .andExpect(jsonPath(&quot;$.rows[0].emiPaise&quot;).value(4_339_100))
+                .andExpect(jsonPath(&quot;$.rows[0].interestPaise&quot;).value(3_541_667))   // 50 lakh x 8.5% / 12, to the paisa
+                .andExpect(jsonPath(&quot;$.rows[239].balancePaise&quot;).value(0));
+    }
+
+    @Test
+    void aProductWithNoRateYetIs422() throws Exception {
+        quote(&quot;GOLD&quot;, 10_000_000, 12)
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;There is no GOLD rate valid on 2026-10-19.&quot;));
+    }
+
+    @Test
+    void outOfRangeOrMissingFieldsAre400() throws Exception {
+        quote(&quot;PERSONAL&quot;, 999_999, 24).andExpect(status().isBadRequest());
+        quote(&quot;PERSONAL&quot;, 50_000_000, 5).andExpect(status().isBadRequest());
+        quote(&quot;PERSONAL&quot;, 50_000_000, 361).andExpect(status().isBadRequest());
+        quote(&quot;CAR&quot;, 50_000_000, 24).andExpect(status().isBadRequest());
+        mvc.perform(post(&quot;/loan-quotes&quot;).contentType(MediaType.APPLICATION_JSON).content(&quot;{}&quot;)).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void anUnknownQuoteIs404() throws Exception {
+        mvc.perform(get(&quot;/loan-quotes/{id}/schedule&quot;, UUID.randomUUID())).andExpect(status().isNotFound())
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Quote not found&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/tijori/loans/EmiTest.java</p><div class="notes"><p>A textbook value, 80 combinations that must close at zero, a loan that closes early, and rates on their boundary days.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.loans;
+
+import org.junit.jupiter.api.Test;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** The formula against a known value, every schedule closing at zero, and rate dates at their boundaries. */
+class EmiTest {
+
+    @Test
+    void aTextbookExample() {
+        // Rs 1,00,000 at 12% a year for 12 months: EMI Rs 8,884.88, quoted as Rs 8,885.
+        assertThat(Emi.emiPaise(10_000_000, new BigDecimal(&quot;12&quot;), 12)).isEqualTo(888_500);
+    }
+
+    @Test
+    void everyCombinationClosesAtZeroAndRepaysThePrincipalExactly() {
+        for (long principal : new long[]{1_000_000, 12_345_678, 50_000_000, 1_000_000_000}) {
+            for (String rate : new String[]{&quot;8.50&quot;, &quot;12.99&quot;, &quot;13.50&quot;, &quot;24&quot;}) {
+                for (int months : new int[]{6, 7, 24, 60, 360}) {
+                    List&lt;Emi.Row&gt; rows = Emi.schedule(principal, new BigDecimal(rate), months);
+                    assertThat(rows.getLast().balancePaise()).as(principal + &quot; &quot; + rate + &quot; &quot; + months).isZero();
+                    assertThat(rows.stream().mapToLong(Emi.Row::principalPaise).sum()).isEqualTo(principal);
+                    assertThat(rows).allMatch(r -&gt; r.balancePaise() &gt;= 0);
+                }
+            }
+        }
+    }
+
+    @Test
+    void aSmallLongLoanWhoseEmiWasRoundedUpClosesEarlyInsteadOfGoingNegative() {
+        // Rs 10,000 at 12.99% for 360 months: Rs 110.54 a month is quoted as Rs 111, so it is repaid by month 344.
+        List&lt;Emi.Row&gt; rows = Emi.schedule(1_000_000, new BigDecimal(&quot;12.99&quot;), 360);
+        assertThat(rows).hasSize(344);
+        assertThat(rows.getLast().balancePaise()).isZero();
+        assertThat(rows.getLast().emiPaise()).isLessThan(11_100);
+    }
+
+    @Test
+    void theRateIsTheOneValidOnTheDay() {
+        RateTable table = new RateTable(Map.of(Product.PERSONAL, List.of(
+                new RateTable.DatedRate(LocalDate.of(2026, 4, 1), new BigDecimal(&quot;13.50&quot;)),
+                new RateTable.DatedRate(LocalDate.of(2026, 10, 1), new BigDecimal(&quot;12.99&quot;)))));
+        assertThat(table.rateOn(Product.PERSONAL, LocalDate.of(2026, 3, 31))).isEmpty();
+        assertThat(table.rateOn(Product.PERSONAL, LocalDate.of(2026, 9, 30)).orElseThrow().annualPercent()).isEqualByComparingTo(&quot;13.50&quot;);
+        assertThat(table.rateOn(Product.PERSONAL, LocalDate.of(2026, 10, 1)).orElseThrow().annualPercent()).isEqualByComparingTo(&quot;12.99&quot;);
+        assertThat(table.rateOn(Product.HOME, LocalDate.of(2026, 10, 1))).isEmpty();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/tijori/loans/ApiTest.java</p><div class="notes"><p>Shared setup: the whole app through MockMvc, with "today" fixed at 19 Oct 2026 by a test <code>Clock</code>.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.loans;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/** Shared setup: the whole app through MockMvc, and &quot;today&quot; fixed at 19 Oct 2026 so the rate a test gets never changes. */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(ApiTest.FixedToday.class)
+abstract class ApiTest {
+
+    @TestConfiguration
+    static class FixedToday {
+        @Bean
+        @Primary
+        Clock fixedClock() {
+            return Clock.fixed(Instant.parse(&quot;2026-10-19T04:30:00Z&quot;), ZoneId.of(&quot;Asia/Kolkata&quot;));
+        }
+    }
+
+    @Autowired
+    MockMvc mvc;
+
+    ResultActions quote(String product, long principalPaise, int months) throws Exception {
+        return mvc.perform(post(&quot;/loan-quotes&quot;).contentType(MediaType.APPLICATION_JSON).content(
+                &quot;{\&quot;product\&quot;:\&quot;&quot; + product + &quot;\&quot;,\&quot;principalPaise\&quot;:&quot; + principalPaise + &quot;,\&quot;tenureMonths\&quot;:&quot; + months + &quot;}&quot;));
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/tijori/loans/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=PrepaymentChallengeTest</code></li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 12 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 18 tests pass (12 station tests and 6 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Go deeper · about 35 minutes</p><h2>Part-prepayment</h2><p>Add <code>?prepayMonth=6&amp;prepayPaise=10000000</code> to the schedule: ₹1 lakh paid after month 6's EMI. Keep the EMI; the loan ends sooner. Each row gets <code>prepaidPaise</code>.</p><p><b>Done when:</b> all three tests in <code>PrepaymentChallengeTest</code> pass: 20 instalments instead of 24.</p><details class="qa"><summary>Hints</summary><ul><li>The schedule already stops when the balance reaches zero; a prepayment only lowers the balance one month.</li><li>Refuse a prepayment that would clear the whole balance (that is a foreclosure), or one after the last EMI: <code>422</code>.</li><li>One parameter without the other is a <code>400</code>.</li></ul></details><p class="path">challenge/PrepaymentChallengeTest.java</p><pre class="code"><code class="language-java">package com.tijori.loans;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: GET /loan-quotes/{id}/schedule?prepayMonth=6&amp;prepayPaise=10000000 shows the schedule with a part-prepayment
+ * made after that month&#x27;s EMI. The EMI stays the same, so the loan ends sooner. Each row gets a prepaidPaise field.
+ */
+class PrepaymentChallengeTest extends ApiTest {
+
+    String personalLoan() throws Exception {
+        return quote(&quot;PERSONAL&quot;, 50_000_000, 24).andReturn().getResponse().getHeader(&quot;Location&quot;);
+    }
+
+    @Test
+    void aPrepaymentKeepsTheEmiAndShortensTheLoan() throws Exception {
+        mvc.perform(get(personalLoan()).param(&quot;prepayMonth&quot;, &quot;6&quot;).param(&quot;prepayPaise&quot;, &quot;10000000&quot;))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.rows&quot;, hasSize(20)))                        // 20 instalments, not 24
+                .andExpect(jsonPath(&quot;$.rows[5].emiPaise&quot;).value(2_376_900))
+                .andExpect(jsonPath(&quot;$.rows[5].prepaidPaise&quot;).value(10_000_000))
+                .andExpect(jsonPath(&quot;$.rows[5].balancePaise&quot;).value(28_683_699))   // 3,86,836.99 - 1,00,000
+                .andExpect(jsonPath(&quot;$.rows[6].emiPaise&quot;).value(2_376_900))        // same EMI after the prepayment
+                .andExpect(jsonPath(&quot;$.rows[19].emiPaise&quot;).value(4_633))           // the last one is small
+                .andExpect(jsonPath(&quot;$.rows[19].balancePaise&quot;).value(0));
+    }
+
+    @Test
+    void withoutAPrepaymentTheScheduleIsUnchanged() throws Exception {
+        mvc.perform(get(personalLoan()))
+                .andExpect(jsonPath(&quot;$.rows&quot;, hasSize(24)))
+                .andExpect(jsonPath(&quot;$.rows[5].prepaidPaise&quot;).value(0))
+                .andExpect(jsonPath(&quot;$.rows[23].balancePaise&quot;).value(0));
+    }
+
+    @Test
+    void impossiblePrepaymentsAreRefused() throws Exception {
+        String loan = personalLoan();
+        mvc.perform(get(loan).param(&quot;prepayMonth&quot;, &quot;6&quot;).param(&quot;prepayPaise&quot;, &quot;38683699&quot;))   // all that is left: that is a foreclosure
+                .andExpect(status().isUnprocessableContent());
+        mvc.perform(get(loan).param(&quot;prepayMonth&quot;, &quot;24&quot;).param(&quot;prepayPaise&quot;, &quot;100000&quot;))    // after the last EMI
+                .andExpect(status().isUnprocessableContent());
+        mvc.perform(get(loan).param(&quot;prepayMonth&quot;, &quot;6&quot;))                                     // amount missing
+                .andExpect(status().isBadRequest());
+        mvc.perform(get(loan).param(&quot;prepayMonth&quot;, &quot;6&quot;).param(&quot;prepayPaise&quot;, &quot;0&quot;))
+                .andExpect(status().isBadRequest());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/Emi.java</p><div class="src"><pre class="code"><code class="language-java">package com.tijori.loans;
+
+import java.math.BigDecimal;
+import java.math.MathContext;
+import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * The EMI formula and the amortisation schedule, in BigDecimal. A learning exercise, not financial advice:
+ * real lenders also add fees, broken-period interest and their own rounding rules.
+ */
+final class Emi {
+
+    /** 34 significant digits for every intermediate step: far more than paise need, so rounding happens only where we say. */
+    static final MathContext MC = MathContext.DECIMAL128;
+
+    record Row(int month, long emiPaise, long interestPaise, long principalPaise, long prepaidPaise, long balancePaise) {
+    }
+
+    private Emi() {
+    }
+
+    /** Monthly rate as a fraction: 12.99% a year is 0.1299 / 12 a month. */
+    static BigDecimal monthlyRate(BigDecimal annualPercent) {
+        return annualPercent.divide(BigDecimal.valueOf(1200), MC);
+    }
+
+    /** EMI = P x r x (1+r)^n / ((1+r)^n - 1), rounded half up to whole rupees, as most lenders quote it. In paise. */
+    static long emiPaise(long principalPaise, BigDecimal annualPercent, int months) {
+        BigDecimal p = BigDecimal.valueOf(principalPaise, 2);              // rupees, exactly
+        BigDecimal r = monthlyRate(annualPercent);
+        BigDecimal growth = BigDecimal.ONE.add(r).pow(months, MC);         // (1+r)^n
+        BigDecimal emi = p.multiply(r, MC).multiply(growth, MC).divide(growth.subtract(BigDecimal.ONE), MC);
+        return emi.setScale(0, RoundingMode.HALF_UP).movePointRight(2).longValueExact();
+    }
+
+    /**
+     * Month by month: interest on what is still owed (rounded to the paisa), the rest of the EMI repays principal.
+     * Because the EMI was rounded to a whole rupee, the last month would not land on zero; it is adjusted to pay
+     * exactly what is left, interest included, so the loan closes at 0. A whole-rupee EMI rounded up can also
+     * repay a small, long loan before its last month; then that month pays what is left and the schedule stops early.
+     */
+    static List&lt;Row&gt; schedule(long principalPaise, BigDecimal annualPercent, int months) {
+        return schedule(principalPaise, annualPercent, months, 0, 0);
+    }
+
+    /**
+     * Challenge 1: prepayPaise is paid after the EMI of prepayMonth. The EMI stays the same, so the balance reaches
+     * zero sooner and the early-close rule ends the schedule. The caller checks the amount is less than the balance.
+     */
+    static List&lt;Row&gt; schedule(long principalPaise, BigDecimal annualPercent, int months, int prepayMonth, long prepayPaise) {
+        long emi = emiPaise(principalPaise, annualPercent, months);
+        BigDecimal r = monthlyRate(annualPercent);
+        List&lt;Row&gt; rows = new ArrayList&lt;&gt;();
+        long balance = principalPaise;
+        for (int m = 1; m &lt;= months &amp;&amp; balance &gt; 0; m++) {
+            long interest = BigDecimal.valueOf(balance).multiply(r, MC).setScale(0, RoundingMode.HALF_UP).longValueExact();
+            long principal = m == months ? balance : Math.min(emi - interest, balance);   // the final adjustment
+            long prepaid = m == prepayMonth ? prepayPaise : 0;
+            balance -= principal + prepaid;
+            rows.add(new Row(m, interest + principal, interest, principal, prepaid, balance));
+        }
+        return rows;
+    }
+}</code></pre></div><p class="path">challenge/solution/LoanQuoteController.java</p><div class="src"><pre class="code"><code class="language-java">package com.tijori.loans;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.math.BigDecimal;
+import java.net.URI;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+@RestController
+class LoanQuoteController {
+
+    record QuoteRequest(@NotNull Product product,
+                        @NotNull @Min(value = 1_000_000, message = &quot;must be at least Rs 10,000&quot;)
+                        @Max(value = 1_000_000_000, message = &quot;must be at most Rs 1,00,00,000 (a demo rule)&quot;) Long principalPaise,
+                        @NotNull @Min(6) @Max(360) Integer tenureMonths,
+                        LocalDate disbursalDate) {
+    }
+
+    record Quote(UUID quoteId, Product product, LocalDate quoteDate, LocalDate disbursalDate, long principalPaise, int tenureMonths,
+                 BigDecimal annualRatePercent, LocalDate rateValidFrom, int instalments, long emiPaise, long lastEmiPaise,
+                 long totalInterestPaise, long totalPayablePaise) {
+    }
+
+    record Schedule(UUID quoteId, List&lt;Emi.Row&gt; rows) {
+    }
+
+    private final RateTable rates;
+    private final Clock clock;
+    private final Map&lt;UUID, Quote&gt; quotes = new ConcurrentHashMap&lt;&gt;();
+
+    LoanQuoteController(RateTable rates, Clock clock) {
+        this.rates = rates;
+        this.clock = clock;
+    }
+
+    @PostMapping(&quot;/loan-quotes&quot;)
+    ResponseEntity&lt;Quote&gt; quote(@Valid @RequestBody QuoteRequest r) {
+        LocalDate today = LocalDate.now(clock);
+        LocalDate disbursal = r.disbursalDate() == null ? today : r.disbursalDate();
+        if (disbursal.isBefore(today) || disbursal.isAfter(today.plusDays(90))) {   // 90 days: a demo rule
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Disbursal date out of range&quot;,
+                    &quot;The disbursal date must be between &quot; + today + &quot; and &quot; + today.plusDays(90) + &quot;.&quot;);
+        }
+        RateTable.DatedRate rate = rates.rateOn(r.product(), disbursal).orElseThrow(() -&gt; problem(HttpStatus.UNPROCESSABLE_CONTENT,
+                &quot;No rate on this date&quot;, &quot;There is no &quot; + r.product() + &quot; rate valid on &quot; + disbursal + &quot;.&quot;));
+        List&lt;Emi.Row&gt; rows = Emi.schedule(r.principalPaise(), rate.annualPercent(), r.tenureMonths());
+        long totalInterest = rows.stream().mapToLong(Emi.Row::interestPaise).sum();
+        Quote q = new Quote(UUID.randomUUID(), r.product(), today, disbursal, r.principalPaise(), r.tenureMonths(),
+                rate.annualPercent(), rate.from(), rows.size(), rows.getFirst().emiPaise(), rows.getLast().emiPaise(),
+                totalInterest, r.principalPaise() + totalInterest);
+        quotes.put(q.quoteId(), q);
+        return ResponseEntity.created(URI.create(&quot;/loan-quotes/&quot; + q.quoteId() + &quot;/schedule&quot;)).body(q);
+    }
+
+    /** The schedule is recomputed from the stored quote: same inputs, same rate, same rows every time. */
+    @GetMapping(&quot;/loan-quotes/{id}/schedule&quot;)
+    Schedule schedule(@PathVariable UUID id, @RequestParam(required = false) @Positive Integer prepayMonth,
+                      @RequestParam(required = false) @Positive Long prepayPaise) {
+        Quote q = quotes.get(id);
+        if (q == null) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;Quote not found&quot;, &quot;No loan quote has this id.&quot;);
+        }
+        List&lt;Emi.Row&gt; plain = Emi.schedule(q.principalPaise(), q.annualRatePercent(), q.tenureMonths());
+        if (prepayMonth == null &amp;&amp; prepayPaise == null) {
+            return new Schedule(id, plain);
+        }
+        if (prepayMonth == null || prepayPaise == null) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;Incomplete prepayment&quot;, &quot;Send both prepayMonth and prepayPaise.&quot;);
+        }
+        if (prepayMonth &gt;= plain.size()) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Prepayment after the last EMI&quot;,
+                    &quot;The loan has &quot; + plain.size() + &quot; instalments; prepay after month 1 to &quot; + (plain.size() - 1) + &quot;.&quot;);
+        }
+        long left = plain.get(prepayMonth - 1).balancePaise();
+        if (prepayPaise &gt;= left) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Prepayment is a foreclosure&quot;,
+                    &quot;After month &quot; + prepayMonth + &quot; the balance is &quot; + left + &quot; paise; a part-prepayment must be less.&quot;);
+        }
+        return new Schedule(id, Emi.schedule(q.principalPaise(), q.annualRatePercent(), q.tenureMonths(), prepayMonth, prepayPaise));
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Beginner-friendly · about 20 minutes</p><h2>Quote for a disbursal date</h2><p>Add an optional <code>disbursalDate</code>. The rate is the one valid on that date, so a gold loan disbursed on 5 Jan 2027 can be quoted today. Demo rule: today to 90 days ahead.</p><p><b>Done when:</b> all three tests in <code>DisbursalDateChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li><code>rateOn</code> already takes a date: pass the disbursal date instead of today.</li><li>A <code>LocalDate</code> field in the body is parsed from <code>2027-01-05</code>; any other format is a <code>400</code> on its own.</li></ul></details><p class="path">challenge/DisbursalDateChallengeTest.java</p><pre class="code"><code class="language-java">package com.tijori.loans;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.ResultActions;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: an optional disbursalDate in the request. The quote uses the rate valid on that date, not today.
+ * Demo rule: the date is today or up to 90 days ahead. Without it, nothing changes.
+ */
+class DisbursalDateChallengeTest extends ApiTest {
+
+    ResultActions quoteOn(String product, String date) throws Exception {
+        return mvc.perform(post(&quot;/loan-quotes&quot;).contentType(MediaType.APPLICATION_JSON).content(
+                &quot;{\&quot;product\&quot;:\&quot;&quot; + product + &quot;\&quot;,\&quot;principalPaise\&quot;:10000000,\&quot;tenureMonths\&quot;:12,\&quot;disbursalDate\&quot;:\&quot;&quot; + date + &quot;\&quot;}&quot;));
+    }
+
+    @Test
+    void theRateIsTheOneValidOnTheDisbursalDate() throws Exception {
+        quoteOn(&quot;GOLD&quot;, &quot;2027-01-05&quot;)                                   // today (19 Oct 2026) GOLD has no rate yet
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath(&quot;$.disbursalDate&quot;).value(&quot;2027-01-05&quot;))
+                .andExpect(jsonPath(&quot;$.annualRatePercent&quot;).value(9.25))
+                .andExpect(jsonPath(&quot;$.rateValidFrom&quot;).value(&quot;2027-01-01&quot;));
+        quoteOn(&quot;GOLD&quot;, &quot;2026-12-31&quot;).andExpect(status().isUnprocessableContent());   // the day before it starts
+    }
+
+    @Test
+    void withoutADateItIsToday() throws Exception {
+        quote(&quot;PERSONAL&quot;, 10_000_000, 12).andExpect(jsonPath(&quot;$.disbursalDate&quot;).value(&quot;2026-10-19&quot;));
+    }
+
+    @Test
+    void aPastOrFarDateIsRefused() throws Exception {
+        quoteOn(&quot;PERSONAL&quot;, &quot;2026-10-18&quot;).andExpect(status().isUnprocessableContent());   // yesterday
+        quoteOn(&quot;PERSONAL&quot;, &quot;2027-01-17&quot;).andExpect(status().isCreated());                // day 90
+        quoteOn(&quot;PERSONAL&quot;, &quot;2027-01-18&quot;).andExpect(status().isUnprocessableContent());   // day 91
+        quoteOn(&quot;PERSONAL&quot;, &quot;18-10-2026&quot;).andExpect(status().isBadRequest());             // not ISO 8601
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/LoanQuoteController.java</p><div class="src"><pre class="code"><code class="language-java">package com.tijori.loans;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.math.BigDecimal;
+import java.net.URI;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+@RestController
+class LoanQuoteController {
+
+    record QuoteRequest(@NotNull Product product,
+                        @NotNull @Min(value = 1_000_000, message = &quot;must be at least Rs 10,000&quot;)
+                        @Max(value = 1_000_000_000, message = &quot;must be at most Rs 1,00,00,000 (a demo rule)&quot;) Long principalPaise,
+                        @NotNull @Min(6) @Max(360) Integer tenureMonths,
+                        LocalDate disbursalDate) {
+    }
+
+    record Quote(UUID quoteId, Product product, LocalDate quoteDate, LocalDate disbursalDate, long principalPaise, int tenureMonths,
+                 BigDecimal annualRatePercent, LocalDate rateValidFrom, int instalments, long emiPaise, long lastEmiPaise,
+                 long totalInterestPaise, long totalPayablePaise) {
+    }
+
+    record Schedule(UUID quoteId, List&lt;Emi.Row&gt; rows) {
+    }
+
+    private final RateTable rates;
+    private final Clock clock;
+    private final Map&lt;UUID, Quote&gt; quotes = new ConcurrentHashMap&lt;&gt;();
+
+    LoanQuoteController(RateTable rates, Clock clock) {
+        this.rates = rates;
+        this.clock = clock;
+    }
+
+    @PostMapping(&quot;/loan-quotes&quot;)
+    ResponseEntity&lt;Quote&gt; quote(@Valid @RequestBody QuoteRequest r) {
+        LocalDate today = LocalDate.now(clock);
+        LocalDate disbursal = r.disbursalDate() == null ? today : r.disbursalDate();
+        if (disbursal.isBefore(today) || disbursal.isAfter(today.plusDays(90))) {   // 90 days: a demo rule
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Disbursal date out of range&quot;,
+                    &quot;The disbursal date must be between &quot; + today + &quot; and &quot; + today.plusDays(90) + &quot;.&quot;);
+        }
+        RateTable.DatedRate rate = rates.rateOn(r.product(), disbursal).orElseThrow(() -&gt; problem(HttpStatus.UNPROCESSABLE_CONTENT,
+                &quot;No rate on this date&quot;, &quot;There is no &quot; + r.product() + &quot; rate valid on &quot; + disbursal + &quot;.&quot;));
+        List&lt;Emi.Row&gt; rows = Emi.schedule(r.principalPaise(), rate.annualPercent(), r.tenureMonths());
+        long totalInterest = rows.stream().mapToLong(Emi.Row::interestPaise).sum();
+        Quote q = new Quote(UUID.randomUUID(), r.product(), today, disbursal, r.principalPaise(), r.tenureMonths(),
+                rate.annualPercent(), rate.from(), rows.size(), rows.getFirst().emiPaise(), rows.getLast().emiPaise(),
+                totalInterest, r.principalPaise() + totalInterest);
+        quotes.put(q.quoteId(), q);
+        return ResponseEntity.created(URI.create(&quot;/loan-quotes/&quot; + q.quoteId() + &quot;/schedule&quot;)).body(q);
+    }
+
+    /** The schedule is recomputed from the stored quote: same inputs, same rate, same rows every time. */
+    @GetMapping(&quot;/loan-quotes/{id}/schedule&quot;)
+    Schedule schedule(@PathVariable UUID id, @RequestParam(required = false) @Positive Integer prepayMonth,
+                      @RequestParam(required = false) @Positive Long prepayPaise) {
+        Quote q = quotes.get(id);
+        if (q == null) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;Quote not found&quot;, &quot;No loan quote has this id.&quot;);
+        }
+        List&lt;Emi.Row&gt; plain = Emi.schedule(q.principalPaise(), q.annualRatePercent(), q.tenureMonths());
+        if (prepayMonth == null &amp;&amp; prepayPaise == null) {
+            return new Schedule(id, plain);
+        }
+        if (prepayMonth == null || prepayPaise == null) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;Incomplete prepayment&quot;, &quot;Send both prepayMonth and prepayPaise.&quot;);
+        }
+        if (prepayMonth &gt;= plain.size()) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Prepayment after the last EMI&quot;,
+                    &quot;The loan has &quot; + plain.size() + &quot; instalments; prepay after month 1 to &quot; + (plain.size() - 1) + &quot;.&quot;);
+        }
+        long left = plain.get(prepayMonth - 1).balancePaise();
+        if (prepayPaise &gt;= left) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Prepayment is a foreclosure&quot;,
+                    &quot;After month &quot; + prepayMonth + &quot; the balance is &quot; + left + &quot; paise; a part-prepayment must be less.&quot;);
+        }
+        return new Schedule(id, Emi.schedule(q.principalPaise(), q.annualRatePercent(), q.tenureMonths(), prepayMonth, prepayPaise));
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Lower EMI or shorter loan?</h2>
+<p>After a prepayment, lenders often offer a choice: keep the EMI and shorten the tenure, or keep the tenure and lower the EMI. Sketch both schedules for the challenge 1 loan. Which saves more interest, and why? What would the API need to let the customer choose, and what must the quote show before they do?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design (none in this station)</li></ul><p class="rule">Short at Foundations: the choices that matter here.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: the same EMI every month ends at −₹11.91; an early rounding costs ₹3.</li>
+<li>Write the formula in <code>BigDecimal</code> with one <code>MathContext</code>; check it against a textbook value.</li>
+<li>Write the schedule with the final adjustment; test 80 combinations for zero, exact principal, no negative balance.</li>
+<li>Move rates into configuration with start dates; inject a <code>Clock</code>.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td><code>BigDecimal</code> + <code>MathContext</code>, round once</td><td>Verbose arithmetic.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td><code>double</code> and <code>Math.pow</code></td><td>Fine for the EMI shown to 2 decimals most of the time; wrong at the paisa now and then, and hard to prove.</td><td><span class="pill bad">Not for money</span></td></tr><tr><td>Rounding each step to 2 or 4 decimals</td><td>Small errors grow through the power and the division: the ₹3 bug.</td><td><span class="pill bad">Wrong</span></td></tr><tr><td>EMI to the paisa instead of whole rupees</td><td>Last instalment differs less, but still differs: the adjustment is still needed.</td><td><span class="pill warn">A lender's choice</span></td></tr><tr><td>Rates hard-coded in Java</td><td>A release for every rate change, and old quotes can no longer be explained.</td><td><span class="pill bad">Wrong</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>None in this station. With a database: <code>rates</code> (product, valid_from, annual_percent) with a unique key on (product, valid_from) and a check that the rate is positive; <code>quotes</code> store the rate itself, not a reference that could change.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Money</dt><dd>Paise in, paise out; <code>BigDecimal</code> only in between. Totals come from the schedule, so the quote and the schedule can never disagree.</dd>
+<dt>Rates</dt><dd>A new rate is added before its start date, never edited in place: a quote can always be explained by the rate valid on its date.</dd>
+<dt>Time</dt><dd>"Today" is in India's time zone. A server in UTC would quote the old rate for the first five and a half hours of the day a rate changes.</dd>
+<dt>Regulation</dt><dd>Real lenders must show the rate, fees and total cost in a key fact statement before the loan. This station shows how the numbers are computed, not the full disclosure.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>What is the EMI formula?</summary><p>EMI = P × r × (1+r)^n ÷ ((1+r)^n − 1), where P is the principal, r the monthly rate (annual ÷ 12 ÷ 100) and n the number of months.</p></details><details class="qa"><summary>Why does the last instalment differ?</summary><p>The EMI is rounded, so every month repays a little more or less principal than the exact formula. The last instalment pays exactly what is left, so the loan closes at zero.</p></details><details class="qa"><summary>Why BigDecimal with a MathContext?</summary><p>BigDecimal is exact for decimals, but dividing can need infinitely many digits. A MathContext says how many significant digits to keep, so the code controls where rounding happens.</p></details><details class="qa"><summary>How do you find the rate valid on a date?</summary><p>Keep rates in a TreeMap keyed by start date and call floorEntry(date): the latest start on or before that day.</p></details><details class="qa"><summary>Why inject a Clock?</summary><p>So tests can fix today and check the rate on a boundary day, instead of tests that pass or fail depending on when they run.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 12 tests pass.</td><td>You can compute month 1's interest and principal by hand.</td></tr><tr><td>Money</td><td>Rounding happens once for the EMI and once per month for interest.</td><td>You can explain the ₹3 and the ₹11.91.</td></tr><tr><td>Tests</td><td>A schedule invariant tested on many combinations.</td><td>You can say what bug those combinations found.</td></tr><tr><td>Explanation</td><td>The final adjustment in two sentences.</td><td>Lower EMI vs shorter loan after a prepayment.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This Foundations station has no flawed version to review. Use this checklist on any loan or interest code:</p>
+<ul class="rules">
+<li>Is any amount or rate a <code>double</code>?</li>
+<li>Where does rounding happen, and how many times?</li>
+<li>Does the schedule end at exactly zero, for every amount and tenure tested?</li>
+<li>Where do rates come from, and which one applies on the day a rate changes?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
