@@ -1,0 +1,1272 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 018 · Payment methods with sealed interfaces</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 018</span>
+    <h1>Payment methods with sealed interfaces</h1>
+    <p class="scenario">UPI, card, net banking and wallet payments are one class full of nullable fields; a refund path forgot wallets.</p>
+    <p class="sim"><b>Simulation</b><span>A payment intent is a response describing what the payer does next. No UPI app, bank or card network is contacted, no money moves, and nothing is stored in this station. Card tokens are made-up strings.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Payments</li>
+      <li><b>Types</b>None</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>014 Fare estimates per vehicle type</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring MVC · sealed interfaces · records · switch pattern matching · Jackson 3 · MockMvc</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Paysetu adds wallets</strong><p>The payment class gets one more nullable field, <code>walletMobile</code>. Checkout works; the tests for checkout pass.</p></li><li><strong>The first wallet refund</strong><p>The refund code checks UPI, then card, then net banking, and returns nothing for anything else. Wallet refunds silently go nowhere, and support finds out from customers.</p></li><li><strong>The fix</strong><p>Model "one of four" as a sealed interface with a record per method, and handle them with switches that have no default. Adding a fifth method now stops the build at every place that forgot it.</p></li></ol>
+<p class="lesson">Let the compiler keep the list of cases, so a new one cannot be forgotten quietly.</p>
+
+<h2>What are we building?</h2>
+<p><code>POST /payment-intents</code> takes an order, an amount and exactly one payment method. It answers with what the payer does next (approve in a UPI app, enter an OTP, log in to the bank, confirm a wallet debit) and where a refund would go.</p>
+
+<h2>An everyday analogy</h2>
+<p>A paper form with a separate box for each way to pay, where you may fill in only one box. Nobody can tick "UPI" and also write a card number, and the clerk's checklist has a line for every box on the form.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Read the type</strong>: <code>"type": "UPI"</code> picks the UPI record; other fields are refused.</li>
+<li><strong>Validate</strong> that record's own fields: a UPI ID, a 4-letter bank code, a 10-digit mobile.</li>
+<li><strong>Switch on the method</strong> for the next action; the compiler checks all four are handled.</li>
+<li><strong>Switch again</strong> for the refund route, with the same guarantee.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: why not keep the old class and add a test for wallet refunds?</summary><p>That test catches wallets, once. The next method (say, pay later) needs someone to remember every place again. With a sealed interface and no default branch, the build itself fails at each place that does not handle the new method.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No real payment.</strong> Nothing contacts NPCI, a bank or a card network.</li>
+<li><strong>No card numbers.</strong> Only a token, the network and the last 4 digits; a full number is refused.</li>
+<li><strong>No storage.</strong> Challenge 1 adds it.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Payment intent</strong></td><td>A record of "this order wants to be paid this way", before any money moves.</td><td>The checkout screen after you pick UPI.</td><td><code>POST /payment-intents</code></td></tr><tr><td><strong>Sealed interface</strong></td><td>An interface that lists every type allowed to implement it. No one else can.</td><td>A menu with exactly four dishes printed on it.</td><td><code>PaymentMethod permits Upi, Card, NetBanking, Wallet</code></td></tr><tr><td><strong>Record</strong></td><td>A small class that is just its data, with equals and toString for free.</td><td>A filled-in form.</td><td><code>record Upi(String vpa)</code></td></tr><tr><td><strong>Pattern matching switch</strong></td><td>A switch that picks a branch by type and unpacks its fields.</td><td>"If it is a UPI payment, take its UPI ID and…"</td><td><code>case Upi(String vpa) -&gt;</code></td></tr><tr><td><strong>Exhaustive</strong></td><td>Covers every case. For a sealed type, the compiler checks it.</td><td>A checklist the inspector will not sign until every line is ticked.</td><td>No <code>default</code> in <code>Methods</code></td></tr><tr><td><strong>Card token</strong></td><td>A stand-in for a card number that is useless outside one merchant.</td><td>A cloakroom ticket instead of the coat.</td><td><code>token</code>, accepted but never returned</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Paysetu</strong> (a fictional payment gateway) has one <code>Payment</code> class with a nullable field for every method. Each new method means hunting for every <code>if (vpa != null) … else if …</code> chain. The refund chain was missed when wallets launched, so wallet refunds returned nothing. The class also accepts a payment that is UPI and card at once.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> a UPI ID in any case, <b>then</b> it is stored lower-case and the payer is asked to approve in their UPI app.</li>
+<li><b>Given</b> a card, <b>then</b> the response shows the network and last 4 digits, never the token.</li>
+<li><b>Given</b> net banking at <code>hdfc</code>, <b>then</b> a redirect to the (simulated) HDFC login; at a bank that is not offered, <code>422</code>.</li>
+<li><b>Given</b> a wallet, <b>then</b> the refund route is the wallet, with the mobile number masked.</li>
+<li><b>Given</b> a UPI method with card fields, an unknown or missing type, or a bad field, <b>then</b> <code>400</code>.</li>
+<li><b>Given</b> every permitted payment method, <b>then</b> it can arrive as JSON and has a next action and a refund route.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>One record per method; each has only its own fields. A <code>switch</code> over methods has no <code>default</code>.</li>
+<li>Identifiers are normalised with <code>Locale.ROOT</code>: UPI IDs lower-case, bank codes upper-case.</li>
+<li>Amounts are whole paise, ₹1 to ₹1,00,000 (a demo rule).</li>
+<li>Secrets are write-only: the card token and wallet mobile are accepted, never returned in full.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Model "exactly one of" data with a sealed interface and records.</li>
+<li>Use switch pattern matching and record patterns, and explain exhaustiveness.</li>
+<li>Read polymorphic JSON with a <code>type</code> field, and refuse fields that do not belong.</li>
+<li>Write a test that covers every subtype without listing them.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/payment-intents</code></td><td>Create an intent for one method. <code>201</code> with the next action and refund route.</td></tr></tbody></table></div>
+<h2>Request body</h2>
+<div class="scroll"><table class=""><thead><tr><th>Field</th><th>Rule</th></tr></thead><tbody><tr><td><code>orderId</code></td><td>1 to 40 letters, digits, <code>-</code> or <code>_</code>.</td></tr><tr><td><code>amountPaise</code></td><td>100 to 10,000,000, whole number.</td></tr><tr><td><code>method</code></td><td>An object with <code>type</code> and only that type's fields (below).</td></tr></tbody></table></div>
+<div class="scroll"><table class=""><thead><tr><th>type</th><th>Fields</th></tr></thead><tbody><tr><td><code>UPI</code></td><td><code>vpa</code>: a UPI ID like <code>name@bank</code></td></tr><tr><td><code>CARD</code></td><td><code>network</code> (<code>VISA</code>, <code>MASTERCARD</code>, <code>RUPAY</code>), <code>last4</code>, <code>token</code> (<code>tok_…</code>, write-only)</td></tr><tr><td><code>NET_BANKING</code></td><td><code>bankCode</code>: 4 letters; offered: HDFC, ICIC, KKBK, SBIN, UTIB</td></tr><tr><td><code>WALLET</code></td><td><code>mobile</code>: 10 digits starting 6 to 9 (write-only; returned as <code>maskedMobile</code>)</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">201</span></td><td>Intent created</td></tr><tr><td><span class="pill warn">400</span></td><td>Unknown or missing type, a field from another method, or a bad field</td></tr><tr><td><span class="pill warn">422</span></td><td>Net banking at a bank that is not offered</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 14 Oct 2026, in this order. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: UPI</h3><p><b>Why:</b> the UPI ID is normalised to lower-case; the payer approves in their app.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /payment-intents HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;orderId&quot;: &quot;ORD-1042&quot;,
+  &quot;amountPaise&quot;: 49900,
+  &quot;method&quot;: {
+    &quot;type&quot;: &quot;UPI&quot;,
+    &quot;vpa&quot;: &quot;Asha.R@OKAXIS&quot;
+  }
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Content-Type: application/json
+Content-Length: 355
+
+{
+  &quot;id&quot;: &quot;pi_219ca11a03f646838ca9099d768f1afa&quot;,
+  &quot;orderId&quot;: &quot;ORD-1042&quot;,
+  &quot;amountPaise&quot;: 49900,
+  &quot;status&quot;: &quot;REQUIRES_ACTION&quot;,
+  &quot;method&quot;: {
+    &quot;type&quot;: &quot;UPI&quot;,
+    &quot;vpa&quot;: &quot;asha.r@okaxis&quot;
+  },
+  &quot;nextAction&quot;: {
+    &quot;type&quot;: &quot;APPROVE_IN_UPI_APP&quot;,
+    &quot;detail&quot;: &quot;Approve Rs 499.00 to Paysetu in the UPI app linked to asha.r@okaxis.&quot;
+  },
+  &quot;refundRoute&quot;: &quot;Back to the bank account behind the UPI ID asha.r@okaxis.&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: a saved card</h3><p><b>Why:</b> the token was accepted but is not in the response: only the network and last 4 digits are.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /payment-intents HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;orderId&quot;: &quot;ORD-1043&quot;,
+  &quot;amountPaise&quot;: 129900,
+  &quot;method&quot;: {
+    &quot;type&quot;: &quot;CARD&quot;,
+    &quot;network&quot;: &quot;RUPAY&quot;,
+    &quot;last4&quot;: &quot;4242&quot;,
+    &quot;token&quot;: &quot;tok_9f8e7d6c5b4a&quot;
+  }
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Content-Type: application/json
+Content-Length: 351
+
+{
+  &quot;id&quot;: &quot;pi_729439693f7f468f8adff5854a8c3ebd&quot;,
+  &quot;orderId&quot;: &quot;ORD-1043&quot;,
+  &quot;amountPaise&quot;: 129900,
+  &quot;status&quot;: &quot;REQUIRES_ACTION&quot;,
+  &quot;method&quot;: {
+    &quot;type&quot;: &quot;CARD&quot;,
+    &quot;network&quot;: &quot;RUPAY&quot;,
+    &quot;last4&quot;: &quot;4242&quot;
+  },
+  &quot;nextAction&quot;: {
+    &quot;type&quot;: &quot;AUTHENTICATE_CARD&quot;,
+    &quot;detail&quot;: &quot;Enter the one-time password from your bank for the RUPAY card ending 4242.&quot;
+  },
+  &quot;refundRoute&quot;: &quot;Back to the RUPAY card ending 4242.&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: net banking</h3><p><b>Why:</b> <code>hdfc</code> becomes <code>HDFC</code>; the next action is a redirect to a simulated bank page.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /payment-intents HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;orderId&quot;: &quot;ORD-1044&quot;,
+  &quot;amountPaise&quot;: 250000,
+  &quot;method&quot;: {
+    &quot;type&quot;: &quot;NET_BANKING&quot;,
+    &quot;bankCode&quot;: &quot;hdfc&quot;
+  }
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Content-Type: application/json
+Content-Length: 310
+
+{
+  &quot;id&quot;: &quot;pi_13ef0631ce5d49eba89c9579c81b0d5a&quot;,
+  &quot;orderId&quot;: &quot;ORD-1044&quot;,
+  &quot;amountPaise&quot;: 250000,
+  &quot;status&quot;: &quot;REQUIRES_ACTION&quot;,
+  &quot;method&quot;: {
+    &quot;type&quot;: &quot;NET_BANKING&quot;,
+    &quot;bankCode&quot;: &quot;HDFC&quot;
+  },
+  &quot;nextAction&quot;: {
+    &quot;type&quot;: &quot;REDIRECT_TO_BANK&quot;,
+    &quot;detail&quot;: &quot;/simulated-banks/HDFC/login&quot;
+  },
+  &quot;refundRoute&quot;: &quot;Back to the account at bank HDFC it was paid from.&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: wallet</h3><p><b>Why:</b> the case the old refund code forgot. The refund route is the wallet; the number is masked.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /payment-intents HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;orderId&quot;: &quot;ORD-1045&quot;,
+  &quot;amountPaise&quot;: 9900,
+  &quot;method&quot;: {
+    &quot;type&quot;: &quot;WALLET&quot;,
+    &quot;mobile&quot;: &quot;9876543210&quot;
+  }
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Content-Type: application/json
+Content-Length: 344
+
+{
+  &quot;id&quot;: &quot;pi_ecc8cc2d41fa4e0bb15feb3d8c8e1a90&quot;,
+  &quot;orderId&quot;: &quot;ORD-1045&quot;,
+  &quot;amountPaise&quot;: 9900,
+  &quot;status&quot;: &quot;REQUIRES_ACTION&quot;,
+  &quot;method&quot;: {
+    &quot;type&quot;: &quot;WALLET&quot;,
+    &quot;maskedMobile&quot;: &quot;98******10&quot;
+  },
+  &quot;nextAction&quot;: {
+    &quot;type&quot;: &quot;CONFIRM_WALLET_DEBIT&quot;,
+    &quot;detail&quot;: &quot;Confirm the Rs 99.00 debit in the Paysetu wallet of 98******10.&quot;
+  },
+  &quot;refundRoute&quot;: &quot;Back to the Paysetu wallet of 98******10.&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: UPI with a card field</h3><p><b>Why:</b> <code>last4</code> is not a UPI field: <code>400</code> instead of guessing which method was meant.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /payment-intents HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;orderId&quot;: &quot;ORD-1046&quot;,
+  &quot;amountPaise&quot;: 49900,
+  &quot;method&quot;: {
+    &quot;type&quot;: &quot;UPI&quot;,
+    &quot;vpa&quot;: &quot;asha@okaxis&quot;,
+    &quot;last4&quot;: &quot;4242&quot;
+  }
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Failed to read request&quot;,
+  &quot;instance&quot;: &quot;/payment-intents&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: a cheque</h3><p><b>Why:</b> not one of the four types: <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /payment-intents HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;orderId&quot;: &quot;ORD-1047&quot;,
+  &quot;amountPaise&quot;: 49900,
+  &quot;method&quot;: {
+    &quot;type&quot;: &quot;CHEQUE&quot;,
+    &quot;number&quot;: &quot;000123&quot;
+  }
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Failed to read request&quot;,
+  &quot;instance&quot;: &quot;/payment-intents&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: a bank that is not offered</h3><p><b>Why:</b> a valid code shape, but no such option: <code>422</code> listing the banks.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /payment-intents HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;orderId&quot;: &quot;ORD-1048&quot;,
+  &quot;amountPaise&quot;: 49900,
+  &quot;method&quot;: {
+    &quot;type&quot;: &quot;NET_BANKING&quot;,
+    &quot;bankCode&quot;: &quot;ABCD&quot;
+  }
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Net banking with bank ABCD is not available. Available: HDFC, ICIC, KKBK, SBIN, UTIB.&quot;,
+  &quot;instance&quot;: &quot;/payment-intents&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Bank not available&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>UPI ID in capitals</td><td>Lower-case; approve in app</td><td><code>upiAsksThePayerToApproveInTheirApp</code></td></tr><tr><td>Card with a token</td><td>Token not in the response</td><td><code>aCardNeverEchoesItsToken</code></td></tr><tr><td>Net banking <code>hdfc</code>; wallet</td><td>Redirect to HDFC; masked mobile</td><td><code>netBankingRedirectsAndAWalletShowsAMaskedNumber</code></td></tr><tr><td>Bank ABCD</td><td><code>422</code></td><td><code>aBankThatIsNotOfferedIs422</code></td></tr><tr><td>CHEQUE; no type; bad UPI ID; full card number; short mobile; 99 paise; empty body</td><td><code>400</code></td><td><code>badMethodsAre400</code></td></tr><tr><td>Every permitted method</td><td>Registered for JSON; has a next action and refund route</td><td><code>EveryMethodTest</code></td></tr><tr><td>A <code>case</code> removed from a switch</td><td>The build fails (below)</td><td>The compiler</td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">One class with nullable fields for every method, so a new method is silently missed.</p>
+<p>The first test shows the old refund chain returning <code>null</code> for a wallet. The second shows the old class taking a UPI-and-card payment and picking whichever <code>if</code> comes first. The third shows the sealed model refunding the wallet and refusing the mixed body. While building, making JSON lenient, echoing the token, and unregistering wallets each turned tests red.</p>
+</div>
+<pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The first test written for this station: it reproduces the bugs before the fix. */
+class ForgottenWalletTrapTest extends ApiTest {
+
+    /** The &quot;before&quot; model: one class, a nullable field per method. Kept only in tests. */
+    record OldPayment(String vpa, String cardLast4, String bankCode, String walletMobile) {
+    }
+
+    /** The &quot;before&quot; refund path. It compiles, and nothing says wallets are missing. */
+    static String oldRefundRoute(OldPayment p) {
+        if (p.vpa() != null) {
+            return &quot;UPI &quot; + p.vpa();
+        } else if (p.cardLast4() != null) {
+            return &quot;card &quot; + p.cardLast4();
+        } else if (p.bankCode() != null) {
+            return &quot;bank &quot; + p.bankCode();
+        }
+        return null;   // wallets were added later; nobody came back here
+    }
+
+    @Test
+    void theOldRefundPathSilentlyForgetsWallets() {
+        assertThat(oldRefundRoute(new OldPayment(null, null, null, &quot;9876543210&quot;))).isNull();
+    }
+
+    @Test
+    void theOldClassAcceptsAPaymentThatIsTwoMethodsAtOnce() {
+        // UPI and a card in one payment: the old code just picks whichever if comes first.
+        assertThat(oldRefundRoute(new OldPayment(&quot;asha@okaxis&quot;, &quot;4242&quot;, null, null))).isEqualTo(&quot;UPI asha@okaxis&quot;);
+    }
+
+    @Test
+    void theSealedModelRefundsWalletsAndRefusesMixedMethods() throws Exception {
+        intent(&quot;{\&quot;type\&quot;:\&quot;WALLET\&quot;,\&quot;mobile\&quot;:\&quot;9876543210\&quot;}&quot;)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath(&quot;$.refundRoute&quot;).value(&quot;Back to the Paysetu wallet of 98******10.&quot;));
+        intent(&quot;{\&quot;type\&quot;:\&quot;UPI\&quot;,\&quot;vpa\&quot;:\&quot;asha@okaxis\&quot;,\&quot;last4\&quot;:\&quot;4242\&quot;}&quot;).andExpect(status().isBadRequest());
+    }
+}</code></pre>
+<h2>And when a case is forgotten now</h2>
+<p>Removing the wallet branch from <code>refundRoute</code> no longer compiles. This is the real output, saved in <code>docs/missing-case-compile.txt</code>:</p>
+<pre class="console">$ ./mvnw -q compile   # with &quot;case Wallet&quot; removed from refundRoute
+[ERROR] src/main/java/com/paysetu/payments/Methods.java:[35,16] the switch expression does not cover all possible input values
+</pre>
+</section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr><tr><td>Docker</td><td>Not needed for this station</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 11 tests</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Sealed interfaces, record patterns and pattern-matching switches are all final in Java 21.</p>
+<h2>Try it yourself</h2>
+<p>The body is in <code>docs/upi-intent.json</code>. Then try adding <code>"last4": "4242"</code> to the method.</p>
+<pre class="code"><code class="language-bash"># Expect 201 with nextAction APPROVE_IN_UPI_APP
+curl -i -X POST http://localhost:8080/payment-intents -H &quot;Content-Type: application/json&quot; -d &quot;@docs/upi-intent.json&quot;</code></pre>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>400</code> for a body that looks right</td><td>A field that belongs to another method, or a misspelt one.</td><td>Send only the fields of the chosen <code>type</code>.</td></tr><tr><td><code>the switch expression does not cover all possible input values</code></td><td>A method was added and a switch does not handle it.</td><td>Add the <code>case</code>. That error is the feature.</td></tr><tr><td><code>release version 25 not supported</code></td><td>Maven is using an older JDK.</td><td>Point <code>JAVA_HOME</code> at JDK 25, or add <code>-Djava.version=21</code>.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/018-payment-methods-with-sealed-interfaces/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/paysetu/payments/
+│   ├── PaymentIntentController.java   ├── PaymentMethod.java
+│   ├── Methods.java                   └── PaymentsApplication.java
+├── src/test/java/com/paysetu/payments/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">PaymentIntentController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">PaymentMethod.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">Methods.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">PaymentsApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/paysetu/payments/PaymentIntentController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Validates the request, checks the bank is offered, and builds the intent.</dd><dt>Why</dt><dd>The controller never asks which method it has, except for the one rule that only applies to net banking.</dd><dt>Without it</dt><dd><code>if (vpa != null) … else if …</code> chains.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Set;
+import java.util.UUID;
+
+@RestController
+class PaymentIntentController {
+
+    /** Banks offered for net banking in this demo. */
+    static final Set&lt;String&gt; BANKS = Set.of(&quot;HDFC&quot;, &quot;ICIC&quot;, &quot;SBIN&quot;, &quot;UTIB&quot;, &quot;KKBK&quot;);
+
+    record IntentRequest(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9_-]{1,40}&quot;) String orderId,
+                         @NotNull @Min(100) @Max(value = 10_000_000, message = &quot;must be at most Rs 1,00,000 (a demo rule)&quot;) Long amountPaise,
+                         @NotNull @Valid PaymentMethod method) {
+    }
+
+    record Intent(String id, String orderId, long amountPaise, String status, PaymentMethod method,
+                  Methods.NextAction nextAction, String refundRoute) {
+    }
+
+    /** Builds the intent and says what the payer does next. Nothing is stored in this station (challenge 1 stores it). */
+    @PostMapping(&quot;/payment-intents&quot;)
+    @ResponseStatus(HttpStatus.CREATED)
+    Intent create(@Valid @RequestBody IntentRequest r) {
+        if (r.method() instanceof PaymentMethod.NetBanking(String bank) &amp;&amp; !BANKS.contains(bank)) {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT,
+                    &quot;Net banking with bank &quot; + bank + &quot; is not available. Available: &quot; + String.join(&quot;, &quot;, BANKS.stream().sorted().toList()) + &quot;.&quot;);
+            p.setTitle(&quot;Bank not available&quot;);
+            throw new ErrorResponseException(HttpStatus.UNPROCESSABLE_CONTENT, p, null);
+        }
+        String amount = &quot;Rs &quot; + r.amountPaise() / 100 + &quot;.&quot; + String.format(&quot;%02d&quot;, r.amountPaise() % 100);
+        return new Intent(&quot;pi_&quot; + UUID.randomUUID().toString().replace(&quot;-&quot;, &quot;&quot;), r.orderId(), r.amountPaise(), &quot;REQUIRES_ACTION&quot;,
+                r.method(), Methods.nextAction(r.method(), amount), Methods.refundRoute(r.method()));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/paysetu/payments/PaymentMethod.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The sealed interface and its four records, with the JSON type names.</dd><dt>Why</dt><dd>"Exactly one of" written as a type: impossible states cannot be built.</dd><dt>Without it</dt><dd>One class with four nullable fields.</dd></dl><ul><li><code>@JsonTypeInfo</code> and <code>@JsonSubTypes</code> map <code>"type"</code> to a record.</li><li>Compact constructors normalise UPI IDs and bank codes with <code>Locale.ROOT</code>.</li><li><code>WRITE_ONLY</code> keeps the token and mobile out of responses.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+
+import java.util.Locale;
+
+/**
+ * Exactly one of four ways to pay. &quot;sealed ... permits&quot; closes the list: a switch over PaymentMethod with no default
+ * must handle every record, and adding a fifth method is a compile error everywhere one is forgotten.
+ * JSON carries a &quot;type&quot; field that picks the record; each record has only the fields its method needs.
+ */
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = &quot;type&quot;)
+@JsonSubTypes({
+        @JsonSubTypes.Type(value = PaymentMethod.Upi.class, name = &quot;UPI&quot;),
+        @JsonSubTypes.Type(value = PaymentMethod.Card.class, name = &quot;CARD&quot;),
+        @JsonSubTypes.Type(value = PaymentMethod.NetBanking.class, name = &quot;NET_BANKING&quot;),
+        @JsonSubTypes.Type(value = PaymentMethod.Wallet.class, name = &quot;WALLET&quot;)})
+sealed interface PaymentMethod permits PaymentMethod.Upi, PaymentMethod.Card, PaymentMethod.NetBanking, PaymentMethod.Wallet {
+
+    /** A UPI ID such as asha@okaxis, stored lower-case. */
+    record Upi(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9._-]{2,64}@[A-Za-z][A-Za-z0-9]{1,63}&quot;, message = &quot;must be a UPI ID like name@bank&quot;) String vpa)
+            implements PaymentMethod {
+        public Upi {
+            vpa = vpa == null ? null : vpa.toLowerCase(Locale.ROOT);
+        }
+    }
+
+    /**
+     * A saved card, as a token from the (simulated) card network plus what may be shown: network and last 4 digits.
+     * The full card number never reaches this API, and the token is accepted but never written back out.
+     */
+    record Card(@NotNull Network network,
+                @NotNull @Pattern(regexp = &quot;\\d{4}&quot;, message = &quot;must be the last 4 digits&quot;) String last4,
+                @NotNull @Pattern(regexp = &quot;tok_[A-Za-z0-9]{8,64}&quot;, message = &quot;must be a card token&quot;) @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) String token)
+            implements PaymentMethod {
+        enum Network { VISA, MASTERCARD, RUPAY }
+    }
+
+    /** Net banking at a bank, by the 4-letter bank code that starts its IFSC codes (HDFC, SBIN...), stored upper-case. */
+    record NetBanking(@NotNull @Pattern(regexp = &quot;[A-Za-z]{4}&quot;, message = &quot;must be a 4-letter bank code&quot;) String bankCode)
+            implements PaymentMethod {
+        public NetBanking {
+            bankCode = bankCode == null ? null : bankCode.toUpperCase(Locale.ROOT);
+        }
+    }
+
+    /** The Paysetu wallet of a mobile number. Responses show the number masked. */
+    record Wallet(@NotNull @Pattern(regexp = &quot;[6-9]\\d{9}&quot;, message = &quot;must be a 10-digit Indian mobile number&quot;)
+                  @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) String mobile)
+            implements PaymentMethod {
+        @JsonProperty(&quot;maskedMobile&quot;)
+        String maskedMobile() {
+            return mobile.substring(0, 2) + &quot;******&quot; + mobile.substring(8);
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/paysetu/payments/Methods.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Next action and refund route: one switch each, no default.</dd><dt>Why</dt><dd>Record patterns unpack fields in the <code>case</code>; the compiler checks every method is handled.</dd><dt>Without it</dt><dd>The trap: a refund chain with no wallet branch.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import com.paysetu.payments.PaymentMethod.Card;
+import com.paysetu.payments.PaymentMethod.NetBanking;
+import com.paysetu.payments.PaymentMethod.Upi;
+import com.paysetu.payments.PaymentMethod.Wallet;
+
+/**
+ * Everything that differs by payment method, as switches over the sealed interface. No default branch on purpose:
+ * the compiler proves each switch handles every method. Simulated: no UPI app, bank or card network is contacted.
+ */
+final class Methods {
+
+    record NextAction(String type, String detail) {
+    }
+
+    private Methods() {
+    }
+
+    static NextAction nextAction(PaymentMethod method, String amount) {
+        return switch (method) {
+            case Upi(String vpa) -&gt; new NextAction(&quot;APPROVE_IN_UPI_APP&quot;,
+                    &quot;Approve &quot; + amount + &quot; to Paysetu in the UPI app linked to &quot; + vpa + &quot;.&quot;);
+            case Card(Card.Network network, String last4, String token) -&gt; new NextAction(&quot;AUTHENTICATE_CARD&quot;,
+                    &quot;Enter the one-time password from your bank for the &quot; + network + &quot; card ending &quot; + last4 + &quot;.&quot;);
+            case NetBanking(String bankCode) -&gt; new NextAction(&quot;REDIRECT_TO_BANK&quot;,
+                    &quot;/simulated-banks/&quot; + bankCode + &quot;/login&quot;);
+            case Wallet w -&gt; new NextAction(&quot;CONFIRM_WALLET_DEBIT&quot;,
+                    &quot;Confirm the &quot; + amount + &quot; debit in the Paysetu wallet of &quot; + w.maskedMobile() + &quot;.&quot;);
+        };
+    }
+
+    /** Where a refund of this payment goes. The old code&#x27;s version of this forgot wallets. */
+    static String refundRoute(PaymentMethod method) {
+        return switch (method) {
+            case Upi(String vpa) -&gt; &quot;Back to the bank account behind the UPI ID &quot; + vpa + &quot;.&quot;;
+            case Card(Card.Network network, String last4, String token) -&gt; &quot;Back to the &quot; + network + &quot; card ending &quot; + last4 + &quot;.&quot;;
+            case NetBanking(String bankCode) -&gt; &quot;Back to the account at bank &quot; + bankCode + &quot; it was paid from.&quot;;
+            case Wallet w -&gt; &quot;Back to the Paysetu wallet of &quot; + w.maskedMobile() + &quot;.&quot;;
+        };
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Problem bodies for errors, and <code>fail-on-unknown-properties</code>: a field from another method is a <code>400</code>.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: paysetu-payments
+  mvc:
+    problemdetails:
+      enabled: true
+  jackson:
+    deserialization:
+      accept-float-as-int: false
+      # A UPI payment that also carries card fields is ambiguous: refuse it instead of silently ignoring them.
+      fail-on-unknown-properties: true</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/paysetu/payments/PaymentsApplication.java</p><div class="notes"><p>Standard Spring Boot entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class PaymentsApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(PaymentsApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found (a bank that is not offered)</td><td><code>PaymentIntentContractTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>ForgottenWalletTrapTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>This station</td><td>Every permitted method, found by reflection</td><td><code>EveryMethodTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.paysetu.payments.PaymentIntentContractTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.paysetu.payments.ForgottenWalletTrapTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.paysetu.payments.EveryMethodTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">ForgottenWalletTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">PaymentIntentContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">EveryMethodTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/paysetu/payments/ForgottenWalletTrapTest.java</p><div class="notes"><p>Written first: the old refund chain's <code>null</code>, the old class's mixed payment, and the sealed model's answers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The first test written for this station: it reproduces the bugs before the fix. */
+class ForgottenWalletTrapTest extends ApiTest {
+
+    /** The &quot;before&quot; model: one class, a nullable field per method. Kept only in tests. */
+    record OldPayment(String vpa, String cardLast4, String bankCode, String walletMobile) {
+    }
+
+    /** The &quot;before&quot; refund path. It compiles, and nothing says wallets are missing. */
+    static String oldRefundRoute(OldPayment p) {
+        if (p.vpa() != null) {
+            return &quot;UPI &quot; + p.vpa();
+        } else if (p.cardLast4() != null) {
+            return &quot;card &quot; + p.cardLast4();
+        } else if (p.bankCode() != null) {
+            return &quot;bank &quot; + p.bankCode();
+        }
+        return null;   // wallets were added later; nobody came back here
+    }
+
+    @Test
+    void theOldRefundPathSilentlyForgetsWallets() {
+        assertThat(oldRefundRoute(new OldPayment(null, null, null, &quot;9876543210&quot;))).isNull();
+    }
+
+    @Test
+    void theOldClassAcceptsAPaymentThatIsTwoMethodsAtOnce() {
+        // UPI and a card in one payment: the old code just picks whichever if comes first.
+        assertThat(oldRefundRoute(new OldPayment(&quot;asha@okaxis&quot;, &quot;4242&quot;, null, null))).isEqualTo(&quot;UPI asha@okaxis&quot;);
+    }
+
+    @Test
+    void theSealedModelRefundsWalletsAndRefusesMixedMethods() throws Exception {
+        intent(&quot;{\&quot;type\&quot;:\&quot;WALLET\&quot;,\&quot;mobile\&quot;:\&quot;9876543210\&quot;}&quot;)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath(&quot;$.refundRoute&quot;).value(&quot;Back to the Paysetu wallet of 98******10.&quot;));
+        intent(&quot;{\&quot;type\&quot;:\&quot;UPI\&quot;,\&quot;vpa\&quot;:\&quot;asha@okaxis\&quot;,\&quot;last4\&quot;:\&quot;4242\&quot;}&quot;).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/paysetu/payments/PaymentIntentContractTest.java</p><div class="notes"><p>Each method, what is never echoed, and every refusal.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.hamcrest.Matchers.matchesPattern;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP contract: each payment method, what is never echoed back, and every refusal. */
+class PaymentIntentContractTest extends ApiTest {
+
+    @Test
+    void upiAsksThePayerToApproveInTheirApp() throws Exception {
+        intent(&quot;{\&quot;type\&quot;:\&quot;UPI\&quot;,\&quot;vpa\&quot;:\&quot;Asha.R@OKAXIS\&quot;}&quot;)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath(&quot;$.id&quot;).value(matchesPattern(&quot;pi_[0-9a-f]{32}&quot;)))
+                .andExpect(jsonPath(&quot;$.status&quot;).value(&quot;REQUIRES_ACTION&quot;))
+                .andExpect(jsonPath(&quot;$.method.type&quot;).value(&quot;UPI&quot;))
+                .andExpect(jsonPath(&quot;$.method.vpa&quot;).value(&quot;asha.r@okaxis&quot;))
+                .andExpect(jsonPath(&quot;$.nextAction.type&quot;).value(&quot;APPROVE_IN_UPI_APP&quot;))
+                .andExpect(jsonPath(&quot;$.nextAction.detail&quot;).value(&quot;Approve Rs 499.00 to Paysetu in the UPI app linked to asha.r@okaxis.&quot;));
+    }
+
+    @Test
+    void aCardNeverEchoesItsToken() throws Exception {
+        intent(&quot;{\&quot;type\&quot;:\&quot;CARD\&quot;,\&quot;network\&quot;:\&quot;RUPAY\&quot;,\&quot;last4\&quot;:\&quot;4242\&quot;,\&quot;token\&quot;:\&quot;tok_9f8e7d6c5b4a\&quot;}&quot;)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath(&quot;$.method.last4&quot;).value(&quot;4242&quot;))
+                .andExpect(jsonPath(&quot;$.method.token&quot;).doesNotExist())
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString(&quot;tok_&quot;))))
+                .andExpect(jsonPath(&quot;$.nextAction.type&quot;).value(&quot;AUTHENTICATE_CARD&quot;))
+                .andExpect(jsonPath(&quot;$.refundRoute&quot;).value(&quot;Back to the RUPAY card ending 4242.&quot;));
+    }
+
+    @Test
+    void netBankingRedirectsAndAWalletShowsAMaskedNumber() throws Exception {
+        intent(&quot;{\&quot;type\&quot;:\&quot;NET_BANKING\&quot;,\&quot;bankCode\&quot;:\&quot;hdfc\&quot;}&quot;)
+                .andExpect(jsonPath(&quot;$.nextAction.type&quot;).value(&quot;REDIRECT_TO_BANK&quot;))
+                .andExpect(jsonPath(&quot;$.nextAction.detail&quot;).value(&quot;/simulated-banks/HDFC/login&quot;));
+        intent(&quot;{\&quot;type\&quot;:\&quot;WALLET\&quot;,\&quot;mobile\&quot;:\&quot;9876543210\&quot;}&quot;)
+                .andExpect(jsonPath(&quot;$.method.maskedMobile&quot;).value(&quot;98******10&quot;))
+                .andExpect(jsonPath(&quot;$.method.mobile&quot;).doesNotExist());
+    }
+
+    @Test
+    void aBankThatIsNotOfferedIs422() throws Exception {
+        intent(&quot;{\&quot;type\&quot;:\&quot;NET_BANKING\&quot;,\&quot;bankCode\&quot;:\&quot;ABCD\&quot;}&quot;)
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Bank not available&quot;));
+    }
+
+    @Test
+    void badMethodsAre400() throws Exception {
+        intent(&quot;{\&quot;type\&quot;:\&quot;CHEQUE\&quot;,\&quot;number\&quot;:\&quot;000123\&quot;}&quot;).andExpect(status().isBadRequest());      // not a method
+        intent(&quot;{\&quot;vpa\&quot;:\&quot;asha@okaxis\&quot;}&quot;).andExpect(status().isBadRequest());                        // no type
+        intent(&quot;{\&quot;type\&quot;:\&quot;UPI\&quot;,\&quot;vpa\&quot;:\&quot;asha\&quot;}&quot;).andExpect(status().isBadRequest());               // not a UPI ID
+        intent(&quot;{\&quot;type\&quot;:\&quot;UPI\&quot;}&quot;).andExpect(status().isBadRequest());
+        intent(&quot;{\&quot;type\&quot;:\&quot;CARD\&quot;,\&quot;network\&quot;:\&quot;RUPAY\&quot;,\&quot;last4\&quot;:\&quot;4242424242424242\&quot;,\&quot;token\&quot;:\&quot;tok_9f8e7d6c5b4a\&quot;}&quot;)
+                .andExpect(status().isBadRequest());                                                   // a full card number
+        intent(&quot;{\&quot;type\&quot;:\&quot;WALLET\&quot;,\&quot;mobile\&quot;:\&quot;12345\&quot;}&quot;).andExpect(status().isBadRequest());
+        intent(99, &quot;{\&quot;type\&quot;:\&quot;UPI\&quot;,\&quot;vpa\&quot;:\&quot;asha@okaxis\&quot;}&quot;).andExpect(status().isBadRequest());    // under Rs 1
+        mvc.perform(post(&quot;/payment-intents&quot;).contentType(MediaType.APPLICATION_JSON).content(&quot;{}&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/paysetu/payments/EveryMethodTest.java</p><div class="notes"><p>Builds a placeholder of every permitted record by reflection, so a method added later is tested without editing this file.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import org.junit.jupiter.api.Test;
+
+import java.lang.reflect.RecordComponent;
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Every permitted payment method, found by reflection, so a method added later is covered without editing this test:
+ * it can be sent as JSON, and it has a next action and a refund route.
+ */
+class EveryMethodTest {
+
+    @Test
+    void paymentMethodIsSealed() {
+        assertThat(PaymentMethod.class.isSealed()).isTrue();
+    }
+
+    @Test
+    void everyMethodCanArriveAsJson() {
+        Set&lt;Class&lt;?&gt;&gt; registered = Arrays.stream(PaymentMethod.class.getAnnotation(JsonSubTypes.class).value())
+                .map(JsonSubTypes.Type::value).collect(Collectors.toSet());
+        assertThat(registered).containsExactlyInAnyOrder(PaymentMethod.class.getPermittedSubclasses());
+    }
+
+    @Test
+    void everyMethodHasANextActionAndARefundRoute() throws Exception {
+        for (Class&lt;?&gt; type : PaymentMethod.class.getPermittedSubclasses()) {
+            PaymentMethod method = sample(type);
+            assertThat(Methods.nextAction(method, &quot;Rs 1.00&quot;).detail()).as(type.getSimpleName()).isNotBlank();
+            assertThat(Methods.refundRoute(method)).as(type.getSimpleName()).isNotBlank();
+        }
+    }
+
+    /** A record with placeholder values: &quot;9876543210&quot; for text, the first constant of an enum, 1 for numbers. */
+    static PaymentMethod sample(Class&lt;?&gt; type) throws Exception {
+        RecordComponent[] components = type.getRecordComponents();
+        Object[] args = Arrays.stream(components).map(c -&gt; {
+            Class&lt;?&gt; t = c.getType();
+            if (t.isEnum()) return t.getEnumConstants()[0];
+            if (t == String.class) return &quot;9876543210&quot;;
+            if (t == long.class || t == Long.class) return 1L;
+            return 1;
+        }).toArray();
+        return (PaymentMethod) type.getDeclaredConstructor(Arrays.stream(components).map(RecordComponent::getType).toArray(Class[]::new))
+                .newInstance(args);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/paysetu/payments/ApiTest.java</p><div class="notes"><p>Shared setup: the whole app through MockMvc and a helper that posts an intent.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/** Shared setup: the whole app through MockMvc, and a helper that pays ₹499 for order ORD-1 with a given method. */
+@SpringBootTest
+@AutoConfigureMockMvc
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+
+    ResultActions intent(String methodJson) throws Exception {
+        return intent(49_900, methodJson);
+    }
+
+    ResultActions intent(long amountPaise, String methodJson) throws Exception {
+        return mvc.perform(post(&quot;/payment-intents&quot;).contentType(MediaType.APPLICATION_JSON).content(
+                &quot;{\&quot;orderId\&quot;:\&quot;ORD-1\&quot;,\&quot;amountPaise\&quot;:&quot; + amountPaise + &quot;,\&quot;method\&quot;:&quot; + methodJson + &quot;}&quot;));
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/paysetu/payments/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=ReadBackChallengeTest</code></li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 11 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 15 tests pass (11 station tests and 4 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>Read an intent back</h2><p>Keep each intent in memory, answer <code>GET /payment-intents/{id}</code>, and return a <code>Location</code> header from the POST. An unknown id is <code>404</code>.</p><p><b>Done when:</b> both tests in <code>ReadBackChallengeTest</code> pass, and the card token is still never returned.</p><details class="qa"><summary>Hints</summary><ul><li>A <code>ConcurrentHashMap</code> keyed by id is enough here.</li><li><code>ResponseEntity.created(uri).body(intent)</code> gives the 201 and the header together.</li></ul></details><p class="path">challenge/ReadBackChallengeTest.java</p><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.matchesPattern;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Challenge 1: keep each intent, answer GET /payment-intents/{id}, and point to it with a Location header. */
+class ReadBackChallengeTest extends ApiTest {
+
+    @Test
+    void anIntentCanBeReadBackWithoutItsCardToken() throws Exception {
+        String location = intent(&quot;{\&quot;type\&quot;:\&quot;CARD\&quot;,\&quot;network\&quot;:\&quot;VISA\&quot;,\&quot;last4\&quot;:\&quot;1111\&quot;,\&quot;token\&quot;:\&quot;tok_a1b2c3d4e5f6\&quot;}&quot;)
+                .andExpect(header().string(&quot;Location&quot;, matchesPattern(&quot;/payment-intents/pi_[0-9a-f]{32}&quot;)))
+                .andReturn().getResponse().getHeader(&quot;Location&quot;);
+        mvc.perform(get(location))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.id&quot;).value(location.substring(&quot;/payment-intents/&quot;.length())))
+                .andExpect(jsonPath(&quot;$.method.type&quot;).value(&quot;CARD&quot;))
+                .andExpect(jsonPath(&quot;$.method.token&quot;).doesNotExist());
+    }
+
+    @Test
+    void anUnknownIntentIs404() throws Exception {
+        mvc.perform(get(&quot;/payment-intents/pi_00000000000000000000000000000000&quot;))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Payment intent not found&quot;));
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/PaymentIntentController.java</p><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+@RestController
+class PaymentIntentController {
+
+    /** Banks offered for net banking in this demo. */
+    static final Set&lt;String&gt; BANKS = Set.of(&quot;HDFC&quot;, &quot;ICIC&quot;, &quot;SBIN&quot;, &quot;UTIB&quot;, &quot;KKBK&quot;);
+
+    record IntentRequest(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9_-]{1,40}&quot;) String orderId,
+                         @NotNull @Min(100) @Max(value = 10_000_000, message = &quot;must be at most Rs 1,00,000 (a demo rule)&quot;) Long amountPaise,
+                         @NotNull @Valid PaymentMethod method) {
+    }
+
+    record Intent(String id, String orderId, long amountPaise, String status, PaymentMethod method,
+                  Methods.NextAction nextAction, String refundRoute) {
+    }
+
+    /** Challenge 1: intents kept in memory, so they can be read back. Gone when the app stops. */
+    private final Map&lt;String, Intent&gt; intents = new ConcurrentHashMap&lt;&gt;();
+
+    /** Builds the intent, keeps it, and says what the payer does next. */
+    @PostMapping(&quot;/payment-intents&quot;)
+    ResponseEntity&lt;Intent&gt; create(@Valid @RequestBody IntentRequest r) {
+        if (r.method() instanceof PaymentMethod.NetBanking(String bank) &amp;&amp; !BANKS.contains(bank)) {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT,
+                    &quot;Net banking with bank &quot; + bank + &quot; is not available. Available: &quot; + String.join(&quot;, &quot;, BANKS.stream().sorted().toList()) + &quot;.&quot;);
+            p.setTitle(&quot;Bank not available&quot;);
+            throw new ErrorResponseException(HttpStatus.UNPROCESSABLE_CONTENT, p, null);
+        }
+        String amount = &quot;Rs &quot; + r.amountPaise() / 100 + &quot;.&quot; + String.format(&quot;%02d&quot;, r.amountPaise() % 100);
+        Intent intent = new Intent(&quot;pi_&quot; + UUID.randomUUID().toString().replace(&quot;-&quot;, &quot;&quot;), r.orderId(), r.amountPaise(), &quot;REQUIRES_ACTION&quot;,
+                r.method(), Methods.nextAction(r.method(), amount), Methods.refundRoute(r.method()));
+        intents.put(intent.id(), intent);
+        return ResponseEntity.created(URI.create(&quot;/payment-intents/&quot; + intent.id())).body(intent);
+    }
+
+    @GetMapping(&quot;/payment-intents/{id}&quot;)
+    Intent read(@PathVariable String id) {
+        Intent intent = intents.get(id);
+        if (intent == null) {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No payment intent has this id.&quot;);
+            p.setTitle(&quot;Payment intent not found&quot;);
+            throw new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        }
+        return intent;
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 25 minutes</p><h2>A fifth method: pay later</h2><p>Add <code>PAY_LATER</code> (Paysetu Pay Later, fictional) with a <code>mobile</code>. Add the record to the <code>permits</code> list and build: the compiler names every switch that needs a new case.</p><p><b>Done when:</b> both tests in <code>PayLaterChallengeTest</code> pass, and <code>EveryMethodTest</code> covers the new method without changes.</p><details class="qa"><summary>Hints</summary><ul><li>Copy the wallet record's shape: a write-only mobile and a masked one.</li><li>Register the JSON name in <code>@JsonSubTypes</code>, or <code>EveryMethodTest</code> will tell you.</li></ul></details><p class="path">challenge/PayLaterChallengeTest.java</p><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: a fifth method, PAY_LATER, for Paysetu Pay Later (fictional) by mobile number. Add the record and let
+ * the compiler show you every switch that must handle it. EveryMethodTest picks it up on its own.
+ */
+class PayLaterChallengeTest extends ApiTest {
+
+    @Test
+    void payLaterHasItsOwnNextActionAndRefundRoute() throws Exception {
+        intent(&quot;{\&quot;type\&quot;:\&quot;PAY_LATER\&quot;,\&quot;mobile\&quot;:\&quot;9123456780\&quot;}&quot;)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath(&quot;$.method.type&quot;).value(&quot;PAY_LATER&quot;))
+                .andExpect(jsonPath(&quot;$.method.maskedMobile&quot;).value(&quot;91******80&quot;))
+                .andExpect(jsonPath(&quot;$.nextAction.type&quot;).value(&quot;APPROVE_PAY_LATER&quot;))
+                .andExpect(jsonPath(&quot;$.refundRoute&quot;).value(&quot;Back to the Paysetu Pay Later account of 91******80, lowering what is due.&quot;));
+    }
+
+    @Test
+    void aBadMobileIs400() throws Exception {
+        intent(&quot;{\&quot;type\&quot;:\&quot;PAY_LATER\&quot;,\&quot;mobile\&quot;:\&quot;0123\&quot;}&quot;).andExpect(status().isBadRequest());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/PaymentMethod.java</p><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+
+import java.util.Locale;
+
+/**
+ * Exactly one of four ways to pay. &quot;sealed ... permits&quot; closes the list: a switch over PaymentMethod with no default
+ * must handle every record, and adding a fifth method is a compile error everywhere one is forgotten.
+ * JSON carries a &quot;type&quot; field that picks the record; each record has only the fields its method needs.
+ */
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = &quot;type&quot;)
+@JsonSubTypes({
+        @JsonSubTypes.Type(value = PaymentMethod.Upi.class, name = &quot;UPI&quot;),
+        @JsonSubTypes.Type(value = PaymentMethod.Card.class, name = &quot;CARD&quot;),
+        @JsonSubTypes.Type(value = PaymentMethod.NetBanking.class, name = &quot;NET_BANKING&quot;),
+        @JsonSubTypes.Type(value = PaymentMethod.Wallet.class, name = &quot;WALLET&quot;),
+        @JsonSubTypes.Type(value = PaymentMethod.PayLater.class, name = &quot;PAY_LATER&quot;)})
+sealed interface PaymentMethod
+        permits PaymentMethod.Upi, PaymentMethod.Card, PaymentMethod.NetBanking, PaymentMethod.Wallet, PaymentMethod.PayLater {
+
+    /** A UPI ID such as asha@okaxis, stored lower-case. */
+    record Upi(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9._-]{2,64}@[A-Za-z][A-Za-z0-9]{1,63}&quot;, message = &quot;must be a UPI ID like name@bank&quot;) String vpa)
+            implements PaymentMethod {
+        public Upi {
+            vpa = vpa == null ? null : vpa.toLowerCase(Locale.ROOT);
+        }
+    }
+
+    /**
+     * A saved card, as a token from the (simulated) card network plus what may be shown: network and last 4 digits.
+     * The full card number never reaches this API, and the token is accepted but never written back out.
+     */
+    record Card(@NotNull Network network,
+                @NotNull @Pattern(regexp = &quot;\\d{4}&quot;, message = &quot;must be the last 4 digits&quot;) String last4,
+                @NotNull @Pattern(regexp = &quot;tok_[A-Za-z0-9]{8,64}&quot;, message = &quot;must be a card token&quot;) @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) String token)
+            implements PaymentMethod {
+        enum Network { VISA, MASTERCARD, RUPAY }
+    }
+
+    /** Net banking at a bank, by the 4-letter bank code that starts its IFSC codes (HDFC, SBIN...), stored upper-case. */
+    record NetBanking(@NotNull @Pattern(regexp = &quot;[A-Za-z]{4}&quot;, message = &quot;must be a 4-letter bank code&quot;) String bankCode)
+            implements PaymentMethod {
+        public NetBanking {
+            bankCode = bankCode == null ? null : bankCode.toUpperCase(Locale.ROOT);
+        }
+    }
+
+    /** The Paysetu wallet of a mobile number. Responses show the number masked. */
+    record Wallet(@NotNull @Pattern(regexp = &quot;[6-9]\\d{9}&quot;, message = &quot;must be a 10-digit Indian mobile number&quot;)
+                  @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) String mobile)
+            implements PaymentMethod {
+        @JsonProperty(&quot;maskedMobile&quot;)
+        String maskedMobile() {
+            return mobile.substring(0, 2) + &quot;******&quot; + mobile.substring(8);
+        }
+    }
+
+    /** Challenge 2: Paysetu Pay Later (fictional), by mobile number, shown masked. */
+    record PayLater(@NotNull @Pattern(regexp = &quot;[6-9]\\d{9}&quot;, message = &quot;must be a 10-digit Indian mobile number&quot;)
+                    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) String mobile)
+            implements PaymentMethod {
+        @JsonProperty(&quot;maskedMobile&quot;)
+        String maskedMobile() {
+            return mobile.substring(0, 2) + &quot;******&quot; + mobile.substring(8);
+        }
+    }
+}</code></pre></div><p class="path">challenge/solution/Methods.java</p><div class="src"><pre class="code"><code class="language-java">package com.paysetu.payments;
+
+import com.paysetu.payments.PaymentMethod.Card;
+import com.paysetu.payments.PaymentMethod.NetBanking;
+import com.paysetu.payments.PaymentMethod.PayLater;
+import com.paysetu.payments.PaymentMethod.Upi;
+import com.paysetu.payments.PaymentMethod.Wallet;
+
+/**
+ * Everything that differs by payment method, as switches over the sealed interface. No default branch on purpose:
+ * the compiler proves each switch handles every method. Simulated: no UPI app, bank or card network is contacted.
+ */
+final class Methods {
+
+    record NextAction(String type, String detail) {
+    }
+
+    private Methods() {
+    }
+
+    static NextAction nextAction(PaymentMethod method, String amount) {
+        return switch (method) {
+            case Upi(String vpa) -&gt; new NextAction(&quot;APPROVE_IN_UPI_APP&quot;,
+                    &quot;Approve &quot; + amount + &quot; to Paysetu in the UPI app linked to &quot; + vpa + &quot;.&quot;);
+            case Card(Card.Network network, String last4, String token) -&gt; new NextAction(&quot;AUTHENTICATE_CARD&quot;,
+                    &quot;Enter the one-time password from your bank for the &quot; + network + &quot; card ending &quot; + last4 + &quot;.&quot;);
+            case NetBanking(String bankCode) -&gt; new NextAction(&quot;REDIRECT_TO_BANK&quot;,
+                    &quot;/simulated-banks/&quot; + bankCode + &quot;/login&quot;);
+            case Wallet w -&gt; new NextAction(&quot;CONFIRM_WALLET_DEBIT&quot;,
+                    &quot;Confirm the &quot; + amount + &quot; debit in the Paysetu wallet of &quot; + w.maskedMobile() + &quot;.&quot;);
+            case PayLater p -&gt; new NextAction(&quot;APPROVE_PAY_LATER&quot;,
+                    &quot;Approve &quot; + amount + &quot; on Paysetu Pay Later with the one-time password sent to &quot; + p.maskedMobile() + &quot;.&quot;);
+        };
+    }
+
+    /** Where a refund of this payment goes. The old code&#x27;s version of this forgot wallets. */
+    static String refundRoute(PaymentMethod method) {
+        return switch (method) {
+            case Upi(String vpa) -&gt; &quot;Back to the bank account behind the UPI ID &quot; + vpa + &quot;.&quot;;
+            case Card(Card.Network network, String last4, String token) -&gt; &quot;Back to the &quot; + network + &quot; card ending &quot; + last4 + &quot;.&quot;;
+            case NetBanking(String bankCode) -&gt; &quot;Back to the account at bank &quot; + bankCode + &quot; it was paid from.&quot;;
+            case Wallet w -&gt; &quot;Back to the Paysetu wallet of &quot; + w.maskedMobile() + &quot;.&quot;;
+            case PayLater p -&gt; &quot;Back to the Paysetu Pay Later account of &quot; + p.maskedMobile() + &quot;, lowering what is due.&quot;;
+        };
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Switches or methods on the records?</h2>
+<p>This station keeps <code>nextAction</code> and <code>refundRoute</code> as switches in one class. They could instead be methods on each record. With twelve methods and six operations, which is easier to change when a method is added, and which when an operation is added? Where would you want the compiler to help?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design (none in this station)</li></ul><p class="rule">Short at Foundations: the choices that matter here.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: the old refund chain returns <code>null</code> for a wallet.</li>
+<li>Write the sealed interface and one record per method, with their own validation.</li>
+<li>Map JSON <code>type</code> to records; refuse unknown fields.</li>
+<li>Write the switches without <code>default</code>; check by reflection that every method is reachable and handled.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Sealed interface + records + switches</td><td>A switch to update per operation when a method is added; the compiler finds them all.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>One class with nullable fields</td><td>Impossible states (UPI and card at once); every new method is a hunt.</td><td><span class="pill bad">Wrong</span></td></tr><tr><td>A <code>default</code> branch in each switch</td><td>Compiles when a method is forgotten: the trap, back again.</td><td><span class="pill bad">Wrong</span></td></tr><tr><td>An enum <code>type</code> plus a map of fields</td><td>Loose typing; validation by hand.</td><td><span class="pill bad">Avoid</span></td></tr><tr><td>Methods on each record (polymorphism)</td><td>Easy to add a method, harder to add an operation; logic spread across records.</td><td><span class="pill warn">Good when operations are few</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>None in this station. With a database: one <code>payment_intents</code> table with a <code>method_type</code> column and a check constraint per type that exactly its own columns are set (for example, <code>method_type = 'UPI'</code> requires <code>vpa</code> and forbids <code>card_last4</code>). The database then refuses mixed methods too.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Card data</dt><dd>In India, RBI's card-on-file tokenisation rules stop merchants from storing card numbers. This API accepts only a token and what may be displayed, and refuses a full number.</dd>
+<dt>Privacy</dt><dd>Mobile numbers and tokens are write-only. Logs need the same care: never log the request body as-is.</dd>
+<dt>Evolution</dt><dd>A new method changes the API: old clients that do not know <code>PAY_LATER</code> must still read responses. Document new <code>type</code> values before shipping them.</dd>
+<dt>Real gateways</dt><dd>UPI, cards and net banking each have their own flows, timeouts and failure states. This station models only the first step.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>What does a sealed interface give you?</summary><p>A closed list of implementations, known to the compiler. A switch over it can be exhaustive without a default, so adding an implementation makes every incomplete switch a compile error.</p></details><details class="qa"><summary>Why no default branch?</summary><p>A default branch makes an incomplete switch compile. Without it, the compiler tells you every place a new case must be handled.</p></details><details class="qa"><summary>What is a record pattern?</summary><p>case Upi(String vpa) -&gt; matches a Upi and binds its component in one step, instead of a cast and a getter.</p></details><details class="qa"><summary>How do you read polymorphic JSON safely?</summary><p>A type property mapped to known subtypes, so an unknown type fails, and fail-on-unknown-properties, so fields from another type are refused instead of ignored.</p></details><details class="qa"><summary>How do you test every subtype without listing them?</summary><p>Class.getPermittedSubclasses() gives the list at runtime; build a placeholder of each and check the behaviour, so a new subtype is covered automatically.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 11 tests pass.</td><td>You can add a method and follow the compiler to every switch.</td></tr><tr><td>Modelling</td><td>One record per method, no nullable fields for other methods.</td><td>You can explain why a default branch brings the trap back.</td></tr><tr><td>Security</td><td>Tokens and mobile numbers are never returned.</td><td>You know why a full card number is refused.</td></tr><tr><td>Explanation</td><td>Sealed interfaces in two sentences.</td><td>Switches versus methods on records, and when each wins.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This Foundations station has no flawed version to review. Use this checklist on any "one of several kinds" code:</p>
+<ul class="rules">
+<li>Can an object be two kinds at once, or none?</li>
+<li>Does any switch or if-chain over the kinds have a default that hides a missing case?</li>
+<li>Can every kind arrive from JSON, and are other kinds' fields refused?</li>
+<li>Is any secret field echoed back in a response or a log?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
