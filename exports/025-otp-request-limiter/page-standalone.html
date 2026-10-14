@@ -1,0 +1,1914 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 025 · OTP request limiter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 025</span>
+    <h1>OTP request limiter</h1>
+    <p class="scenario">Bots request thousands of OTP SMS for one number; two requests at the same instant both slip past the limit.</p>
+    <p class="sim"><b>Simulation</b><span>No SMS is sent: a simulated sender waits as long as a provider call and counts what it would have sent. OTP codes are generated but never returned or logged. Limits are kept in this server's memory.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Fintech</li>
+      <li><b>Types</b>Concurrency · Idempotency</li>
+      <li><b>Reviewer view</b>Yes</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>006 One error shape for a banking API</p>
+      <p><span class="eyebrow">Builds toward</span><br>042 Flash sale without overselling · 096 Partner API keys and quotas · 122 Ingesting driver locations · 125 Login attempt limits across servers</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring MVC · ConcurrentHashMap.compute · CompletableFuture · virtual threads · MockMvc</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>A bot targets one number</strong><p>It sends 20 OTP requests at the same instant. Each one checks "fewer than 3 sent in 10 minutes?", sees yes, and calls the SMS provider. 20 SMS go out, and Tijori pays for each.</p></li><li><strong>The app retries a slow request</strong><p>The customer taps once, the network is slow, the app retries. The old code counts it as a second request and sends a second code.</p></li><li><strong>The fix</strong><p>Check and book the slot in one atomic step, before calling the SMS provider. Remember each Idempotency-Key, so a retry, even one arriving at the same instant, gets the first answer.</p></li></ol>
+<p class="lesson">"Check, then act" is two steps. Under load, something always fits between them.</p>
+
+<h2>What are we building?</h2>
+<p><code>POST /otp-requests</code> sends (simulated) an OTP to a number, at most 3 times in any 10 minutes per number. Beyond that it answers <code>429</code> with how long to wait. A retried request gets the same answer and no second SMS.</p>
+
+<h2>An everyday analogy</h2>
+<p>A temple gives 3 tokens per family per hour. A careless counter looks at the register, hands over the token, then writes the entry: four relatives at four windows all get one. A careful counter writes the entry and hands the token in one movement, at one register.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Normalise the number</strong>: +91 98765 43210 and 098765-43210 are 9876543210.</li>
+<li><strong>Look up the key</strong>: seen before? Return that answer, even if it is still being made.</li>
+<li><strong>Check and book in one step</strong>: fewer than 3 in the window? Take a slot. Otherwise <code>429</code> with the wait.</li>
+<li><strong>Send the SMS</strong> only after the slot is booked.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: the count is a ConcurrentHashMap. Why is that not enough?</summary><p>Each call on it is safe, but "read the count, decide, then add" is three calls. Another request can run between them. The decision and the update must be one atomic call: <code>compute</code>.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>Not across servers.</strong> The count lives in one server's memory: with N servers, a number can get 3 × N. Station 125 shares the count.</li>
+<li><strong>No real SMS.</strong> A simulated sender counts messages.</li>
+<li><strong>No OTP verification.</strong> Only requesting one.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>OTP</strong></td><td>A one-time password sent by SMS to prove you hold the phone.</td><td>The 6-digit code your bank texts you.</td><td><code>POST /otp-requests</code></td></tr><tr><td><strong>Race condition</strong></td><td>Two things happening at once give a result neither would alone.</td><td>Two people book the last seat because both saw it free.</td><td>Check, then send, then record</td></tr><tr><td><strong>Atomic</strong></td><td>Done as one step that nothing can come between.</td><td>Taking the last token from the counter in one grab.</td><td><code>ConcurrentHashMap.compute</code></td></tr><tr><td><strong>Idempotency key</strong></td><td>An id the app sends with a request, and again on a retry, so the server does it once.</td><td>A cheque number: paying the same cheque twice is refused.</td><td><code>Idempotency-Key</code> header</td></tr><tr><td><strong>429 and Retry-After</strong></td><td>"Too many requests", and how many seconds to wait.</td><td>"Counter closed, back in 10 minutes."</td><td><code>Retry-After: 360</code></td></tr><tr><td><strong>Injectable clock</strong></td><td>Code asks a Clock object for the time, so tests can set it.</td><td>A stage clock the director moves forward between scenes.</td><td><code>TestClock</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Tijori</strong> (a fictional fintech app) pays for every OTP SMS. Bots request thousands for one number, to run up costs or to flood someone's phone. The existing limit fails exactly when it matters: requests that arrive together all slip past it. App retries are counted as new requests.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> 20 requests for one number at the same instant, <b>then</b> exactly 3 are accepted, 17 get <code>429</code>, and 3 SMS are sent.</li>
+<li><b>Given</b> requests at 09:00, 09:02 and 09:04, <b>then</b> a 4th at 09:05 gets <code>429</code> with <code>Retry-After: 300</code>, and one at 09:10 is accepted.</li>
+<li><b>Given</b> the same Idempotency-Key twice, <b>then</b> the same requestId, no second SMS, no slot used; 10 copies at once are still one request.</li>
+<li><b>Given</b> a key reused for another number, <b>then</b> <code>422</code>.</li>
+<li><b>Given</b> +91 98765 43210, 098765-43210 and 9876543210, <b>then</b> one number, one limit.</li>
+<li><b>Given</b> a number that is not a 10-digit Indian mobile, or a missing or malformed key, <b>then</b> <code>400</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>3 requests per number in any 10 minutes (a demo rule); different numbers never wait for each other.</li>
+<li>The slot is booked before the SMS is sent; Retry-After counts from the oldest request in the window, rounded up.</li>
+<li>The code is never in a response or a log; responses show the number masked.</li>
+<li>Time comes from an injected <code>Clock</code>.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Recognise check-then-act races, and fix them with an atomic operation.</li>
+<li>Choose between <code>synchronized</code> and <code>ConcurrentHashMap.compute</code>.</li>
+<li>Make a request idempotent, including two copies arriving at once.</li>
+<li>Answer <code>429</code> with an honest <code>Retry-After</code>, and test time with an injectable clock.</li>
+<li>Prove an invariant with a real parallel test.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/otp-requests</code></td><td>Send an OTP to a number. <code>202</code>: accepted, SMS on its way (simulated).</td></tr></tbody></table></div>
+<h2>Request</h2>
+<div class="scroll"><table class=""><thead><tr><th>Part</th><th>Rule</th></tr></thead><tbody><tr><td><code>Idempotency-Key</code> header</td><td>8 to 64 letters, digits or <code>-</code>. A new key per tap of "Send OTP"; the same key when retrying that tap.</td></tr><tr><td><code>mobile</code></td><td>An Indian mobile number; +91, a leading 0, spaces and dashes are allowed.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">202</span></td><td>Accepted (or a retry of an accepted request: the same body)</td></tr><tr><td><span class="pill warn">400</span></td><td>Not a mobile number, or the key is missing or malformed</td></tr><tr><td><span class="pill warn">422</span></td><td>The key was already used for another number</td></tr><tr><td><span class="pill warn">429</span></td><td>3 requests in the last 10 minutes; <code>Retry-After</code> says how many seconds to wait</td></tr></tbody></table></div>
+<p class="muted"><code>Idempotency-Key</code> is described in an IETF draft (draft-ietf-httpapi-idempotency-key-header); check its current status before calling it a standard. <code>429</code> is defined in RFC 6585 and <code>Retry-After</code> in RFC 9110.</p>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 14 Oct 2026, in this order, within a few seconds. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: the first tap</h3><p><b>Why:</b> accepted; the code is not in the response, the number is masked, two attempts left.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /otp-requests HTTP/1.1
+Content-Type: application/json
+Idempotency-Key: tap-7f3a-0001
+
+{
+  &quot;mobile&quot;: &quot;9876543210&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 202 
+Content-Type: application/json
+Content-Length: 126
+
+{
+  &quot;requestId&quot;: &quot;otp_a6b2ca80b25948a9820b4e8758785bd2&quot;,
+  &quot;mobile&quot;: &quot;XXXXXX3210&quot;,
+  &quot;expiresAt&quot;: &quot;2026-10-14T13:25:03Z&quot;,
+  &quot;attemptsLeft&quot;: 2
+}</code></pre></div></div></section><section class="example"><h3>Case 2: the app retries that tap</h3><p><b>Why:</b> the same key (and the same number, written with +91): the same requestId, no second SMS, no slot used.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /otp-requests HTTP/1.1
+Content-Type: application/json
+Idempotency-Key: tap-7f3a-0001
+
+{
+  &quot;mobile&quot;: &quot;+91 98765 43210&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 202 
+Content-Type: application/json
+Content-Length: 126
+
+{
+  &quot;requestId&quot;: &quot;otp_a6b2ca80b25948a9820b4e8758785bd2&quot;,
+  &quot;mobile&quot;: &quot;XXXXXX3210&quot;,
+  &quot;expiresAt&quot;: &quot;2026-10-14T13:25:03Z&quot;,
+  &quot;attemptsLeft&quot;: 2
+}</code></pre></div></div></section><section class="example"><h3>Case 3: a second tap</h3><p><b>Why:</b> a new key: a new request. 098765-43210 is the same number.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /otp-requests HTTP/1.1
+Content-Type: application/json
+Idempotency-Key: tap-7f3a-0002
+
+{
+  &quot;mobile&quot;: &quot;098765-43210&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 202 
+Content-Type: application/json
+Content-Length: 126
+
+{
+  &quot;requestId&quot;: &quot;otp_cda68d76f026430787505616f16a6de9&quot;,
+  &quot;mobile&quot;: &quot;XXXXXX3210&quot;,
+  &quot;expiresAt&quot;: &quot;2026-10-14T13:25:03Z&quot;,
+  &quot;attemptsLeft&quot;: 1
+}</code></pre></div></div></section><section class="example"><h3>Case 4: a third tap</h3><p><b>Why:</b> the last slot in this window.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /otp-requests HTTP/1.1
+Content-Type: application/json
+Idempotency-Key: tap-7f3a-0003
+
+{
+  &quot;mobile&quot;: &quot;9876543210&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 202 
+Content-Type: application/json
+Content-Length: 126
+
+{
+  &quot;requestId&quot;: &quot;otp_e9b0337e52244585899fe8c0e48d6589&quot;,
+  &quot;mobile&quot;: &quot;XXXXXX3210&quot;,
+  &quot;expiresAt&quot;: &quot;2026-10-14T13:25:03Z&quot;,
+  &quot;attemptsLeft&quot;: 0
+}</code></pre></div></div></section><section class="example"><h3>Case 5: a fourth tap</h3><p><b>Why:</b> <code>429</code>. <code>Retry-After</code> counts to when the first request leaves the 10-minute window.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /otp-requests HTTP/1.1
+Content-Type: application/json
+Idempotency-Key: tap-7f3a-0004
+
+{
+  &quot;mobile&quot;: &quot;9876543210&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 429 
+Retry-After: 600
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;This number has had 3 OTPs in the last 10 minutes. Try again in 600 seconds.&quot;,
+  &quot;instance&quot;: &quot;/otp-requests&quot;,
+  &quot;status&quot;: 429,
+  &quot;title&quot;: &quot;Too many OTP requests&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: a key reused for another number</h3><p><b>Why:</b> a bug in the app, not a retry: <code>422</code>, and no SMS.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /otp-requests HTTP/1.1
+Content-Type: application/json
+Idempotency-Key: tap-7f3a-0001
+
+{
+  &quot;mobile&quot;: &quot;9123456780&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;This Idempotency-Key was used for a different number. Use a new key for a new request.&quot;,
+  &quot;instance&quot;: &quot;/otp-requests&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Idempotency key reused&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: not a mobile number</h3><p><b>Why:</b> <code>400</code>, before any limit or SMS.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /otp-requests HTTP/1.1
+Content-Type: application/json
+Idempotency-Key: tap-7f3a-0005
+
+{
+  &quot;mobile&quot;: &quot;12345&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;mobile must be an Indian mobile number of 10 digits.&quot;,
+  &quot;instance&quot;: &quot;/otp-requests&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Invalid mobile number&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>First request</td><td>202, masked, no code, 2 left</td><td><code>anOtpRequestIsAcceptedWithoutShowingTheCodeOrTheNumber</code></td></tr><tr><td>Three formats of one number, then a 4th</td><td>One limit; <code>429</code>, Retry-After 360</td><td><code>theFourthIn10MinutesIs429WithRetryAfterFromTheOldest</code></td></tr><tr><td>09:00, 09:02, 09:04, then 09:05, 09:09:59, 09:10</td><td>Retry-After 300, then 1, then accepted</td><td><code>retryAfterCountsFromTheOldestRequestInTheWindow</code></td></tr><tr><td>20 requests at once, one number</td><td>3 accepted, 17 × 429, 3 SMS</td><td><code>twentyBotRequestsAtOnceGetThreeSms</code></td></tr><tr><td>3 numbers × 5 requests at once</td><td>3 each</td><td><code>differentNumbersEachGetTheirOwnThree</code></td></tr><tr><td>Same key twice</td><td>Same answer, 1 SMS, no slot</td><td><code>aRetryWithTheSameKeyGetsTheSameAnswerAndNoSecondSms</code></td></tr><tr><td>Same key 10 times at once</td><td>One requestId, 1 SMS</td><td><code>tenCopiesOfOneRequestAtTheSameInstantAreOneRequest</code></td></tr><tr><td>Key reused for another number</td><td><code>422</code>, no SMS</td><td><code>aKeyReusedForAnotherNumberIs422</code></td></tr><tr><td>A refused request's key, retried later</td><td>Accepted</td><td><code>aRefusedRequestCanBeRetriedWithItsKeyOnceTheWindowMoves</code></td></tr><tr><td>Bad numbers, keys, bodies</td><td><code>400</code></td><td><code>badRequestsAre400</code></td></tr><tr><td>Two servers</td><td>6: the limit is per server</td><td><code>theLimitIsPerServerSoTwoServersAllowSix</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">An in-memory limiter that only works on one server, and check-then-act races.</p>
+<p>The old limiter uses thread-safe pieces: a <code>ConcurrentHashMap</code> and a synchronized list. The first test sends 20 requests at once and more than 3 get through: each checked before any had recorded. The second runs the real limiter the same way: exactly 3. The third states the limit that remains: two servers, each with its own count, allow 6. That is not fixed here; it needs a shared store (station 125).</p>
+</div>
+<pre class="code"><code class="language-java">package com.tijori.otp;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** The first test written for this station: it reproduces the bug before the fix, and states the fix&#x27;s limit. */
+class CheckThenActTrapTest {
+
+    /**
+     * The &quot;before&quot; limiter: check the count, send the SMS, then record the request. Each step is thread-safe on its
+     * own (a ConcurrentHashMap, a synchronized list); the sequence is not. Kept only in tests.
+     */
+    static final class OldLimiter {
+        final Map&lt;String, List&lt;Instant&gt;&gt; sent = new ConcurrentHashMap&lt;&gt;();
+
+        boolean request(String mobile) throws InterruptedException {
+            List&lt;Instant&gt; times = sent.computeIfAbsent(mobile, m -&gt; java.util.Collections.synchronizedList(new ArrayList&lt;&gt;()));
+            if (times.size() &gt;= 3) {
+                return false;
+            }
+            Thread.sleep(50);              // the SMS provider call
+            times.add(Instant.now());
+            return true;
+        }
+    }
+
+    static int acceptedOutOf20(java.util.function.Predicate&lt;String&gt; request) throws Exception {
+        AtomicInteger accepted = new AtomicInteger();
+        CountDownLatch start = new CountDownLatch(1);
+        try (var threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; 20; i++) {
+                threads.submit(() -&gt; {
+                    start.await();
+                    if (request.test(&quot;9876543210&quot;)) {
+                        accepted.incrementAndGet();
+                    }
+                    return null;
+                });
+            }
+            start.countDown();   // all 20 at the same instant, like a bot
+        }
+        return accepted.get();
+    }
+
+    @Test
+    void theOldLimiterLetsTwentyThroughWhenTheyArriveTogether() throws Exception {
+        OldLimiter old = new OldLimiter();
+        int accepted = acceptedOutOf20(m -&gt; {
+            try {
+                return old.request(m);
+            } catch (InterruptedException e) {
+                throw new IllegalStateException(e);
+            }
+        });
+        assertThat(accepted).isGreaterThan(3);   // every one checked &quot;fewer than 3 sent&quot; before any was recorded
+    }
+
+    @Test
+    void theAtomicLimiterLetsExactlyThreeThrough() throws Exception {
+        OtpLimiter limiter = new OtpLimiter(Clock.systemUTC());
+        assertThat(acceptedOutOf20(m -&gt; limiter.tryAcquire(m).accepted())).isEqualTo(3);
+    }
+
+    @Test
+    void theLimitIsPerServerSoTwoServersAllowSix() throws Exception {
+        // The known limit of an in-memory count: each server keeps its own. Station 125 shares the count.
+        OtpLimiter serverA = new OtpLimiter(Clock.systemUTC());
+        OtpLimiter serverB = new OtpLimiter(Clock.systemUTC());
+        AtomicInteger turn = new AtomicInteger();
+        int accepted = acceptedOutOf20(m -&gt; (turn.getAndIncrement() % 2 == 0 ? serverA : serverB).tryAcquire(m).accepted());
+        assertThat(accepted).isEqualTo(6);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr><tr><td>Docker</td><td>Not needed for this station</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 14 tests</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Virtual threads are final in Java 21.</p>
+<h2>Try it yourself</h2>
+<pre class="code"><code class="language-bash"># Run this four times, changing the key each time; the 4th answers 429 with Retry-After
+curl -i -X POST http://localhost:8080/otp-requests -H &quot;Content-Type: application/json&quot; \
+     -H &quot;Idempotency-Key: my-tap-0001&quot; -d &#x27;{&quot;mobile&quot;:&quot;9876543210&quot;}&#x27;</code></pre>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>The same requestId every time</td><td>You are resending the same key.</td><td>Change the key for a new tap.</td></tr><tr><td><code>400</code> with a valid number</td><td>The key has characters other than letters, digits and dashes, or is under 8 long.</td><td>Use a UUID or similar.</td></tr><tr><td><code>429</code> straight away after a restart</td><td>Not possible: counts live in memory and start empty.</td><td>If you see it, another instance answered.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/025-otp-request-limiter/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/tijori/otp/
+│   ├── OtpController.java   ├── OtpService.java   ├── OtpLimiter.java
+│   ├── SmsSender.java       ├── SimulatedSmsSender.java   └── OtpApplication.java
+├── src/test/java/com/tijori/otp/   (see Tests)
+├── review/                   The flawed version for the Review tab
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">OtpController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">OtpService.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">OtpLimiter.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">SimulatedSmsSender.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">SmsSender.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">OtpApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/tijori/otp/OtpController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Reads the key and the body, and hands them to the service. <code>202</code> on success.</dd><dt>Why</dt><dd>The controller has no rules; the service is where retries, limits and the SMS meet.</dd><dt>Without it</dt><dd>Rules spread across controllers.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.otp;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+class OtpController {
+
+    record Body(@NotBlank @Size(max = 20) String mobile) {
+    }
+
+    private final OtpService otp;
+
+    OtpController(OtpService otp) {
+        this.otp = otp;
+    }
+
+    /** The app sends a new Idempotency-Key for each tap of &quot;Send OTP&quot;, and the same key when it retries that tap. */
+    @PostMapping(&quot;/otp-requests&quot;)
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    OtpService.OtpRequest request(@RequestHeader(&quot;Idempotency-Key&quot;) @Pattern(regexp = &quot;[A-Za-z0-9-]{8,64}&quot;) String key,
+                                  @Valid @RequestBody Body body) {
+        return otp.request(key, body.mobile());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/tijori/otp/OtpService.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Normalises the number, handles replays, asks the limiter, sends the SMS.</dd><dt>Why</dt><dd><code>putIfAbsent</code> of a <code>CompletableFuture</code>: the first request with a key does the work; any copy waits for the same result.</dd><dt>Without it</dt><dd>Storing the answer only after it is ready, so two copies both do the work.</dd></dl><ul><li>A refused request removes its key: nothing happened, so a later retry may try again.</li><li><code>Retry-After</code> is rounded up, never inviting an early retry.</li><li>The code goes to the SMS text only.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.otp;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponseException;
+
+import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * One OTP request: replay check, limit, SMS. Each Idempotency-Key maps to one future result, created atomically,
+ * so the same request sent twice, even at the same instant, books one slot and sends one SMS.
+ */
+@Service
+class OtpService {
+
+    static final Duration CODE_VALID_FOR = Duration.ofMinutes(5);
+
+    record OtpRequest(String requestId, String mobile, Instant expiresAt, int attemptsLeft) {
+    }
+
+    /** The first request with a key stores its future here; any repeat waits for that same future. */
+    private record Stored(String mobile, CompletableFuture&lt;OtpRequest&gt; result) {
+    }
+
+    private final OtpLimiter limiter;
+    private final SmsSender sms;
+    private final Clock clock;
+    private final SecureRandom random = new SecureRandom();
+    // shortcut: keys are kept until restart; a real store expires them after a day (a table or a cache with a TTL)
+    private final Map&lt;String, Stored&gt; byKey = new ConcurrentHashMap&lt;&gt;();
+
+    OtpService(OtpLimiter limiter, SmsSender sms, Clock clock) {
+        this.limiter = limiter;
+        this.sms = sms;
+        this.clock = clock;
+    }
+
+    OtpRequest request(String idempotencyKey, String rawMobile) {
+        String mobile = normalise(rawMobile);
+        Stored mine = new Stored(mobile, new CompletableFuture&lt;&gt;());
+        Stored first = byKey.putIfAbsent(idempotencyKey, mine);
+        if (first != null) {
+            return replay(first, mobile);
+        }
+        try {
+            OtpRequest result = issue(mobile);
+            mine.result().complete(result);
+            return result;
+        } catch (RuntimeException refused) {
+            byKey.remove(idempotencyKey);             // nothing happened: a later retry with this key may try again
+            mine.result().completeExceptionally(refused);
+            throw refused;
+        }
+    }
+
+    private OtpRequest replay(Stored first, String mobile) {
+        if (!first.mobile().equals(mobile)) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Idempotency key reused&quot;,
+                    &quot;This Idempotency-Key was used for a different number. Use a new key for a new request.&quot;);
+        }
+        try {
+            return first.result().join();             // the same answer as the first request, even if it is still running
+        } catch (CompletionException e) {
+            throw (RuntimeException) e.getCause();
+        }
+    }
+
+    private OtpRequest issue(String mobile) {
+        OtpLimiter.Decision d = limiter.tryAcquire(mobile);
+        if (!d.accepted()) {
+            long seconds = Math.max(1, (d.retryAfter().toMillis() + 999) / 1000);   // round up: never invite an early retry
+            ErrorResponseException tooMany = problem(HttpStatus.TOO_MANY_REQUESTS, &quot;Too many OTP requests&quot;,
+                    &quot;This number has had &quot; + OtpLimiter.MAX + &quot; OTPs in the last 10 minutes. Try again in &quot; + seconds + &quot; seconds.&quot;);
+            tooMany.getHeaders().set(HttpHeaders.RETRY_AFTER, String.valueOf(seconds));
+            throw tooMany;
+        }
+        String code = String.format(&quot;%06d&quot;, random.nextInt(1_000_000));
+        sms.send(mobile, &quot;Your Tijori code is &quot; + code + &quot;. It expires in 5 minutes. Never share it.&quot;);
+        return new OtpRequest(&quot;otp_&quot; + UUID.randomUUID().toString().replace(&quot;-&quot;, &quot;&quot;), masked(mobile),
+                clock.instant().plus(CODE_VALID_FOR).truncatedTo(java.time.temporal.ChronoUnit.SECONDS), d.attemptsLeft());
+    }
+
+    /** &quot;+91 98765-43210&quot;, &quot;098765 43210&quot; and &quot;9876543210&quot; are one number, so formats cannot dodge the limit. */
+    static String normalise(String raw) {
+        String digits = raw.replaceAll(&quot;[\\s()-]&quot;, &quot;&quot;);
+        if (digits.startsWith(&quot;+91&quot;)) {
+            digits = digits.substring(3);
+        } else if (digits.length() == 11 &amp;&amp; digits.startsWith(&quot;0&quot;)) {
+            digits = digits.substring(1);
+        }
+        if (!digits.matches(&quot;[6-9]\\d{9}&quot;)) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;Invalid mobile number&quot;, &quot;mobile must be an Indian mobile number of 10 digits.&quot;);
+        }
+        return digits;
+    }
+
+    static String masked(String mobile) {
+        return &quot;XXXXXX&quot; + mobile.substring(6);
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+
+    void clear() {
+        byKey.clear();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/tijori/otp/OtpLimiter.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>3 per number per 10 minutes, checked and booked in one <code>compute</code>.</dd><dt>Why</dt><dd>Atomic per key: requests for one number take turns; other numbers do not wait.</dd><dt>Without it</dt><dd>The trap: check, send, then record.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.otp;
+
+import org.springframework.stereotype.Component;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * At most MAX requests per number in any WINDOW (demo rule: 3 in 10 minutes). The check and the booking happen in
+ * one ConcurrentHashMap.compute call, which is atomic per key: two requests for one number cannot both see &quot;2 used&quot;
+ * and both book the third slot. Requests for different numbers do not wait for each other.
+ *
+ * Limit: this map lives in one server&#x27;s memory. With N servers behind a load balancer, a number can get N x MAX.
+ * Safe while one instance runs; across servers the count needs a shared store (station 125).
+ */
+@Component
+class OtpLimiter {
+
+    static final int MAX = 3;
+    static final Duration WINDOW = Duration.ofMinutes(10);
+
+    /** accepted: whether a slot was booked; attemptsLeft after this one; retryAfter until a slot frees, if refused. */
+    record Decision(boolean accepted, int attemptsLeft, Duration retryAfter) {
+    }
+
+    private final Clock clock;
+    private final Map&lt;String, Deque&lt;Instant&gt;&gt; windows = new ConcurrentHashMap&lt;&gt;();
+
+    OtpLimiter(Clock clock) {
+        this.clock = clock;
+    }
+
+    Decision tryAcquire(String mobile) {
+        Instant now = clock.instant();
+        Decision[] decision = new Decision[1];
+        windows.compute(mobile, (m, times) -&gt; {
+            Deque&lt;Instant&gt; window = times == null ? new ArrayDeque&lt;&gt;() : times;
+            while (!window.isEmpty() &amp;&amp; !window.peekFirst().isAfter(now.minus(WINDOW))) {
+                window.pollFirst();   // older than the window: no longer counts
+            }
+            if (window.size() &gt;= MAX) {
+                decision[0] = new Decision(false, 0, Duration.between(now, window.peekFirst().plus(WINDOW)));
+            } else {
+                window.addLast(now);
+                decision[0] = new Decision(true, MAX - window.size(), Duration.ZERO);
+            }
+            return window;
+        });
+        return decision[0];
+    }
+
+    void clear() {
+        windows.clear();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/tijori/otp/SimulatedSmsSender.java</p><div class="notes"><p>Waits like a provider, counts per number, logs the masked number and never the text.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.otp;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Simulated SMS provider: no message leaves the machine. It takes as long as a real provider call (configurable)
+ * and counts what it was asked to send, per number, so tests can check how many SMS a bot would have cost.
+ */
+@Component
+class SimulatedSmsSender implements SmsSender {
+
+    private static final Logger log = LoggerFactory.getLogger(SimulatedSmsSender.class);
+
+    private final Duration latency;
+    private final Map&lt;String, AtomicInteger&gt; sent = new ConcurrentHashMap&lt;&gt;();
+
+    SimulatedSmsSender(@Value(&quot;${tijori.sms.simulated-latency}&quot;) Duration latency) {
+        this.latency = latency;
+    }
+
+    @Override
+    public void send(String mobile, String text) {
+        try {
+            Thread.sleep(latency);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        sent.computeIfAbsent(mobile, m -&gt; new AtomicInteger()).incrementAndGet();
+        log.info(&quot;Simulated SMS to {} (text not logged: it holds the code)&quot;, OtpService.masked(mobile));
+    }
+
+    int sentTo(String mobile) {
+        AtomicInteger n = sent.get(mobile);
+        return n == null ? 0 : n.get();
+    }
+
+    void clear() {
+        sent.clear();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/tijori/otp/SmsSender.java</p><div class="notes"><p>The one-method interface the real provider would implement.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.otp;
+
+/** Sends one SMS. The real one calls an SMS provider; this station uses a simulated one. */
+interface SmsSender {
+
+    void send(String mobile, String text);
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Problem bodies for errors, and the simulated SMS latency.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: tijori-otp
+  mvc:
+    problemdetails:
+      enabled: true
+
+tijori:
+  sms:
+    simulated-latency: 50ms   # about what an SMS provider call takes; the gap where check-then-act races</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/tijori/otp/OtpApplication.java</p><div class="notes"><p>Entry point, and the <code>Clock</code> bean tests replace.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.otp;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+import java.time.Clock;
+
+@SpringBootApplication
+public class OtpApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(OtpApplication.class, args);
+    }
+
+    /** &quot;Now&quot; comes from here, so tests can move time forward instead of waiting 10 minutes. */
+    @Bean
+    Clock clock() {
+        return Clock.systemUTC();
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>OtpContractTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>CheckThenActTrapTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Concurrency</td><td>A real parallel test proving the invariant</td><td><code>OtpConcurrencyTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Idempotency</td><td>The same request twice gives one effect</td><td><code>OtpReplayTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">The parallel tests use virtual threads released together by a <code>CountDownLatch</code>. While building, the concurrency, replay and trap classes were run five more times in a row: no failures.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.tijori.otp.OtpConcurrencyTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.tijori.otp.OtpContractTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.tijori.otp.OtpReplayTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.tijori.otp.CheckThenActTrapTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">CheckThenActTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">OtpConcurrencyTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">OtpReplayTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">OtpContractTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/tijori/otp/CheckThenActTrapTest.java</p><div class="notes"><p>Written first: the old limiter's race, the atomic limiter's exact 3, and the per-server limit.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.otp;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** The first test written for this station: it reproduces the bug before the fix, and states the fix&#x27;s limit. */
+class CheckThenActTrapTest {
+
+    /**
+     * The &quot;before&quot; limiter: check the count, send the SMS, then record the request. Each step is thread-safe on its
+     * own (a ConcurrentHashMap, a synchronized list); the sequence is not. Kept only in tests.
+     */
+    static final class OldLimiter {
+        final Map&lt;String, List&lt;Instant&gt;&gt; sent = new ConcurrentHashMap&lt;&gt;();
+
+        boolean request(String mobile) throws InterruptedException {
+            List&lt;Instant&gt; times = sent.computeIfAbsent(mobile, m -&gt; java.util.Collections.synchronizedList(new ArrayList&lt;&gt;()));
+            if (times.size() &gt;= 3) {
+                return false;
+            }
+            Thread.sleep(50);              // the SMS provider call
+            times.add(Instant.now());
+            return true;
+        }
+    }
+
+    static int acceptedOutOf20(java.util.function.Predicate&lt;String&gt; request) throws Exception {
+        AtomicInteger accepted = new AtomicInteger();
+        CountDownLatch start = new CountDownLatch(1);
+        try (var threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; 20; i++) {
+                threads.submit(() -&gt; {
+                    start.await();
+                    if (request.test(&quot;9876543210&quot;)) {
+                        accepted.incrementAndGet();
+                    }
+                    return null;
+                });
+            }
+            start.countDown();   // all 20 at the same instant, like a bot
+        }
+        return accepted.get();
+    }
+
+    @Test
+    void theOldLimiterLetsTwentyThroughWhenTheyArriveTogether() throws Exception {
+        OldLimiter old = new OldLimiter();
+        int accepted = acceptedOutOf20(m -&gt; {
+            try {
+                return old.request(m);
+            } catch (InterruptedException e) {
+                throw new IllegalStateException(e);
+            }
+        });
+        assertThat(accepted).isGreaterThan(3);   // every one checked &quot;fewer than 3 sent&quot; before any was recorded
+    }
+
+    @Test
+    void theAtomicLimiterLetsExactlyThreeThrough() throws Exception {
+        OtpLimiter limiter = new OtpLimiter(Clock.systemUTC());
+        assertThat(acceptedOutOf20(m -&gt; limiter.tryAcquire(m).accepted())).isEqualTo(3);
+    }
+
+    @Test
+    void theLimitIsPerServerSoTwoServersAllowSix() throws Exception {
+        // The known limit of an in-memory count: each server keeps its own. Station 125 shares the count.
+        OtpLimiter serverA = new OtpLimiter(Clock.systemUTC());
+        OtpLimiter serverB = new OtpLimiter(Clock.systemUTC());
+        AtomicInteger turn = new AtomicInteger();
+        int accepted = acceptedOutOf20(m -&gt; (turn.getAndIncrement() % 2 == 0 ? serverA : serverB).tryAcquire(m).accepted());
+        assertThat(accepted).isEqualTo(6);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/tijori/otp/OtpConcurrencyTest.java</p><div class="notes"><p>Twenty bot requests at once, and three numbers at once, through the whole app.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.otp;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** Real parallel requests through the whole app: virtual threads released together by a latch. */
+@Timeout(value = 60, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+class OtpConcurrencyTest extends ApiTest {
+
+    /** Sends each (key, mobile) pair at the same instant and counts the answers by status. */
+    Map&lt;Integer, AtomicInteger&gt; together(List&lt;String[]&gt; requests) throws Exception {
+        Map&lt;Integer, AtomicInteger&gt; byStatus = new ConcurrentHashMap&lt;&gt;();
+        CountDownLatch start = new CountDownLatch(1);
+        try (var threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (String[] r : requests) {
+                threads.submit(() -&gt; {
+                    start.await();
+                    int status = otp(r[0], r[1]).andReturn().getResponse().getStatus();
+                    byStatus.computeIfAbsent(status, s -&gt; new AtomicInteger()).incrementAndGet();
+                    return null;
+                });
+            }
+            start.countDown();
+        }
+        return byStatus;
+    }
+
+    @Test
+    void twentyBotRequestsAtOnceGetThreeSms() throws Exception {
+        List&lt;String[]&gt; bot = java.util.stream.IntStream.range(0, 20).mapToObj(i -&gt; new String[]{&quot;bot-key-&quot; + i + &quot;-xyz&quot;, &quot;9876543210&quot;}).toList();
+        Map&lt;Integer, AtomicInteger&gt; byStatus = together(bot);
+        assertThat(byStatus.get(202).get()).isEqualTo(3);
+        assertThat(byStatus.get(429).get()).isEqualTo(17);
+        assertThat(sms.sentTo(&quot;9876543210&quot;)).isEqualTo(3);
+    }
+
+    @Test
+    void differentNumbersEachGetTheirOwnThree() throws Exception {
+        List&lt;String[]&gt; mixed = new java.util.ArrayList&lt;&gt;();
+        for (String mobile : new String[]{&quot;9000000001&quot;, &quot;9000000002&quot;, &quot;9000000003&quot;}) {
+            for (int i = 0; i &lt; 5; i++) {
+                mixed.add(new String[]{&quot;key-&quot; + mobile + &quot;-&quot; + i, mobile});
+            }
+        }
+        Map&lt;Integer, AtomicInteger&gt; byStatus = together(mixed);
+        assertThat(byStatus.get(202).get()).isEqualTo(9);
+        for (String mobile : new String[]{&quot;9000000001&quot;, &quot;9000000002&quot;, &quot;9000000003&quot;}) {
+            assertThat(sms.sentTo(mobile)).isEqualTo(3);
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/tijori/otp/OtpReplayTest.java</p><div class="notes"><p>Retries, ten copies at once, a reused key, and a retry after a refusal.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.otp;
+
+import com.jayway.jsonpath.JsonPath;
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The same request twice is one request: one slot, one SMS, one answer. */
+class OtpReplayTest extends ApiTest {
+
+    String requestId(String key, String mobile) throws Exception {
+        return JsonPath.read(otp(key, mobile).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString(), &quot;$.requestId&quot;);
+    }
+
+    @Test
+    void aRetryWithTheSameKeyGetsTheSameAnswerAndNoSecondSms() throws Exception {
+        String first = requestId(&quot;tap-0001-retry&quot;, &quot;9876543210&quot;);
+        String again = requestId(&quot;tap-0001-retry&quot;, &quot;+91 98765 43210&quot;);   // the same number, written differently
+        assertThat(again).isEqualTo(first);
+        assertThat(sms.sentTo(&quot;9876543210&quot;)).isEqualTo(1);
+        otp(&quot;tap-0002-next&quot;, &quot;9876543210&quot;).andExpect(jsonPath(&quot;$.attemptsLeft&quot;).value(1));   // the retry used no slot
+    }
+
+    @Test
+    void tenCopiesOfOneRequestAtTheSameInstantAreOneRequest() throws Exception {
+        Set&lt;String&gt; ids = ConcurrentHashMap.newKeySet();
+        CountDownLatch start = new CountDownLatch(1);
+        try (var threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; 10; i++) {
+                threads.submit(() -&gt; {
+                    start.await();
+                    ids.add(requestId(&quot;double-tap-777&quot;, &quot;9876543210&quot;));
+                    return null;
+                });
+            }
+            start.countDown();
+        }
+        assertThat(ids).hasSize(1);
+        assertThat(sms.sentTo(&quot;9876543210&quot;)).isEqualTo(1);
+    }
+
+    @Test
+    void aKeyReusedForAnotherNumberIs422() throws Exception {
+        requestId(&quot;shared-key-01&quot;, &quot;9876543210&quot;);
+        otp(&quot;shared-key-01&quot;, &quot;9123456780&quot;).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Idempotency key reused&quot;));
+        assertThat(sms.sentTo(&quot;9123456780&quot;)).isZero();
+    }
+
+    @Test
+    void aRefusedRequestCanBeRetriedWithItsKeyOnceTheWindowMoves() throws Exception {
+        for (int i = 0; i &lt; 3; i++) {
+            requestId(&quot;fill-&quot; + i + &quot;-abcdef&quot;, &quot;9876543210&quot;);
+        }
+        otp(&quot;late-key-0001&quot;, &quot;9876543210&quot;).andExpect(status().isTooManyRequests());
+        clock.advance(Duration.ofMinutes(10));
+        otp(&quot;late-key-0001&quot;, &quot;9876543210&quot;).andExpect(status().isAccepted());   // the refusal had no effect to replay
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/tijori/otp/OtpContractTest.java</p><div class="notes"><p>The first request, the limit with Retry-After, the window moving, and bad requests.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.otp;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import java.time.Duration;
+
+import static org.hamcrest.Matchers.matchesPattern;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP contract: an accepted request, the limit with Retry-After, the window moving, and every refusal. */
+class OtpContractTest extends ApiTest {
+
+    @Test
+    void anOtpRequestIsAcceptedWithoutShowingTheCodeOrTheNumber() throws Exception {
+        otp(&quot;first-tap-0001&quot;, &quot;9876543210&quot;)
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath(&quot;$.requestId&quot;).value(matchesPattern(&quot;otp_[0-9a-f]{32}&quot;)))
+                .andExpect(jsonPath(&quot;$.mobile&quot;).value(&quot;XXXXXX3210&quot;))
+                .andExpect(jsonPath(&quot;$.expiresAt&quot;).value(&quot;2026-10-14T09:05:00Z&quot;))
+                .andExpect(jsonPath(&quot;$.attemptsLeft&quot;).value(2))
+                .andExpect(jsonPath(&quot;$.code&quot;).doesNotExist());
+    }
+
+    @Test
+    void theFourthIn10MinutesIs429WithRetryAfterFromTheOldest() throws Exception {
+        otp(&quot;tap-a-000001&quot;, &quot;9876543210&quot;);
+        clock.advance(Duration.ofMinutes(1));
+        otp(&quot;tap-b-000002&quot;, &quot;+91 98765-43210&quot;);   // the same number: counts
+        otp(&quot;tap-c-000003&quot;, &quot;09876543210&quot;).andExpect(jsonPath(&quot;$.attemptsLeft&quot;).value(0));
+        clock.advance(Duration.ofMinutes(3));
+        otp(&quot;tap-d-000004&quot;, &quot;9876543210&quot;)
+                .andExpect(status().isTooManyRequests())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(header().string(&quot;Retry-After&quot;, &quot;360&quot;))   // the first one leaves the window at 09:10, 6 minutes away
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;This number has had 3 OTPs in the last 10 minutes. Try again in 360 seconds.&quot;));
+        clock.advance(Duration.ofMinutes(6));
+        otp(&quot;tap-e-000005&quot;, &quot;9876543210&quot;).andExpect(status().isAccepted()).andExpect(jsonPath(&quot;$.attemptsLeft&quot;).value(0));
+    }
+
+    @Test
+    void retryAfterCountsFromTheOldestRequestInTheWindow() throws Exception {
+        otp(&quot;slot-1-000001&quot;, &quot;9123456780&quot;);   // 09:00
+        clock.advance(Duration.ofMinutes(2));
+        otp(&quot;slot-2-000002&quot;, &quot;9123456780&quot;);   // 09:02
+        clock.advance(Duration.ofMinutes(2));
+        otp(&quot;slot-3-000003&quot;, &quot;9123456780&quot;);   // 09:04
+        clock.advance(Duration.ofMinutes(1));  // 09:05: the 09:00 request frees its slot at 09:10
+        otp(&quot;slot-4-000004&quot;, &quot;9123456780&quot;).andExpect(status().isTooManyRequests()).andExpect(header().string(&quot;Retry-After&quot;, &quot;300&quot;));
+        clock.advance(Duration.ofSeconds(299));
+        otp(&quot;slot-5-000005&quot;, &quot;9123456780&quot;).andExpect(status().isTooManyRequests()).andExpect(header().string(&quot;Retry-After&quot;, &quot;1&quot;));
+        clock.advance(Duration.ofSeconds(1));
+        otp(&quot;slot-6-000006&quot;, &quot;9123456780&quot;).andExpect(status().isAccepted());
+    }
+
+    @Test
+    void badRequestsAre400() throws Exception {
+        otp(&quot;valid-key-01&quot;, &quot;12345&quot;).andExpect(status().isBadRequest()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Invalid mobile number&quot;));
+        otp(&quot;valid-key-02&quot;, &quot;5876543210&quot;).andExpect(status().isBadRequest());
+        otp(&quot;short&quot;, &quot;9876543210&quot;).andExpect(status().isBadRequest());
+        otp(&quot;bad key with spaces&quot;, &quot;9876543210&quot;).andExpect(status().isBadRequest());
+        mvc.perform(post(&quot;/otp-requests&quot;).contentType(MediaType.APPLICATION_JSON).content(&quot;{\&quot;mobile\&quot;:\&quot;9876543210\&quot;}&quot;))
+                .andExpect(status().isBadRequest());   // no Idempotency-Key
+        mvc.perform(post(&quot;/otp-requests&quot;).header(&quot;Idempotency-Key&quot;, &quot;valid-key-03&quot;).contentType(MediaType.APPLICATION_JSON).content(&quot;{}&quot;))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void anUnknownPathIs404() throws Exception {
+        mvc.perform(post(&quot;/otp-request&quot;).header(&quot;Idempotency-Key&quot;, &quot;valid-key-04&quot;)
+                .contentType(MediaType.APPLICATION_JSON).content(&quot;{\&quot;mobile\&quot;:\&quot;9876543210\&quot;}&quot;)).andExpect(status().isNotFound());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/tijori/otp/ApiTest.java</p><div class="notes"><p>Shared setup: a clock the tests move by hand, and empty limits before each test.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.otp;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/** Shared setup: the whole app through MockMvc, a clock the tests move by hand, and nothing remembered between tests. */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(ApiTest.TestClockConfig.class)
+abstract class ApiTest {
+
+    static final Instant START = Instant.parse(&quot;2026-10-14T09:00:00Z&quot;);
+
+    /** A clock that only moves when a test says so. */
+    static final class TestClock extends Clock {
+        private final AtomicReference&lt;Instant&gt; now = new AtomicReference&lt;&gt;(START);
+
+        void reset() {
+            now.set(START);
+        }
+
+        void advance(Duration d) {
+            now.updateAndGet(t -&gt; t.plus(d));
+        }
+
+        @Override
+        public Instant instant() {
+            return now.get();
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+    }
+
+    @TestConfiguration
+    static class TestClockConfig {
+        @Bean
+        @Primary
+        TestClock testClock() {
+            return new TestClock();
+        }
+    }
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    TestClock clock;
+    @Autowired
+    OtpLimiter limiter;
+    @Autowired
+    OtpService service;
+    @Autowired
+    SimulatedSmsSender sms;
+
+    @BeforeEach
+    void freshStart() {
+        clock.reset();
+        limiter.clear();
+        service.clear();
+        sms.clear();
+    }
+
+    ResultActions otp(String key, String mobile) throws Exception {
+        return mvc.perform(post(&quot;/otp-requests&quot;).header(&quot;Idempotency-Key&quot;, key)
+                .contentType(MediaType.APPLICATION_JSON).content(&quot;{\&quot;mobile\&quot;:\&quot;&quot; + mobile + &quot;\&quot;}&quot;));
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/tijori/otp/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=KeyExpiryChallengeTest</code></li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 14 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 16 tests pass (14 station tests and 2 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>Forget keys after a day</h2><p>Keys are kept forever (the <code>shortcut:</code> comment in <code>OtpService</code>). Remember each key for 24 hours, then treat it as new and free its memory.</p><p><b>Done when:</b> the test in <code>KeyExpiryChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>Store the time with each key, from the injected <code>Clock</code>.</li><li><code>map.values().removeIf(...)</code> drops the old ones.</li></ul></details><p class="path">challenge/KeyExpiryChallengeTest.java</p><pre class="code"><code class="language-java">package com.tijori.otp;
+
+import com.jayway.jsonpath.JsonPath;
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Challenge 1: an Idempotency-Key is remembered for 24 hours, then forgotten. A key seen again after that is a new
+ * request (and the memory it used is freed).
+ */
+class KeyExpiryChallengeTest extends ApiTest {
+
+    String requestId(String key) throws Exception {
+        return JsonPath.read(otp(key, &quot;9876543210&quot;).andReturn().getResponse().getContentAsString(), &quot;$.requestId&quot;);
+    }
+
+    @Test
+    void aKeyIsRememberedForADayThenForgotten() throws Exception {
+        String first = requestId(&quot;old-key-123456&quot;);
+        clock.advance(Duration.ofHours(23));
+        assertThat(requestId(&quot;old-key-123456&quot;)).isEqualTo(first);
+        clock.advance(Duration.ofHours(2));
+        assertThat(requestId(&quot;old-key-123456&quot;)).isNotEqualTo(first);
+        assertThat(sms.sentTo(&quot;9876543210&quot;)).isEqualTo(2);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/OtpService.java</p><div class="src"><pre class="code"><code class="language-java">package com.tijori.otp;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponseException;
+
+import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * One OTP request: replay check, limit, SMS. Each Idempotency-Key maps to one future result, created atomically,
+ * so the same request sent twice, even at the same instant, books one slot and sends one SMS.
+ */
+@Service
+class OtpService {
+
+    static final Duration CODE_VALID_FOR = Duration.ofMinutes(5);
+    static final Duration KEY_KEPT_FOR = Duration.ofHours(24);
+    static final int MAX_PER_ADDRESS = 20;
+
+    record OtpRequest(String requestId, String mobile, Instant expiresAt, int attemptsLeft) {
+    }
+
+    /** The first request with a key stores its future here; any repeat waits for that same future. */
+    private record Stored(String mobile, Instant at, CompletableFuture&lt;OtpRequest&gt; result) {
+    }
+
+    private final OtpLimiter limiter;
+    private final SmsSender sms;
+    private final Clock clock;
+    private final SecureRandom random = new SecureRandom();
+    private final Map&lt;String, Stored&gt; byKey = new ConcurrentHashMap&lt;&gt;();
+
+    OtpService(OtpLimiter limiter, SmsSender sms, Clock clock) {
+        this.limiter = limiter;
+        this.sms = sms;
+        this.clock = clock;
+    }
+
+    OtpRequest request(String idempotencyKey, String rawMobile, String clientAddress) {
+        String mobile = normalise(rawMobile);
+        Instant now = clock.instant();
+        // Challenge 1: forget keys older than a day. Run on each request here; a real store would expire them itself.
+        byKey.values().removeIf(s -&gt; s.at().isBefore(now.minus(KEY_KEPT_FOR)));
+        Stored mine = new Stored(mobile, now, new CompletableFuture&lt;&gt;());
+        Stored first = byKey.putIfAbsent(idempotencyKey, mine);
+        if (first != null) {
+            return replay(first, mobile);
+        }
+        try {
+            OtpRequest result = issue(mobile, clientAddress);
+            mine.result().complete(result);
+            return result;
+        } catch (RuntimeException refused) {
+            byKey.remove(idempotencyKey);             // nothing happened: a later retry with this key may try again
+            mine.result().completeExceptionally(refused);
+            throw refused;
+        }
+    }
+
+    private OtpRequest replay(Stored first, String mobile) {
+        if (!first.mobile().equals(mobile)) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Idempotency key reused&quot;,
+                    &quot;This Idempotency-Key was used for a different number. Use a new key for a new request.&quot;);
+        }
+        try {
+            return first.result().join();             // the same answer as the first request, even if it is still running
+        } catch (CompletionException e) {
+            throw (RuntimeException) e.getCause();
+        }
+    }
+
+    private OtpRequest issue(String mobile, String clientAddress) {
+        // Challenge 2: the address first. Its slot is used even if the number is then refused: bots pay for trying.
+        OtpLimiter.Decision byAddress = limiter.tryAcquire(&quot;ip:&quot; + clientAddress, MAX_PER_ADDRESS);
+        if (!byAddress.accepted()) {
+            long seconds = Math.max(1, (byAddress.retryAfter().toMillis() + 999) / 1000);
+            ErrorResponseException tooMany = problem(HttpStatus.TOO_MANY_REQUESTS, &quot;Too many OTP requests from this address&quot;,
+                    &quot;Try again in &quot; + seconds + &quot; seconds.&quot;);
+            tooMany.getHeaders().set(HttpHeaders.RETRY_AFTER, String.valueOf(seconds));
+            throw tooMany;
+        }
+        OtpLimiter.Decision d = limiter.tryAcquire(mobile);
+        if (!d.accepted()) {
+            long seconds = Math.max(1, (d.retryAfter().toMillis() + 999) / 1000);   // round up: never invite an early retry
+            ErrorResponseException tooMany = problem(HttpStatus.TOO_MANY_REQUESTS, &quot;Too many OTP requests&quot;,
+                    &quot;This number has had &quot; + OtpLimiter.MAX + &quot; OTPs in the last 10 minutes. Try again in &quot; + seconds + &quot; seconds.&quot;);
+            tooMany.getHeaders().set(HttpHeaders.RETRY_AFTER, String.valueOf(seconds));
+            throw tooMany;
+        }
+        String code = String.format(&quot;%06d&quot;, random.nextInt(1_000_000));
+        sms.send(mobile, &quot;Your Tijori code is &quot; + code + &quot;. It expires in 5 minutes. Never share it.&quot;);
+        return new OtpRequest(&quot;otp_&quot; + UUID.randomUUID().toString().replace(&quot;-&quot;, &quot;&quot;), masked(mobile),
+                clock.instant().plus(CODE_VALID_FOR).truncatedTo(java.time.temporal.ChronoUnit.SECONDS), d.attemptsLeft());
+    }
+
+    /** &quot;+91 98765-43210&quot;, &quot;098765 43210&quot; and &quot;9876543210&quot; are one number, so formats cannot dodge the limit. */
+    static String normalise(String raw) {
+        String digits = raw.replaceAll(&quot;[\\s()-]&quot;, &quot;&quot;);
+        if (digits.startsWith(&quot;+91&quot;)) {
+            digits = digits.substring(3);
+        } else if (digits.length() == 11 &amp;&amp; digits.startsWith(&quot;0&quot;)) {
+            digits = digits.substring(1);
+        }
+        if (!digits.matches(&quot;[6-9]\\d{9}&quot;)) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;Invalid mobile number&quot;, &quot;mobile must be an Indian mobile number of 10 digits.&quot;);
+        }
+        return digits;
+    }
+
+    static String masked(String mobile) {
+        return &quot;XXXXXX&quot; + mobile.substring(6);
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+
+    void clear() {
+        byKey.clear();
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 35 minutes</p><h2>A limit per address too</h2><p>Bots rotate numbers. Also allow at most 20 requests per client address in 10 minutes, whatever the numbers, with its own <code>429</code>.</p><p><b>Done when:</b> the test in <code>PerIpLimitChallengeTest</code> passes, and the station's tests still pass.</p><details class="qa"><summary>Hints</summary><ul><li>Give the limiter a key and a maximum: <code>tryAcquire("ip:" + address, 20)</code>.</li><li>Decide whether a request refused by the number limit still uses an address slot, and write the reason down.</li><li>Behind a load balancer, the remote address is the balancer's: trust forwarded headers only from it.</li></ul></details><p class="path">challenge/PerIpLimitChallengeTest.java</p><pre class="code"><code class="language-java">package com.tijori.otp;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.ResultActions;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: bots rotate numbers. Also limit each client address to 20 OTP requests in 10 minutes, whatever the
+ * numbers. Other addresses are not affected.
+ */
+class PerIpLimitChallengeTest extends ApiTest {
+
+    ResultActions from(String ip, int n) throws Exception {
+        return mvc.perform(post(&quot;/otp-requests&quot;).header(&quot;Idempotency-Key&quot;, &quot;ip-test-key-&quot; + ip.replace(&quot;.&quot;, &quot;-&quot;) + &quot;-&quot; + n)
+                .with(r -&gt; { r.setRemoteAddr(ip); return r; })
+                .contentType(MediaType.APPLICATION_JSON).content(&quot;{\&quot;mobile\&quot;:\&quot;9&quot; + String.format(&quot;%09d&quot;, n) + &quot;\&quot;}&quot;));
+    }
+
+    @Test
+    void oneAddressGetsTwentyAcrossAllNumbers() throws Exception {
+        for (int n = 1; n &lt;= 20; n++) {
+            from(&quot;203.0.113.9&quot;, n).andExpect(status().isAccepted());
+        }
+        from(&quot;203.0.113.9&quot;, 21).andExpect(status().isTooManyRequests())
+                .andExpect(header().exists(&quot;Retry-After&quot;))
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Too many OTP requests from this address&quot;));
+        from(&quot;198.51.100.4&quot;, 21).andExpect(status().isAccepted());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/OtpLimiter.java</p><div class="src"><pre class="code"><code class="language-java">package com.tijori.otp;
+
+import org.springframework.stereotype.Component;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * At most MAX requests per number in any WINDOW (demo rule: 3 in 10 minutes). The check and the booking happen in
+ * one ConcurrentHashMap.compute call, which is atomic per key: two requests for one number cannot both see &quot;2 used&quot;
+ * and both book the third slot. Requests for different numbers do not wait for each other.
+ *
+ * Limit: this map lives in one server&#x27;s memory. With N servers behind a load balancer, a number can get N x MAX.
+ * Safe while one instance runs; across servers the count needs a shared store (station 125).
+ */
+@Component
+class OtpLimiter {
+
+    static final int MAX = 3;
+    static final Duration WINDOW = Duration.ofMinutes(10);
+
+    /** accepted: whether a slot was booked; attemptsLeft after this one; retryAfter until a slot frees, if refused. */
+    record Decision(boolean accepted, int attemptsLeft, Duration retryAfter) {
+    }
+
+    private final Clock clock;
+    private final Map&lt;String, Deque&lt;Instant&gt;&gt; windows = new ConcurrentHashMap&lt;&gt;();
+
+    OtpLimiter(Clock clock) {
+        this.clock = clock;
+    }
+
+    Decision tryAcquire(String mobile) {
+        return tryAcquire(mobile, MAX);
+    }
+
+    /** Challenge 2: the same rule for any key (&quot;ip:203.0.113.9&quot;) with its own maximum. */
+    Decision tryAcquire(String key, int max) {
+        Instant now = clock.instant();
+        Decision[] decision = new Decision[1];
+        windows.compute(key, (m, times) -&gt; {
+            Deque&lt;Instant&gt; window = times == null ? new ArrayDeque&lt;&gt;() : times;
+            while (!window.isEmpty() &amp;&amp; !window.peekFirst().isAfter(now.minus(WINDOW))) {
+                window.pollFirst();   // older than the window: no longer counts
+            }
+            if (window.size() &gt;= max) {
+                decision[0] = new Decision(false, 0, Duration.between(now, window.peekFirst().plus(WINDOW)));
+            } else {
+                window.addLast(now);
+                decision[0] = new Decision(true, max - window.size(), Duration.ZERO);
+            }
+            return window;
+        });
+        return decision[0];
+    }
+
+    void clear() {
+        windows.clear();
+    }
+}</code></pre></div><p class="path">challenge/solution/OtpService.java</p><div class="src"><pre class="code"><code class="language-java">package com.tijori.otp;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponseException;
+
+import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * One OTP request: replay check, limit, SMS. Each Idempotency-Key maps to one future result, created atomically,
+ * so the same request sent twice, even at the same instant, books one slot and sends one SMS.
+ */
+@Service
+class OtpService {
+
+    static final Duration CODE_VALID_FOR = Duration.ofMinutes(5);
+    static final Duration KEY_KEPT_FOR = Duration.ofHours(24);
+    static final int MAX_PER_ADDRESS = 20;
+
+    record OtpRequest(String requestId, String mobile, Instant expiresAt, int attemptsLeft) {
+    }
+
+    /** The first request with a key stores its future here; any repeat waits for that same future. */
+    private record Stored(String mobile, Instant at, CompletableFuture&lt;OtpRequest&gt; result) {
+    }
+
+    private final OtpLimiter limiter;
+    private final SmsSender sms;
+    private final Clock clock;
+    private final SecureRandom random = new SecureRandom();
+    private final Map&lt;String, Stored&gt; byKey = new ConcurrentHashMap&lt;&gt;();
+
+    OtpService(OtpLimiter limiter, SmsSender sms, Clock clock) {
+        this.limiter = limiter;
+        this.sms = sms;
+        this.clock = clock;
+    }
+
+    OtpRequest request(String idempotencyKey, String rawMobile, String clientAddress) {
+        String mobile = normalise(rawMobile);
+        Instant now = clock.instant();
+        // Challenge 1: forget keys older than a day. Run on each request here; a real store would expire them itself.
+        byKey.values().removeIf(s -&gt; s.at().isBefore(now.minus(KEY_KEPT_FOR)));
+        Stored mine = new Stored(mobile, now, new CompletableFuture&lt;&gt;());
+        Stored first = byKey.putIfAbsent(idempotencyKey, mine);
+        if (first != null) {
+            return replay(first, mobile);
+        }
+        try {
+            OtpRequest result = issue(mobile, clientAddress);
+            mine.result().complete(result);
+            return result;
+        } catch (RuntimeException refused) {
+            byKey.remove(idempotencyKey);             // nothing happened: a later retry with this key may try again
+            mine.result().completeExceptionally(refused);
+            throw refused;
+        }
+    }
+
+    private OtpRequest replay(Stored first, String mobile) {
+        if (!first.mobile().equals(mobile)) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Idempotency key reused&quot;,
+                    &quot;This Idempotency-Key was used for a different number. Use a new key for a new request.&quot;);
+        }
+        try {
+            return first.result().join();             // the same answer as the first request, even if it is still running
+        } catch (CompletionException e) {
+            throw (RuntimeException) e.getCause();
+        }
+    }
+
+    private OtpRequest issue(String mobile, String clientAddress) {
+        // Challenge 2: the address first. Its slot is used even if the number is then refused: bots pay for trying.
+        OtpLimiter.Decision byAddress = limiter.tryAcquire(&quot;ip:&quot; + clientAddress, MAX_PER_ADDRESS);
+        if (!byAddress.accepted()) {
+            long seconds = Math.max(1, (byAddress.retryAfter().toMillis() + 999) / 1000);
+            ErrorResponseException tooMany = problem(HttpStatus.TOO_MANY_REQUESTS, &quot;Too many OTP requests from this address&quot;,
+                    &quot;Try again in &quot; + seconds + &quot; seconds.&quot;);
+            tooMany.getHeaders().set(HttpHeaders.RETRY_AFTER, String.valueOf(seconds));
+            throw tooMany;
+        }
+        OtpLimiter.Decision d = limiter.tryAcquire(mobile);
+        if (!d.accepted()) {
+            long seconds = Math.max(1, (d.retryAfter().toMillis() + 999) / 1000);   // round up: never invite an early retry
+            ErrorResponseException tooMany = problem(HttpStatus.TOO_MANY_REQUESTS, &quot;Too many OTP requests&quot;,
+                    &quot;This number has had &quot; + OtpLimiter.MAX + &quot; OTPs in the last 10 minutes. Try again in &quot; + seconds + &quot; seconds.&quot;);
+            tooMany.getHeaders().set(HttpHeaders.RETRY_AFTER, String.valueOf(seconds));
+            throw tooMany;
+        }
+        String code = String.format(&quot;%06d&quot;, random.nextInt(1_000_000));
+        sms.send(mobile, &quot;Your Tijori code is &quot; + code + &quot;. It expires in 5 minutes. Never share it.&quot;);
+        return new OtpRequest(&quot;otp_&quot; + UUID.randomUUID().toString().replace(&quot;-&quot;, &quot;&quot;), masked(mobile),
+                clock.instant().plus(CODE_VALID_FOR).truncatedTo(java.time.temporal.ChronoUnit.SECONDS), d.attemptsLeft());
+    }
+
+    /** &quot;+91 98765-43210&quot;, &quot;098765 43210&quot; and &quot;9876543210&quot; are one number, so formats cannot dodge the limit. */
+    static String normalise(String raw) {
+        String digits = raw.replaceAll(&quot;[\\s()-]&quot;, &quot;&quot;);
+        if (digits.startsWith(&quot;+91&quot;)) {
+            digits = digits.substring(3);
+        } else if (digits.length() == 11 &amp;&amp; digits.startsWith(&quot;0&quot;)) {
+            digits = digits.substring(1);
+        }
+        if (!digits.matches(&quot;[6-9]\\d{9}&quot;)) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;Invalid mobile number&quot;, &quot;mobile must be an Indian mobile number of 10 digits.&quot;);
+        }
+        return digits;
+    }
+
+    static String masked(String mobile) {
+        return &quot;XXXXXX&quot; + mobile.substring(6);
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+
+    void clear() {
+        byKey.clear();
+    }
+}</code></pre></div><p class="path">challenge/solution/OtpController.java</p><div class="src"><pre class="code"><code class="language-java">package com.tijori.otp;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+class OtpController {
+
+    record Body(@NotBlank @Size(max = 20) String mobile) {
+    }
+
+    private final OtpService otp;
+
+    OtpController(OtpService otp) {
+        this.otp = otp;
+    }
+
+    /** The app sends a new Idempotency-Key for each tap of &quot;Send OTP&quot;, and the same key when it retries that tap. */
+    @PostMapping(&quot;/otp-requests&quot;)
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    OtpService.OtpRequest request(@RequestHeader(&quot;Idempotency-Key&quot;) @Pattern(regexp = &quot;[A-Za-z0-9-]{8,64}&quot;) String key,
+                                  @Valid @RequestBody Body body, HttpServletRequest http) {
+        // Challenge 2: behind a load balancer this is the balancer&#x27;s address; trust X-Forwarded-For only from it
+        // (server.forward-headers-strategy), never from the open internet.
+        return otp.request(key, body.mobile(), http.getRemoteAddr());
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Three servers, one limit</h2>
+<p>Tijori runs three instances. Where should the count live so all three share it: a database row with a lock, an atomic counter in Valkey with an expiry, or something else? What happens to OTP requests when that store is down: refuse all, or allow and alert? Station 125 builds one answer.</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design (none in this station)</li></ul><p class="rule">Short at Foundations: the choices that matter here.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: 20 requests at once through the old limiter.</li>
+<li>Make check-and-book one <code>compute</code> call; test 20 at once again: exactly 3.</li>
+<li>Add the idempotency map with a future per key; test 10 copies at once.</li>
+<li>Inject the clock; test Retry-After and the window moving.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td><code>compute</code> per number</td><td>Requests for one number take turns; others never wait.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td><code>synchronized</code> on the whole limiter</td><td>Correct, but every number waits for every other.</td><td><span class="pill warn">Works, slower</span></td></tr><tr><td>Check, send, then record</td><td>Races exactly when a bot attacks.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Book after the SMS succeeds</td><td>Sounds kind to customers; reopens the race for the whole SMS call.</td><td><span class="pill bad">Wrong</span></td></tr><tr><td>A shared store (Valkey, a database)</td><td>Infrastructure, and a plan for when it is down.</td><td><span class="pill warn">For more than one server</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>None in this station. Across servers: an <code>otp_requests</code> table (mobile, requested_at) and a count in the same transaction with a row lock per number, or a Valkey key per number with an expiry and an atomic increment.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Servers</dt><dd>The guarantee is "3 per number per 10 minutes per server instance". With more than one instance, the count must be shared.</dd>
+<dt>Restarts</dt><dd>Counts and keys live in memory: a restart forgets them, and a bot gets a fresh 3. Acceptable for a demo; not for a bank.</dd>
+<dt>Secrets</dt><dd>The OTP itself appears only in the SMS text. It is not in responses or logs, and the number is masked in both.</dd>
+<dt>Cost</dt><dd>Count 429s per number and per address; a spike is an attack, and the SMS bill is the first place it shows.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>What is a check-then-act race?</summary><p>Code reads a value, decides, then writes. Between the read and the write another thread does the same, so both decide on stale information.</p></details><details class="qa"><summary>synchronized or ConcurrentHashMap.compute?</summary><p>Both make the step atomic. A synchronized method locks everything; compute locks only the entry for that key, so different numbers do not wait for each other.</p></details><details class="qa"><summary>How do you make a request idempotent?</summary><p>The client sends a key; the server stores the result under it. A repeat returns the stored result. To cover two copies arriving at once, store a placeholder (a future) atomically before doing the work.</p></details><details class="qa"><summary>Why inject a Clock?</summary><p>So tests can set and move time: a 10-minute window is tested in milliseconds, and Retry-After can be checked exactly.</p></details><details class="qa"><summary>Why is an in-memory limiter not enough?</summary><p>Each server counts on its own, and restarts forget. Behind a load balancer the real limit is N times the intended one.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 14 tests pass.</td><td>You found all four flaws in the Review tab before opening them.</td></tr><tr><td>Concurrency</td><td>Check and book in one atomic step.</td><td>You can say why compute beats synchronized here.</td></tr><tr><td>Idempotency</td><td>A retry returns the first answer.</td><td>Two copies at the same instant, too.</td></tr><tr><td>Explanation</td><td>Why the old limiter let 20 through.</td><td>What changes with three servers.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate made the limiter "kinder": customers keep their attempt when the SMS provider fails, retries are remembered once the answer is ready, Retry-After is "simpler", and numbers are accepted in any common format. The sequential tests still pass. Read both files and list every problem before opening the findings.</p>
+<p class="path">review/OtpService.java</p>
+<pre class="code"><code class="language-java">package com.tijori.otp;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponseException;
+
+import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * One OTP request: replay check, limit, SMS. Each Idempotency-Key maps to one future result, created atomically,
+ * so the same request sent twice, even at the same instant, books one slot and sends one SMS.
+ */
+@Service
+class OtpService {
+
+    static final Duration CODE_VALID_FOR = Duration.ofMinutes(5);
+
+    record OtpRequest(String requestId, String mobile, Instant expiresAt, int attemptsLeft) {
+    }
+
+    /** The first request with a key stores its future here; any repeat waits for that same future. */
+    private record Stored(String mobile, CompletableFuture&lt;OtpRequest&gt; result) {
+    }
+
+    private final OtpLimiter limiter;
+    private final SmsSender sms;
+    private final Clock clock;
+    private final SecureRandom random = new SecureRandom();
+    // shortcut: keys are kept until restart; a real store expires them after a day (a table or a cache with a TTL)
+    private final Map&lt;String, Stored&gt; byKey = new ConcurrentHashMap&lt;&gt;();
+
+    OtpService(OtpLimiter limiter, SmsSender sms, Clock clock) {
+        this.limiter = limiter;
+        this.sms = sms;
+        this.clock = clock;
+    }
+
+    OtpRequest request(String idempotencyKey, String rawMobile) {
+        String mobile = normalise(rawMobile);
+        Stored seen = byKey.get(idempotencyKey);
+        if (seen != null) {
+            if (!seen.mobile().equals(mobile)) {
+                throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Idempotency key reused&quot;,
+                        &quot;This Idempotency-Key was used for a different number. Use a new key for a new request.&quot;);
+            }
+            return seen.result().join();
+        }
+        OtpRequest result = issue(mobile);
+        byKey.put(idempotencyKey, new Stored(mobile, CompletableFuture.completedFuture(result)));   // remember it for retries
+        return result;
+    }
+
+    private OtpRequest issue(String mobile) {
+        OtpLimiter.Decision d = limiter.check(mobile);
+        if (!d.accepted()) {
+            long seconds = Math.max(1, (d.retryAfter().toMillis() + 999) / 1000);   // round up: never invite an early retry
+            ErrorResponseException tooMany = problem(HttpStatus.TOO_MANY_REQUESTS, &quot;Too many OTP requests&quot;,
+                    &quot;This number has had &quot; + OtpLimiter.MAX + &quot; OTPs in the last 10 minutes. Try again in &quot; + seconds + &quot; seconds.&quot;);
+            tooMany.getHeaders().set(HttpHeaders.RETRY_AFTER, String.valueOf(seconds));
+            throw tooMany;
+        }
+        String code = String.format(&quot;%06d&quot;, random.nextInt(1_000_000));
+        sms.send(mobile, &quot;Your Tijori code is &quot; + code + &quot;. It expires in 5 minutes. Never share it.&quot;);
+        limiter.book(mobile);   // only now: if the SMS provider had failed, the customer would keep the attempt
+        return new OtpRequest(&quot;otp_&quot; + UUID.randomUUID().toString().replace(&quot;-&quot;, &quot;&quot;), masked(mobile),
+                clock.instant().plus(CODE_VALID_FOR).truncatedTo(java.time.temporal.ChronoUnit.SECONDS), d.attemptsLeft());
+    }
+
+    /** Keeps the digits; numbers with a country code or a leading 0 are accepted too. */
+    static String normalise(String raw) {
+        String digits = raw.replaceAll(&quot;\\D&quot;, &quot;&quot;);
+        if (!digits.matches(&quot;\\d{10,12}&quot;)) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;Invalid mobile number&quot;, &quot;mobile must be an Indian mobile number of 10 digits.&quot;);
+        }
+        return digits;
+    }
+
+    static String masked(String mobile) {
+        return &quot;XXXXXX&quot; + mobile.substring(6);
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+
+    void clear() {
+        byKey.clear();
+    }
+}</code></pre>
+<p class="path">review/OtpLimiter.java</p>
+<pre class="code"><code class="language-java">package com.tijori.otp;
+
+import org.springframework.stereotype.Component;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * At most MAX requests per number in any WINDOW (demo rule: 3 in 10 minutes). The check and the booking happen in
+ * one ConcurrentHashMap.compute call, which is atomic per key: two requests for one number cannot both see &quot;2 used&quot;
+ * and both book the third slot. Requests for different numbers do not wait for each other.
+ *
+ * Limit: this map lives in one server&#x27;s memory. With N servers behind a load balancer, a number can get N x MAX.
+ * Safe while one instance runs; across servers the count needs a shared store (station 125).
+ */
+@Component
+class OtpLimiter {
+
+    static final int MAX = 3;
+    static final Duration WINDOW = Duration.ofMinutes(10);
+
+    /** accepted: whether a slot was booked; attemptsLeft after this one; retryAfter until a slot frees, if refused. */
+    record Decision(boolean accepted, int attemptsLeft, Duration retryAfter) {
+    }
+
+    private final Clock clock;
+    private final Map&lt;String, Deque&lt;Instant&gt;&gt; windows = new ConcurrentHashMap&lt;&gt;();
+
+    OtpLimiter(Clock clock) {
+        this.clock = clock;
+    }
+
+    Decision tryAcquire(String mobile) {
+        Instant now = clock.instant();
+        Decision[] decision = new Decision[1];
+        windows.compute(mobile, (m, times) -&gt; {
+            Deque&lt;Instant&gt; window = times == null ? new ArrayDeque&lt;&gt;() : times;
+            while (!window.isEmpty() &amp;&amp; !window.peekFirst().isAfter(now.minus(WINDOW))) {
+                window.pollFirst();   // older than the window: no longer counts
+            }
+            if (window.size() &gt;= MAX) {
+                decision[0] = new Decision(false, 0, Duration.between(now, window.peekLast().plus(WINDOW)));
+            } else {
+                window.addLast(now);
+                decision[0] = new Decision(true, MAX - window.size(), Duration.ZERO);
+            }
+            return window;
+        });
+        return decision[0];
+    }
+
+    /** Whether a request would be accepted now, without booking a slot. */
+    Decision check(String mobile) {
+        Instant now = clock.instant();
+        Deque&lt;Instant&gt; window = windows.getOrDefault(mobile, new ArrayDeque&lt;&gt;());
+        long recent = window.stream().filter(t -&gt; t.isAfter(now.minus(WINDOW))).count();
+        return recent &gt;= MAX
+                ? new Decision(false, 0, Duration.between(now, window.peekLast().plus(WINDOW)))
+                : new Decision(true, (int) (MAX - recent - 1), Duration.ZERO);
+    }
+
+    /** Books a slot. Called once the SMS has actually gone out, so a failed SMS costs the customer no attempt. */
+    void book(String mobile) {
+        windows.compute(mobile, (m, times) -&gt; {
+            Deque&lt;Instant&gt; window = times == null ? new ArrayDeque&lt;&gt;() : times;
+            window.addLast(clock.instant());
+            return window;
+        });
+    }
+
+    void clear() {
+        windows.clear();
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>The slot is booked after the SMS is sent</summary><p>"A failed SMS should not cost the customer an attempt" is a kind thought, and it brings back check-then-act with a 50 ms gap: every request checks before any books.</p><p class="evidence"><b>Test evidence:</b> <code>twentyBotRequestsAtOnceGetThreeSms</code> and <code>differentNumbersEachGetTheirOwnThree</code> both fail: more than 3 accepted per number.</p></details><details class="finding"><summary><span class="sev">2</span>The replay is stored after the request completes</summary><p>Sequential retries still work, so it looks fine; two copies arriving together both miss the map and both send an SMS.</p><p class="evidence"><b>Test evidence:</b> <code>tenCopiesOfOneRequestAtTheSameInstantAreOneRequest</code>: more than one requestId.</p></details><details class="finding"><summary><span class="sev">3</span>Retry-After counts from the newest request</summary><p>The wait looks plausible, but it is too long: the slot frees when the oldest request leaves the window.</p><p class="evidence"><b>Test evidence:</b> <code>retryAfterCountsFromTheOldestRequestInTheWindow</code>: 540 instead of 300.</p></details><details class="finding"><summary><span class="sev">4</span>Numbers keep their +91 or leading 0</summary><p>"Accept any 10 to 12 digits" makes 9876543210, 919876543210 and 09876543210 three numbers: a bot gets 9 OTPs, and a retry written with +91 looks like a different number.</p><p class="evidence"><b>Test evidence:</b> <code>theFourthIn10MinutesIs429WithRetryAfterFromTheOldest</code> (2 attempts left instead of 0), <code>badRequestsAre400</code> and <code>aRetryWithTheSameKeyGetsTheSameAnswerAndNoSecondSms</code> (422).</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the two flawed files copied over the real ones, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>CheckThenActTrapTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill ok">3 / 3</span></td></tr><tr><td><code>OtpConcurrencyTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">0 / 2</span></td></tr><tr><td><code>OtpContractTest</code></td><td><span class="pill ok">5 / 5</span></td><td><span class="pill bad">2 / 5</span></td></tr><tr><td><code>OtpReplayTest</code></td><td><span class="pill ok">4 / 4</span></td><td><span class="pill bad">2 / 4</span></td></tr></tbody></table></div>
+<p class="note">Two of the four flaws pass every test that sends one request at a time. Only the parallel tests catch them, which is why this station has them.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
