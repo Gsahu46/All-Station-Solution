@@ -1,0 +1,1249 @@
+<title>Station 024 · Public holidays from a partner API</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 024</span>
+    <h1>Public holidays from a partner API</h1>
+    <p class="scenario">Leave balances ignore public holidays because nobody knows how to call the holiday provider from Java.</p>
+    <p class="sim"><b>Simulation</b><span>The holiday provider is simulated by a demo endpoint inside the same app, called over real HTTP; its data is a few fixed-date holidays, not an official list. Tests use a stub HTTP server instead.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>HR SaaS</li>
+      <li><b>Types</b>None</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>023 Accepting a partner&#x27;s snake_case JSON</p>
+      <p><span class="eyebrow">Builds toward</span><br>103 Calling a legacy SOAP service · 105 Support ticket summaries with an LLM API</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring MVC · RestClient · @HttpExchange · JDK HttpServer stub · MockMvc</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Leave balances ignore holidays</strong><p>Employees in Bengaluru lose a day of leave for Kannada Rajyotsava, because Teamdesk does not know it is a holiday.</p></li><li><strong>The first fix calls the provider</strong><p>It works in the demo. Then the provider has a slow morning: every leave request waits, threads pile up, and Teamdesk stops answering anyone. When the provider returns 500, Teamdesk returns 500 too.</p></li><li><strong>The fix</strong><p>Call the provider with a time limit, and translate each kind of failure into an honest answer of our own: too slow, failed, or no list. Never pass their error text on.</p></li></ol>
+<p class="lesson">Every call to someone else's service needs a time limit and a plan for each way it can fail.</p>
+
+<h2>What are we building?</h2>
+<p><code>GET /holidays?year=2026&amp;state=KA</code> asks the holiday provider for a state's holidays and returns them sorted, in our own shape. When the provider is slow or broken, it says so with <code>504</code> or <code>502</code>, quickly.</p>
+
+<h2>An everyday analogy</h2>
+<p>A shopkeeper phones the wholesaler for a price. If nobody answers in a minute, she tells the customer "the wholesaler is not answering, come back later" instead of standing at the phone all day while the queue grows.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Check the request</strong> first: a bad year or state is <code>400</code>, and the provider is never called.</li>
+<li><strong>Call the provider</strong> through an interface client, with a 1 s connect and a 2 s read limit.</li>
+<li><strong>Translate failures</strong>: their 404 is ours; their 5xx, bad key or garbage is <code>502</code>; their slowness is <code>504</code>.</li>
+<li><strong>Answer in our shape</strong>: only the fields we use, sorted by date.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: the provider says 401 because our API key expired. Should our client get 401?</summary><p>No. 401 tells our client <em>they</em> must sign in again, which will not help. The fault is between us and the provider: <code>502</code>, and an alert for us.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No real holiday provider.</strong> A simulated one, with a few fixed-date holidays.</li>
+<li><strong>No retries or circuit breaker.</strong> Discussed in Design; a later station builds them.</li>
+<li><strong>No leave calculation.</strong> Only the holiday list.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Partner API</strong></td><td>Someone else's service that our service calls.</td><td>Calling a supplier to ask what is in stock.</td><td>The holiday provider</td></tr><tr><td><strong>Timeout</strong></td><td>How long we wait before giving up.</td><td>Hanging up after ringing for a minute.</td><td><code>read-timeout: 2s</code></td></tr><tr><td><strong>502 Bad Gateway</strong></td><td>"The service I depend on failed."</td><td>"The supplier gave us a wrong answer."</td><td>Provider 5xx, bad key, unreadable answer</td></tr><tr><td><strong>504 Gateway Timeout</strong></td><td>"The service I depend on was too slow."</td><td>"The supplier did not pick up."</td><td>Provider slower than 2 s</td></tr><tr><td><strong>HTTP interface client</strong></td><td>An interface whose methods Spring turns into HTTP calls.</td><td>A speed-dial button with the number already stored.</td><td><code>@HttpExchange</code></td></tr><tr><td><strong>Stub server</strong></td><td>A fake partner, run by the test, that answers however the test says.</td><td>A colleague playing the customer in a rehearsal.</td><td><code>StubProvider</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Teamdesk</strong> (a fictional HR app) must count public holidays when it computes leave. Holidays come from a provider's API. The first integration had no timeout and no error handling: one slow morning at the provider took Teamdesk down with it, and every provider error reached users as a 500.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> 2026 and KA, <b>then</b> the provider is asked for <code>year=2026&amp;region=KA</code> and the holidays come back sorted by date, without the provider's extra fields.</li>
+<li><b>Given</b> the provider takes longer than the read limit, <b>then</b> <code>504</code>, well before the provider answers.</li>
+<li><b>Given</b> the provider answers 500, 401, unreadable data, or hangs up, <b>then</b> <code>502</code>, and none of its error text in our body.</li>
+<li><b>Given</b> the provider has no list for the state, <b>then</b> <code>404</code>.</li>
+<li><b>Given</b> an unknown state, a year outside 2000 to 2100, or no year, <b>then</b> <code>400</code>, and the provider is not called.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>Connect limit 1 s, read limit 2 s, both in configuration.</li>
+<li>States are normalised with <code>Locale.ROOT</code>; the demo list is KA, MH, DL, TN.</li>
+<li>The provider's error bodies are logged, never returned.</li>
+<li>Only the fields we use are mapped; anything else the provider adds is ignored.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Call an HTTP API with <code>RestClient</code> and an <code>@HttpExchange</code> interface.</li>
+<li>Map a partner's JSON to records.</li>
+<li>Set timeouts, and translate 4xx, 5xx and timeouts into honest answers.</li>
+<li>Test against a stub HTTP server that can be slow or broken on demand.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/holidays?year&amp;state</code></td><td>A state's public holidays for a year, from the provider.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>The holidays, sorted by date</td></tr><tr><td><span class="pill warn">400</span></td><td>Unknown state, or a year missing or outside 2000 to 2100</td></tr><tr><td><span class="pill warn">404</span></td><td>The provider has no list for that state and year</td></tr><tr><td><span class="pill bad">502</span></td><td>The provider failed, rejected our key, sent something unreadable, or hung up</td></tr><tr><td><span class="pill bad">504</span></td><td>The provider did not answer within the read limit</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 14 Oct 2026. The app calls its simulated provider over HTTP; year 2098 and 2099 are the simulated provider's demo switches for slow and failing. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: what the provider sends</h3><p><b>Why:</b> their shape: extra fields (<code>country</code>, <code>observed</code>, <code>generatedBy</code>) and their own order.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /demo-provider/v1/holidays?year=2026&amp;region=KA HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+
+{
+  &quot;country&quot;: &quot;IN&quot;,
+  &quot;year&quot;: 2026,
+  &quot;generatedBy&quot;: &quot;demo&quot;,
+  &quot;region&quot;: &quot;KA&quot;,
+  &quot;holidays&quot;: [
+    {
+      &quot;type&quot;: &quot;NATIONAL&quot;,
+      &quot;name&quot;: &quot;Independence Day&quot;,
+      &quot;date&quot;: &quot;2026-08-15&quot;,
+      &quot;observed&quot;: true
+    },
+    {
+      &quot;type&quot;: &quot;NATIONAL&quot;,
+      &quot;name&quot;: &quot;Republic Day&quot;,
+      &quot;date&quot;: &quot;2026-01-26&quot;,
+      &quot;observed&quot;: true
+    },
+    {
+      &quot;type&quot;: &quot;NATIONAL&quot;,
+      &quot;name&quot;: &quot;Gandhi Jayanti&quot;,
+      &quot;date&quot;: &quot;2026-10-02&quot;,
+      &quot;observed&quot;: true
+    },
+    {
+      &quot;type&quot;: &quot;STATE&quot;,
+      &quot;name&quot;: &quot;Kannada Rajyotsava&quot;,
+      &quot;date&quot;: &quot;2026-11-01&quot;,
+      &quot;observed&quot;: true
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 2: what we send</h3><p><b>Why:</b> only the fields we use, sorted by date, under our names.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /holidays?year=2026&amp;state=KA HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 296
+
+{
+  &quot;year&quot;: 2026,
+  &quot;state&quot;: &quot;KA&quot;,
+  &quot;holidays&quot;: [
+    {
+      &quot;date&quot;: &quot;2026-01-26&quot;,
+      &quot;name&quot;: &quot;Republic Day&quot;,
+      &quot;type&quot;: &quot;NATIONAL&quot;
+    },
+    {
+      &quot;date&quot;: &quot;2026-08-15&quot;,
+      &quot;name&quot;: &quot;Independence Day&quot;,
+      &quot;type&quot;: &quot;NATIONAL&quot;
+    },
+    {
+      &quot;date&quot;: &quot;2026-10-02&quot;,
+      &quot;name&quot;: &quot;Gandhi Jayanti&quot;,
+      &quot;type&quot;: &quot;NATIONAL&quot;
+    },
+    {
+      &quot;date&quot;: &quot;2026-11-01&quot;,
+      &quot;name&quot;: &quot;Kannada Rajyotsava&quot;,
+      &quot;type&quot;: &quot;STATE&quot;
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 3: a state the provider has no list for</h3><p><b>Why:</b> their 404 becomes our 404, with our own wording.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /holidays?year=2026&amp;state=tn HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;The provider has no holiday list for TN in 2026.&quot;,
+  &quot;instance&quot;: &quot;/holidays&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;No holiday list&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: an unknown state</h3><p><b>Why:</b> refused before any call: <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /holidays?year=2026&amp;state=ZZ HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;state must be one of DL, KA, MH, TN.&quot;,
+  &quot;instance&quot;: &quot;/holidays&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Unknown state&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: the provider fails</h3><p><b>Why:</b> its 500 names a database host. We answer <code>502</code> and keep that text in our logs.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /holidays?year=2099&amp;state=KA HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 502 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;The holiday provider failed to answer. Try again shortly.&quot;,
+  &quot;instance&quot;: &quot;/holidays&quot;,
+  &quot;status&quot;: 502,
+  &quot;title&quot;: &quot;Holiday provider failed&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: the provider is too slow</h3><p><b>Why:</b> the provider takes 3 s; we stop waiting at 2 s: <code>504</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /holidays?year=2098&amp;state=KA HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 504 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;The holiday provider did not answer in time. Try again shortly.&quot;,
+  &quot;instance&quot;: &quot;/holidays&quot;,
+  &quot;status&quot;: 504,
+  &quot;title&quot;: &quot;Holiday provider too slow&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>2026, lower-case ka</td><td>Sorted, our shape; provider asked for KA</td><td><code>aStatesHolidaysComeBackSortedInOurShape</code></td></tr><tr><td>Provider 404</td><td><code>404</code></td><td><code>theProvidersNotFoundIsOurNotFound</code></td></tr><tr><td>ZZ; 1999; abc; no year</td><td><code>400</code>, no call made</td><td><code>badRequestsAre400AndNeverReachTheProvider</code></td></tr><tr><td>Provider 500 with a host name</td><td><code>502</code>, host not shown</td><td><code>aProvider500IsOur502WithoutTheirInternals</code></td></tr><tr><td>Provider 401 (our key)</td><td><code>502</code>, key not shown</td><td><code>ourExpiredKeyIsOur502NotTheClients401</code></td></tr><tr><td>HTML instead of JSON</td><td><code>502</code></td><td><code>anAnswerWeCannotReadIs502</code></td></tr><tr><td>Connection closed with no answer</td><td><code>502</code> unreachable, not a timeout</td><td><code>aDroppedConnectionIs502NotATimeout</code></td></tr><tr><td>Provider takes 2 s, limit 400 ms (tests)</td><td><code>504</code> in under 1.5 s</td><td><code>theRealEndpointGivesUpInTimeAndSaysWhoFailed</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">No timeout and no handling of the partner's 5xx, so our API hangs or 500s.</p>
+<p><code>RestClient.create(url)</code> works in every demo. The first test shows it waiting the full 2 seconds a slow provider takes, and it would wait far longer. The second shows the provider's 500 escaping as an exception, which our API turns into its own 500. The third shows the real endpoint answering <code>504</code> within its limit and <code>502</code> for the failure. While building, removing the read timeout turned 1 test red, removing the failure handling turned 4 red, and passing the provider's message through turned 2 red.</p>
+</div>
+<pre class="code"><code class="language-java">package com.teamdesk.holidays;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.RestClient;
+
+import java.time.Duration;
+import java.time.Instant;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The first test written for this station: it reproduces the bugs before the fix. */
+class SlowProviderTrapTest extends ApiTest {
+
+    /** The &quot;before&quot; call: a RestClient with no timeout and no error handling. Kept only in tests. */
+    static String oldCall() {
+        return RestClient.create(STUB.baseUrl()).get().uri(&quot;/v1/holidays?year=2026&amp;region=KA&quot;).retrieve().body(String.class);
+    }
+
+    @Test
+    void theOldCallWaitsAsLongAsTheProviderLikes() {
+        STUB.behaviour = StubProvider.Behaviour.SLOW;
+        Instant start = Instant.now();
+        oldCall();
+        assertThat(Duration.between(start, Instant.now())).isGreaterThanOrEqualTo(Duration.ofMillis(1_900));
+        // every request thread stuck like this is one fewer for everyone else
+    }
+
+    @Test
+    void theOldCallTurnsTheProvidersFailureIntoOurs() {
+        STUB.behaviour = StubProvider.Behaviour.FAIL;
+        assertThatThrownBy(SlowProviderTrapTest::oldCall)
+                .isInstanceOf(HttpServerErrorException.InternalServerError.class);   // uncaught: our API answers 500
+    }
+
+    @Test
+    void theRealEndpointGivesUpInTimeAndSaysWhoFailed() throws Exception {
+        STUB.behaviour = StubProvider.Behaviour.SLOW;
+        Instant start = Instant.now();
+        holidays(&quot;2030&quot;, &quot;KA&quot;).andExpect(status().isGatewayTimeout())   // years no test fetches successfully: nothing cached
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Holiday provider too slow&quot;));
+        assertThat(Duration.between(start, Instant.now())).isLessThan(Duration.ofMillis(1_500));
+
+        STUB.behaviour = StubProvider.Behaviour.FAIL;
+        holidays(&quot;2031&quot;, &quot;KA&quot;).andExpect(status().isBadGateway())
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Holiday provider failed&quot;));
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr><tr><td>Docker</td><td>Not needed for this station</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 10 tests</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<pre class="code"><code class="language-bash">curl &quot;http://localhost:8080/holidays?year=2026&amp;state=KA&quot;
+
+# The simulated provider&#x27;s demo switches: 2099 fails, 2098 is too slow
+curl -i &quot;http://localhost:8080/holidays?year=2099&amp;state=KA&quot;
+curl -i &quot;http://localhost:8080/holidays?year=2098&amp;state=KA&quot;</code></pre>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>502</code> unreachable for every request</td><td>The provider address is wrong, or the app runs on another port.</td><td>Check <code>teamdesk.holidays.base-url</code>.</td></tr><tr><td><code>504</code> for normal requests</td><td>The read limit is shorter than the provider's normal answer.</td><td>Raise <code>read-timeout</code> a little; never remove it.</td></tr><tr><td><code>release version 25 not supported</code></td><td>Maven is using an older JDK.</td><td>Point <code>JAVA_HOME</code> at JDK 25, or add <code>-Djava.version=21</code>.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/024-public-holidays-from-a-partner-api/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/teamdesk/holidays/
+│   ├── HolidayController.java      ├── HolidayProviderClient.java
+│   ├── ProviderClientConfig.java   ├── DemoProviderController.java   └── HolidaysApplication.java
+├── src/test/java/com/teamdesk/holidays/   (see Tests; StubProvider is the fake partner)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">HolidayController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">HolidayProviderClient.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">ProviderClientConfig.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">DemoProviderController.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">HolidaysApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/teamdesk/holidays/HolidayController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Validates, calls the provider, and translates every failure into our own answer.</dd><dt>Why</dt><dd>One <code>try</code> with a <code>catch</code> per kind of failure, ordered from specific to general.</dd><dt>Without it</dt><dd>Letting the provider's exception become our 500.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.teamdesk.holidays;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientException;
+
+import java.net.SocketTimeoutException;
+import java.net.http.HttpTimeoutException;
+import java.time.LocalDate;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
+@RestController
+class HolidayController {
+
+    private static final Logger log = LoggerFactory.getLogger(HolidayController.class);
+
+    /** States Teamdesk has offices in (a demo list). */
+    static final Set&lt;String&gt; STATES = Set.of(&quot;KA&quot;, &quot;MH&quot;, &quot;DL&quot;, &quot;TN&quot;);
+
+    record Holiday(LocalDate date, String name, String type) {
+    }
+
+    record Holidays(int year, String state, List&lt;Holiday&gt; holidays) {
+    }
+
+    private final HolidayProviderClient provider;
+
+    HolidayController(HolidayProviderClient provider) {
+        this.provider = provider;
+    }
+
+    @GetMapping(&quot;/holidays&quot;)
+    Holidays holidays(@RequestParam @Min(2000) @Max(2100) int year, @RequestParam String state) {
+        String region = state.toUpperCase(Locale.ROOT);
+        if (!STATES.contains(region)) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;Unknown state&quot;, &quot;state must be one of &quot; + String.join(&quot;, &quot;, STATES.stream().sorted().toList()) + &quot;.&quot;);
+        }
+        HolidayProviderClient.ProviderResponse answer = call(year, region);
+        return new Holidays(year, region, answer.holidays().stream()
+                .map(h -&gt; new Holiday(h.date(), h.name(), h.type()))
+                .sorted(Comparator.comparing(Holiday::date))
+                .toList());
+    }
+
+    /**
+     * Every way the provider can fail, translated into our own answer. The provider&#x27;s error body is logged, never
+     * passed on: it may name internal hosts or keys, and our clients cannot act on it anyway.
+     */
+    private HolidayProviderClient.ProviderResponse call(int year, String region) {
+        try {
+            HolidayProviderClient.ProviderResponse answer = provider.holidays(year, region);
+            if (answer == null || answer.holidays() == null) {
+                throw new RestClientException(&quot;empty answer&quot;);
+            }
+            return answer;
+        } catch (HttpClientErrorException.NotFound e) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;No holiday list&quot;, &quot;The provider has no holiday list for &quot; + region + &quot; in &quot; + year + &quot;.&quot;);
+        } catch (ResourceAccessException e) {
+            boolean timedOut = e.getCause() instanceof HttpTimeoutException || e.getCause() instanceof SocketTimeoutException;
+            log.warn(&quot;Holiday provider unreachable ({}): {}&quot;, timedOut ? &quot;timeout&quot; : &quot;connection&quot;, e.getMessage());
+            throw timedOut
+                    ? problem(HttpStatus.GATEWAY_TIMEOUT, &quot;Holiday provider too slow&quot;, &quot;The holiday provider did not answer in time. Try again shortly.&quot;)
+                    : problem(HttpStatus.BAD_GATEWAY, &quot;Holiday provider unreachable&quot;, &quot;The holiday provider could not be reached. Try again shortly.&quot;);
+        } catch (RestClientException e) {   // its 5xx, any other 4xx (our key or request is wrong), or a body we cannot read
+            log.warn(&quot;Holiday provider failed: {}&quot;, e.getMessage());
+            throw problem(HttpStatus.BAD_GATEWAY, &quot;Holiday provider failed&quot;, &quot;The holiday provider failed to answer. Try again shortly.&quot;);
+        }
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/teamdesk/holidays/HolidayProviderClient.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The provider's API as an interface, with records for its JSON.</dd><dt>Why</dt><dd>Spring writes the HTTP call; the interface is easy to read and easy to fake.</dd><dt>Without it</dt><dd>Hand-built URLs and string JSON.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.teamdesk.holidays;
+
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.service.annotation.GetExchange;
+import org.springframework.web.service.annotation.HttpExchange;
+
+import java.time.LocalDate;
+import java.util.List;
+
+/**
+ * The holiday provider&#x27;s API, declared as an interface: Spring writes the HTTP call. Only the fields we use are
+ * mapped; the provider&#x27;s other fields are ignored (Jackson 3&#x27;s default).
+ */
+@HttpExchange(&quot;/v1/holidays&quot;)
+interface HolidayProviderClient {
+
+    record ProviderHoliday(LocalDate date, String name, String type) {
+    }
+
+    record ProviderResponse(String region, int year, List&lt;ProviderHoliday&gt; holidays) {
+    }
+
+    @GetExchange
+    ProviderResponse holidays(@RequestParam int year, @RequestParam String region);
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/teamdesk/holidays/ProviderClientConfig.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Builds the client with a connect and a read time limit.</dd><dt>Why</dt><dd>Limits from configuration, so operations can tune them without a release.</dd><dt>Without it</dt><dd>The trap: a client with no time limit.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.teamdesk.holidays;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.support.RestClientAdapter;
+import org.springframework.web.service.invoker.HttpServiceProxyFactory;
+
+import java.net.http.HttpClient;
+import java.time.Duration;
+
+/**
+ * Builds the provider client with time limits. Without them a slow provider holds our request thread for as long
+ * as it likes, and enough slow calls take our whole API down with it.
+ */
+@Configuration
+class ProviderClientConfig {
+
+    @Bean
+    HolidayProviderClient holidayProviderClient(@Value(&quot;${teamdesk.holidays.base-url}&quot;) String baseUrl,
+                                                @Value(&quot;${teamdesk.holidays.connect-timeout}&quot;) Duration connectTimeout,
+                                                @Value(&quot;${teamdesk.holidays.read-timeout}&quot;) Duration readTimeout) {
+        JdkClientHttpRequestFactory requests = new JdkClientHttpRequestFactory(
+                HttpClient.newBuilder().connectTimeout(connectTimeout).build());
+        requests.setReadTimeout(readTimeout);
+        RestClient rest = RestClient.builder().baseUrl(baseUrl).requestFactory(requests).build();
+        return HttpServiceProxyFactory.builderFor(RestClientAdapter.create(rest)).build().createClient(HolidayProviderClient.class);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/teamdesk/holidays/DemoProviderController.java</p><div class="notes"><p>The simulated provider, so the app runs on its own. Switched off in tests, which use a stub server.</p></div><div class="src"><pre class="code"><code class="language-java">package com.teamdesk.holidays;
+
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * A simulated holiday provider, so the app runs without a real one: the app calls this over HTTP like any partner.
+ * Demo data: three fixed-date national holidays and one state day, not an official list.
+ * Demo switches: year 2098 answers after 3 seconds, year 2099 answers 500. TN has no list (404).
+ */
+@RestController
+@ConditionalOnProperty(&quot;teamdesk.demo-provider.enabled&quot;)
+class DemoProviderController {
+
+    private static final Map&lt;String, String[]&gt; STATE_DAYS = Map.of(
+            &quot;KA&quot;, new String[]{&quot;11-01&quot;, &quot;Kannada Rajyotsava&quot;},
+            &quot;MH&quot;, new String[]{&quot;05-01&quot;, &quot;Maharashtra Day&quot;});
+
+    @GetMapping(&quot;/demo-provider/v1/holidays&quot;)
+    ResponseEntity&lt;?&gt; holidays(@RequestParam int year, @RequestParam String region) throws InterruptedException {
+        if (year == 2098) {
+            Thread.sleep(3_000);
+        }
+        if (year == 2099) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(&quot;error&quot;, &quot;db-holidays-02 connection pool exhausted&quot;));
+        }
+        if (region.equals(&quot;TN&quot;)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(&quot;error&quot;, &quot;no data for region&quot;));
+        }
+        List&lt;Map&lt;String, Object&gt;&gt; days = new ArrayList&lt;&gt;(List.of(
+                day(year, &quot;08-15&quot;, &quot;Independence Day&quot;, &quot;NATIONAL&quot;),
+                day(year, &quot;01-26&quot;, &quot;Republic Day&quot;, &quot;NATIONAL&quot;),
+                day(year, &quot;10-02&quot;, &quot;Gandhi Jayanti&quot;, &quot;NATIONAL&quot;)));
+        if (STATE_DAYS.containsKey(region)) {
+            days.add(day(year, STATE_DAYS.get(region)[0], STATE_DAYS.get(region)[1], &quot;STATE&quot;));
+        }
+        return ResponseEntity.ok(Map.of(&quot;country&quot;, &quot;IN&quot;, &quot;region&quot;, region, &quot;year&quot;, year, &quot;holidays&quot;, days, &quot;generatedBy&quot;, &quot;demo&quot;));
+    }
+
+    private static Map&lt;String, Object&gt; day(int year, String monthDay, String name, String type) {
+        return Map.of(&quot;date&quot;, LocalDate.parse(year + &quot;-&quot; + monthDay), &quot;name&quot;, name, &quot;type&quot;, type, &quot;observed&quot;, true);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>The provider's address and time limits, and the demo provider switch.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: teamdesk-holidays
+  mvc:
+    problemdetails:
+      enabled: true
+
+teamdesk:
+  holidays:
+    # The simulated provider in this same app. A real deployment points this at the provider&#x27;s URL.
+    base-url: http://localhost:${server.port:8080}/demo-provider
+    connect-timeout: 1s
+    read-timeout: 2s     # longer than the provider&#x27;s normal answer, far shorter than our clients will wait
+  demo-provider:
+    enabled: true</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/teamdesk/holidays/HolidaysApplication.java</p><div class="notes"><p>Standard Spring Boot entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.teamdesk.holidays;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class HolidaysApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(HolidaysApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>HolidayContractTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>SlowProviderTrapTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>This station</td><td>Every other provider failure; nothing of theirs leaks</td><td><code>ProviderFailureTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.teamdesk.holidays.SlowProviderTrapTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.teamdesk.holidays.HolidayContractTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.teamdesk.holidays.ProviderFailureTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">SlowProviderTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">HolidayContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">ProviderFailureTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">StubProvider.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/teamdesk/holidays/SlowProviderTrapTest.java</p><div class="notes"><p>Written first: the old call's wait and its escaping 500, and the real endpoint's 504 and 502.</p></div><div class="src"><pre class="code"><code class="language-java">package com.teamdesk.holidays;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.RestClient;
+
+import java.time.Duration;
+import java.time.Instant;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The first test written for this station: it reproduces the bugs before the fix. */
+class SlowProviderTrapTest extends ApiTest {
+
+    /** The &quot;before&quot; call: a RestClient with no timeout and no error handling. Kept only in tests. */
+    static String oldCall() {
+        return RestClient.create(STUB.baseUrl()).get().uri(&quot;/v1/holidays?year=2026&amp;region=KA&quot;).retrieve().body(String.class);
+    }
+
+    @Test
+    void theOldCallWaitsAsLongAsTheProviderLikes() {
+        STUB.behaviour = StubProvider.Behaviour.SLOW;
+        Instant start = Instant.now();
+        oldCall();
+        assertThat(Duration.between(start, Instant.now())).isGreaterThanOrEqualTo(Duration.ofMillis(1_900));
+        // every request thread stuck like this is one fewer for everyone else
+    }
+
+    @Test
+    void theOldCallTurnsTheProvidersFailureIntoOurs() {
+        STUB.behaviour = StubProvider.Behaviour.FAIL;
+        assertThatThrownBy(SlowProviderTrapTest::oldCall)
+                .isInstanceOf(HttpServerErrorException.InternalServerError.class);   // uncaught: our API answers 500
+    }
+
+    @Test
+    void theRealEndpointGivesUpInTimeAndSaysWhoFailed() throws Exception {
+        STUB.behaviour = StubProvider.Behaviour.SLOW;
+        Instant start = Instant.now();
+        holidays(&quot;2030&quot;, &quot;KA&quot;).andExpect(status().isGatewayTimeout())   // years no test fetches successfully: nothing cached
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Holiday provider too slow&quot;));
+        assertThat(Duration.between(start, Instant.now())).isLessThan(Duration.ofMillis(1_500));
+
+        STUB.behaviour = StubProvider.Behaviour.FAIL;
+        holidays(&quot;2031&quot;, &quot;KA&quot;).andExpect(status().isBadGateway())
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Holiday provider failed&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/teamdesk/holidays/HolidayContractTest.java</p><div class="notes"><p>A year's holidays, the provider's 404, and requests refused before any call.</p></div><div class="src"><pre class="code"><code class="language-java">package com.teamdesk.holidays;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP contract: a year&#x27;s holidays, the provider&#x27;s 404, and requests refused before any call is made. */
+class HolidayContractTest extends ApiTest {
+
+    @Test
+    void aStatesHolidaysComeBackSortedInOurShape() throws Exception {
+        holidays(&quot;2026&quot;, &quot;ka&quot;)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.year&quot;).value(2026))
+                .andExpect(jsonPath(&quot;$.state&quot;).value(&quot;KA&quot;))
+                .andExpect(jsonPath(&quot;$.holidays&quot;, hasSize(2)))
+                .andExpect(jsonPath(&quot;$.holidays[0].date&quot;).value(&quot;2026-01-26&quot;))
+                .andExpect(jsonPath(&quot;$.holidays[0].name&quot;).value(&quot;Republic Day&quot;))
+                .andExpect(jsonPath(&quot;$.holidays[1].type&quot;).value(&quot;STATE&quot;))
+                .andExpect(jsonPath(&quot;$.holidays[0].observed&quot;).doesNotExist());   // the provider&#x27;s extra fields stay out
+        assertThat(STUB.lastQuery).isEqualTo(&quot;year=2026&amp;region=KA&quot;);
+    }
+
+    @Test
+    void theProvidersNotFoundIsOurNotFound() throws Exception {
+        STUB.behaviour = StubProvider.Behaviour.NOT_FOUND;
+        holidays(&quot;2026&quot;, &quot;TN&quot;)
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;The provider has no holiday list for TN in 2026.&quot;));
+    }
+
+    @Test
+    void badRequestsAre400AndNeverReachTheProvider() throws Exception {
+        int before = STUB.calls.get();
+        holidays(&quot;2026&quot;, &quot;ZZ&quot;).andExpect(status().isBadRequest()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Unknown state&quot;));
+        holidays(&quot;1999&quot;, &quot;KA&quot;).andExpect(status().isBadRequest());
+        holidays(&quot;abc&quot;, &quot;KA&quot;).andExpect(status().isBadRequest());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(&quot;/holidays&quot;).param(&quot;state&quot;, &quot;KA&quot;))
+                .andExpect(status().isBadRequest());
+        assertThat(STUB.calls.get()).isEqualTo(before);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/teamdesk/holidays/ProviderFailureTest.java</p><div class="notes"><p>500, 401, HTML and a dropped connection, each with its answer.</p></div><div class="src"><pre class="code"><code class="language-java">package com.teamdesk.holidays;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Every other way the provider fails, and that its error text never reaches our clients. */
+class ProviderFailureTest extends ApiTest {
+
+    /** A year per failure, never fetched successfully, so no earlier answer can stand in for the failure. */
+    String bodyFor(StubProvider.Behaviour behaviour, int expectedStatus, String expectedTitle) throws Exception {
+        STUB.behaviour = behaviour;
+        return holidays(String.valueOf(2040 + behaviour.ordinal()), &quot;KA&quot;).andExpect(status().is(expectedStatus)).andExpect(jsonPath(&quot;$.title&quot;).value(expectedTitle))
+                .andReturn().getResponse().getContentAsString();
+    }
+
+    @Test
+    void aProvider500IsOur502WithoutTheirInternals() throws Exception {
+        assertThat(bodyFor(StubProvider.Behaviour.FAIL, 502, &quot;Holiday provider failed&quot;)).doesNotContain(&quot;db-holidays&quot;).doesNotContain(&quot;5432&quot;);
+    }
+
+    @Test
+    void ourExpiredKeyIsOur502NotTheClients401() throws Exception {
+        assertThat(bodyFor(StubProvider.Behaviour.BAD_KEY, 502, &quot;Holiday provider failed&quot;)).doesNotContain(&quot;tdk_live&quot;);
+    }
+
+    @Test
+    void anAnswerWeCannotReadIs502() throws Exception {
+        bodyFor(StubProvider.Behaviour.BAD_JSON, 502, &quot;Holiday provider failed&quot;);
+    }
+
+    @Test
+    void aDroppedConnectionIs502NotATimeout() throws Exception {
+        bodyFor(StubProvider.Behaviour.HANG_UP, 502, &quot;Holiday provider unreachable&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/teamdesk/holidays/StubProvider.java</p><div class="notes"><p>The fake partner: the JDK's own HTTP server on a random port, told per test how to behave.</p></div><div class="src"><pre class="code"><code class="language-java">package com.teamdesk.holidays;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * A stand-in for the holiday provider: a real HTTP server on a random port (the JDK&#x27;s own, no extra library), told
+ * per test how to behave. Our app calls it over real HTTP, so timeouts and status codes are real too.
+ */
+final class StubProvider {
+
+    enum Behaviour { NORMAL, SLOW, FAIL, NOT_FOUND, BAD_KEY, BAD_JSON, HANG_UP }
+
+    static final String HOLIDAYS = &quot;&quot;&quot;
+            {&quot;country&quot;:&quot;IN&quot;,&quot;region&quot;:&quot;KA&quot;,&quot;year&quot;:2026,&quot;apiVersion&quot;:&quot;3.2&quot;,
+             &quot;holidays&quot;:[{&quot;date&quot;:&quot;2026-11-01&quot;,&quot;name&quot;:&quot;Kannada Rajyotsava&quot;,&quot;type&quot;:&quot;STATE&quot;,&quot;observed&quot;:true},
+                         {&quot;date&quot;:&quot;2026-01-26&quot;,&quot;name&quot;:&quot;Republic Day&quot;,&quot;type&quot;:&quot;NATIONAL&quot;,&quot;observed&quot;:true}]}&quot;&quot;&quot;;
+
+    private final HttpServer server;
+    volatile Behaviour behaviour = Behaviour.NORMAL;
+    volatile String lastQuery;
+    volatile String lastApiKey;
+    final AtomicInteger calls = new AtomicInteger();
+
+    private StubProvider(HttpServer server) {
+        this.server = server;
+    }
+
+    static StubProvider start() {
+        try {
+            HttpServer server = HttpServer.create(new InetSocketAddress(&quot;localhost&quot;, 0), 0);
+            server.setExecutor(Executors.newCachedThreadPool());   // a slow answer must not block the next request
+            StubProvider stub = new StubProvider(server);
+            server.createContext(&quot;/v1/holidays&quot;, stub::handle);
+            server.start();
+            return stub;
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    String baseUrl() {
+        return &quot;http://localhost:&quot; + server.getAddress().getPort();
+    }
+
+    private void handle(HttpExchange ex) throws IOException {
+        calls.incrementAndGet();
+        lastQuery = ex.getRequestURI().getQuery();
+        lastApiKey = ex.getRequestHeaders().getFirst(&quot;X-Api-Key&quot;);
+        switch (behaviour) {
+            case NORMAL -&gt; send(ex, 200, HOLIDAYS);
+            case SLOW -&gt; {
+                sleep(2_000);
+                send(ex, 200, HOLIDAYS);
+            }
+            case FAIL -&gt; send(ex, 500, &quot;{\&quot;error\&quot;:\&quot;db-holidays-02.internal:5432 connection pool exhausted\&quot;}&quot;);
+            case NOT_FOUND -&gt; send(ex, 404, &quot;{\&quot;error\&quot;:\&quot;no data for region\&quot;}&quot;);
+            case BAD_KEY -&gt; send(ex, 401, &quot;{\&quot;error\&quot;:\&quot;api key tdk_live_8f2c expired\&quot;}&quot;);
+            case BAD_JSON -&gt; send(ex, 200, &quot;&lt;html&gt;Service temporarily unavailable&lt;/html&gt;&quot;);
+            case HANG_UP -&gt; ex.close();   // closes the connection without an answer
+        }
+    }
+
+    private static void send(HttpExchange ex, int status, String body) throws IOException {
+        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+        ex.getResponseHeaders().add(&quot;Content-Type&quot;, &quot;application/json&quot;);
+        ex.sendResponseHeaders(status, bytes.length);
+        ex.getResponseBody().write(bytes);
+        ex.close();
+    }
+
+    private static void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/teamdesk/holidays/ApiTest.java</p><div class="notes"><p>Shared setup: points the app at the stub, with a 400 ms read limit.</p></div><div class="src"><pre class="code"><code class="language-java">package com.teamdesk.holidays;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+
+/**
+ * Shared setup: the whole app through MockMvc, calling the stub provider instead of the demo one, with a short read
+ * timeout so the slow case takes milliseconds, not seconds.
+ */
+@SpringBootTest(properties = {&quot;teamdesk.demo-provider.enabled=false&quot;, &quot;teamdesk.holidays.read-timeout=400ms&quot;})
+@AutoConfigureMockMvc
+abstract class ApiTest {
+
+    static final StubProvider STUB = StubProvider.start();
+
+    @DynamicPropertySource
+    static void provider(DynamicPropertyRegistry registry) {
+        registry.add(&quot;teamdesk.holidays.base-url&quot;, STUB::baseUrl);
+    }
+
+    @Autowired
+    MockMvc mvc;
+
+    @BeforeEach
+    void providerBehavesNormally() {
+        STUB.behaviour = StubProvider.Behaviour.NORMAL;
+    }
+
+    ResultActions holidays(String year, String state) throws Exception {
+        return mvc.perform(get(&quot;/holidays&quot;).param(&quot;year&quot;, year).param(&quot;state&quot;, state));
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/teamdesk/holidays/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=LastGoodAnswerChallengeTest</code></li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 10 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 13 tests pass (10 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Go deeper · about 30 minutes</p><h2>Serve the last good answer</h2><p>A year's holidays rarely change. Keep the last good answer per year and state; when the provider fails or is too slow, serve it. Say where the answer came from: <code>"source": "provider"</code> or <code>"cache"</code>.</p><p><b>Done when:</b> both tests in <code>LastGoodAnswerChallengeTest</code> pass, and the station's tests still pass.</p><details class="qa"><summary>Hints</summary><ul><li>A <code>ConcurrentHashMap</code> keyed by year and state is enough here.</li><li>Catch the failure where you build the answer; rethrow it when there is nothing cached, or when it is a 404.</li></ul></details><p class="path">challenge/LastGoodAnswerChallengeTest.java</p><pre class="code"><code class="language-java">package com.teamdesk.holidays;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: a year&#x27;s holidays rarely change. Keep the last good answer per year and state, and serve it when
+ * the provider fails or is too slow. The response says where it came from: &quot;provider&quot; or &quot;cache&quot;.
+ */
+class LastGoodAnswerChallengeTest extends ApiTest {
+
+    @Test
+    void aFailingProviderIsCoveredByTheLastGoodAnswer() throws Exception {
+        holidays(&quot;2027&quot;, &quot;MH&quot;).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.source&quot;).value(&quot;provider&quot;));
+        STUB.behaviour = StubProvider.Behaviour.FAIL;
+        holidays(&quot;2027&quot;, &quot;MH&quot;).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.source&quot;).value(&quot;cache&quot;))
+                .andExpect(jsonPath(&quot;$.holidays[0].name&quot;).value(&quot;Republic Day&quot;));
+        STUB.behaviour = StubProvider.Behaviour.SLOW;
+        holidays(&quot;2027&quot;, &quot;MH&quot;).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.source&quot;).value(&quot;cache&quot;));
+    }
+
+    @Test
+    void withNothingCachedTheFailureStillShows() throws Exception {
+        STUB.behaviour = StubProvider.Behaviour.FAIL;
+        holidays(&quot;2028&quot;, &quot;MH&quot;).andExpect(status().isBadGateway());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/HolidayController.java</p><div class="src"><pre class="code"><code class="language-java">package com.teamdesk.holidays;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientException;
+
+import java.net.SocketTimeoutException;
+import java.net.http.HttpTimeoutException;
+import java.time.LocalDate;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+@RestController
+class HolidayController {
+
+    private static final Logger log = LoggerFactory.getLogger(HolidayController.class);
+
+    /** States Teamdesk has offices in (a demo list). */
+    static final Set&lt;String&gt; STATES = Set.of(&quot;KA&quot;, &quot;MH&quot;, &quot;DL&quot;, &quot;TN&quot;);
+
+    record Holiday(LocalDate date, String name, String type) {
+    }
+
+    /** Challenge 1: source is &quot;provider&quot; for a fresh answer, &quot;cache&quot; for the last good one. */
+    record Holidays(int year, String state, List&lt;Holiday&gt; holidays, String source) {
+    }
+
+    /** Challenge 1: the last good answer per year and state. A year&#x27;s holidays rarely change. */
+    private final Map&lt;String, List&lt;Holiday&gt;&gt; lastGood = new ConcurrentHashMap&lt;&gt;();
+
+    private final HolidayProviderClient provider;
+
+    HolidayController(HolidayProviderClient provider) {
+        this.provider = provider;
+    }
+
+    @GetMapping(&quot;/holidays&quot;)
+    Holidays holidays(@RequestParam @Min(2000) @Max(2100) int year, @RequestParam String state) {
+        String region = state.toUpperCase(Locale.ROOT);
+        if (!STATES.contains(region)) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;Unknown state&quot;, &quot;state must be one of &quot; + String.join(&quot;, &quot;, STATES.stream().sorted().toList()) + &quot;.&quot;);
+        }
+        String key = year + &quot;/&quot; + region;
+        try {
+            List&lt;Holiday&gt; fresh = call(year, region).holidays().stream()
+                    .map(h -&gt; new Holiday(h.date(), h.name(), h.type()))
+                    .sorted(Comparator.comparing(Holiday::date))
+                    .toList();
+            lastGood.put(key, fresh);
+            return new Holidays(year, region, fresh, &quot;provider&quot;);
+        } catch (ErrorResponseException failure) {
+            List&lt;Holiday&gt; cached = lastGood.get(key);
+            if (cached == null || failure.getStatusCode().value() == 404) {
+                throw failure;
+            }
+            log.warn(&quot;Serving the last good holiday list for {} instead of: {}&quot;, key, failure.getBody().getTitle());
+            return new Holidays(year, region, cached, &quot;cache&quot;);
+        }
+    }
+
+    /**
+     * Every way the provider can fail, translated into our own answer. The provider&#x27;s error body is logged, never
+     * passed on: it may name internal hosts or keys, and our clients cannot act on it anyway.
+     */
+    private HolidayProviderClient.ProviderResponse call(int year, String region) {
+        try {
+            HolidayProviderClient.ProviderResponse answer = provider.holidays(year, region);
+            if (answer == null || answer.holidays() == null) {
+                throw new RestClientException(&quot;empty answer&quot;);
+            }
+            return answer;
+        } catch (HttpClientErrorException.NotFound e) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;No holiday list&quot;, &quot;The provider has no holiday list for &quot; + region + &quot; in &quot; + year + &quot;.&quot;);
+        } catch (ResourceAccessException e) {
+            boolean timedOut = e.getCause() instanceof HttpTimeoutException || e.getCause() instanceof SocketTimeoutException;
+            log.warn(&quot;Holiday provider unreachable ({}): {}&quot;, timedOut ? &quot;timeout&quot; : &quot;connection&quot;, e.getMessage());
+            throw timedOut
+                    ? problem(HttpStatus.GATEWAY_TIMEOUT, &quot;Holiday provider too slow&quot;, &quot;The holiday provider did not answer in time. Try again shortly.&quot;)
+                    : problem(HttpStatus.BAD_GATEWAY, &quot;Holiday provider unreachable&quot;, &quot;The holiday provider could not be reached. Try again shortly.&quot;);
+        } catch (RestClientException e) {   // its 5xx, any other 4xx (our key or request is wrong), or a body we cannot read
+            log.warn(&quot;Holiday provider failed: {}&quot;, e.getMessage());
+            throw problem(HttpStatus.BAD_GATEWAY, &quot;Holiday provider failed&quot;, &quot;The holiday provider failed to answer. Try again shortly.&quot;);
+        }
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Beginner-friendly · about 15 minutes</p><h2>Send an API key</h2><p>The provider wants an <code>X-Api-Key</code> header. Read the key from <code>teamdesk.holidays.api-key</code> and send it with every call. It must never appear in our responses.</p><p><b>Done when:</b> the test in <code>ApiKeyChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li><code>RestClient.builder().defaultHeader(...)</code> adds it to every request.</li><li>In real deployments the property comes from an environment variable, never from the repository.</li></ul></details><p class="path">challenge/ApiKeyChallengeTest.java</p><pre class="code"><code class="language-java">package com.teamdesk.holidays;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.test.context.TestPropertySource;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: the provider wants an API key in an X-Api-Key header. The key comes from configuration
+ * (teamdesk.holidays.api-key, set from an environment variable in real life) and never appears in our responses.
+ */
+@TestPropertySource(properties = &quot;teamdesk.holidays.api-key=tdk_test_1234&quot;)
+class ApiKeyChallengeTest extends ApiTest {
+
+    @Test
+    void everyCallCarriesTheKeyAndNoResponseShowsIt() throws Exception {
+        String body = holidays(&quot;2026&quot;, &quot;DL&quot;).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(STUB.lastApiKey).isEqualTo(&quot;tdk_test_1234&quot;);
+        assertThat(body).doesNotContain(&quot;tdk_test_1234&quot;);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/ProviderClientConfig.java</p><div class="src"><pre class="code"><code class="language-java">package com.teamdesk.holidays;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.support.RestClientAdapter;
+import org.springframework.web.service.invoker.HttpServiceProxyFactory;
+
+import java.net.http.HttpClient;
+import java.time.Duration;
+
+/**
+ * Builds the provider client with time limits. Without them a slow provider holds our request thread for as long
+ * as it likes, and enough slow calls take our whole API down with it.
+ */
+@Configuration
+class ProviderClientConfig {
+
+    @Bean
+    HolidayProviderClient holidayProviderClient(@Value(&quot;${teamdesk.holidays.base-url}&quot;) String baseUrl,
+                                                @Value(&quot;${teamdesk.holidays.connect-timeout}&quot;) Duration connectTimeout,
+                                                @Value(&quot;${teamdesk.holidays.read-timeout}&quot;) Duration readTimeout,
+                                                @Value(&quot;${teamdesk.holidays.api-key:}&quot;) String apiKey) {
+        JdkClientHttpRequestFactory requests = new JdkClientHttpRequestFactory(
+                HttpClient.newBuilder().connectTimeout(connectTimeout).build());
+        requests.setReadTimeout(readTimeout);
+        // Challenge 2: the key from configuration (an environment variable in real life), on every call, never logged.
+        RestClient rest = RestClient.builder().baseUrl(baseUrl).requestFactory(requests).defaultHeader(&quot;X-Api-Key&quot;, apiKey).build();
+        return HttpServiceProxyFactory.builderFor(RestClientAdapter.create(rest)).build().createClient(HolidayProviderClient.class);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Retry, or stop asking?</h2>
+<p>Should we retry a failed call to the provider? Which failures are worth one retry, and which never are? If the provider is down for an hour, what stops thousands of our requests from each waiting 2 seconds? Sketch a circuit breaker: when it opens, when it tries again, and what users see meanwhile.</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design (none in this station)</li></ul><p class="rule">Short at Foundations: the choices that matter here.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the stub provider and the trap test: the old call waits, and its 500 escapes.</li>
+<li>Declare the provider's API as an <code>@HttpExchange</code> interface with records.</li>
+<li>Build the client with connect and read limits from configuration.</li>
+<li>Translate each kind of failure; test each one, including a dropped connection.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td><code>@HttpExchange</code> interface over <code>RestClient</code></td><td>An interface and a config class.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td><code>RestClient</code> calls written by hand</td><td>More code per call; fine for one or two calls.</td><td><span class="pill warn">Also fine</span></td></tr><tr><td><code>RestTemplate</code></td><td>Deprecated in Spring Framework 7.1.</td><td><span class="pill bad">Avoid in new code</span></td></tr><tr><td>No timeout</td><td>One slow partner takes us down.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>WireMock for the stub</td><td>A dependency; richer matching and recording.</td><td><span class="pill warn">For bigger integrations</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>None in this station. Holidays change once a year: a real system would copy them into a <code>public_holidays</code> table (date, state, name) on a schedule, and answer from there, calling the provider only to refresh.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Time limits</dt><dd>The read limit must be shorter than our own clients' patience, and every thread waiting on a partner is one not serving anyone else.</dd>
+<dt>Errors</dt><dd>Log the partner's error body, with the status; return our own wording. Their messages name hosts, keys and versions.</dd>
+<dt>Secrets</dt><dd>API keys come from the environment (challenge 2), never from the repository or a log line.</dd>
+<dt>Monitoring</dt><dd>Count 502s and 504s by cause. A rise in timeouts is often the first sign of a partner's trouble.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>What happens without a timeout on an HTTP call?</summary><p>The thread waits as long as the other side likes. Under load, every request thread ends up waiting and the whole service stops answering.</p></details><details class="qa"><summary>502 or 504?</summary><p>504 when the upstream service did not answer in time; 502 when it answered badly (5xx, garbage) or could not be reached.</p></details><details class="qa"><summary>Should a partner&#x27;s 401 become our 401?</summary><p>No. It means our credentials with them are wrong, which our client cannot fix. Answer 502 and alert ourselves.</p></details><details class="qa"><summary>What is @HttpExchange?</summary><p>A Spring annotation for declaring an HTTP API as a Java interface. HttpServiceProxyFactory turns it into a client over RestClient.</p></details><details class="qa"><summary>How do you test a partner integration?</summary><p>Against a stub HTTP server you control: make it slow, failing, or return garbage, and check each answer. Never against the real partner in unit tests.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 10 tests pass.</td><td>You can map each provider failure to our status code without looking.</td></tr><tr><td>Resilience</td><td>Timeouts set, failures translated.</td><td>You can explain thread exhaustion.</td></tr><tr><td>Testing</td><td>A stub that can be slow or broken.</td><td>Why not test against the real provider.</td></tr><tr><td>Explanation</td><td>502 versus 504.</td><td>Retries and circuit breakers, and when each helps.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This Foundations station has no flawed version to review. Use this checklist on any outgoing HTTP call:</p>
+<ul class="rules">
+<li>Is there a connect and a read time limit?</li>
+<li>What does each failure (4xx, 5xx, timeout, garbage) become for our caller?</li>
+<li>Can any of the partner's error text reach our caller?</li>
+<li>Is there a test with a slow and a failing partner?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
