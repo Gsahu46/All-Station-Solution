@@ -1,0 +1,60 @@
+package com.billora.invoices;
+
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+
+@RestController
+class TaxPreviewController {
+
+    record Preview(LocalDate invoiceDate, String sellerState, String placeOfSupply, Gst.SupplyType supplyType,
+                   List<Gst.PricedLine> lines, List<Gst.RateTotal> taxSummary, long taxableValuePaise,
+                   long cgstPaise, long sgstPaise, long igstPaise, long totalTaxPaise, long invoiceTotalPaise) {
+    }
+
+    private final GstRates rates;
+
+    TaxPreviewController(GstRates rates) {
+        this.rates = rates;
+    }
+
+    /** A preview only: nothing is stored and no invoice number is issued. */
+    @PostMapping("/invoices/tax-preview")
+    Preview preview(@Valid @RequestBody TaxPreviewRequest r) {
+        GstState pos = GstState.byCode(r.placeOfSupply()).orElseThrow(() -> problem(HttpStatus.BAD_REQUEST,
+                "Unknown state code", "No state in this demo has GST state code " + r.placeOfSupply() + "."));
+        List<Gst.PricedLine> lines = new ArrayList<>();
+        for (int i = 0; i < r.lines().size(); i++) {
+            TaxPreviewRequest.Line l = r.lines().get(i);
+            int n = i + 1;
+            BigDecimal rate = rates.rate(l.hsn(), r.invoiceDate(), l.unitPricePaise()).orElseThrow(() -> problem(
+                    HttpStatus.UNPROCESSABLE_CONTENT, "No GST rate",
+                    "Line " + n + ": no GST rate for HSN " + l.hsn() + " on " + r.invoiceDate() + "."));
+            lines.add(new Gst.PricedLine(n, l.description(), l.hsn(), l.quantity(), l.unitPricePaise(),
+                    l.quantity() * l.unitPricePaise(), rate));
+        }
+        Gst.SupplyType type = Gst.supplyType(rates.sellerState(), pos);
+        List<Gst.RateTotal> summary = Gst.summary(lines, type);
+        long taxable = summary.stream().mapToLong(Gst.RateTotal::taxableValuePaise).sum();
+        long cgst = summary.stream().mapToLong(Gst.RateTotal::cgstPaise).sum();
+        long sgst = summary.stream().mapToLong(Gst.RateTotal::sgstPaise).sum();
+        long igst = summary.stream().mapToLong(Gst.RateTotal::igstPaise).sum();
+        return new Preview(r.invoiceDate(), rates.sellerState().label(), pos.label(), type, lines, summary,
+                taxable, cgst, sgst, igst, cgst + sgst + igst, taxable + cgst + sgst + igst);
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}
