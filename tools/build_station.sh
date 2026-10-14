@@ -78,7 +78,7 @@ if [ "$CAPTURE" = "--capture" ]; then
   ./mvnw -B -q ${JAVA_VERSION:+-Djava.version=$JAVA_VERSION} -DskipTests package
   java -jar target/*.jar > "$TMP/app.log" 2>&1 & APP_PID=$!
   for _ in $(seq 1 90); do curl -s -o /dev/null http://localhost:8080/ && break; sleep 1; done
-  docs/capture.sh
+  APP_LOG="$TMP/app.log" docs/capture.sh   # capture.sh may quote the running app's own log lines
   kill "$APP_PID"; APP_PID=""
   if [ -n "${COMPOSE_UP:-}" ]; then docker compose down -v >/dev/null 2>&1 || true; COMPOSE_UP=""; fi
 fi
