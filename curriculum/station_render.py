@@ -71,6 +71,9 @@ def capture(name):
             headers.append("Authorization: Basic " + base64.b64encode(next(args).encode()).decode())
         elif a in ("-d", "--data-raw"):
             body = next(args)
+        elif a == "--data-binary":  # "@path" relative to docs/captures, where capture.sh runs: show the file sent
+            v = next(args)
+            body = (ST / "docs/captures" / v[1:]).resolve().read_text() if v.startswith("@") else v
         elif a.startswith("http"):
             url = a
     method = method or ("POST" if body is not None else "GET")
