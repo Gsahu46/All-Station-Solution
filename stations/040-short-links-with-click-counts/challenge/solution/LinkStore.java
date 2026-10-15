@@ -1,0 +1,66 @@
+package com.chhotu.links;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
+
+import java.time.OffsetDateTime;
+import java.util.Optional;
+
+@Repository
+class LinkStore {
+
+    /** Tries this many codes before giving up; with 7 characters even one retry is extremely rare. */
+    static final int ATTEMPTS = 5;
+
+    record Link(String code, String targetUrl, long clicks, OffsetDateTime createdAt) {
+    }
+
+    private final JdbcClient jdbc;
+    private final CodeGenerator codes;
+
+    LinkStore(JdbcClient jdbc, CodeGenerator codes) {
+        this.jdbc = jdbc;
+        this.codes = codes;
+    }
+
+    /**
+     * Inserts with a fresh code. ON CONFLICT DO NOTHING turns a taken code into "0 rows", and we try another; the row
+     * that already had the code is never touched. Empty only if every attempt collided.
+     */
+    Optional<String> create(String targetUrl) {
+        return create(targetUrl, null);
+    }
+
+    Optional<String> create(String targetUrl, OffsetDateTime expiresAt) {
+        for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
+            String code = codes.next();
+            if (insert(code, targetUrl, expiresAt)) {
+                return Optional.of(code);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** True if the code was free. A taken code is left exactly as it was. */
+    boolean insert(String code, String targetUrl, OffsetDateTime expiresAt) {
+        return jdbc.sql("INSERT INTO links (code, target_url, expires_at) VALUES (:code, :url, :expires) ON CONFLICT (code) DO NOTHING")
+                .param("code", code).param("url", targetUrl).param("expires", expiresAt).update() == 1;
+    }
+
+    /** The target, and whether the link has expired. */
+    record Target(String url, boolean expired) {
+    }
+
+    Optional<Target> target(String code) {
+        return jdbc.sql("SELECT target_url AS url, coalesce(expires_at <= now(), false) AS expired FROM links WHERE code = :code")
+                .param("code", code).query(Target.class).optional();
+    }
+
+    Optional<Link> link(String code) {
+        return jdbc.sql("SELECT code, target_url, clicks, created_at FROM links WHERE code = :code").param("code", code).query(Link.class).optional();
+    }
+
+    void addClicks(String code, long clicks) {
+        jdbc.sql("UPDATE links SET clicks = clicks + :n WHERE code = :code").param("n", clicks).param("code", code).update();
+    }
+}
