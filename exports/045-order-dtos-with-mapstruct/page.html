@@ -1,0 +1,2208 @@
+<title>Station 045 · Order DTOs with MapStruct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 045</span>
+    <h1>Order DTOs with MapStruct</h1>
+    <p class="scenario">Hand-written mapping between entities and DTOs is 600 lines; a new field was added to one and silently missed in the other.</p>
+    <p class="sim"><b>Simulation</b><span>Orders, customers and prices are demo data, not Tiffino's. An order is a record; no kitchen, rider or payment is involved.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Food delivery</li>
+      <li><b>Types</b>Database</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>043 Doctor directory with JPA</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · MapStruct 1.6.3 (unmappedTargetPolicy ERROR) · Spring Data JPA · @Embedded, @OneToMany · PostgreSQL 17 · Flyway · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>600 lines of copying</strong><p>Tiffino's code copied fields between entities and API objects by hand: name to name, phone to phone, for every class.</p></li><li><strong>A new field, half added</strong><p>In March, "delivery instructions" was added to the table, the entity, the request and the response. Nobody added it to the copying code. It compiled, tests passed, and every "ring twice, baby sleeping" went nowhere.</p></li><li><strong>The fix</strong><p>Let MapStruct write the copying code, and make the build fail when any field is left unmapped without saying why.</p></li></ol>
+<p class="lesson">A forgotten field should fail the build, not the customer's order.</p>
+
+<h2>What are we building?</h2>
+<p><code>POST /orders</code> takes an order with an address, lines and delivery instructions; <code>GET /orders/{id}</code> returns it, phone masked, totals computed. Every field travels both ways.</p>
+
+<h2>An everyday analogy</h2>
+<p>A printed form with numbered boxes and a checker who refuses any form with an empty box, unless it is stamped "not needed". A clerk copying by hand skips a box now and then; the checker never does.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>You declare</strong> the mappings as an interface, with the few special rules.</li>
+<li><strong>At compile time</strong>, MapStruct writes the code, field by field.</li>
+<li><strong>Any target field</strong> nobody fills, and nobody marked as ignored, stops the build.</li>
+<li><strong>At runtime</strong>, the generated code is plain Java: no reflection, no surprises.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: why do <code>id</code>, <code>status</code> and <code>totalPaise</code> say <code>ignore = true</code>?</summary><p>They must not come from the client: the database assigns the id, the service sets the status and computes the total. "Ignore" is a written decision; forgetting is not, and the build refuses it.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No order workflow.</strong> Orders stay PLACED.</li>
+<li><strong>No payment.</strong> A total, not a charge.</li>
+<li><strong>No editing.</strong> Changing lines is station 047.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>DTO</strong></td><td>An object shaped for the API: what clients send and receive.</td><td>The order slip, not the kitchen's ledger.</td><td><code>OrderDtos</code></td></tr><tr><td><strong>Mapping</strong></td><td>Copying values between an entity and a DTO.</td><td>Copying an order slip into the ledger.</td><td><code>OrderMapper</code></td></tr><tr><td><strong>MapStruct</strong></td><td>A tool that writes the mapping code for you when the project compiles.</td><td>A stamp that copies every box at once.</td><td><code>OrderMapperImpl</code> (generated)</td></tr><tr><td><strong>Unmapped target</strong></td><td>A field on the destination that nothing fills.</td><td>A box on the ledger left blank.</td><td><code>unmappedTargetPolicy = ERROR</code></td></tr><tr><td><strong>Nested mapping</strong></td><td>Mapping an object inside an object, or a list of them.</td><td>The address block inside the slip.</td><td><code>address</code>, <code>lines</code></td></tr><tr><td><strong>Custom mapping</strong></td><td>A rule you write for one field.</td><td>Writing only the last 4 digits of the phone.</td><td><code>maskPhone</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Tiffino</strong> (a fictional food delivery brand) has 600 lines of hand-written mapping between entities and DTOs; a field added to one was silently missed in the other.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> an order with delivery instructions, <b>then</b> <code>201</code> and the same instructions in the response and on <code>GET</code>.</li>
+<li><b>Given</b> 2 paneer thalis at ₹249 and 1 chaas at ₹49, <b>then</b> line totals ₹498 and ₹49, order total ₹547.</li>
+<li><b>Given</b> any response, <b>then</b> the phone shows only its last 4 digits.</li>
+<li><b>Given</b> a mapper that leaves a field unmapped, <b>then</b> the build fails, naming the field.</li>
+<li><b>Given</b> a 5-digit PIN, quantity 0, a bad phone, no lines, or a <code>totalPaise</code> sent by the client, <b>then</b> <code>400</code>; an unknown order, <code>404</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>Mapping is generated by MapStruct with <code>unmappedTargetPolicy = ERROR</code>.</li>
+<li>Fields the client must not set are ignored explicitly, with a reason.</li>
+<li>Totals are computed on the server; money in integer paise.</li>
+<li>An order and its lines are saved together, or not at all.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Keep entities and DTOs apart, and map between them.</li>
+<li>Write MapStruct mappers with nested, list and custom mappings.</li>
+<li>Use compile-time unmapped-field checks, and know their blind spot.</li>
+<li>Map a bidirectional parent–child relation correctly.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/orders</code></td><td>Place an order: customer, phone, address, optional instructions, 1 to 20 lines.</td></tr><tr><td><code>GET</code></td><td><code>/orders/{id}</code></td><td>Read it back.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">201</span></td><td>Placed; <code>Location</code> points at it</td></tr><tr><td><span class="pill ok">200</span></td><td>The order</td></tr><tr><td><span class="pill warn">400</span></td><td>A field fails validation, or an unknown field such as <code>totalPaise</code></td></tr><tr><td><span class="pill warn">404</span></td><td>No such order</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 15 Oct 2026, in this order, against one fresh database. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: an order with instructions</h3><p><b>Why:</b> every field mapped in and out; phone masked; total computed.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /orders HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;customerName&quot;: &quot;Asha Verma&quot;,
+  &quot;phone&quot;: &quot;9876543210&quot;,
+  &quot;address&quot;: {
+    &quot;line&quot;: &quot;Flat 4B, Lotus Residency, Baner Road&quot;,
+    &quot;city&quot;: &quot;Pune&quot;,
+    &quot;pincode&quot;: &quot;411045&quot;
+  },
+  &quot;deliveryInstructions&quot;: &quot;Ring twice, baby sleeping&quot;,
+  &quot;lines&quot;: [
+    {
+      &quot;item&quot;: &quot;Paneer thali&quot;,
+      &quot;quantity&quot;: 2,
+      &quot;unitPricePaise&quot;: 24900
+    },
+    {
+      &quot;item&quot;: &quot;Masala chaas&quot;,
+      &quot;quantity&quot;: 1,
+      &quot;unitPricePaise&quot;: 4900
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /orders/1
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 1,
+  &quot;customerName&quot;: &quot;Asha Verma&quot;,
+  &quot;phone&quot;: &quot;******3210&quot;,
+  &quot;address&quot;: {
+    &quot;line&quot;: &quot;Flat 4B, Lotus Residency, Baner Road&quot;,
+    &quot;city&quot;: &quot;Pune&quot;,
+    &quot;pincode&quot;: &quot;411045&quot;
+  },
+  &quot;deliveryInstructions&quot;: &quot;Ring twice, baby sleeping&quot;,
+  &quot;lines&quot;: [
+    {
+      &quot;item&quot;: &quot;Paneer thali&quot;,
+      &quot;quantity&quot;: 2,
+      &quot;unitPricePaise&quot;: 24900,
+      &quot;linePaise&quot;: 49800
+    },
+    {
+      &quot;item&quot;: &quot;Masala chaas&quot;,
+      &quot;quantity&quot;: 1,
+      &quot;unitPricePaise&quot;: 4900,
+      &quot;linePaise&quot;: 4900
+    }
+  ],
+  &quot;totalPaise&quot;: 54700,
+  &quot;status&quot;: &quot;PLACED&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: the same order, read back</h3><p><b>Why:</b> the instructions survived the round trip through the database.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /orders/1 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 400
+
+{
+  &quot;id&quot;: 1,
+  &quot;customerName&quot;: &quot;Asha Verma&quot;,
+  &quot;phone&quot;: &quot;******3210&quot;,
+  &quot;address&quot;: {
+    &quot;line&quot;: &quot;Flat 4B, Lotus Residency, Baner Road&quot;,
+    &quot;city&quot;: &quot;Pune&quot;,
+    &quot;pincode&quot;: &quot;411045&quot;
+  },
+  &quot;deliveryInstructions&quot;: &quot;Ring twice, baby sleeping&quot;,
+  &quot;lines&quot;: [
+    {
+      &quot;item&quot;: &quot;Paneer thali&quot;,
+      &quot;quantity&quot;: 2,
+      &quot;unitPricePaise&quot;: 24900,
+      &quot;linePaise&quot;: 49800
+    },
+    {
+      &quot;item&quot;: &quot;Masala chaas&quot;,
+      &quot;quantity&quot;: 1,
+      &quot;unitPricePaise&quot;: 4900,
+      &quot;linePaise&quot;: 4900
+    }
+  ],
+  &quot;totalPaise&quot;: 54700,
+  &quot;status&quot;: &quot;PLACED&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: order 99</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /orders/99 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No order 99.&quot;,
+  &quot;instance&quot;: &quot;/orders/99&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Order not found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: PIN 41104</h3><p><b>Why:</b> <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /orders HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;customerName&quot;: &quot;Asha Verma&quot;,
+  &quot;phone&quot;: &quot;9876543210&quot;,
+  &quot;address&quot;: {
+    &quot;line&quot;: &quot;Flat 4B, Lotus Residency, Baner Road&quot;,
+    &quot;city&quot;: &quot;Pune&quot;,
+    &quot;pincode&quot;: &quot;41104&quot;
+  },
+  &quot;deliveryInstructions&quot;: &quot;Ring twice, baby sleeping&quot;,
+  &quot;lines&quot;: [
+    {
+      &quot;item&quot;: &quot;Paneer thali&quot;,
+      &quot;quantity&quot;: 2,
+      &quot;unitPricePaise&quot;: 24900
+    },
+    {
+      &quot;item&quot;: &quot;Masala chaas&quot;,
+      &quot;quantity&quot;: 1,
+      &quot;unitPricePaise&quot;: 4900
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Invalid request content.&quot;,
+  &quot;instance&quot;: &quot;/orders&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: <code>totalPaise</code> in the request</h3><p><b>Why:</b> not a request field: <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /orders HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;totalPaise&quot;: 1,
+  &quot;customerName&quot;: &quot;Asha Verma&quot;,
+  &quot;phone&quot;: &quot;9876543210&quot;,
+  &quot;address&quot;: {
+    &quot;line&quot;: &quot;Flat 4B, Lotus Residency, Baner Road&quot;,
+    &quot;city&quot;: &quot;Pune&quot;,
+    &quot;pincode&quot;: &quot;411045&quot;
+  },
+  &quot;deliveryInstructions&quot;: &quot;Ring twice, baby sleeping&quot;,
+  &quot;lines&quot;: [
+    {
+      &quot;item&quot;: &quot;Paneer thali&quot;,
+      &quot;quantity&quot;: 2,
+      &quot;unitPricePaise&quot;: 24900
+    },
+    {
+      &quot;item&quot;: &quot;Masala chaas&quot;,
+      &quot;quantity&quot;: 1,
+      &quot;unitPricePaise&quot;: 4900
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Failed to read request&quot;,
+  &quot;instance&quot;: &quot;/orders&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section>
+<h2>The code MapStruct wrote</h2>
+<p class="muted">The <code>OrderMapperImpl</code> generated by the build the captures ran against (<code>docs/captures/generated-OrderMapperImpl.java.txt</code>). Nobody wrote or edits this file.</p>
+<pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import java.util.ArrayList;
+import java.util.List;
+import javax.annotation.processing.Generated;
+import org.springframework.stereotype.Component;
+
+@Generated(
+    value = &quot;org.mapstruct.ap.MappingProcessor&quot;,
+    date = &quot;2026-10-15T10:34:20+0000&quot;,
+    comments = &quot;version: 1.6.3, compiler: javac, environment: Java 25.0.1 (Eclipse Adoptium)&quot;
+)
+@Component
+class OrderMapperImpl implements OrderMapper {
+
+    @Override
+    public Order toEntity(OrderDtos.CreateOrderRequest request) {
+        if ( request == null ) {
+            return null;
+        }
+
+        Order order = new Order();
+
+        order.setCustomerName( request.customerName() );
+        order.setPhone( request.phone() );
+        order.setAddress( toEntity( request.address() ) );
+        order.setDeliveryInstructions( request.deliveryInstructions() );
+        order.setLines( lineRequestListToOrderLineList( request.lines() ) );
+
+        linkLines( order );
+
+        return order;
+    }
+
+    @Override
+    public OrderLine toEntity(OrderDtos.LineRequest line) {
+        if ( line == null ) {
+            return null;
+        }
+
+        OrderLine orderLine = new OrderLine();
+
+        orderLine.setItem( line.item() );
+        if ( line.quantity() != null ) {
+            orderLine.setQuantity( line.quantity() );
+        }
+        if ( line.unitPricePaise() != null ) {
+            orderLine.setUnitPricePaise( line.unitPricePaise() );
+        }
+
+        return orderLine;
+    }
+
+    @Override
+    public Address toEntity(OrderDtos.AddressDto address) {
+        if ( address == null ) {
+            return null;
+        }
+
+        Address address1 = new Address();
+
+        address1.setLine( address.line() );
+        address1.setCity( address.city() );
+        address1.setPincode( address.pincode() );
+
+        return address1;
+    }
+
+    @Override
+    public OrderDtos.OrderResponse toResponse(Order order) {
+        if ( order == null ) {
+            return null;
+        }
+
+        String phone = null;
+        long id = 0L;
+        String customerName = null;
+        OrderDtos.AddressDto address = null;
+        String deliveryInstructions = null;
+        List&lt;OrderDtos.LineResponse&gt; lines = null;
+        long totalPaise = 0L;
+        String status = null;
+
+        phone = OrderMapper.maskPhone( order.getPhone() );
+        if ( order.getId() != null ) {
+            id = order.getId();
+        }
+        customerName = order.getCustomerName();
+        address = toDto( order.getAddress() );
+        deliveryInstructions = order.getDeliveryInstructions();
+        lines = orderLineListToLineResponseList( order.getLines() );
+        totalPaise = order.getTotalPaise();
+        status = order.getStatus();
+
+        OrderDtos.OrderResponse orderResponse = new OrderDtos.OrderResponse( id, customerName, phone, address, deliveryInstructions, lines, totalPaise, status );
+
+        return orderResponse;
+    }
+
+    @Override
+    public OrderDtos.LineResponse toResponse(OrderLine line) {
+        if ( line == null ) {
+            return null;
+        }
+
+        String item = null;
+        int quantity = 0;
+        long unitPricePaise = 0L;
+
+        item = line.getItem();
+        quantity = line.getQuantity();
+        unitPricePaise = line.getUnitPricePaise();
+
+        long linePaise = line.getQuantity() * line.getUnitPricePaise();
+
+        OrderDtos.LineResponse lineResponse = new OrderDtos.LineResponse( item, quantity, unitPricePaise, linePaise );
+
+        return lineResponse;
+    }
+
+    @Override
+    public OrderDtos.AddressDto toDto(Address address) {
+        if ( address == null ) {
+            return null;
+        }
+
+        String line = null;
+        String city = null;
+        String pincode = null;
+
+        line = address.getLine();
+        city = address.getCity();
+        pincode = address.getPincode();
+
+        OrderDtos.AddressDto addressDto = new OrderDtos.AddressDto( line, city, pincode );
+
+        return addressDto;
+    }
+
+    protected List&lt;OrderLine&gt; lineRequestListToOrderLineList(List&lt;OrderDtos.LineRequest&gt; list) {
+        if ( list == null ) {
+            return null;
+        }
+
+        List&lt;OrderLine&gt; list1 = new ArrayList&lt;OrderLine&gt;( list.size() );
+        for ( OrderDtos.LineRequest lineRequest : list ) {
+            list1.add( toEntity( lineRequest ) );
+        }
+
+        return list1;
+    }
+
+    protected List&lt;OrderDtos.LineResponse&gt; orderLineListToLineResponseList(List&lt;OrderLine&gt; list) {
+        if ( list == null ) {
+            return null;
+        }
+
+        List&lt;OrderDtos.LineResponse&gt; list1 = new ArrayList&lt;OrderDtos.LineResponse&gt;( list.size() );
+        for ( OrderLine orderLine : list ) {
+            list1.add( toResponse( orderLine ) );
+        }
+
+        return list1;
+    }
+}</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>A full order, posted and read back</td><td>Every field, phone masked, totals</td><td><code>anOrderComesBackWithEveryField</code></td></tr><tr><td>No instructions</td><td>Allowed; absent in the response</td><td><code>instructionsAreOptional</code></td></tr><tr><td>A mapper missing a field</td><td>The build fails</td><td><code>theBuildFailsWhenAMapperMissesAField</code></td></tr><tr><td>A package-private setter</td><td>Silently not mapped</td><td><code>butAPackagePrivateSetterIsInvisibleAndSilentlySkipped</code></td></tr><tr><td>Bad phone, PIN, status, total, quantity, orphan line, written directly</td><td>Refused by named constraints</td><td><code>namedConstraintsHoldWithoutJava</code></td></tr><tr><td>A line the database refuses</td><td>The whole order rolls back</td><td><code>aBadLineRollsBackTheWholeOrder</code></td></tr><tr><td>Bad fields; unknown order</td><td><code>400</code>; <code>404</code></td><td><code>OrderContractTest</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Hand-written mapping that silently skips a newly added field.</p>
+<p>The old mapper, kept in the tests, drops the delivery instructions on the way in and on the way out. MapStruct carries them both ways.</p>
+<p>The last two tests run the Java compiler with the MapStruct processor, on a tiny mapper each. A mapper that misses a field fails to compile, naming it. A setter that is not public compiles with no error and is never called. That second case is how this station was first built: MapStruct filled only the list of lines, and the ERROR policy did not fire, because it only checks setters it can see.</p>
+<p>While building, each part was undone once. Not linking lines to their order turned 4 tests red, ignoring the instructions on purpose 2, and dropping the phone mask 1. Leaving out the <code>totalPaise</code> decision made the project fail to compile.</p>
+</div>
+<pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import javax.tools.Diagnostic;
+import javax.tools.DiagnosticCollector;
+import javax.tools.JavaCompiler;
+import javax.tools.JavaFileObject;
+import javax.tools.StandardJavaFileManager;
+import javax.tools.ToolProvider;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * The first test written for this station: the old mapper drops the field nobody remembered, MapStruct keeps it, and
+ * the compiler itself refuses a mapper that forgets one. The last two tests run javac with the MapStruct processor.
+ */
+class HandWrittenMappingTrapTest extends ApiTest {
+
+    @Test
+    void theHandWrittenMapperDropsDeliveryInstructions() {
+        Order entity = OldOrderMapper.toEntity(request(ORDER));
+        assertThat(entity.getDeliveryInstructions()).isNull();                        // lost on the way in
+        entity.setDeliveryInstructions(&quot;Ring twice, baby sleeping&quot;);
+        assertThat(OldOrderMapper.toResponse(entity).deliveryInstructions()).isNull();   // and on the way out
+    }
+
+    @Test
+    void mapStructCarriesItBothWays() {
+        Order entity = mapper.toEntity(request(ORDER));
+        assertThat(entity.getDeliveryInstructions()).isEqualTo(&quot;Ring twice, baby sleeping&quot;);
+        assertThat(entity.getLines()).allSatisfy(line -&gt; assertThat(line.getOrder()).isSameAs(entity));
+        entity.setStatus(&quot;PLACED&quot;);
+        assertThat(mapper.toResponse(entity).deliveryInstructions()).isEqualTo(&quot;Ring twice, baby sleeping&quot;);
+    }
+
+    /** Compiles one mapper source with the MapStruct processor; returns the error messages. */
+    static List&lt;String&gt; compile(Path dir, String source) throws IOException {
+        Path src = dir.resolve(&quot;src/demo/M.java&quot;);
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, source);
+        Files.createDirectories(dir.resolve(&quot;out&quot;));
+        JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
+        DiagnosticCollector&lt;JavaFileObject&gt; diagnostics = new DiagnosticCollector&lt;&gt;();
+        try (StandardJavaFileManager files = javac.getStandardFileManager(diagnostics, null, null)) {
+            javac.getTask(null, files, diagnostics,
+                    List.of(&quot;-proc:full&quot;, &quot;-classpath&quot;, System.getProperty(&quot;java.class.path&quot;), &quot;-d&quot;, dir.resolve(&quot;out&quot;).toString(), &quot;-s&quot;, dir.resolve(&quot;out&quot;).toString()),
+                    null, files.getJavaFileObjects(src)).call();
+        }
+        return diagnostics.getDiagnostics().stream().filter(d -&gt; d.getKind() == Diagnostic.Kind.ERROR)
+                .map(d -&gt; d.getMessage(null)).collect(Collectors.toList());
+    }
+
+    @Test
+    void theBuildFailsWhenAMapperMissesAField(@TempDir Path dir) throws IOException {
+        List&lt;String&gt; errors = compile(dir, &quot;&quot;&quot;
+                package demo;
+                import org.mapstruct.*;
+                @Mapper(unmappedTargetPolicy = ReportingPolicy.ERROR)
+                interface M {
+                    record Source(String customerName) {}
+                    record Target(String customerName, String deliveryInstructions) {}
+                    Target map(Source source);
+                }&quot;&quot;&quot;);
+        assertThat(errors).anySatisfy(e -&gt; assertThat(e).contains(&quot;Unmapped target property: \&quot;deliveryInstructions\&quot;&quot;));
+    }
+
+    @Test
+    void butAPackagePrivateSetterIsInvisibleAndSilentlySkipped(@TempDir Path dir) throws IOException {
+        // Found while building this station: with package-private setters, MapStruct mapped only the list and said nothing.
+        List&lt;String&gt; errors = compile(dir, &quot;&quot;&quot;
+                package demo;
+                import org.mapstruct.*;
+                @Mapper(unmappedTargetPolicy = ReportingPolicy.ERROR)
+                interface M {
+                    record Source(String customerName) {}
+                    class Target {
+                        private String customerName;
+                        public String getCustomerName() { return customerName; }
+                        void setCustomerName(String customerName) { this.customerName = customerName; }
+                    }
+                    Target map(Source source);
+                }&quot;&quot;&quot;);
+        assertThat(errors).isEmpty();
+        assertThat(Files.readString(dir.resolve(&quot;out/demo/MImpl.java&quot;))).doesNotContain(&quot;setCustomerName&quot;);
+    }
+}</code></pre><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * The hand-written mapping before the fix, kept only in tests (600 lines in the real app; the order part is enough).
+ * Written before delivery instructions existed. The field was added to the entity, the request and the response in
+ * March, and nobody came back here. It compiles, it runs, and the instructions are dropped both ways.
+ */
+final class OldOrderMapper {
+
+    /** The response class as it was then: it has the field, but the mapper below never fills it. */
+    record OldResponse(long id, String customerName, String phone, OrderDtos.AddressDto address, String deliveryInstructions,
+                       List&lt;OrderDtos.LineResponse&gt; lines, long totalPaise, String status) {
+    }
+
+    private OldOrderMapper() {
+    }
+
+    static Order toEntity(OrderDtos.CreateOrderRequest r) {
+        Order order = new Order();
+        order.setCustomerName(r.customerName());
+        order.setPhone(r.phone());
+        Address address = new Address();
+        address.setLine(r.address().line());
+        address.setCity(r.address().city());
+        address.setPincode(r.address().pincode());
+        order.setAddress(address);
+        List&lt;OrderLine&gt; lines = new ArrayList&lt;&gt;();
+        for (OrderDtos.LineRequest l : r.lines()) {
+            OrderLine line = new OrderLine();
+            line.setItem(l.item());
+            line.setQuantity(l.quantity());
+            line.setUnitPricePaise(l.unitPricePaise());
+            line.setOrder(order);
+            lines.add(line);
+        }
+        order.setLines(lines);
+        return order;
+    }
+
+    static OldResponse toResponse(Order o) {
+        List&lt;OrderDtos.LineResponse&gt; lines = o.getLines().stream()
+                .map(l -&gt; new OrderDtos.LineResponse(l.getItem(), l.getQuantity(), l.getUnitPricePaise(), l.getQuantity() * l.getUnitPricePaise()))
+                .toList();
+        OrderDtos.AddressDto address = new OrderDtos.AddressDto(o.getAddress().getLine(), o.getAddress().getCity(), o.getAddress().getPincode());
+        return new OldResponse(o.getId() == null ? 0 : o.getId(), o.getCustomerName(), &quot;******&quot; + o.getPhone().substring(6),
+                address, null, lines, o.getTotalPaise(), o.getStatus());   // the constructor took null for the new argument
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 10 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Make the March mistake on purpose: add <code>String deliverySlot</code> to <code>OrderResponse</code> and to <code>Order</code> (with a public setter), and compile.</p>
+<pre class="code"><code class="language-bash">./mvnw -q compile</code></pre>
+<p>The build stops with <code>Unmapped target property: "deliverySlot"</code> until the column, the request and the mapping agree. Put it back.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>Unmapped target property: "…"</code></td><td>A target field nobody fills.</td><td>Map it, or <code>@Mapping(target = "…", ignore = true)</code> with a reason.</td></tr><tr><td>Fields silently null after mapping, no error</td><td>The target's setters are not public.</td><td>Make them public; MapStruct only sees accessible setters.</td></tr><tr><td><code>Can't map "0" to "long …". Reason: L/l mandatory for long types</code></td><td>A <code>defaultValue</code> for a long.</td><td>Write <code>"0L"</code>.</td></tr><tr><td><code>Schema validation: wrong column type … found [int2], but expecting [integer]</code></td><td>A SMALLINT column for an <code>int</code> field.</td><td>Match the types in a migration; validation only checks.</td></tr><tr><td><code>null value in column "order_id"</code></td><td>Lines not linked to their order.</td><td>The <code>@AfterMapping</code> that sets <code>line.order</code>.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/045-order-dtos-with-mapstruct/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/tiffino/ordering/
+│   ├── OrderController.java   ├── OrderService.java   ├── OrderMapper.java   ├── OrderDtos.java
+│   ├── Order.java   ├── OrderLine.java   ├── Address.java   ├── OrderRepository.java   └── OrderingApplication.java
+├── src/main/resources/
+│   ├── application.yaml   └── db/migration/V1__orders_and_lines.sql
+├── src/test/java/com/tiffino/ordering/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures (with the generated mapper), saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the entities and the database.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">OrderController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">OrderService.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">OrderMapper.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">OrderDtos.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">Order.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">OrderLine.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">Address.java</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">OrderRepository.java</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">V1__orders_and_lines.sql</button><button class="file-btn" role="tab" id="code-9-b" aria-controls="code-9" aria-selected="false" data-group="code">pom.xml</button><button class="file-btn" role="tab" id="code-10-b" aria-controls="code-10" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-11-b" aria-controls="code-11" aria-selected="false" data-group="code">OrderingApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/tiffino/ordering/OrderController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Validates the request; returns the response with <code>Location</code>.</dd><dt>Why</dt><dd>HTTP only; no mapping here.</dd><dt>Without it</dt><dd>Mapping code mixed into the controller.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+
+@RestController
+class OrderController {
+
+    private final OrderService service;
+
+    OrderController(OrderService service) {
+        this.service = service;
+    }
+
+    @PostMapping(&quot;/orders&quot;)
+    ResponseEntity&lt;OrderDtos.OrderResponse&gt; place(@Valid @RequestBody OrderDtos.CreateOrderRequest request) {
+        OrderDtos.OrderResponse placed = service.place(request);
+        return ResponseEntity.created(URI.create(&quot;/orders/&quot; + placed.id())).body(placed);
+    }
+
+    @GetMapping(&quot;/orders/{id}&quot;)
+    OrderDtos.OrderResponse one(@PathVariable long id) {
+        return service.find(id).orElseThrow(() -&gt; {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No order &quot; + id + &quot;.&quot;);
+            p.setTitle(&quot;Order not found&quot;);
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        });
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/tiffino/ordering/OrderService.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Maps, sets the status, computes the total, saves; maps back inside the transaction.</dd><dt>Why</dt><dd>The server decides what the client must not.</dd><dt>Without it</dt><dd>A total taken from the client.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Optional;
+
+@Service
+class OrderService {
+
+    private final OrderRepository orders;
+    private final OrderMapper mapper;
+
+    OrderService(OrderRepository orders, OrderMapper mapper) {
+        this.orders = orders;
+        this.mapper = mapper;
+    }
+
+    /** Records an order (a demo record; no kitchen, no payment). The total is computed here, from the lines. */
+    @Transactional
+    OrderDtos.OrderResponse place(OrderDtos.CreateOrderRequest request) {
+        Order order = mapper.toEntity(request);
+        order.setStatus(&quot;PLACED&quot;);
+        order.setTotalPaise(order.getLines().stream().mapToLong(l -&gt; Math.multiplyExact((long) l.getQuantity(), l.getUnitPricePaise())).sum());
+        return mapper.toResponse(orders.save(order));
+    }
+
+    /** Mapped inside the transaction: the lines are loaded while the session is open. */
+    @Transactional(readOnly = true)
+    Optional&lt;OrderDtos.OrderResponse&gt; find(long id) {
+        return orders.findById(id).map(mapper::toResponse);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/tiffino/ordering/OrderMapper.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The mappings MapStruct turns into code.</dd><dt>Why</dt><dd>Every target field is mapped, or ignored with a reason; anything else fails the build.</dd><dt>Without it</dt><dd>600 lines of copying, and the next forgotten field.</dd></dl><ul><li><code>@AfterMapping linkLines</code> sets each line's <code>order</code>, without which Hibernate cannot fill <code>order_id</code>.</li><li><code>@Named("maskPhone")</code> is a rule for one field; <code>expression</code> computes <code>linePaise</code>.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import org.mapstruct.AfterMapping;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.MappingConstants;
+import org.mapstruct.MappingTarget;
+import org.mapstruct.Named;
+import org.mapstruct.ReportingPolicy;
+
+/**
+ * MapStruct writes the implementation at compile time. unmappedTargetPolicy = ERROR is the point of this station: if
+ * a field is added to an entity or a response and nobody says where it comes from (or that it is ignored on
+ * purpose), the build fails, naming the field. A hand-written mapper just leaves it null.
+ */
+@Mapper(componentModel = MappingConstants.ComponentModel.SPRING, unmappedTargetPolicy = ReportingPolicy.ERROR)
+interface OrderMapper {
+
+    @Mapping(target = &quot;id&quot;, ignore = true)            // the database assigns it
+    @Mapping(target = &quot;status&quot;, ignore = true)        // set by the service
+    @Mapping(target = &quot;totalPaise&quot;, ignore = true)    // computed by the service, never taken from the client
+    Order toEntity(OrderDtos.CreateOrderRequest request);
+
+    @Mapping(target = &quot;id&quot;, ignore = true)
+    @Mapping(target = &quot;order&quot;, ignore = true)         // linked back in linkLines
+    OrderLine toEntity(OrderDtos.LineRequest line);
+
+    Address toEntity(OrderDtos.AddressDto address);
+
+    /** Each line must point at its order, or Hibernate cannot fill order_id. */
+    @AfterMapping
+    default void linkLines(@MappingTarget Order order) {
+        order.getLines().forEach(line -&gt; line.setOrder(order));
+    }
+
+    @Mapping(target = &quot;phone&quot;, source = &quot;phone&quot;, qualifiedByName = &quot;maskPhone&quot;)
+    OrderDtos.OrderResponse toResponse(Order order);
+
+    @Mapping(target = &quot;linePaise&quot;, expression = &quot;java(line.getQuantity() * line.getUnitPricePaise())&quot;)
+    OrderDtos.LineResponse toResponse(OrderLine line);
+
+    OrderDtos.AddressDto toDto(Address address);
+
+    /** Only the last four digits leave the server. */
+    @Named(&quot;maskPhone&quot;)
+    static String maskPhone(String phone) {
+        return &quot;******&quot; + phone.substring(phone.length() - 4);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/tiffino/ordering/OrderDtos.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Request and response records, with validation.</dd><dt>Why</dt><dd>The API's shape, apart from the tables.</dd><dt>Without it</dt><dd>Entities in JSON (station 043).</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
+import java.util.List;
+
+/** The API&#x27;s shapes: what a client sends, and what it gets back. Separate from the entities on purpose. */
+final class OrderDtos {
+
+    private OrderDtos() {
+    }
+
+    record AddressDto(@NotBlank @Size(max = 200) String line,
+                      @NotBlank @Size(max = 40) String city,
+                      @NotNull @Pattern(regexp = &quot;[1-9]\\d{5}&quot;, message = &quot;must be a 6-digit PIN code&quot;) String pincode) {
+    }
+
+    record LineRequest(@NotBlank @Size(max = 80) String item,
+                       @NotNull @Min(1) @Max(20) Integer quantity,
+                       @NotNull @Min(1) Long unitPricePaise) {
+    }
+
+    record CreateOrderRequest(@NotBlank @Size(max = 80) String customerName,
+                              @NotNull @Pattern(regexp = &quot;[6-9]\\d{9}&quot;, message = &quot;must be a 10-digit mobile number&quot;) String phone,
+                              @NotNull @Valid AddressDto address,
+                              @Size(max = 200) String deliveryInstructions,
+                              @NotEmpty @Size(max = 20) List&lt;@NotNull @Valid LineRequest&gt; lines) {
+    }
+
+    record LineResponse(String item, int quantity, long unitPricePaise, long linePaise) {
+    }
+
+    record OrderResponse(long id, String customerName, String phone, AddressDto address, String deliveryInstructions,
+                         List&lt;LineResponse&gt; lines, long totalPaise, String status) {
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/tiffino/ordering/Order.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The orders table, with an embedded address and its lines.</dd><dt>Why</dt><dd>Setters are public: MapStruct does not see package-private ones.</dd><dt>Without it</dt><dd>A mapper that compiles and fills nothing.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Embedded;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
+import jakarta.persistence.Table;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Entity
+@Table(name = &quot;orders&quot;)
+public class Order {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String customerName;
+    private String phone;
+    @Embedded
+    private Address address;
+    private String deliveryInstructions;
+    private String status;
+    private long totalPaise;
+
+    @OneToMany(mappedBy = &quot;order&quot;, cascade = CascadeType.ALL)
+    @OrderBy(&quot;id&quot;)
+    private List&lt;OrderLine&gt; lines = new ArrayList&lt;&gt;();
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getCustomerName() {
+        return customerName;
+    }
+
+    public void setCustomerName(String customerName) {
+        this.customerName = customerName;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public Address getAddress() {
+        return address;
+    }
+
+    public void setAddress(Address address) {
+        this.address = address;
+    }
+
+    public String getDeliveryInstructions() {
+        return deliveryInstructions;
+    }
+
+    public void setDeliveryInstructions(String deliveryInstructions) {
+        this.deliveryInstructions = deliveryInstructions;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public long getTotalPaise() {
+        return totalPaise;
+    }
+
+    public void setTotalPaise(long totalPaise) {
+        this.totalPaise = totalPaise;
+    }
+
+    public List&lt;OrderLine&gt; getLines() {
+        return lines;
+    }
+
+    public void setLines(List&lt;OrderLine&gt; lines) {
+        this.lines = lines;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/tiffino/ordering/OrderLine.java</p><div class="notes"><p>One line, linked to its order.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = &quot;order_lines&quot;)
+public class OrderLine {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = &quot;order_id&quot;)
+    private Order order;
+
+    private String item;
+    private int quantity;
+    private long unitPricePaise;
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public Order getOrder() {
+        return order;
+    }
+
+    public void setOrder(Order order) {
+        this.order = order;
+    }
+
+    public String getItem() {
+        return item;
+    }
+
+    public void setItem(String item) {
+        this.item = item;
+    }
+
+    public int getQuantity() {
+        return quantity;
+    }
+
+    public void setQuantity(int quantity) {
+        this.quantity = quantity;
+    }
+
+    public long getUnitPricePaise() {
+        return unitPricePaise;
+    }
+
+    public void setUnitPricePaise(long unitPricePaise) {
+        this.unitPricePaise = unitPricePaise;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/tiffino/ordering/Address.java</p><div class="notes"><p>The address, embedded in the orders row.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
+
+/** Part of the orders row, as a value: no table of its own. */
+@Embeddable
+public class Address {
+
+    @Column(name = &quot;address_line&quot;)
+    private String line;
+    private String city;
+    private String pincode;
+
+    public String getLine() {
+        return line;
+    }
+
+    public void setLine(String line) {
+        this.line = line;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public void setCity(String city) {
+        this.city = city;
+    }
+
+    public String getPincode() {
+        return pincode;
+    }
+
+    public void setPincode(String pincode) {
+        this.pincode = pincode;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/java/com/tiffino/ordering/OrderRepository.java</p><div class="notes"><p>Spring Data repository.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+interface OrderRepository extends JpaRepository&lt;Order, Long&gt; {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">src/main/resources/db/migration/V1__orders_and_lines.sql</p><div class="notes"><p>Both tables with named constraints. Column types match the entities, or Hibernate's validation stops the start.</p></div><div class="src"><pre class="code"><code class="language-sql">CREATE TABLE orders (
+    id                    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    customer_name         VARCHAR(80)  NOT NULL,
+    phone                 VARCHAR(10)  NOT NULL,
+    address_line          VARCHAR(200) NOT NULL,
+    city                  VARCHAR(40)  NOT NULL,
+    pincode               VARCHAR(6)   NOT NULL,
+    delivery_instructions VARCHAR(200),             -- added in March; the hand-written mapper never learned about it
+    status                VARCHAR(12)  NOT NULL,
+    total_paise           BIGINT       NOT NULL,
+    created_at            TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT orders_phone_digits    CHECK (phone ~ &#x27;^[6-9][0-9]{9}$&#x27;),
+    CONSTRAINT orders_pincode_digits  CHECK (pincode ~ &#x27;^[1-9][0-9]{5}$&#x27;),
+    CONSTRAINT orders_status_known    CHECK (status IN (&#x27;PLACED&#x27;, &#x27;COOKING&#x27;, &#x27;OUT_FOR_DELIVERY&#x27;, &#x27;DELIVERED&#x27;, &#x27;CANCELLED&#x27;)),
+    CONSTRAINT orders_total_positive  CHECK (total_paise &gt; 0)
+);
+
+CREATE TABLE order_lines (
+    id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    order_id         BIGINT      NOT NULL,
+    item             VARCHAR(80) NOT NULL,
+    quantity         INT         NOT NULL,
+    unit_price_paise BIGINT      NOT NULL,
+    CONSTRAINT order_lines_order_fk         FOREIGN KEY (order_id) REFERENCES orders (id),
+    CONSTRAINT order_lines_quantity_range   CHECK (quantity BETWEEN 1 AND 20),
+    CONSTRAINT order_lines_price_positive   CHECK (unit_price_paise &gt; 0)
+);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-9" aria-labelledby="code-9-b" hidden><p class="path">pom.xml</p><div class="notes"><p>MapStruct and its annotation processor; the processor is also on the test classpath for the javac tests.</p></div><div class="src"><pre class="code"><code class="language-xml">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;project xmlns=&quot;http://maven.apache.org/POM/4.0.0&quot;
+         xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot;
+         xsi:schemaLocation=&quot;http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd&quot;&gt;
+    &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+
+    &lt;parent&gt;
+        &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+        &lt;artifactId&gt;spring-boot-starter-parent&lt;/artifactId&gt;
+        &lt;version&gt;4.1.1&lt;/version&gt;
+        &lt;relativePath/&gt;
+    &lt;/parent&gt;
+
+    &lt;groupId&gt;com.tiffino&lt;/groupId&gt;
+    &lt;artifactId&gt;order-dtos&lt;/artifactId&gt;
+    &lt;version&gt;1.0.0&lt;/version&gt;
+    &lt;name&gt;Station 045 - Order DTOs with MapStruct&lt;/name&gt;
+
+    &lt;properties&gt;
+        &lt;java.version&gt;25&lt;/java.version&gt;
+        &lt;mapstruct.version&gt;1.6.3&lt;/mapstruct.version&gt;
+    &lt;/properties&gt;
+
+    &lt;dependencies&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.mapstruct&lt;/groupId&gt;
+            &lt;artifactId&gt;mapstruct&lt;/artifactId&gt;
+            &lt;version&gt;${mapstruct.version}&lt;/version&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-webmvc&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-validation&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-data-jpa&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-flyway&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.flywaydb&lt;/groupId&gt;
+            &lt;artifactId&gt;flyway-database-postgresql&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.postgresql&lt;/groupId&gt;
+            &lt;artifactId&gt;postgresql&lt;/artifactId&gt;
+            &lt;scope&gt;runtime&lt;/scope&gt;
+        &lt;/dependency&gt;
+
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-test&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.mapstruct&lt;/groupId&gt;
+            &lt;artifactId&gt;mapstruct-processor&lt;/artifactId&gt;
+            &lt;version&gt;${mapstruct.version}&lt;/version&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-webmvc-test&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-testcontainers&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.testcontainers&lt;/groupId&gt;
+            &lt;artifactId&gt;testcontainers-postgresql&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+    &lt;/dependencies&gt;
+
+    &lt;build&gt;
+        &lt;plugins&gt;
+            &lt;plugin&gt;
+                &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+                &lt;artifactId&gt;spring-boot-maven-plugin&lt;/artifactId&gt;
+            &lt;/plugin&gt;
+            &lt;plugin&gt;
+                &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
+                &lt;artifactId&gt;maven-compiler-plugin&lt;/artifactId&gt;
+                &lt;configuration&gt;
+                    &lt;annotationProcessorPaths&gt;
+                        &lt;path&gt;
+                            &lt;groupId&gt;org.mapstruct&lt;/groupId&gt;
+                            &lt;artifactId&gt;mapstruct-processor&lt;/artifactId&gt;
+                            &lt;version&gt;${mapstruct.version}&lt;/version&gt;
+                        &lt;/path&gt;
+                    &lt;/annotationProcessorPaths&gt;
+                &lt;/configuration&gt;
+            &lt;/plugin&gt;
+        &lt;/plugins&gt;
+    &lt;/build&gt;
+&lt;/project&gt;</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-10" aria-labelledby="code-10-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>open-in-view off, schema validation, strict JSON.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: tiffino-ordering
+  mvc:
+    problemdetails:
+      enabled: true
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/tiffino
+    username: tiffino
+    password: tiffino
+  jpa:
+    # No database work after the service returns: a lazy association touched while writing JSON fails loudly
+    # instead of quietly running extra queries during the response.
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # Flyway owns the schema; Hibernate only checks the entities match it</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-11" aria-labelledby="code-11-b" hidden><p class="path">src/main/java/com/tiffino/ordering/OrderingApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class OrderingApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(OrderingApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>OrderContractTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>HandWrittenMappingTrapTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>OrderDatabaseTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, MapStruct 1.6.3, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.tiffino.ordering.OrderDatabaseTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.tiffino.ordering.HandWrittenMappingTrapTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.tiffino.ordering.OrderContractTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">HandWrittenMappingTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">OrderContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">OrderDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">OldOrderMapper.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/tiffino/ordering/HandWrittenMappingTrapTest.java</p><div class="notes"><p>Written first: the old mapper, MapStruct, and two javac runs with the processor.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import javax.tools.Diagnostic;
+import javax.tools.DiagnosticCollector;
+import javax.tools.JavaCompiler;
+import javax.tools.JavaFileObject;
+import javax.tools.StandardJavaFileManager;
+import javax.tools.ToolProvider;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * The first test written for this station: the old mapper drops the field nobody remembered, MapStruct keeps it, and
+ * the compiler itself refuses a mapper that forgets one. The last two tests run javac with the MapStruct processor.
+ */
+class HandWrittenMappingTrapTest extends ApiTest {
+
+    @Test
+    void theHandWrittenMapperDropsDeliveryInstructions() {
+        Order entity = OldOrderMapper.toEntity(request(ORDER));
+        assertThat(entity.getDeliveryInstructions()).isNull();                        // lost on the way in
+        entity.setDeliveryInstructions(&quot;Ring twice, baby sleeping&quot;);
+        assertThat(OldOrderMapper.toResponse(entity).deliveryInstructions()).isNull();   // and on the way out
+    }
+
+    @Test
+    void mapStructCarriesItBothWays() {
+        Order entity = mapper.toEntity(request(ORDER));
+        assertThat(entity.getDeliveryInstructions()).isEqualTo(&quot;Ring twice, baby sleeping&quot;);
+        assertThat(entity.getLines()).allSatisfy(line -&gt; assertThat(line.getOrder()).isSameAs(entity));
+        entity.setStatus(&quot;PLACED&quot;);
+        assertThat(mapper.toResponse(entity).deliveryInstructions()).isEqualTo(&quot;Ring twice, baby sleeping&quot;);
+    }
+
+    /** Compiles one mapper source with the MapStruct processor; returns the error messages. */
+    static List&lt;String&gt; compile(Path dir, String source) throws IOException {
+        Path src = dir.resolve(&quot;src/demo/M.java&quot;);
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, source);
+        Files.createDirectories(dir.resolve(&quot;out&quot;));
+        JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
+        DiagnosticCollector&lt;JavaFileObject&gt; diagnostics = new DiagnosticCollector&lt;&gt;();
+        try (StandardJavaFileManager files = javac.getStandardFileManager(diagnostics, null, null)) {
+            javac.getTask(null, files, diagnostics,
+                    List.of(&quot;-proc:full&quot;, &quot;-classpath&quot;, System.getProperty(&quot;java.class.path&quot;), &quot;-d&quot;, dir.resolve(&quot;out&quot;).toString(), &quot;-s&quot;, dir.resolve(&quot;out&quot;).toString()),
+                    null, files.getJavaFileObjects(src)).call();
+        }
+        return diagnostics.getDiagnostics().stream().filter(d -&gt; d.getKind() == Diagnostic.Kind.ERROR)
+                .map(d -&gt; d.getMessage(null)).collect(Collectors.toList());
+    }
+
+    @Test
+    void theBuildFailsWhenAMapperMissesAField(@TempDir Path dir) throws IOException {
+        List&lt;String&gt; errors = compile(dir, &quot;&quot;&quot;
+                package demo;
+                import org.mapstruct.*;
+                @Mapper(unmappedTargetPolicy = ReportingPolicy.ERROR)
+                interface M {
+                    record Source(String customerName) {}
+                    record Target(String customerName, String deliveryInstructions) {}
+                    Target map(Source source);
+                }&quot;&quot;&quot;);
+        assertThat(errors).anySatisfy(e -&gt; assertThat(e).contains(&quot;Unmapped target property: \&quot;deliveryInstructions\&quot;&quot;));
+    }
+
+    @Test
+    void butAPackagePrivateSetterIsInvisibleAndSilentlySkipped(@TempDir Path dir) throws IOException {
+        // Found while building this station: with package-private setters, MapStruct mapped only the list and said nothing.
+        List&lt;String&gt; errors = compile(dir, &quot;&quot;&quot;
+                package demo;
+                import org.mapstruct.*;
+                @Mapper(unmappedTargetPolicy = ReportingPolicy.ERROR)
+                interface M {
+                    record Source(String customerName) {}
+                    class Target {
+                        private String customerName;
+                        public String getCustomerName() { return customerName; }
+                        void setCustomerName(String customerName) { this.customerName = customerName; }
+                    }
+                    Target map(Source source);
+                }&quot;&quot;&quot;);
+        assertThat(errors).isEmpty();
+        assertThat(Files.readString(dir.resolve(&quot;out/demo/MImpl.java&quot;))).doesNotContain(&quot;setCustomerName&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/tiffino/ordering/OrderContractTest.java</p><div class="notes"><p>A full order in and out, and every refusal.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.test.json.JsonCompareMode;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP contract: an order in, the same order out. LENIENT: every listed value is checked; fields added later may appear. */
+class OrderContractTest extends ApiTest {
+
+    static final String RESPONSE = &quot;&quot;&quot;
+            {&quot;id&quot;:1,&quot;customerName&quot;:&quot;Asha Verma&quot;,&quot;phone&quot;:&quot;******3210&quot;,
+             &quot;address&quot;:{&quot;line&quot;:&quot;Flat 4B, Lotus Residency, Baner Road&quot;,&quot;city&quot;:&quot;Pune&quot;,&quot;pincode&quot;:&quot;411045&quot;},
+             &quot;deliveryInstructions&quot;:&quot;Ring twice, baby sleeping&quot;,
+             &quot;lines&quot;:[{&quot;item&quot;:&quot;Paneer thali&quot;,&quot;quantity&quot;:2,&quot;unitPricePaise&quot;:24900,&quot;linePaise&quot;:49800},
+                      {&quot;item&quot;:&quot;Masala chaas&quot;,&quot;quantity&quot;:1,&quot;unitPricePaise&quot;:4900,&quot;linePaise&quot;:4900}],
+             &quot;totalPaise&quot;:54700,&quot;status&quot;:&quot;PLACED&quot;}&quot;&quot;&quot;;
+
+    @Test
+    void anOrderComesBackWithEveryField() throws Exception {
+        place(ORDER).andExpect(status().isCreated()).andExpect(header().string(&quot;Location&quot;, &quot;/orders/1&quot;))
+                .andExpect(content().json(RESPONSE, JsonCompareMode.LENIENT));
+        mvc.perform(get(&quot;/orders/1&quot;)).andExpect(status().isOk()).andExpect(content().json(RESPONSE, JsonCompareMode.LENIENT));
+    }
+
+    @Test
+    void instructionsAreOptional() throws Exception {
+        place(ORDER.replace(&quot;\&quot;deliveryInstructions\&quot;:\&quot;Ring twice, baby sleeping\&quot;,&quot;, &quot;&quot;))
+                .andExpect(status().isCreated()).andExpect(jsonPath(&quot;$.deliveryInstructions&quot;).doesNotExist());
+    }
+
+    @Test
+    void anUnknownOrderIs404() throws Exception {
+        mvc.perform(get(&quot;/orders/99&quot;)).andExpect(status().isNotFound()).andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
+    @Test
+    void badOrdersAre400() throws Exception {
+        place(ORDER.replace(&quot;411045&quot;, &quot;41104&quot;)).andExpect(status().isBadRequest());
+        place(ORDER.replace(&quot;\&quot;quantity\&quot;:2&quot;, &quot;\&quot;quantity\&quot;:0&quot;)).andExpect(status().isBadRequest());
+        place(ORDER.replace(&quot;9876543210&quot;, &quot;12345&quot;)).andExpect(status().isBadRequest());
+        place(ORDER.replaceAll(&quot;\&quot;lines\&quot;:\\[.*]&quot;, &quot;\&quot;lines\&quot;:[]&quot;)).andExpect(status().isBadRequest());
+        place(ORDER.replace(&quot;\&quot;customerName\&quot;&quot;, &quot;\&quot;totalPaise\&quot;:1,\&quot;customerName\&quot;&quot;)).andExpect(status().isBadRequest());   // the client never sets the total
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/tiffino/ordering/OrderDatabaseTest.java</p><div class="notes"><p>Named constraints, and an order rolled back with its lines.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The tables&#x27; rules with Java bypassed, and an order saved with its lines or not at all. */
+class OrderDatabaseTest extends ApiTest {
+
+    @Autowired
+    OrderService service;
+
+    long insertOrder(String phone, String pincode, String status, long total) {
+        return jdbc.sql(&quot;INSERT INTO orders (customer_name, phone, address_line, city, pincode, status, total_paise) VALUES (&#x27;T&#x27;, ?, &#x27;x&#x27;, &#x27;Pune&#x27;, ?, ?, ?) RETURNING id&quot;)
+                .params(phone, pincode, status, total).query(Long.class).single();
+    }
+
+    @Test
+    void namedConstraintsHoldWithoutJava() {
+        assertThatThrownBy(() -&gt; insertOrder(&quot;12345&quot;, &quot;411045&quot;, &quot;PLACED&quot;, 100)).hasMessageContaining(&quot;orders_phone_digits&quot;);
+        assertThatThrownBy(() -&gt; insertOrder(&quot;9876543210&quot;, &quot;011045&quot;, &quot;PLACED&quot;, 100)).hasMessageContaining(&quot;orders_pincode_digits&quot;);
+        assertThatThrownBy(() -&gt; insertOrder(&quot;9876543210&quot;, &quot;411045&quot;, &quot;LOST&quot;, 100)).hasMessageContaining(&quot;orders_status_known&quot;);
+        assertThatThrownBy(() -&gt; insertOrder(&quot;9876543210&quot;, &quot;411045&quot;, &quot;PLACED&quot;, 0)).hasMessageContaining(&quot;orders_total_positive&quot;);
+        long id = insertOrder(&quot;9876543210&quot;, &quot;411045&quot;, &quot;PLACED&quot;, 100);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO order_lines (order_id, item, quantity, unit_price_paise) VALUES (?, &#x27;x&#x27;, 0, 100)&quot;).param(id).update())
+                .hasMessageContaining(&quot;order_lines_quantity_range&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO order_lines (order_id, item, quantity, unit_price_paise) VALUES (999, &#x27;x&#x27;, 1, 100)&quot;).update())
+                .hasMessageContaining(&quot;order_lines_order_fk&quot;);
+    }
+
+    @Test
+    void aBadLineRollsBackTheWholeOrder() {
+        // Validation bypassed: the service is called directly with a quantity the database refuses.
+        OrderDtos.CreateOrderRequest bad = request(ORDER.replace(&quot;\&quot;quantity\&quot;:1&quot;, &quot;\&quot;quantity\&quot;:50&quot;));
+        assertThatThrownBy(() -&gt; service.place(bad)).hasMessageContaining(&quot;order_lines_quantity_range&quot;);
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM orders&quot;).query(Long.class).single()).isZero();
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM order_lines&quot;).query(Long.class).single()).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/tiffino/ordering/OldOrderMapper.java</p><div class="notes"><p>The old hand-written mapping, kept only in tests.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * The hand-written mapping before the fix, kept only in tests (600 lines in the real app; the order part is enough).
+ * Written before delivery instructions existed. The field was added to the entity, the request and the response in
+ * March, and nobody came back here. It compiles, it runs, and the instructions are dropped both ways.
+ */
+final class OldOrderMapper {
+
+    /** The response class as it was then: it has the field, but the mapper below never fills it. */
+    record OldResponse(long id, String customerName, String phone, OrderDtos.AddressDto address, String deliveryInstructions,
+                       List&lt;OrderDtos.LineResponse&gt; lines, long totalPaise, String status) {
+    }
+
+    private OldOrderMapper() {
+    }
+
+    static Order toEntity(OrderDtos.CreateOrderRequest r) {
+        Order order = new Order();
+        order.setCustomerName(r.customerName());
+        order.setPhone(r.phone());
+        Address address = new Address();
+        address.setLine(r.address().line());
+        address.setCity(r.address().city());
+        address.setPincode(r.address().pincode());
+        order.setAddress(address);
+        List&lt;OrderLine&gt; lines = new ArrayList&lt;&gt;();
+        for (OrderDtos.LineRequest l : r.lines()) {
+            OrderLine line = new OrderLine();
+            line.setItem(l.item());
+            line.setQuantity(l.quantity());
+            line.setUnitPricePaise(l.unitPricePaise());
+            line.setOrder(order);
+            lines.add(line);
+        }
+        order.setLines(lines);
+        return order;
+    }
+
+    static OldResponse toResponse(Order o) {
+        List&lt;OrderDtos.LineResponse&gt; lines = o.getLines().stream()
+                .map(l -&gt; new OrderDtos.LineResponse(l.getItem(), l.getQuantity(), l.getUnitPricePaise(), l.getQuantity() * l.getUnitPricePaise()))
+                .toList();
+        OrderDtos.AddressDto address = new OrderDtos.AddressDto(o.getAddress().getLine(), o.getAddress().getCity(), o.getAddress().getPincode());
+        return new OldResponse(o.getId() == null ? 0 : o.getId(), o.getCustomerName(), &quot;******&quot; + o.getPhone().substring(6),
+                address, null, lines, o.getTotalPaise(), o.getStatus());   // the constructor took null for the new argument
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/tiffino/ordering/ApiTest.java</p><div class="notes"><p>Shared setup: the demo order, and requests read by the app's JSON mapper.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import tools.jackson.databind.json.JsonMapper;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/** Shared setup: the app on a real PostgreSQL, no orders before each test. */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    static final String ORDER = &quot;&quot;&quot;
+            {&quot;customerName&quot;:&quot;Asha Verma&quot;,&quot;phone&quot;:&quot;9876543210&quot;,
+             &quot;address&quot;:{&quot;line&quot;:&quot;Flat 4B, Lotus Residency, Baner Road&quot;,&quot;city&quot;:&quot;Pune&quot;,&quot;pincode&quot;:&quot;411045&quot;},
+             &quot;deliveryInstructions&quot;:&quot;Ring twice, baby sleeping&quot;,
+             &quot;lines&quot;:[{&quot;item&quot;:&quot;Paneer thali&quot;,&quot;quantity&quot;:2,&quot;unitPricePaise&quot;:24900},{&quot;item&quot;:&quot;Masala chaas&quot;,&quot;quantity&quot;:1,&quot;unitPricePaise&quot;:4900}]}&quot;&quot;&quot;;
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+    @Autowired
+    OrderMapper mapper;
+    @Autowired
+    JsonMapper json;
+
+    /** A request as the API would receive it, read by the app&#x27;s own JSON mapper (no Java validation runs). */
+    OrderDtos.CreateOrderRequest request(String body) {
+        return json.readValue(body, OrderDtos.CreateOrderRequest.class);
+    }
+
+    @BeforeEach
+    void noOrders() {
+        jdbc.sql(&quot;TRUNCATE order_lines, orders RESTART IDENTITY&quot;).update();
+    }
+
+    ResultActions place(String json) throws Exception {
+        return mvc.perform(post(&quot;/orders&quot;).contentType(MediaType.APPLICATION_JSON).content(json));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/tiffino/ordering/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker. Mapped entities, cascades and constraints must behave exactly as in production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/tiffino/ordering/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=TipChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 10 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in (Java files and one migration), all 13 tests pass (10 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 25 minutes</p><h2>A tip for the rider</h2><p>Add an optional <code>tipPaise</code> (0 to ₹500): in the request, a new migration with a check, the entity and the response; the total includes it. Watch what the build says each time the field exists in one place but not the next.</p><p><b>Done when:</b> both tests in <code>TipChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li><code>@Mapping(target = "tipPaise", source = "tipPaise", defaultValue = "0L")</code> turns a missing tip into 0.</li><li>The total is still computed in the service.</li></ul></details><p class="path">challenge/TipChallengeTest.java</p><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: customers can add a tip for the rider. &quot;tipPaise&quot; (optional, 0 to 50,000) goes in the request, the
+ * orders table (a new migration, with a check), the entity and the response, and the total includes it. Notice
+ * what the build tells you each time you add the field in one place but not the next.
+ */
+class TipChallengeTest extends ApiTest {
+
+    @Test
+    void theTipIsStoredReturnedAndAdded() throws Exception {
+        place(ORDER.replace(&quot;\&quot;customerName\&quot;&quot;, &quot;\&quot;tipPaise\&quot;:2000,\&quot;customerName\&quot;&quot;)).andExpect(status().isCreated())
+                .andExpect(jsonPath(&quot;$.tipPaise&quot;).value(2000)).andExpect(jsonPath(&quot;$.totalPaise&quot;).value(56700));
+        mvc.perform(get(&quot;/orders/1&quot;)).andExpect(jsonPath(&quot;$.tipPaise&quot;).value(2000));
+    }
+
+    @Test
+    void noTipIsZeroAndTooBigATipIsRefused() throws Exception {
+        place(ORDER).andExpect(jsonPath(&quot;$.tipPaise&quot;).value(0)).andExpect(jsonPath(&quot;$.totalPaise&quot;).value(54700));
+        place(ORDER.replace(&quot;\&quot;customerName\&quot;&quot;, &quot;\&quot;tipPaise\&quot;:-100,\&quot;customerName\&quot;&quot;)).andExpect(status().isBadRequest());
+        place(ORDER.replace(&quot;\&quot;customerName\&quot;&quot;, &quot;\&quot;tipPaise\&quot;:60000,\&quot;customerName\&quot;&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/V2__order_tip.sql</p><div class="src"><pre class="code"><code class="language-sql">-- A tip for the rider, in paise. Existing orders get 0.
+ALTER TABLE orders ADD COLUMN tip_paise BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE orders ADD CONSTRAINT orders_tip_range CHECK (tip_paise BETWEEN 0 AND 50000);</code></pre></div><p class="path">challenge/solution/Order.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Embedded;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
+import jakarta.persistence.Table;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Entity
+@Table(name = &quot;orders&quot;)
+public class Order {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String customerName;
+    private String phone;
+    @Embedded
+    private Address address;
+    private String deliveryInstructions;
+    private String status;
+    private long totalPaise;
+    private long tipPaise;
+
+    @OneToMany(mappedBy = &quot;order&quot;, cascade = CascadeType.ALL)
+    @OrderBy(&quot;id&quot;)
+    private List&lt;OrderLine&gt; lines = new ArrayList&lt;&gt;();
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getCustomerName() {
+        return customerName;
+    }
+
+    public void setCustomerName(String customerName) {
+        this.customerName = customerName;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public Address getAddress() {
+        return address;
+    }
+
+    public void setAddress(Address address) {
+        this.address = address;
+    }
+
+    public String getDeliveryInstructions() {
+        return deliveryInstructions;
+    }
+
+    public void setDeliveryInstructions(String deliveryInstructions) {
+        this.deliveryInstructions = deliveryInstructions;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public long getTotalPaise() {
+        return totalPaise;
+    }
+
+    public void setTotalPaise(long totalPaise) {
+        this.totalPaise = totalPaise;
+    }
+
+    public long getTipPaise() {
+        return tipPaise;
+    }
+
+    public void setTipPaise(long tipPaise) {
+        this.tipPaise = tipPaise;
+    }
+
+    public List&lt;OrderLine&gt; getLines() {
+        return lines;
+    }
+
+    public void setLines(List&lt;OrderLine&gt; lines) {
+        this.lines = lines;
+    }
+}</code></pre></div><p class="path">challenge/solution/OrderDtos.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
+import java.util.List;
+
+/** The API&#x27;s shapes: what a client sends, and what it gets back. Separate from the entities on purpose. */
+final class OrderDtos {
+
+    private OrderDtos() {
+    }
+
+    record AddressDto(@NotBlank @Size(max = 200) String line,
+                      @NotBlank @Size(max = 40) String city,
+                      @NotNull @Pattern(regexp = &quot;[1-9]\\d{5}&quot;, message = &quot;must be a 6-digit PIN code&quot;) String pincode) {
+    }
+
+    record LineRequest(@NotBlank @Size(max = 80) String item,
+                       @NotNull @Min(1) @Max(20) Integer quantity,
+                       @NotNull @Min(1) Long unitPricePaise) {
+    }
+
+    record CreateOrderRequest(@NotBlank @Size(max = 80) String customerName,
+                              @NotNull @Pattern(regexp = &quot;[6-9]\\d{9}&quot;, message = &quot;must be a 10-digit mobile number&quot;) String phone,
+                              @NotNull @Valid AddressDto address,
+                              @Size(max = 200) String deliveryInstructions,
+                              @Min(0) @Max(50_000) Long tipPaise,
+                              @NotEmpty @Size(max = 20) List&lt;@NotNull @Valid LineRequest&gt; lines) {
+    }
+
+    record KitchenTicket(long orderId, List&lt;String&gt; items, String instructions) {
+    }
+
+    record LineResponse(String item, int quantity, long unitPricePaise, long linePaise) {
+    }
+
+    record OrderResponse(long id, String customerName, String phone, AddressDto address, String deliveryInstructions,
+                         List&lt;LineResponse&gt; lines, long tipPaise, long totalPaise, String status) {
+    }
+}</code></pre></div><p class="path">challenge/solution/OrderMapper.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import org.mapstruct.AfterMapping;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.MappingConstants;
+import org.mapstruct.MappingTarget;
+import org.mapstruct.Named;
+import org.mapstruct.ReportingPolicy;
+
+/**
+ * MapStruct writes the implementation at compile time. unmappedTargetPolicy = ERROR is the point of this station: if
+ * a field is added to an entity or a response and nobody says where it comes from (or that it is ignored on
+ * purpose), the build fails, naming the field. A hand-written mapper just leaves it null.
+ */
+@Mapper(componentModel = MappingConstants.ComponentModel.SPRING, unmappedTargetPolicy = ReportingPolicy.ERROR)
+interface OrderMapper {
+
+    @Mapping(target = &quot;id&quot;, ignore = true)            // the database assigns it
+    @Mapping(target = &quot;status&quot;, ignore = true)        // set by the service
+    @Mapping(target = &quot;totalPaise&quot;, ignore = true)    // computed by the service, never taken from the client
+    @Mapping(target = &quot;tipPaise&quot;, source = &quot;tipPaise&quot;, defaultValue = &quot;0L&quot;)   // MapStruct insists on the L for a long
+    Order toEntity(OrderDtos.CreateOrderRequest request);
+
+    @Mapping(target = &quot;id&quot;, ignore = true)
+    @Mapping(target = &quot;order&quot;, ignore = true)         // linked back in linkLines
+    OrderLine toEntity(OrderDtos.LineRequest line);
+
+    Address toEntity(OrderDtos.AddressDto address);
+
+    /** Each line must point at its order, or Hibernate cannot fill order_id. */
+    @AfterMapping
+    default void linkLines(@MappingTarget Order order) {
+        order.getLines().forEach(line -&gt; line.setOrder(order));
+    }
+
+    @Mapping(target = &quot;phone&quot;, source = &quot;phone&quot;, qualifiedByName = &quot;maskPhone&quot;)
+    OrderDtos.OrderResponse toResponse(Order order);
+
+    @Mapping(target = &quot;linePaise&quot;, expression = &quot;java(line.getQuantity() * line.getUnitPricePaise())&quot;)
+    OrderDtos.LineResponse toResponse(OrderLine line);
+
+    OrderDtos.AddressDto toDto(Address address);
+
+    @Mapping(target = &quot;orderId&quot;, source = &quot;id&quot;)
+    @Mapping(target = &quot;items&quot;, source = &quot;lines&quot;)
+    @Mapping(target = &quot;instructions&quot;, source = &quot;deliveryInstructions&quot;)
+    OrderDtos.KitchenTicket toTicket(Order order);
+
+    /** Used by toTicket for each line: &quot;2 x Paneer thali&quot;. */
+    default String ticketLine(OrderLine line) {
+        return line.getQuantity() + &quot; x &quot; + line.getItem();
+    }
+
+    /** Only the last four digits leave the server. */
+    @Named(&quot;maskPhone&quot;)
+    static String maskPhone(String phone) {
+        return &quot;******&quot; + phone.substring(phone.length() - 4);
+    }
+}</code></pre></div><p class="path">challenge/solution/OrderService.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Optional;
+
+@Service
+class OrderService {
+
+    private final OrderRepository orders;
+    private final OrderMapper mapper;
+
+    OrderService(OrderRepository orders, OrderMapper mapper) {
+        this.orders = orders;
+        this.mapper = mapper;
+    }
+
+    /** Records an order (a demo record; no kitchen, no payment). The total is computed here, from the lines. */
+    @Transactional
+    OrderDtos.OrderResponse place(OrderDtos.CreateOrderRequest request) {
+        Order order = mapper.toEntity(request);
+        order.setStatus(&quot;PLACED&quot;);
+        order.setTotalPaise(order.getLines().stream().mapToLong(l -&gt; Math.multiplyExact((long) l.getQuantity(), l.getUnitPricePaise())).sum()
+                + order.getTipPaise());
+        return mapper.toResponse(orders.save(order));
+    }
+
+    @Transactional(readOnly = true)
+    Optional&lt;OrderDtos.KitchenTicket&gt; ticket(long id) {
+        return orders.findById(id).map(mapper::toTicket);
+    }
+
+    /** Mapped inside the transaction: the lines are loaded while the session is open. */
+    @Transactional(readOnly = true)
+    Optional&lt;OrderDtos.OrderResponse&gt; find(long id) {
+        return orders.findById(id).map(mapper::toResponse);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 25 minutes</p><h2>A kitchen ticket</h2><p>Add <code>GET /orders/{id}/kitchen-ticket</code>: the order id, each line as "2 x Paneer thali", and the instructions. No name, phone, address or prices.</p><p><b>Done when:</b> the test in <code>KitchenTicketChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>A second mapping method from <code>Order</code> to a new record, with <code>source</code> renames.</li><li>A <code>default</code> method from <code>OrderLine</code> to <code>String</code> is used for each element of the list.</li></ul></details><p class="path">challenge/KitchenTicketChallengeTest.java</p><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.test.json.JsonCompareMode;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: GET /orders/{id}/kitchen-ticket for the kitchen screen: the order id, each line as &quot;2 x Paneer thali&quot;,
+ * and the instructions. No customer name, phone, address or prices: the kitchen does not need them. A second MapStruct
+ * method, with a custom mapping for the lines.
+ */
+class KitchenTicketChallengeTest extends ApiTest {
+
+    @Test
+    void theTicketHasOnlyWhatTheKitchenNeeds() throws Exception {
+        place(ORDER);
+        mvc.perform(get(&quot;/orders/1/kitchen-ticket&quot;)).andExpect(status().isOk()).andExpect(content().json(&quot;&quot;&quot;
+                {&quot;orderId&quot;:1,&quot;items&quot;:[&quot;2 x Paneer thali&quot;,&quot;1 x Masala chaas&quot;],&quot;instructions&quot;:&quot;Ring twice, baby sleeping&quot;}&quot;&quot;&quot;, JsonCompareMode.STRICT));
+        mvc.perform(get(&quot;/orders/9/kitchen-ticket&quot;)).andExpect(status().isNotFound());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/OrderMapper.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import org.mapstruct.AfterMapping;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.MappingConstants;
+import org.mapstruct.MappingTarget;
+import org.mapstruct.Named;
+import org.mapstruct.ReportingPolicy;
+
+/**
+ * MapStruct writes the implementation at compile time. unmappedTargetPolicy = ERROR is the point of this station: if
+ * a field is added to an entity or a response and nobody says where it comes from (or that it is ignored on
+ * purpose), the build fails, naming the field. A hand-written mapper just leaves it null.
+ */
+@Mapper(componentModel = MappingConstants.ComponentModel.SPRING, unmappedTargetPolicy = ReportingPolicy.ERROR)
+interface OrderMapper {
+
+    @Mapping(target = &quot;id&quot;, ignore = true)            // the database assigns it
+    @Mapping(target = &quot;status&quot;, ignore = true)        // set by the service
+    @Mapping(target = &quot;totalPaise&quot;, ignore = true)    // computed by the service, never taken from the client
+    @Mapping(target = &quot;tipPaise&quot;, source = &quot;tipPaise&quot;, defaultValue = &quot;0L&quot;)   // MapStruct insists on the L for a long
+    Order toEntity(OrderDtos.CreateOrderRequest request);
+
+    @Mapping(target = &quot;id&quot;, ignore = true)
+    @Mapping(target = &quot;order&quot;, ignore = true)         // linked back in linkLines
+    OrderLine toEntity(OrderDtos.LineRequest line);
+
+    Address toEntity(OrderDtos.AddressDto address);
+
+    /** Each line must point at its order, or Hibernate cannot fill order_id. */
+    @AfterMapping
+    default void linkLines(@MappingTarget Order order) {
+        order.getLines().forEach(line -&gt; line.setOrder(order));
+    }
+
+    @Mapping(target = &quot;phone&quot;, source = &quot;phone&quot;, qualifiedByName = &quot;maskPhone&quot;)
+    OrderDtos.OrderResponse toResponse(Order order);
+
+    @Mapping(target = &quot;linePaise&quot;, expression = &quot;java(line.getQuantity() * line.getUnitPricePaise())&quot;)
+    OrderDtos.LineResponse toResponse(OrderLine line);
+
+    OrderDtos.AddressDto toDto(Address address);
+
+    @Mapping(target = &quot;orderId&quot;, source = &quot;id&quot;)
+    @Mapping(target = &quot;items&quot;, source = &quot;lines&quot;)
+    @Mapping(target = &quot;instructions&quot;, source = &quot;deliveryInstructions&quot;)
+    OrderDtos.KitchenTicket toTicket(Order order);
+
+    /** Used by toTicket for each line: &quot;2 x Paneer thali&quot;. */
+    default String ticketLine(OrderLine line) {
+        return line.getQuantity() + &quot; x &quot; + line.getItem();
+    }
+
+    /** Only the last four digits leave the server. */
+    @Named(&quot;maskPhone&quot;)
+    static String maskPhone(String phone) {
+        return &quot;******&quot; + phone.substring(phone.length() - 4);
+    }
+}</code></pre></div><p class="path">challenge/solution/OrderService.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Optional;
+
+@Service
+class OrderService {
+
+    private final OrderRepository orders;
+    private final OrderMapper mapper;
+
+    OrderService(OrderRepository orders, OrderMapper mapper) {
+        this.orders = orders;
+        this.mapper = mapper;
+    }
+
+    /** Records an order (a demo record; no kitchen, no payment). The total is computed here, from the lines. */
+    @Transactional
+    OrderDtos.OrderResponse place(OrderDtos.CreateOrderRequest request) {
+        Order order = mapper.toEntity(request);
+        order.setStatus(&quot;PLACED&quot;);
+        order.setTotalPaise(order.getLines().stream().mapToLong(l -&gt; Math.multiplyExact((long) l.getQuantity(), l.getUnitPricePaise())).sum()
+                + order.getTipPaise());
+        return mapper.toResponse(orders.save(order));
+    }
+
+    @Transactional(readOnly = true)
+    Optional&lt;OrderDtos.KitchenTicket&gt; ticket(long id) {
+        return orders.findById(id).map(mapper::toTicket);
+    }
+
+    /** Mapped inside the transaction: the lines are loaded while the session is open. */
+    @Transactional(readOnly = true)
+    Optional&lt;OrderDtos.OrderResponse&gt; find(long id) {
+        return orders.findById(id).map(mapper::toResponse);
+    }
+}</code></pre></div><p class="path">challenge/solution/OrderController.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.ordering;
+
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+
+@RestController
+class OrderController {
+
+    private final OrderService service;
+
+    OrderController(OrderService service) {
+        this.service = service;
+    }
+
+    @PostMapping(&quot;/orders&quot;)
+    ResponseEntity&lt;OrderDtos.OrderResponse&gt; place(@Valid @RequestBody OrderDtos.CreateOrderRequest request) {
+        OrderDtos.OrderResponse placed = service.place(request);
+        return ResponseEntity.created(URI.create(&quot;/orders/&quot; + placed.id())).body(placed);
+    }
+
+    @GetMapping(&quot;/orders/{id}/kitchen-ticket&quot;)
+    OrderDtos.KitchenTicket ticket(@PathVariable long id) {
+        return service.ticket(id).orElseThrow(() -&gt; {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No order &quot; + id + &quot;.&quot;);
+            p.setTitle(&quot;Order not found&quot;);
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        });
+    }
+
+    @GetMapping(&quot;/orders/{id}&quot;)
+    OrderDtos.OrderResponse one(@PathVariable long id) {
+        return service.find(id).orElseThrow(() -&gt; {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No order &quot; + id + &quot;.&quot;);
+            p.setTitle(&quot;Order not found&quot;);
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        });
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>When is a mapper worth it?</h2>
+<p>For a public API, a mobile app, an internal admin tool and a service-to-service event, decide between: MapStruct, hand-written mapping with a test per field, returning entities, and reusing one DTO everywhere. What does each cost when a column is added, and who notices when something is missed?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, mapping</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test with the old mapper.</li>
+<li>Write the DTOs and the mapper interface; let the build tell you every field you have not decided.</li>
+<li>Read the generated code once; check it fills what you expect.</li>
+<li>Prove the compile-time check with javac in a test, including its blind spot.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>MapStruct with <code>unmappedTargetPolicy = ERROR</code></td><td>An annotation processor; public setters or constructors.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Hand-written mapping</td><td>Every new field needs someone to remember.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Reflection mappers (ModelMapper and similar)</td><td>Mistakes found at runtime, matching by guesswork.</td><td><span class="pill warn">Late errors</span></td></tr><tr><td>Returning entities</td><td>Leaks and lazy loading (station 043).</td><td><span class="pill bad">No</span></td></tr><tr><td>Records with constructors only</td><td>MapStruct uses the constructor; immutable entities do not suit JPA.</td><td><span class="pill warn">For DTOs, yes</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Table</th><th>Constraints</th><th>Mapped as</th></tr></thead><tbody><tr><td><code>orders</code></td><td><code>orders_phone_digits</code>, <code>orders_pincode_digits</code>, <code>orders_status_known</code>, <code>orders_total_positive</code></td><td><code>Order</code>, with <code>@Embedded Address</code> for the address columns</td></tr><tr><td><code>order_lines</code></td><td><code>order_lines_order_fk</code>, <code>order_lines_quantity_range</code>, <code>order_lines_price_positive</code></td><td><code>OrderLine</code>, <code>@ManyToOne</code> to its order; <code>@OneToMany(cascade = ALL)</code> from it</td></tr></tbody></table></div>
+<pre class="code"><code class="language-sql">CREATE TABLE orders (
+    id                    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    customer_name         VARCHAR(80)  NOT NULL,
+    phone                 VARCHAR(10)  NOT NULL,
+    address_line          VARCHAR(200) NOT NULL,
+    city                  VARCHAR(40)  NOT NULL,
+    pincode               VARCHAR(6)   NOT NULL,
+    delivery_instructions VARCHAR(200),             -- added in March; the hand-written mapper never learned about it
+    status                VARCHAR(12)  NOT NULL,
+    total_paise           BIGINT       NOT NULL,
+    created_at            TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT orders_phone_digits    CHECK (phone ~ &#x27;^[6-9][0-9]{9}$&#x27;),
+    CONSTRAINT orders_pincode_digits  CHECK (pincode ~ &#x27;^[1-9][0-9]{5}$&#x27;),
+    CONSTRAINT orders_status_known    CHECK (status IN (&#x27;PLACED&#x27;, &#x27;COOKING&#x27;, &#x27;OUT_FOR_DELIVERY&#x27;, &#x27;DELIVERED&#x27;, &#x27;CANCELLED&#x27;)),
+    CONSTRAINT orders_total_positive  CHECK (total_paise &gt; 0)
+);
+
+CREATE TABLE order_lines (
+    id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    order_id         BIGINT      NOT NULL,
+    item             VARCHAR(80) NOT NULL,
+    quantity         INT         NOT NULL,
+    unit_price_paise BIGINT      NOT NULL,
+    CONSTRAINT order_lines_order_fk         FOREIGN KEY (order_id) REFERENCES orders (id),
+    CONSTRAINT order_lines_quantity_range   CHECK (quantity BETWEEN 1 AND 20),
+    CONSTRAINT order_lines_price_positive   CHECK (unit_price_paise &gt; 0)
+);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Build as a reviewer</dt><dd>The ERROR policy turns a review comment ("did you map the new field?") into a build step nobody can skip.</dd>
+<dt>Read the generated code</dt><dd>It is plain Java in <code>target/generated-sources</code>. When a mapping surprises you, read it before guessing.</dd>
+<dt>Personal data</dt><dd>Masking in the mapper means no response can forget it; logs and exports need the same care.</dd>
+<dt>Versions</dt><dd>Generated code depends on the MapStruct version; pin it and upgrade deliberately.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>Why separate entities and DTOs?</summary><p>The API is a contract with clients; the table is an implementation detail. Separating them lets either change without breaking the other, and keeps private columns private.</p></details><details class="qa"><summary>What does MapStruct do?</summary><p>It generates mapping code at compile time from an interface. The result is plain Java, fast and debuggable, and mistakes are compile errors.</p></details><details class="qa"><summary>What does unmappedTargetPolicy = ERROR give you?</summary><p>A build failure when a target property has no source and no explicit ignore, so a newly added field cannot be forgotten silently.</p></details><details class="qa"><summary>What can it not catch?</summary><p>Properties it cannot see, such as fields with non-public setters, and wrong-but-present mappings (two fields of the same type swapped). Tests still matter.</p></details><details class="qa"><summary>How do you map a parent with a list of children in JPA?</summary><p>Map the list, then set each child&#x27;s back-reference to the parent (an @AfterMapping here), because the child&#x27;s foreign key comes from that reference.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 10 tests pass.</td><td>You added a field and followed the build's errors to the end.</td></tr><tr><td>MapStruct</td><td>Nested, list and custom mappings.</td><td>You read the generated code.</td></tr><tr><td>Safety</td><td>ERROR policy, explicit ignores.</td><td>You know what the policy cannot see.</td></tr><tr><td>JPA</td><td>Parent and children saved together.</td><td>Why the back-reference matters.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This Foundations station has no flawed version to review. Use this checklist on any mapping change:</p>
+<ul class="rules">
+<li>Is every <code>ignore = true</code> explained, and still true?</li>
+<li>Are the target's setters public, or is there a constructor MapStruct can use?</li>
+<li>Can any field the client sends override something the server decides?</li>
+<li>Is personal data masked in the mapping, not left to each caller?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
