@@ -1,0 +1,1432 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 041 · Clinic appointments report with joins</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 041</span>
+    <h1>Clinic appointments report with joins</h1>
+    <p class="scenario">The weekly report hides doctors with zero appointments and double-counts follow-ups.</p>
+    <p class="sim"><b>Simulation</b><span>Doctors, patients, fees and appointments are demo data for one week, not Mediqo's. The report reads records only.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Healthcare</li>
+      <li><b>Types</b>Database</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>038 Gym memberships with migrations and constraints</p>
+      <p><span class="eyebrow">Builds toward</span><br>062 Shipment search by phone number · 067 Category tree and breadcrumbs</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · PostgreSQL 17: INNER and LEFT JOIN, GROUP BY, HAVING, FILTER, COALESCE · JdbcClient · Flyway · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>A weekly report</strong><p>Every Monday, the clinic head reads how many patients each doctor saw last week.</p></li><li><strong>Two doctors are wrong</strong><p>Dr Khan joined last week and saw nobody yet. He is missing from the report altogether, so nobody notices he is idle. Dr Mehta shows 4 appointments, though he saw 3: one patient had two follow-ups booked, and the report counted that visit twice.</p></li><li><strong>The fix</strong><p>Start from every doctor, attach their appointments if there are any, count appointments themselves, and count follow-ups separately.</p></li></ol>
+<p class="lesson">A report should show zero as zero, not leave it out, and count each thing once.</p>
+
+<h2>What are we building?</h2>
+<p><code>GET /reports/doctor-load?from=…&amp;to=…</code> lists every active doctor with the appointments, completed visits, no-shows, follow-ups and fees of those days, busiest first.</p>
+
+<h2>An everyday analogy</h2>
+<p>A school attendance register. It lists every student, and an absent student gets a 0, not a missing line. If one student brought two notes, they are still one student.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Start from every active doctor.</strong></li>
+<li><strong>Attach appointments</strong> in the range, if any (LEFT JOIN, the range in the join condition).</li>
+<li><strong>Attach follow-up counts</strong>, already totalled per appointment, so no row repeats.</li>
+<li><strong>Count per doctor</strong>, turning "no fees" (NULL) into 0.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: the LEFT JOIN is in place, but the query still says <code>WHERE a.starts_at &gt;= '2026-10-05'</code>. Does Dr Khan appear?</summary><p>No. For Dr Khan, <code>a.starts_at</code> is NULL, and <code>NULL &gt;= date</code> is not true, so WHERE removes his row. The condition belongs in the JOIN's ON clause.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No booking.</strong> A read-only report.</li>
+<li><strong>No charts.</strong> JSON rows; a dashboard reads them.</li>
+<li><strong>One clinic.</strong> Many clinics over a year is challenge 3.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>JOIN</strong></td><td>Combine rows from two tables that match on a condition.</td><td>Matching a class list with an exam results list by roll number.</td><td><code>doctors</code> with <code>appointments</code></td></tr><tr><td><strong>INNER JOIN</strong></td><td>Keep only rows that have a match on both sides.</td><td>Only students who sat the exam appear.</td><td>the trap</td></tr><tr><td><strong>LEFT JOIN</strong></td><td>Keep every row on the left, matched or not; missing values are NULL.</td><td>Every student appears; absentees get a blank.</td><td><code>DoctorLoadReport</code></td></tr><tr><td><strong>GROUP BY</strong></td><td>Collapse rows into one per group, with totals.</td><td>One line per doctor.</td><td><code>GROUP BY d.id</code></td></tr><tr><td><strong>HAVING</strong></td><td>A condition on the groups, after counting.</td><td>"Only doctors with at least 2 appointments".</td><td><code>minAppointments</code></td></tr><tr><td><strong>NULL</strong></td><td>"No value": not zero, and any comparison with it is not true.</td><td>A blank cell, not a 0.</td><td><code>coalesce(sum(…), 0)</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Mediqo</strong> (a fictional clinic chain) gets a weekly report that hides doctors with zero appointments and double-counts appointments that have follow-ups.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">On the demo week, 5 to 11 October 2026.</p>
+<ol class="gwt">
+<li><b>Given</b> the week, <b>then</b> Dr Mehta 3, Dr Iyer 2, Dr Rao 1, Dr Khan 0, in that order; the retired Dr Das is not listed.</li>
+<li><b>Given</b> Dr Mehta's appointment with two follow-ups, <b>then</b> it counts once as an appointment, and his follow-ups total 3.</li>
+<li><b>Given</b> a cancelled appointment, <b>then</b> it is not counted; fees count only completed visits.</li>
+<li><b>Given</b> Sunday 11 October only, <b>then</b> Dr Iyer's 23:30 appointment is in, and Dr Rao's at 00:15 on Monday is not.</li>
+<li><b>Given</b> <code>minAppointments=2</code>, <b>then</b> only Dr Mehta and Dr Iyer.</li>
+<li><b>Given</b> a week with no appointments, <b>then</b> every active doctor at zero. <b>Given</b> <code>to</code> before <code>from</code>, more than 92 days, or a missing or malformed date, <code>400</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>Every active doctor appears, whatever the range holds.</li>
+<li>Days are India days; <code>from</code> and <code>to</code> are both included.</li>
+<li>No count is inflated by a one-to-many join.</li>
+<li>Money in integer paise; no NULL in the output.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Choose INNER or LEFT JOIN, and put conditions in ON or WHERE on purpose.</li>
+<li>Use GROUP BY, HAVING, and aggregates with FILTER.</li>
+<li>Handle NULL: <code>count(column)</code> vs <code>count(*)</code>, <code>coalesce</code>.</li>
+<li>Avoid join fan-out by aggregating before joining.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/reports/doctor-load?from=YYYY-MM-DD&amp;to=YYYY-MM-DD&amp;minAppointments=0</code></td><td>Load per active doctor, busiest first. <code>minAppointments</code> is optional.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>A report, even if every count is zero</td></tr><tr><td><span class="pill warn">400</span></td><td><code>to</code> before <code>from</code>, more than 92 days, a missing or malformed date, a negative minimum</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 15 Oct 2026, against the demo data. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: 5 to 11 October</h3><p><b>Why:</b> every active doctor, Dr Khan at zero, Dr Mehta at 3 with 3 follow-ups.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /reports/doctor-load?from=2026-10-05&amp;to=2026-10-11 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 596
+
+{
+  &quot;from&quot;: &quot;2026-10-05&quot;,
+  &quot;to&quot;: &quot;2026-10-11&quot;,
+  &quot;doctors&quot;: [
+    {
+      &quot;doctorId&quot;: 1,
+      &quot;name&quot;: &quot;Dr Mehta&quot;,
+      &quot;speciality&quot;: &quot;Cardiology&quot;,
+      &quot;appointments&quot;: 3,
+      &quot;completed&quot;: 2,
+      &quot;noShows&quot;: 1,
+      &quot;followUps&quot;: 3,
+      &quot;revenuePaise&quot;: 160000
+    },
+    {
+      &quot;doctorId&quot;: 2,
+      &quot;name&quot;: &quot;Dr Iyer&quot;,
+      &quot;speciality&quot;: &quot;Dermatology&quot;,
+      &quot;appointments&quot;: 2,
+      &quot;completed&quot;: 1,
+      &quot;noShows&quot;: 0,
+      &quot;followUps&quot;: 0,
+      &quot;revenuePaise&quot;: 60000
+    },
+    {
+      &quot;doctorId&quot;: 3,
+      &quot;name&quot;: &quot;Dr Rao&quot;,
+      &quot;speciality&quot;: &quot;Paediatrics&quot;,
+      &quot;appointments&quot;: 1,
+      &quot;completed&quot;: 1,
+      &quot;noShows&quot;: 0,
+      &quot;followUps&quot;: 0,
+      &quot;revenuePaise&quot;: 50000
+    },
+    {
+      &quot;doctorId&quot;: 4,
+      &quot;name&quot;: &quot;Dr Khan&quot;,
+      &quot;speciality&quot;: &quot;Orthopaedics&quot;,
+      &quot;appointments&quot;: 0,
+      &quot;completed&quot;: 0,
+      &quot;noShows&quot;: 0,
+      &quot;followUps&quot;: 0,
+      &quot;revenuePaise&quot;: 0
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 2: <code>minAppointments=2</code></h3><p><b>Why:</b> HAVING filters after counting.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /reports/doctor-load?from=2026-10-05&amp;to=2026-10-11&amp;minAppointments=2 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 326
+
+{
+  &quot;from&quot;: &quot;2026-10-05&quot;,
+  &quot;to&quot;: &quot;2026-10-11&quot;,
+  &quot;doctors&quot;: [
+    {
+      &quot;doctorId&quot;: 1,
+      &quot;name&quot;: &quot;Dr Mehta&quot;,
+      &quot;speciality&quot;: &quot;Cardiology&quot;,
+      &quot;appointments&quot;: 3,
+      &quot;completed&quot;: 2,
+      &quot;noShows&quot;: 1,
+      &quot;followUps&quot;: 3,
+      &quot;revenuePaise&quot;: 160000
+    },
+    {
+      &quot;doctorId&quot;: 2,
+      &quot;name&quot;: &quot;Dr Iyer&quot;,
+      &quot;speciality&quot;: &quot;Dermatology&quot;,
+      &quot;appointments&quot;: 2,
+      &quot;completed&quot;: 1,
+      &quot;noShows&quot;: 0,
+      &quot;followUps&quot;: 0,
+      &quot;revenuePaise&quot;: 60000
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 3: Sunday 11 October</h3><p><b>Why:</b> 23:30 on Sunday is in; 00:15 on Monday is not.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /reports/doctor-load?from=2026-10-11&amp;to=2026-10-11 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 583
+
+{
+  &quot;from&quot;: &quot;2026-10-11&quot;,
+  &quot;to&quot;: &quot;2026-10-11&quot;,
+  &quot;doctors&quot;: [
+    {
+      &quot;doctorId&quot;: 2,
+      &quot;name&quot;: &quot;Dr Iyer&quot;,
+      &quot;speciality&quot;: &quot;Dermatology&quot;,
+      &quot;appointments&quot;: 1,
+      &quot;completed&quot;: 0,
+      &quot;noShows&quot;: 0,
+      &quot;followUps&quot;: 0,
+      &quot;revenuePaise&quot;: 0
+    },
+    {
+      &quot;doctorId&quot;: 4,
+      &quot;name&quot;: &quot;Dr Khan&quot;,
+      &quot;speciality&quot;: &quot;Orthopaedics&quot;,
+      &quot;appointments&quot;: 0,
+      &quot;completed&quot;: 0,
+      &quot;noShows&quot;: 0,
+      &quot;followUps&quot;: 0,
+      &quot;revenuePaise&quot;: 0
+    },
+    {
+      &quot;doctorId&quot;: 1,
+      &quot;name&quot;: &quot;Dr Mehta&quot;,
+      &quot;speciality&quot;: &quot;Cardiology&quot;,
+      &quot;appointments&quot;: 0,
+      &quot;completed&quot;: 0,
+      &quot;noShows&quot;: 0,
+      &quot;followUps&quot;: 0,
+      &quot;revenuePaise&quot;: 0
+    },
+    {
+      &quot;doctorId&quot;: 3,
+      &quot;name&quot;: &quot;Dr Rao&quot;,
+      &quot;speciality&quot;: &quot;Paediatrics&quot;,
+      &quot;appointments&quot;: 0,
+      &quot;completed&quot;: 0,
+      &quot;noShows&quot;: 0,
+      &quot;followUps&quot;: 0,
+      &quot;revenuePaise&quot;: 0
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 4: a week in January</h3><p><b>Why:</b> no appointments: everyone at 0, fees 0, not NULL.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /reports/doctor-load?from=2026-01-05&amp;to=2026-01-11 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 583
+
+{
+  &quot;from&quot;: &quot;2026-01-05&quot;,
+  &quot;to&quot;: &quot;2026-01-11&quot;,
+  &quot;doctors&quot;: [
+    {
+      &quot;doctorId&quot;: 2,
+      &quot;name&quot;: &quot;Dr Iyer&quot;,
+      &quot;speciality&quot;: &quot;Dermatology&quot;,
+      &quot;appointments&quot;: 0,
+      &quot;completed&quot;: 0,
+      &quot;noShows&quot;: 0,
+      &quot;followUps&quot;: 0,
+      &quot;revenuePaise&quot;: 0
+    },
+    {
+      &quot;doctorId&quot;: 4,
+      &quot;name&quot;: &quot;Dr Khan&quot;,
+      &quot;speciality&quot;: &quot;Orthopaedics&quot;,
+      &quot;appointments&quot;: 0,
+      &quot;completed&quot;: 0,
+      &quot;noShows&quot;: 0,
+      &quot;followUps&quot;: 0,
+      &quot;revenuePaise&quot;: 0
+    },
+    {
+      &quot;doctorId&quot;: 1,
+      &quot;name&quot;: &quot;Dr Mehta&quot;,
+      &quot;speciality&quot;: &quot;Cardiology&quot;,
+      &quot;appointments&quot;: 0,
+      &quot;completed&quot;: 0,
+      &quot;noShows&quot;: 0,
+      &quot;followUps&quot;: 0,
+      &quot;revenuePaise&quot;: 0
+    },
+    {
+      &quot;doctorId&quot;: 3,
+      &quot;name&quot;: &quot;Dr Rao&quot;,
+      &quot;speciality&quot;: &quot;Paediatrics&quot;,
+      &quot;appointments&quot;: 0,
+      &quot;completed&quot;: 0,
+      &quot;noShows&quot;: 0,
+      &quot;followUps&quot;: 0,
+      &quot;revenuePaise&quot;: 0
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 5: to before from</h3><p><b>Why:</b> <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /reports/doctor-load?from=2026-10-11&amp;to=2026-10-05 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;to is before from.&quot;,
+  &quot;instance&quot;: &quot;/reports/doctor-load&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Invalid date range&quot;
+}</code></pre></div></div></section>
+<h2>The old report, on the same data</h2>
+<p class="muted">The old SQL, run with psql against the same database after the captures (<code>docs/captures/old-report.txt</code>):</p>
+<pre class="code"><code class="language-text">   name   | appointments 
+----------+--------------
+ Dr Mehta |            4
+ Dr Iyer  |            2
+ Dr Rao   |            1
+(3 rows)</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>A doctor with no appointments</td><td>Listed at 0</td><td><code>theReportCountsEveryDoctorCorrectly</code></td></tr><tr><td>An appointment with two follow-ups</td><td>Counted once</td><td><code>theWeekShowsEveryActiveDoctorBusiestFirst</code></td></tr><tr><td>Cancelled; retired doctor</td><td>Not counted; not listed</td><td><code>theWeekShowsEveryActiveDoctorBusiestFirst</code></td></tr><tr><td>23:30 Sunday, 00:15 Monday</td><td>In; out</td><td><code>theDaysAreIndiaDaysWithBothEndsIncluded</code></td></tr><tr><td><code>minAppointments=2</code></td><td>Two doctors</td><td><code>minAppointmentsFiltersAfterCounting</code></td></tr><tr><td>A week with nothing</td><td>Everyone at 0</td><td><code>aWeekWithNoAppointmentsListsEveryoneAtZero</code></td></tr><tr><td>Bad ranges</td><td><code>400</code></td><td><code>badRangesAre400</code></td></tr><tr><td>Unknown doctor, status, negative fee, orphan follow-up</td><td>Refused by named constraints</td><td><code>namedConstraintsHoldWithoutJava</code></td></tr><tr><td>A failed import of appointments</td><td>Rolled back; the report unchanged</td><td><code>aRolledBackDayOfAppointmentsNeverReachesTheReport</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">INNER JOIN hides doctors with zero appointments.</p>
+<p>Four tests on the demo week. The old SQL leaves out Dr Khan and gives Dr Mehta 4. Switching to LEFT JOIN but keeping the date in WHERE leaves Dr Khan out again. Moving the date into ON but keeping <code>count(*)</code> gives Dr Khan an appointment he never had. The report gives 3, 2, 1 and 0. While building, each part of the query was undone once:</p>
+<ul>
+<li>An INNER JOIN turned 5 tests red.</li>
+<li>Conditions moved out of ON turned 5 red, and a date also in WHERE 5.</li>
+<li><code>count(*)</code> turned 4 red.</li>
+<li>Follow-ups joined row by row turned 2 red.</li>
+<li>No <code>coalesce</code> turned 5 red (a NULL cannot become a number).</li>
+<li>Including retired doctors turned 3 red.</li>
+</ul>
+</div>
+<pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
+
+/** The first test written for this station: the old SQL against the demo week, then the two half-fixes. */
+class InnerJoinTrapTest extends ApiTest {
+
+    Map&lt;String, Long&gt; run(String sql) {
+        OffsetDateTime from = LocalDate.parse(FROM).atStartOfDay(DoctorLoadReport.INDIA).toOffsetDateTime();
+        OffsetDateTime to = LocalDate.parse(TO).plusDays(1).atStartOfDay(DoctorLoadReport.INDIA).toOffsetDateTime();
+        return jdbc.sql(sql).param(&quot;from&quot;, from).param(&quot;to&quot;, to)
+                .query((rs, n) -&gt; Map.entry(rs.getString(&quot;name&quot;), rs.getLong(&quot;appointments&quot;))).list().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    @Test
+    void theOldReportHidesDrKhanAndCountsDrMehtasFollowUpsAsAppointments() {
+        Map&lt;String, Long&gt; old = run(OldReportQueries.INNER_JOIN);
+        assertThat(old).doesNotContainKey(&quot;Dr Khan&quot;);                // INNER JOIN: no appointments, no row
+        assertThat(old).contains(entry(&quot;Dr Mehta&quot;, 4L));             // 3 appointments; the one with 2 follow-ups counted twice
+    }
+
+    @Test
+    void aLeftJoinWithTheDateInWhereHidesHimAgain() {
+        assertThat(run(OldReportQueries.LEFT_JOIN_FILTERED_IN_WHERE)).doesNotContainKey(&quot;Dr Khan&quot;);   // NULL &gt;= date is not true
+    }
+
+    @Test
+    void aLeftJoinWithCountStarGivesHimAnAppointmentHeNeverHad() {
+        assertThat(run(OldReportQueries.LEFT_JOIN_COUNT_STAR)).contains(entry(&quot;Dr Khan&quot;, 1L));
+    }
+
+    @Test
+    void theReportCountsEveryDoctorCorrectly() {
+        Map&lt;String, Long&gt; now = report.between(LocalDate.parse(FROM), LocalDate.parse(TO), 0).stream()
+                .collect(Collectors.toMap(DoctorLoadReport.Row::name, DoctorLoadReport.Row::appointments));
+        assertThat(now).containsExactlyInAnyOrderEntriesOf(Map.of(&quot;Dr Mehta&quot;, 3L, &quot;Dr Iyer&quot;, 2L, &quot;Dr Rao&quot;, 1L, &quot;Dr Khan&quot;, 0L));
+    }
+}</code></pre><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+/** The report&#x27;s SQL before the fix, kept only in tests: the first version, and two &quot;fixes&quot; that were not enough. */
+final class OldReportQueries {
+
+    private OldReportQueries() {
+    }
+
+    /** Version 1: INNER JOIN, follow-ups joined row by row, count(*). */
+    static final String INNER_JOIN = &quot;&quot;&quot;
+            SELECT d.name, count(*) AS appointments
+              FROM doctors d
+              JOIN appointments a ON a.doctor_id = d.id
+              LEFT JOIN follow_ups f ON f.appointment_id = a.id
+             WHERE d.active AND a.starts_at &gt;= :from AND a.starts_at &lt; :to AND a.status &lt;&gt; &#x27;CANCELLED&#x27;
+             GROUP BY d.name&quot;&quot;&quot;;
+
+    /** &quot;Fix&quot; 1: LEFT JOIN, but the conditions on appointments are still in WHERE. */
+    static final String LEFT_JOIN_FILTERED_IN_WHERE = &quot;&quot;&quot;
+            SELECT d.name, count(a.id) AS appointments
+              FROM doctors d
+              LEFT JOIN appointments a ON a.doctor_id = d.id
+             WHERE d.active AND a.starts_at &gt;= :from AND a.starts_at &lt; :to AND a.status &lt;&gt; &#x27;CANCELLED&#x27;
+             GROUP BY d.name&quot;&quot;&quot;;
+
+    /** &quot;Fix&quot; 2: conditions moved to ON, but count(*) counts the empty row a LEFT JOIN makes for a doctor with none. */
+    static final String LEFT_JOIN_COUNT_STAR = &quot;&quot;&quot;
+            SELECT d.name, count(*) AS appointments
+              FROM doctors d
+              LEFT JOIN appointments a ON a.doctor_id = d.id
+                    AND a.starts_at &gt;= :from AND a.starts_at &lt; :to AND a.status &lt;&gt; &#x27;CANCELLED&#x27;
+             WHERE d.active
+             GROUP BY d.name&quot;&quot;&quot;;
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080; Flyway loads the demo week
+./mvnw test                 # all 11 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>See a LEFT JOIN's empty row for yourself:</p>
+<pre class="code"><code class="language-bash">docker compose exec postgres psql -U mediqo -d mediqo -c &quot;SELECT d.name, a.id AS appointment FROM doctors d LEFT JOIN appointments a ON a.doctor_id = d.id WHERE d.id = 4&quot;
+docker compose exec postgres psql -U mediqo -d mediqo -c &quot;SELECT count(*), count(a.id) FROM doctors d LEFT JOIN appointments a ON a.doctor_id = d.id WHERE d.id = 4&quot;</code></pre>
+<p>One row with an empty appointment; <code>count(*)</code> is 1, <code>count(a.id)</code> is 0.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>A doctor disappears from a LEFT JOIN report</td><td>A condition on the right table is in WHERE.</td><td>Move it into the ON clause.</td></tr><tr><td>A doctor with nothing shows 1</td><td><code>count(*)</code> counts the empty row.</td><td>Count a column of the right table: <code>count(a.id)</code>.</td></tr><tr><td>Totals are too high</td><td>A one-to-many join repeats rows before counting.</td><td>Aggregate the many side first, or count DISTINCT ids.</td></tr><tr><td><code>null</code> instead of 0</td><td><code>sum</code> of no rows is NULL.</td><td><code>coalesce(sum(…), 0)</code>.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/041-clinic-appointments-report-with-joins/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/mediqo/reports/
+│   ├── ReportController.java   ├── DoctorLoadReport.java   └── ReportsApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__doctors_appointments_follow_ups.sql, V2__demo_week.sql
+├── src/test/java/com/mediqo/reports/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the database behind it.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">ReportController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">DoctorLoadReport.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">V1__doctors_appointments_follow_ups.sql</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">V2__demo_week.sql</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">compose.yaml</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">ReportsApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/mediqo/reports/ReportController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Reads and checks the date range, returns the report.</dd><dt>Why</dt><dd>Range rules are checked before the database is asked.</dd><dt>Without it</dt><dd>A year-long report that scans every appointment.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+
+@RestController
+class ReportController {
+
+    /** Demo rule: one report covers at most 92 days (a quarter). */
+    static final int MAX_DAYS = 92;
+
+    record DoctorLoad(LocalDate from, LocalDate to, List&lt;DoctorLoadReport.Row&gt; doctors) {
+    }
+
+    private final DoctorLoadReport report;
+
+    ReportController(DoctorLoadReport report) {
+        this.report = report;
+    }
+
+    @GetMapping(&quot;/reports/doctor-load&quot;)
+    DoctorLoad doctorLoad(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                          @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+                          @RequestParam(defaultValue = &quot;0&quot;) @Min(0) @Max(1000) int minAppointments) {
+        if (to.isBefore(from)) {
+            throw problem(&quot;to is before from.&quot;);
+        }
+        if (ChronoUnit.DAYS.between(from, to) + 1 &gt; MAX_DAYS) {
+            throw problem(&quot;A report covers at most &quot; + MAX_DAYS + &quot; days.&quot;);
+        }
+        return new DoctorLoad(from, to, report.between(from, to, minAppointments));
+    }
+
+    private static ErrorResponseException problem(String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
+        p.setTitle(&quot;Invalid date range&quot;);
+        return new ErrorResponseException(HttpStatus.BAD_REQUEST, p, null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/mediqo/reports/DoctorLoadReport.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The report as one SQL query with <code>JdbcClient</code>.</dd><dt>Why</dt><dd>LEFT JOIN with conditions in ON, follow-ups pre-counted, <code>count(a.id)</code>, <code>FILTER</code>, <code>coalesce</code>.</dd><dt>Without it</dt><dd>The trap and its two half-fixes.</dd></dl><ul><li><code>count(a.id) FILTER (WHERE …)</code> counts a subset in the same pass.</li><li>The subquery turns follow-ups into one row per appointment before the join, so nothing repeats.</li><li>Columns map to the record by name: <code>doctor_id</code> becomes <code>doctorId</code>.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
+
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.util.List;
+
+/**
+ * Appointments per active doctor in a range of India days, every doctor included. Four details make it right:
+ * LEFT JOIN keeps doctors with no appointments; the date and status conditions sit in the ON clause, because in
+ * WHERE they would throw those doctors out again; count(a.id) counts appointments, where count(*) would count the
+ * empty row a LEFT JOIN makes; and follow-ups are counted per appointment first, so joining them cannot repeat rows.
+ */
+@Repository
+class DoctorLoadReport {
+
+    static final ZoneId INDIA = ZoneId.of(&quot;Asia/Kolkata&quot;);
+
+    record Row(long doctorId, String name, String speciality, long appointments, long completed, long noShows,
+               long followUps, long revenuePaise) {
+    }
+
+    private static final String SQL = &quot;&quot;&quot;
+            SELECT d.id AS doctor_id, d.name, d.speciality,
+                   count(a.id)                                                  AS appointments,
+                   count(a.id) FILTER (WHERE a.status = &#x27;COMPLETED&#x27;)            AS completed,
+                   count(a.id) FILTER (WHERE a.status = &#x27;NO_SHOW&#x27;)              AS no_shows,
+                   coalesce(sum(f.follow_ups), 0)                               AS follow_ups,
+                   coalesce(sum(a.fee_paise) FILTER (WHERE a.status = &#x27;COMPLETED&#x27;), 0) AS revenue_paise
+              FROM doctors d
+              LEFT JOIN appointments a
+                     ON a.doctor_id = d.id
+                    AND a.starts_at &gt;= :from AND a.starts_at &lt; :to
+                    AND a.status &lt;&gt; &#x27;CANCELLED&#x27;
+              LEFT JOIN (SELECT appointment_id, count(*) AS follow_ups FROM follow_ups GROUP BY appointment_id) f
+                     ON f.appointment_id = a.id
+             WHERE d.active
+             GROUP BY d.id, d.name, d.speciality
+            HAVING count(a.id) &gt;= :min
+             ORDER BY appointments DESC, d.name&quot;&quot;&quot;;
+
+    private final JdbcClient jdbc;
+
+    DoctorLoadReport(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    /** from and to are both included, as India days: midnight at the start of from to midnight after to. */
+    List&lt;Row&gt; between(LocalDate from, LocalDate to, int minAppointments) {
+        OffsetDateTime start = from.atStartOfDay(INDIA).toOffsetDateTime();
+        OffsetDateTime end = to.plusDays(1).atStartOfDay(INDIA).toOffsetDateTime();
+        return jdbc.sql(SQL).param(&quot;from&quot;, start).param(&quot;to&quot;, end).param(&quot;min&quot;, minAppointments).query(Row.class).list();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/resources/db/migration/V1__doctors_appointments_follow_ups.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Three tables, with named constraints and an index on doctor and time.</dd><dt>Why</dt><dd>The index serves "this doctor's appointments in this range".</dd><dt>Without it</dt><dd>A full scan of appointments for every doctor.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">CREATE TABLE doctors (
+    id         BIGINT       PRIMARY KEY,
+    name       VARCHAR(80)  NOT NULL,
+    speciality VARCHAR(40)  NOT NULL,
+    active     BOOLEAN      NOT NULL DEFAULT true
+);
+
+CREATE TABLE appointments (
+    id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    doctor_id    BIGINT      NOT NULL,
+    patient_name VARCHAR(80) NOT NULL,
+    starts_at    TIMESTAMPTZ NOT NULL,
+    status       VARCHAR(10) NOT NULL,
+    fee_paise    BIGINT      NOT NULL,
+    CONSTRAINT appointments_doctor_fk    FOREIGN KEY (doctor_id) REFERENCES doctors (id),
+    CONSTRAINT appointments_status_known CHECK (status IN (&#x27;BOOKED&#x27;, &#x27;COMPLETED&#x27;, &#x27;CANCELLED&#x27;, &#x27;NO_SHOW&#x27;)),
+    CONSTRAINT appointments_fee_not_negative CHECK (fee_paise &gt;= 0)
+);
+CREATE INDEX appointments_doctor_time ON appointments (doctor_id, starts_at);
+
+-- An appointment can lead to several follow-ups (a test next week, a review next month): one-to-many.
+CREATE TABLE follow_ups (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    appointment_id BIGINT NOT NULL,
+    due_on         DATE   NOT NULL,
+    reason         VARCHAR(80) NOT NULL,
+    CONSTRAINT follow_ups_appointment_fk FOREIGN KEY (appointment_id) REFERENCES appointments (id)
+);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_week.sql</p><div class="notes"><p>The demo week, with every edge the tests need: a doctor with none, a retired doctor, follow-ups, a cancellation, and appointments at both ends of Sunday night.</p></div><div class="src"><pre class="code"><code class="language-sql">-- Demo data: the week of 5 to 11 October 2026 (India time). Doctors and patients are fictional.
+INSERT INTO doctors (id, name, speciality, active) VALUES
+    (1, &#x27;Dr Mehta&#x27;, &#x27;Cardiology&#x27;, true),
+    (2, &#x27;Dr Iyer&#x27;, &#x27;Dermatology&#x27;, true),
+    (3, &#x27;Dr Rao&#x27;, &#x27;Paediatrics&#x27;, true),
+    (4, &#x27;Dr Khan&#x27;, &#x27;Orthopaedics&#x27;, true),     -- joined this week: no appointments yet
+    (5, &#x27;Dr Das&#x27;, &#x27;Cardiology&#x27;, false);       -- retired: not in the report
+
+INSERT INTO appointments (doctor_id, patient_name, starts_at, status, fee_paise) VALUES
+    (1, &#x27;Asha Verma&#x27;,  TIMESTAMPTZ &#x27;2026-10-05 10:00 Asia/Kolkata&#x27;, &#x27;COMPLETED&#x27;, 80000),   -- id 1: two follow-ups
+    (1, &#x27;Ravi Iyer&#x27;,   TIMESTAMPTZ &#x27;2026-10-06 11:00 Asia/Kolkata&#x27;, &#x27;COMPLETED&#x27;, 80000),   -- id 2: one follow-up
+    (1, &#x27;Meena Rao&#x27;,   TIMESTAMPTZ &#x27;2026-10-07 12:00 Asia/Kolkata&#x27;, &#x27;NO_SHOW&#x27;, 80000),
+    (1, &#x27;Kabir Shah&#x27;,  TIMESTAMPTZ &#x27;2026-10-08 09:30 Asia/Kolkata&#x27;, &#x27;CANCELLED&#x27;, 80000),
+    (2, &#x27;Fatima Ali&#x27;,  TIMESTAMPTZ &#x27;2026-10-05 15:00 Asia/Kolkata&#x27;, &#x27;COMPLETED&#x27;, 60000),
+    (2, &#x27;John Dsouza&#x27;, TIMESTAMPTZ &#x27;2026-10-11 23:30 Asia/Kolkata&#x27;, &#x27;BOOKED&#x27;, 60000),      -- Sunday night: still this week in India
+    (3, &#x27;Baby Anaya&#x27;,  TIMESTAMPTZ &#x27;2026-10-09 10:00 Asia/Kolkata&#x27;, &#x27;COMPLETED&#x27;, 50000),
+    (3, &#x27;Baby Ivaan&#x27;,  TIMESTAMPTZ &#x27;2026-10-12 00:15 Asia/Kolkata&#x27;, &#x27;BOOKED&#x27;, 50000),      -- Monday: next week
+    (5, &#x27;Old Patient&#x27;, TIMESTAMPTZ &#x27;2026-10-06 10:00 Asia/Kolkata&#x27;, &#x27;COMPLETED&#x27;, 70000);
+
+INSERT INTO follow_ups (appointment_id, due_on, reason) VALUES
+    (1, DATE &#x27;2026-10-12&#x27;, &#x27;ECG review&#x27;),
+    (1, DATE &#x27;2026-11-05&#x27;, &#x27;Blood test&#x27;),
+    (2, DATE &#x27;2026-10-20&#x27;, &#x27;BP check&#x27;);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>The database.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: mediqo-reports
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/mediqo
+    username: mediqo
+    password: mediqo</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: mediqo
+      POSTGRES_USER: mediqo
+      POSTGRES_PASSWORD: mediqo
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U mediqo -d mediqo&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/mediqo/reports/ReportsApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class ReportsApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(ReportsApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, and an empty range</td><td><code>DoctorLoadContractTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>InnerJoinTrapTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>ReportDatabaseTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">A report has nothing to be "not found": an empty range is a valid answer with every doctor at zero, and that is what the contract tests check.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.mediqo.reports.InnerJoinTrapTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.mediqo.reports.ReportDatabaseTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.mediqo.reports.DoctorLoadContractTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">InnerJoinTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">DoctorLoadContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">ReportDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">OldReportQueries.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/mediqo/reports/InnerJoinTrapTest.java</p><div class="notes"><p>Written first: the old SQL and its two half-fixes, then the report.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
+
+/** The first test written for this station: the old SQL against the demo week, then the two half-fixes. */
+class InnerJoinTrapTest extends ApiTest {
+
+    Map&lt;String, Long&gt; run(String sql) {
+        OffsetDateTime from = LocalDate.parse(FROM).atStartOfDay(DoctorLoadReport.INDIA).toOffsetDateTime();
+        OffsetDateTime to = LocalDate.parse(TO).plusDays(1).atStartOfDay(DoctorLoadReport.INDIA).toOffsetDateTime();
+        return jdbc.sql(sql).param(&quot;from&quot;, from).param(&quot;to&quot;, to)
+                .query((rs, n) -&gt; Map.entry(rs.getString(&quot;name&quot;), rs.getLong(&quot;appointments&quot;))).list().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    @Test
+    void theOldReportHidesDrKhanAndCountsDrMehtasFollowUpsAsAppointments() {
+        Map&lt;String, Long&gt; old = run(OldReportQueries.INNER_JOIN);
+        assertThat(old).doesNotContainKey(&quot;Dr Khan&quot;);                // INNER JOIN: no appointments, no row
+        assertThat(old).contains(entry(&quot;Dr Mehta&quot;, 4L));             // 3 appointments; the one with 2 follow-ups counted twice
+    }
+
+    @Test
+    void aLeftJoinWithTheDateInWhereHidesHimAgain() {
+        assertThat(run(OldReportQueries.LEFT_JOIN_FILTERED_IN_WHERE)).doesNotContainKey(&quot;Dr Khan&quot;);   // NULL &gt;= date is not true
+    }
+
+    @Test
+    void aLeftJoinWithCountStarGivesHimAnAppointmentHeNeverHad() {
+        assertThat(run(OldReportQueries.LEFT_JOIN_COUNT_STAR)).contains(entry(&quot;Dr Khan&quot;, 1L));
+    }
+
+    @Test
+    void theReportCountsEveryDoctorCorrectly() {
+        Map&lt;String, Long&gt; now = report.between(LocalDate.parse(FROM), LocalDate.parse(TO), 0).stream()
+                .collect(Collectors.toMap(DoctorLoadReport.Row::name, DoctorLoadReport.Row::appointments));
+        assertThat(now).containsExactlyInAnyOrderEntriesOf(Map.of(&quot;Dr Mehta&quot;, 3L, &quot;Dr Iyer&quot;, 2L, &quot;Dr Rao&quot;, 1L, &quot;Dr Khan&quot;, 0L));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/mediqo/reports/DoctorLoadContractTest.java</p><div class="notes"><p>The demo week, HAVING, the ends of a day, an empty week, and bad ranges.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.test.json.JsonCompareMode;
+
+import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP contract on the demo week. */
+class DoctorLoadContractTest extends ApiTest {
+
+    @Test
+    void theWeekShowsEveryActiveDoctorBusiestFirst() throws Exception {
+        mvc.perform(get(&quot;/reports/doctor-load&quot;).param(&quot;from&quot;, FROM).param(&quot;to&quot;, TO)).andExpect(status().isOk())
+                .andExpect(content().json(&quot;&quot;&quot;
+                        {&quot;from&quot;:&quot;2026-10-05&quot;,&quot;to&quot;:&quot;2026-10-11&quot;,&quot;doctors&quot;:[
+                          {&quot;doctorId&quot;:1,&quot;name&quot;:&quot;Dr Mehta&quot;,&quot;speciality&quot;:&quot;Cardiology&quot;,&quot;appointments&quot;:3,&quot;completed&quot;:2,&quot;noShows&quot;:1,&quot;followUps&quot;:3,&quot;revenuePaise&quot;:160000},
+                          {&quot;doctorId&quot;:2,&quot;name&quot;:&quot;Dr Iyer&quot;,&quot;speciality&quot;:&quot;Dermatology&quot;,&quot;appointments&quot;:2,&quot;completed&quot;:1,&quot;noShows&quot;:0,&quot;followUps&quot;:0,&quot;revenuePaise&quot;:60000},
+                          {&quot;doctorId&quot;:3,&quot;name&quot;:&quot;Dr Rao&quot;,&quot;speciality&quot;:&quot;Paediatrics&quot;,&quot;appointments&quot;:1,&quot;completed&quot;:1,&quot;noShows&quot;:0,&quot;followUps&quot;:0,&quot;revenuePaise&quot;:50000},
+                          {&quot;doctorId&quot;:4,&quot;name&quot;:&quot;Dr Khan&quot;,&quot;speciality&quot;:&quot;Orthopaedics&quot;,&quot;appointments&quot;:0,&quot;completed&quot;:0,&quot;noShows&quot;:0,&quot;followUps&quot;:0,&quot;revenuePaise&quot;:0}]}&quot;&quot;&quot;,
+                        JsonCompareMode.LENIENT));   // every listed value checked; new fields may be added
+    }
+
+    @Test
+    void minAppointmentsFiltersAfterCounting() throws Exception {
+        mvc.perform(get(&quot;/reports/doctor-load&quot;).param(&quot;from&quot;, FROM).param(&quot;to&quot;, TO).param(&quot;minAppointments&quot;, &quot;2&quot;))
+                .andExpect(jsonPath(&quot;$.doctors[*].name&quot;, contains(&quot;Dr Mehta&quot;, &quot;Dr Iyer&quot;)));
+    }
+
+    @Test
+    void theDaysAreIndiaDaysWithBothEndsIncluded() throws Exception {
+        // Dr Iyer&#x27;s Sunday 23:30 appointment is in; Dr Rao&#x27;s Monday 00:15 one is not.
+        mvc.perform(get(&quot;/reports/doctor-load&quot;).param(&quot;from&quot;, &quot;2026-10-11&quot;).param(&quot;to&quot;, &quot;2026-10-11&quot;))
+                .andExpect(jsonPath(&quot;$.doctors[?(@.name == &#x27;Dr Iyer&#x27;)].appointments&quot;, contains(1)))
+                .andExpect(jsonPath(&quot;$.doctors[?(@.name == &#x27;Dr Rao&#x27;)].appointments&quot;, contains(0)));
+    }
+
+    @Test
+    void aWeekWithNoAppointmentsListsEveryoneAtZero() throws Exception {
+        mvc.perform(get(&quot;/reports/doctor-load&quot;).param(&quot;from&quot;, &quot;2026-01-05&quot;).param(&quot;to&quot;, &quot;2026-01-11&quot;))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.doctors.length()&quot;).value(4))
+                .andExpect(jsonPath(&quot;$.doctors[*].revenuePaise&quot;, contains(0, 0, 0, 0)));
+    }
+
+    @Test
+    void badRangesAre400() throws Exception {
+        mvc.perform(get(&quot;/reports/doctor-load&quot;).param(&quot;from&quot;, TO).param(&quot;to&quot;, FROM)).andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+        mvc.perform(get(&quot;/reports/doctor-load&quot;).param(&quot;from&quot;, &quot;2026-01-01&quot;).param(&quot;to&quot;, &quot;2026-12-31&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/reports/doctor-load&quot;).param(&quot;from&quot;, FROM)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/reports/doctor-load&quot;).param(&quot;from&quot;, &quot;05-10-2026&quot;).param(&quot;to&quot;, TO)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/reports/doctor-load&quot;).param(&quot;from&quot;, FROM).param(&quot;to&quot;, TO).param(&quot;minAppointments&quot;, &quot;-1&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/mediqo/reports/ReportDatabaseTest.java</p><div class="notes"><p>Named constraints, and a rolled-back import.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.time.LocalDate;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The data&#x27;s rules with Java bypassed, and a rollback that leaves the report as it was. */
+class ReportDatabaseTest extends ApiTest {
+
+    @Autowired
+    TransactionTemplate transaction;
+
+    void appointment(long doctor, String status, long fee) {
+        jdbc.sql(&quot;INSERT INTO appointments (doctor_id, patient_name, starts_at, status, fee_paise) VALUES (?, &#x27;Test&#x27;, TIMESTAMPTZ &#x27;2026-10-07 10:00 Asia/Kolkata&#x27;, ?, ?)&quot;)
+                .params(doctor, status, fee).update();
+    }
+
+    @Test
+    void namedConstraintsHoldWithoutJava() {
+        assertThatThrownBy(() -&gt; appointment(99, &quot;BOOKED&quot;, 100)).hasMessageContaining(&quot;appointments_doctor_fk&quot;);
+        assertThatThrownBy(() -&gt; appointment(4, &quot;MAYBE&quot;, 100)).hasMessageContaining(&quot;appointments_status_known&quot;);
+        assertThatThrownBy(() -&gt; appointment(4, &quot;BOOKED&quot;, -1)).hasMessageContaining(&quot;appointments_fee_not_negative&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO follow_ups (appointment_id, due_on, reason) VALUES (999, CURRENT_DATE, &#x27;x&#x27;)&quot;).update())
+                .hasMessageContaining(&quot;follow_ups_appointment_fk&quot;);
+    }
+
+    @Test
+    void aRolledBackDayOfAppointmentsNeverReachesTheReport() {
+        assertThatThrownBy(() -&gt; transaction.executeWithoutResult(status -&gt; {
+            appointment(4, &quot;COMPLETED&quot;, 90000);
+            appointment(4, &quot;COMPLETED&quot;, -90000);   // refused: the whole day&#x27;s import is rolled back
+        })).hasMessageContaining(&quot;appointments_fee_not_negative&quot;);
+        assertThat(report.between(LocalDate.parse(FROM), LocalDate.parse(TO), 0))
+                .filteredOn(r -&gt; r.name().equals(&quot;Dr Khan&quot;)).singleElement()
+                .extracting(DoctorLoadReport.Row::appointments).isEqualTo(0L);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/mediqo/reports/OldReportQueries.java</p><div class="notes"><p>The old SQL, kept only in tests.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+/** The report&#x27;s SQL before the fix, kept only in tests: the first version, and two &quot;fixes&quot; that were not enough. */
+final class OldReportQueries {
+
+    private OldReportQueries() {
+    }
+
+    /** Version 1: INNER JOIN, follow-ups joined row by row, count(*). */
+    static final String INNER_JOIN = &quot;&quot;&quot;
+            SELECT d.name, count(*) AS appointments
+              FROM doctors d
+              JOIN appointments a ON a.doctor_id = d.id
+              LEFT JOIN follow_ups f ON f.appointment_id = a.id
+             WHERE d.active AND a.starts_at &gt;= :from AND a.starts_at &lt; :to AND a.status &lt;&gt; &#x27;CANCELLED&#x27;
+             GROUP BY d.name&quot;&quot;&quot;;
+
+    /** &quot;Fix&quot; 1: LEFT JOIN, but the conditions on appointments are still in WHERE. */
+    static final String LEFT_JOIN_FILTERED_IN_WHERE = &quot;&quot;&quot;
+            SELECT d.name, count(a.id) AS appointments
+              FROM doctors d
+              LEFT JOIN appointments a ON a.doctor_id = d.id
+             WHERE d.active AND a.starts_at &gt;= :from AND a.starts_at &lt; :to AND a.status &lt;&gt; &#x27;CANCELLED&#x27;
+             GROUP BY d.name&quot;&quot;&quot;;
+
+    /** &quot;Fix&quot; 2: conditions moved to ON, but count(*) counts the empty row a LEFT JOIN makes for a doctor with none. */
+    static final String LEFT_JOIN_COUNT_STAR = &quot;&quot;&quot;
+            SELECT d.name, count(*) AS appointments
+              FROM doctors d
+              LEFT JOIN appointments a ON a.doctor_id = d.id
+                    AND a.starts_at &gt;= :from AND a.starts_at &lt; :to AND a.status &lt;&gt; &#x27;CANCELLED&#x27;
+             WHERE d.active
+             GROUP BY d.name&quot;&quot;&quot;;
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/mediqo/reports/ApiTest.java</p><div class="notes"><p>Shared setup and what the demo week contains.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+
+/**
+ * Shared setup: the app on a real PostgreSQL with the demo week from the migrations (5 to 11 October 2026).
+ * Dr Mehta: 3 appointments that count (2 completed, 1 no-show), 3 follow-ups, plus 1 cancelled. Dr Iyer: 2.
+ * Dr Rao: 1 this week, 1 next. Dr Khan: none. Dr Das: retired.
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    static final String FROM = &quot;2026-10-05&quot;;
+    static final String TO = &quot;2026-10-11&quot;;
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+    @Autowired
+    DoctorLoadReport report;
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/mediqo/reports/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker. Joins, NULLs and aggregates must behave exactly as in production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/mediqo/reports/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=NoShowRateChallengeTest</code> (Docker must be running).</li>
+<li>Change the SQL until it passes, then run <code>./mvnw test</code> to check the other 11 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 13 tests pass (11 station tests and 2 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>No-show rate</h2><p>Add <code>noShowPercent</code>: no-shows as a rounded whole percentage of appointments. A doctor with no appointments has no rate (<code>null</code>), not 0% and not an error.</p><p><b>Done when:</b> the test in <code>NoShowRateChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li><code>nullif(count(a.id), 0)</code> turns a zero divisor into NULL, and anything divided by NULL is NULL.</li><li>Multiply by <code>100.0</code>, not <code>100</code>, or integer division drops the fraction first.</li></ul></details><p class="path">challenge/NoShowRateChallengeTest.java</p><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.nullValue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+
+/**
+ * Challenge 1: add &quot;noShowPercent&quot;: no-shows as a whole-number percentage of appointments, rounded. A doctor with no
+ * appointments has no rate at all (null), not 0% and not a division-by-zero error.
+ */
+class NoShowRateChallengeTest extends ApiTest {
+
+    @Test
+    void theRateIsRoundedAndMissingWhenThereIsNothingToDivide() throws Exception {
+        mvc.perform(get(&quot;/reports/doctor-load&quot;).param(&quot;from&quot;, FROM).param(&quot;to&quot;, TO))
+                .andExpect(jsonPath(&quot;$.doctors[*].name&quot;, contains(&quot;Dr Mehta&quot;, &quot;Dr Iyer&quot;, &quot;Dr Rao&quot;, &quot;Dr Khan&quot;)))
+                .andExpect(jsonPath(&quot;$.doctors[0].noShowPercent&quot;).value(33))
+                .andExpect(jsonPath(&quot;$.doctors[1].noShowPercent&quot;).value(0))
+                .andExpect(jsonPath(&quot;$.doctors[3].noShowPercent&quot;).value(nullValue()));
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/DoctorLoadReport.java</p><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
+
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.util.List;
+
+/**
+ * Appointments per active doctor in a range of India days, every doctor included. Four details make it right:
+ * LEFT JOIN keeps doctors with no appointments; the date and status conditions sit in the ON clause, because in
+ * WHERE they would throw those doctors out again; count(a.id) counts appointments, where count(*) would count the
+ * empty row a LEFT JOIN makes; and follow-ups are counted per appointment first, so joining them cannot repeat rows.
+ */
+@Repository
+class DoctorLoadReport {
+
+    static final ZoneId INDIA = ZoneId.of(&quot;Asia/Kolkata&quot;);
+
+    record Row(long doctorId, String name, String speciality, long appointments, long completed, long noShows,
+               long followUps, long revenuePaise, Integer noShowPercent) {
+    }
+
+    private static final String SQL = &quot;&quot;&quot;
+            SELECT d.id AS doctor_id, d.name, d.speciality,
+                   count(a.id)                                                  AS appointments,
+                   count(a.id) FILTER (WHERE a.status = &#x27;COMPLETED&#x27;)            AS completed,
+                   count(a.id) FILTER (WHERE a.status = &#x27;NO_SHOW&#x27;)              AS no_shows,
+                   coalesce(sum(f.follow_ups), 0)                               AS follow_ups,
+                   coalesce(sum(a.fee_paise) FILTER (WHERE a.status = &#x27;COMPLETED&#x27;), 0) AS revenue_paise,
+                   -- NULLIF turns &quot;divide by 0&quot; into &quot;divide by NULL&quot;, which is NULL: no appointments, no rate
+                   round(100.0 * count(a.id) FILTER (WHERE a.status = &#x27;NO_SHOW&#x27;) / nullif(count(a.id), 0))::int AS no_show_percent
+              FROM doctors d
+              LEFT JOIN appointments a
+                     ON a.doctor_id = d.id
+                    AND a.starts_at &gt;= :from AND a.starts_at &lt; :to
+                    AND a.status &lt;&gt; &#x27;CANCELLED&#x27;
+              LEFT JOIN (SELECT appointment_id, count(*) AS follow_ups FROM follow_ups GROUP BY appointment_id) f
+                     ON f.appointment_id = a.id
+             WHERE d.active
+             GROUP BY d.id, d.name, d.speciality
+            HAVING count(a.id) &gt;= :min
+             ORDER BY appointments DESC, d.name&quot;&quot;&quot;;
+
+    private final JdbcClient jdbc;
+
+    DoctorLoadReport(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    record SpecialityRow(String speciality, long doctors, long appointments) {
+    }
+
+    /** count(DISTINCT d.id): after the join, a doctor appears once per appointment. */
+    List&lt;SpecialityRow&gt; bySpeciality(LocalDate from, LocalDate to) {
+        return jdbc.sql(&quot;&quot;&quot;
+                        SELECT d.speciality, count(DISTINCT d.id) AS doctors, count(a.id) AS appointments
+                          FROM doctors d
+                          LEFT JOIN appointments a
+                                 ON a.doctor_id = d.id
+                                AND a.starts_at &gt;= :from AND a.starts_at &lt; :to
+                                AND a.status &lt;&gt; &#x27;CANCELLED&#x27;
+                         WHERE d.active
+                         GROUP BY d.speciality
+                         ORDER BY appointments DESC, d.speciality&quot;&quot;&quot;)
+                .param(&quot;from&quot;, from.atStartOfDay(INDIA).toOffsetDateTime())
+                .param(&quot;to&quot;, to.plusDays(1).atStartOfDay(INDIA).toOffsetDateTime())
+                .query(SpecialityRow.class).list();
+    }
+
+    /** from and to are both included, as India days: midnight at the start of from to midnight after to. */
+    List&lt;Row&gt; between(LocalDate from, LocalDate to, int minAppointments) {
+        OffsetDateTime start = from.atStartOfDay(INDIA).toOffsetDateTime();
+        OffsetDateTime end = to.plusDays(1).atStartOfDay(INDIA).toOffsetDateTime();
+        return jdbc.sql(SQL).param(&quot;from&quot;, start).param(&quot;to&quot;, end).param(&quot;min&quot;, minAppointments).query(Row.class).list();
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 25 minutes</p><h2>Load per speciality</h2><p>Add <code>GET /reports/speciality-load?from&amp;to</code>: per speciality, active doctors and appointments, busiest first, every speciality with an active doctor included.</p><p><b>Done when:</b> the test in <code>SpecialityLoadChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>After joining appointments, a doctor appears once per appointment: <code>count(DISTINCT d.id)</code>.</li><li>Keep the LEFT JOIN and the conditions in ON, as in the main report.</li></ul></details><p class="path">challenge/SpecialityLoadChallengeTest.java</p><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.test.json.JsonCompareMode;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: GET /reports/speciality-load?from&amp;to: per speciality, how many active doctors and how many
+ * appointments, busiest first, every speciality with an active doctor included. Counting doctors after joining
+ * appointments repeats each doctor once per appointment: count each doctor once.
+ */
+class SpecialityLoadChallengeTest extends ApiTest {
+
+    @Test
+    void eachSpecialityCountsItsDoctorsOnce() throws Exception {
+        mvc.perform(get(&quot;/reports/speciality-load&quot;).param(&quot;from&quot;, FROM).param(&quot;to&quot;, TO)).andExpect(status().isOk())
+                .andExpect(content().json(&quot;&quot;&quot;
+                        [{&quot;speciality&quot;:&quot;Cardiology&quot;,&quot;doctors&quot;:1,&quot;appointments&quot;:3},
+                         {&quot;speciality&quot;:&quot;Dermatology&quot;,&quot;doctors&quot;:1,&quot;appointments&quot;:2},
+                         {&quot;speciality&quot;:&quot;Paediatrics&quot;,&quot;doctors&quot;:1,&quot;appointments&quot;:1},
+                         {&quot;speciality&quot;:&quot;Orthopaedics&quot;,&quot;doctors&quot;:1,&quot;appointments&quot;:0}]&quot;&quot;&quot;, JsonCompareMode.STRICT));
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/DoctorLoadReport.java</p><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
+
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.util.List;
+
+/**
+ * Appointments per active doctor in a range of India days, every doctor included. Four details make it right:
+ * LEFT JOIN keeps doctors with no appointments; the date and status conditions sit in the ON clause, because in
+ * WHERE they would throw those doctors out again; count(a.id) counts appointments, where count(*) would count the
+ * empty row a LEFT JOIN makes; and follow-ups are counted per appointment first, so joining them cannot repeat rows.
+ */
+@Repository
+class DoctorLoadReport {
+
+    static final ZoneId INDIA = ZoneId.of(&quot;Asia/Kolkata&quot;);
+
+    record Row(long doctorId, String name, String speciality, long appointments, long completed, long noShows,
+               long followUps, long revenuePaise, Integer noShowPercent) {
+    }
+
+    private static final String SQL = &quot;&quot;&quot;
+            SELECT d.id AS doctor_id, d.name, d.speciality,
+                   count(a.id)                                                  AS appointments,
+                   count(a.id) FILTER (WHERE a.status = &#x27;COMPLETED&#x27;)            AS completed,
+                   count(a.id) FILTER (WHERE a.status = &#x27;NO_SHOW&#x27;)              AS no_shows,
+                   coalesce(sum(f.follow_ups), 0)                               AS follow_ups,
+                   coalesce(sum(a.fee_paise) FILTER (WHERE a.status = &#x27;COMPLETED&#x27;), 0) AS revenue_paise,
+                   -- NULLIF turns &quot;divide by 0&quot; into &quot;divide by NULL&quot;, which is NULL: no appointments, no rate
+                   round(100.0 * count(a.id) FILTER (WHERE a.status = &#x27;NO_SHOW&#x27;) / nullif(count(a.id), 0))::int AS no_show_percent
+              FROM doctors d
+              LEFT JOIN appointments a
+                     ON a.doctor_id = d.id
+                    AND a.starts_at &gt;= :from AND a.starts_at &lt; :to
+                    AND a.status &lt;&gt; &#x27;CANCELLED&#x27;
+              LEFT JOIN (SELECT appointment_id, count(*) AS follow_ups FROM follow_ups GROUP BY appointment_id) f
+                     ON f.appointment_id = a.id
+             WHERE d.active
+             GROUP BY d.id, d.name, d.speciality
+            HAVING count(a.id) &gt;= :min
+             ORDER BY appointments DESC, d.name&quot;&quot;&quot;;
+
+    private final JdbcClient jdbc;
+
+    DoctorLoadReport(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    record SpecialityRow(String speciality, long doctors, long appointments) {
+    }
+
+    /** count(DISTINCT d.id): after the join, a doctor appears once per appointment. */
+    List&lt;SpecialityRow&gt; bySpeciality(LocalDate from, LocalDate to) {
+        return jdbc.sql(&quot;&quot;&quot;
+                        SELECT d.speciality, count(DISTINCT d.id) AS doctors, count(a.id) AS appointments
+                          FROM doctors d
+                          LEFT JOIN appointments a
+                                 ON a.doctor_id = d.id
+                                AND a.starts_at &gt;= :from AND a.starts_at &lt; :to
+                                AND a.status &lt;&gt; &#x27;CANCELLED&#x27;
+                         WHERE d.active
+                         GROUP BY d.speciality
+                         ORDER BY appointments DESC, d.speciality&quot;&quot;&quot;)
+                .param(&quot;from&quot;, from.atStartOfDay(INDIA).toOffsetDateTime())
+                .param(&quot;to&quot;, to.plusDays(1).atStartOfDay(INDIA).toOffsetDateTime())
+                .query(SpecialityRow.class).list();
+    }
+
+    /** from and to are both included, as India days: midnight at the start of from to midnight after to. */
+    List&lt;Row&gt; between(LocalDate from, LocalDate to, int minAppointments) {
+        OffsetDateTime start = from.atStartOfDay(INDIA).toOffsetDateTime();
+        OffsetDateTime end = to.plusDays(1).atStartOfDay(INDIA).toOffsetDateTime();
+        return jdbc.sql(SQL).param(&quot;from&quot;, start).param(&quot;to&quot;, end).param(&quot;min&quot;, minAppointments).query(Row.class).list();
+    }
+}</code></pre></div><p class="path">challenge/solution/ReportController.java</p><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+
+@RestController
+class ReportController {
+
+    /** Demo rule: one report covers at most 92 days (a quarter). */
+    static final int MAX_DAYS = 92;
+
+    record DoctorLoad(LocalDate from, LocalDate to, List&lt;DoctorLoadReport.Row&gt; doctors) {
+    }
+
+    private final DoctorLoadReport report;
+
+    ReportController(DoctorLoadReport report) {
+        this.report = report;
+    }
+
+    @GetMapping(&quot;/reports/doctor-load&quot;)
+    DoctorLoad doctorLoad(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                          @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+                          @RequestParam(defaultValue = &quot;0&quot;) @Min(0) @Max(1000) int minAppointments) {
+        if (to.isBefore(from)) {
+            throw problem(&quot;to is before from.&quot;);
+        }
+        if (ChronoUnit.DAYS.between(from, to) + 1 &gt; MAX_DAYS) {
+            throw problem(&quot;A report covers at most &quot; + MAX_DAYS + &quot; days.&quot;);
+        }
+        return new DoctorLoad(from, to, report.between(from, to, minAppointments));
+    }
+
+    @GetMapping(&quot;/reports/speciality-load&quot;)
+    List&lt;DoctorLoadReport.SpecialityRow&gt; specialityLoad(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                                                        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        if (to.isBefore(from) || ChronoUnit.DAYS.between(from, to) + 1 &gt; MAX_DAYS) {
+            throw problem(&quot;from must not be after to, and a report covers at most &quot; + MAX_DAYS + &quot; days.&quot;);
+        }
+        return report.bySpeciality(from, to);
+    }
+
+    private static ErrorResponseException problem(String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
+        p.setTitle(&quot;Invalid date range&quot;);
+        return new ErrorResponseException(HttpStatus.BAD_REQUEST, p, null);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>A year, 200 clinics</h2>
+<p>Head office wants this report for any range up to a year, across 200 clinics with 3 crore appointments. Compare running the query on the main database, on a read replica, and from a daily summary table filled each night. What does each cost, how fresh is it, and how would you handle an appointment edited after its day was summarised?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, index</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write demo data with every edge: zero, retired, cancelled, follow-ups, both ends of a night.</li>
+<li>Write the trap test with the old SQL, then each half-fix.</li>
+<li>Write the report: LEFT JOIN, conditions in ON, pre-counted follow-ups, <code>count(a.id)</code>, <code>coalesce</code>.</li>
+<li>Check the whole response field by field.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>One SQL query with LEFT JOIN and FILTER</td><td>SQL to read carefully.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>INNER JOIN</td><td>Zero-rows disappear.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Joining follow-ups directly with <code>count(DISTINCT a.id)</code></td><td>Correct counts, but sums over the joined rows (fees) would still repeat.</td><td><span class="pill warn">Fragile</span></td></tr><tr><td>Load everything into Java and group there</td><td>Moves every row over the network; fine for a week, not for a year.</td><td><span class="pill warn">Small data only</span></td></tr><tr><td>A JPA entity graph</td><td>Many queries or huge joins for a summary.</td><td><span class="pill bad">Wrong tool for reports</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Table</th><th>Key and constraints</th><th>Why</th></tr></thead><tbody><tr><td><code>doctors</code></td><td>PK <code>id</code>; <code>active</code></td><td>Retired doctors stay for history but leave reports.</td></tr><tr><td><code>appointments</code></td><td>Identity PK. <code>appointments_doctor_fk</code>, <code>appointments_status_known</code>, <code>appointments_fee_not_negative</code>. Index <code>(doctor_id, starts_at)</code>.</td><td>The facts the report counts, with the index its join uses.</td></tr><tr><td><code>follow_ups</code></td><td>Identity PK. <code>follow_ups_appointment_fk</code>.</td><td>One-to-many from appointments: the source of the fan-out.</td></tr></tbody></table></div>
+<pre class="code"><code class="language-sql">CREATE TABLE doctors (
+    id         BIGINT       PRIMARY KEY,
+    name       VARCHAR(80)  NOT NULL,
+    speciality VARCHAR(40)  NOT NULL,
+    active     BOOLEAN      NOT NULL DEFAULT true
+);
+
+CREATE TABLE appointments (
+    id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    doctor_id    BIGINT      NOT NULL,
+    patient_name VARCHAR(80) NOT NULL,
+    starts_at    TIMESTAMPTZ NOT NULL,
+    status       VARCHAR(10) NOT NULL,
+    fee_paise    BIGINT      NOT NULL,
+    CONSTRAINT appointments_doctor_fk    FOREIGN KEY (doctor_id) REFERENCES doctors (id),
+    CONSTRAINT appointments_status_known CHECK (status IN (&#x27;BOOKED&#x27;, &#x27;COMPLETED&#x27;, &#x27;CANCELLED&#x27;, &#x27;NO_SHOW&#x27;)),
+    CONSTRAINT appointments_fee_not_negative CHECK (fee_paise &gt;= 0)
+);
+CREATE INDEX appointments_doctor_time ON appointments (doctor_id, starts_at);
+
+-- An appointment can lead to several follow-ups (a test next week, a review next month): one-to-many.
+CREATE TABLE follow_ups (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    appointment_id BIGINT NOT NULL,
+    due_on         DATE   NOT NULL,
+    reason         VARCHAR(80) NOT NULL,
+    CONSTRAINT follow_ups_appointment_fk FOREIGN KEY (appointment_id) REFERENCES appointments (id)
+);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Report load</dt><dd>Reports read many rows; run big ones on a read replica so they never slow down booking.</dd>
+<dt>Check with EXPLAIN</dt><dd><code>EXPLAIN ANALYZE</code> shows whether the <code>(doctor_id, starts_at)</code> index is used. Check before the data grows, not after.</dd>
+<dt>Time zones</dt><dd>Store instants; turn India days into a time range once, in one place.</dd>
+<dt>Reconciling</dt><dd>A report that disagrees with the billing system is usually a join problem: compare row counts before and after each join.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>INNER JOIN or LEFT JOIN?</summary><p>INNER keeps only matching rows. LEFT keeps every row of the left table, with NULLs where nothing matches. Use LEFT when &quot;none&quot; is a valid answer you must show.</p></details><details class="qa"><summary>Why does a condition in WHERE break a LEFT JOIN?</summary><p>WHERE runs after the join. For unmatched rows the right-side columns are NULL, and a comparison with NULL is not true, so WHERE removes exactly the rows the LEFT JOIN kept. Put such conditions in ON.</p></details><details class="qa"><summary>count(*) or count(column)?</summary><p>count(*) counts rows, including the NULL row a LEFT JOIN creates; count(column) counts non-NULL values. To count matches, count a column of the right table.</p></details><details class="qa"><summary>What is join fan-out?</summary><p>Joining a one-to-many relation repeats the &#x27;one&#x27; row for each &#x27;many&#x27;. Counts and sums over the &#x27;one&#x27; side then grow. Aggregate the many side first, or count DISTINCT.</p></details><details class="qa"><summary>WHERE or HAVING?</summary><p>WHERE filters rows before grouping; HAVING filters groups after aggregates are computed, such as &#x27;at least 2 appointments&#x27;.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 11 tests pass.</td><td>You predicted each half-fix's result before running it.</td></tr><tr><td>Joins</td><td>LEFT JOIN with conditions in ON.</td><td>You can explain fan-out with a two-row example.</td></tr><tr><td>NULL</td><td>count(column), coalesce.</td><td>NULLIF for safe division.</td></tr><tr><td>Data</td><td>Demo data covering every edge.</td><td>EXPLAIN shows the index in use.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This Foundations station has no flawed version to review. Use this checklist on any report query:</p>
+<ul class="rules">
+<li>Can a group have zero rows? Does the join keep it?</li>
+<li>Is any condition on the right side of a LEFT JOIN in WHERE?</li>
+<li>Does a one-to-many join run before a count or a sum?</li>
+<li>Can any aggregate return NULL to the client?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
