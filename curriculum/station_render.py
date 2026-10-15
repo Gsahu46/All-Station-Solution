@@ -34,7 +34,7 @@ def read(rel):
 
 def lang_of(name):
     return {"java": "java", "sql": "sql", "yaml": "yaml", "yml": "yaml", "xml": "xml", "json": "json",
-            "properties": "properties", "sh": "bash", "kt": "kotlin", "tf": "hcl"}[name.rsplit(".", 1)[1]]
+            "properties": "properties", "sh": "bash", "kt": "kotlin", "tf": "hcl"}.get(name.rsplit(".", 1)[1], "text")
 
 
 def run(name):
