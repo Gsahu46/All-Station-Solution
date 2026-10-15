@@ -1,0 +1,67 @@
+package com.billora.invoicing;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.ErrorResponseException;
+
+import java.util.List;
+
+@Service
+class InvoiceBook {
+
+    record LineInput(String description, int quantity, long unitPricePaise) {
+        InvoiceLine toLine() {
+            return new InvoiceLine(description, quantity, unitPricePaise);
+        }
+    }
+
+    record LineView(String description, int quantity, long unitPricePaise, long amountPaise) {
+    }
+
+    record InvoiceView(long id, String customerName, List<LineView> lines, long totalPaise) {
+        static InvoiceView of(Invoice invoice) {
+            return new InvoiceView(invoice.getId(), invoice.getCustomerName(),
+                    invoice.getLines().stream().map(l -> new LineView(l.getDescription(), l.getQuantity(), l.getUnitPricePaise(), l.amountPaise())).toList(),
+                    invoice.totalPaise());
+        }
+    }
+
+    private final InvoiceRepository invoices;
+
+    InvoiceBook(InvoiceRepository invoices) {
+        this.invoices = invoices;
+    }
+
+    @Transactional
+    InvoiceView create(String customerName, List<LineInput> lines) {
+        Invoice invoice = new Invoice(customerName);
+        lines.forEach(l -> invoice.addLine(l.toLine()));
+        return InvoiceView.of(invoices.save(invoice));   // cascade: the lines are inserted with it
+    }
+
+    /** Replaces every line. The old rows are deleted at commit (orphanRemoval); the invoice row itself is untouched. */
+    @Transactional
+    InvoiceView replaceLines(long id, List<LineInput> lines) {
+        Invoice invoice = find(id);
+        invoice.replaceLines(lines.stream().map(LineInput::toLine).toList());
+        return InvoiceView.of(invoice);
+    }
+
+    @Transactional(readOnly = true)
+    InvoiceView get(long id) {
+        return InvoiceView.of(find(id));
+    }
+
+    private Invoice find(long id) {
+        return invoices.findWithLinesById(id)
+                .orElseThrow(() -> problem(HttpStatus.NOT_FOUND, "Invoice not found", "No invoice " + id + "."));
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}
