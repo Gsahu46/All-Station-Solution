@@ -215,7 +215,7 @@ def main(station_dir, out_dir):
     page = (page.replace("%%TITLE%%", e(meta.get("page_title", title))).replace("%%HEADER%%", head_html)
                 .replace("%%BLUEPRINT%%", blueprint_block(meta.get("show_blueprint", False)))
                 .replace("%%TABS%%", tabbar).replace("%%PANELS%%", panels))
-    assert "%%" not in page, "unfilled placeholder in the template"
+    assert not re.search(r"%%[A-Z]+%%", page), "unfilled placeholder in the template"   # a literal %% in content is fine
     (out / "page.html").write_text(page)  # body content, for hosts that add their own document skeleton (claude.ai artifacts)
     (out / "page-standalone.html").write_text(  # a complete document, for any website or for opening from disk
         '<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'

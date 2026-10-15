@@ -1,0 +1,1390 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 036 · Medicine search with plain JDBC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 036</span>
+    <h1>Medicine search with plain JDBC</h1>
+    <p class="scenario">A pharmacy search built by string concatenation let one query dump every customer&#x27;s prescriptions.</p>
+    <p class="sim"><b>Simulation</b><span>The catalogue and prices are demo data, not Mediqo's. The prescriptions belong to fictional patients, with phone numbers that are not real; they exist so the trap test can show what the old search leaked.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Healthcare</li>
+      <li><b>Types</b>Database</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>028 Library book loans in layers</p>
+      <p><span class="eyebrow">Builds toward</span><br>037 Bus ticket booking in one transaction</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · plain JDBC: DataSource, PreparedStatement, ResultSet · HikariCP · PostgreSQL 17 · Flyway · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>A search box</strong><p>Customers type a medicine name. The code glues their text into the SQL: <code>… WHERE name ILIKE '%</code> + text + <code>%'</code>.</p></li><li><strong>Someone types SQL</strong><p>One search for <code>x' UNION SELECT patient_name, patient_phone, doctor FROM prescriptions --</code> returns every patient's name, phone and doctor. A customer searching for St. John's Wort gets an error, and after a busy hour searches stop working: every search kept a database connection and never gave it back.</p></li><li><strong>The fix</strong><p>Fixed SQL with a <code>?</code>, the text sent as a parameter, wildcards escaped, and everything closed by try-with-resources.</p></li></ol>
+<p class="lesson">User text is data. It goes into a parameter, never into the SQL itself.</p>
+
+<h2>What are we building?</h2>
+<p><code>GET /medicines?name=para</code> finds medicines whose name contains the text, in any letter case, with strength, form, price and whether a prescription is needed.</p>
+
+<h2>An everyday analogy</h2>
+<p>A pharmacist's order form with a box for the medicine name. Whatever is written in the box is looked up as a name. Nobody reads it as an instruction to open the patient files.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Check the text</strong>: 2 to 50 characters.</li>
+<li><strong>Borrow a connection</strong> from the pool.</li>
+<li><strong>Run fixed SQL</strong> with the text as a parameter; read each row into a <code>Medicine</code>.</li>
+<li><strong>Close everything</strong>: the connection goes back to the pool, whatever happened.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: the box allows only 50 characters. Is that enough to stop injection?</summary><p>No. <code>x' OR 1=1 --</code> is 12 characters and returned every medicine from the old code. Only parameters stop injection; length limits are for usability.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No ORM.</strong> Plain JDBC, every step visible; later stations use helpers.</li>
+<li><strong>No prescriptions endpoint.</strong> The table exists so the trap can show what leaked.</li>
+<li><strong>No fuzzy search.</strong> "Contains", not "sounds like".</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>JDBC</strong></td><td>Java's standard way to talk to a relational database.</td><td>A phone line to the database.</td><td><code>java.sql</code></td></tr><tr><td><strong>DataSource and Connection</strong></td><td>A DataSource hands out connections; a connection is one open line to the database.</td><td>A switchboard and one call.</td><td><code>dataSource.getConnection()</code></td></tr><tr><td><strong>Connection pool</strong></td><td>A few connections kept open and lent out, because opening one is slow.</td><td>Library books: borrow, then return.</td><td>HikariCP</td></tr><tr><td><strong>PreparedStatement</strong></td><td>SQL with <code>?</code> where values go; values are sent separately and never read as SQL.</td><td>A form with boxes: whatever you write in a box stays in the box.</td><td><code>MedicineSearch</code></td></tr><tr><td><strong>SQL injection</strong></td><td>User text that becomes part of the SQL and changes what the query does.</td><td>Writing "and also give me the safe keys" on a bank slip, and the clerk obeying.</td><td>the trap</td></tr><tr><td><strong>try-with-resources</strong></td><td>A <code>try</code> that closes what it opened, on every path.</td><td>A door that shuts itself.</td><td><code>try (Connection c = …)</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Mediqo</strong> (a fictional clinic and pharmacy chain) built its medicine search by string concatenation. One query dumped every customer's prescriptions.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> <code>name=PARA</code>, <b>then</b> the three paracetamol products, ordered by name, strength and form.</li>
+<li><b>Given</b> <code>name=john's</code>, <b>then</b> St. John's Wort, not an error.</li>
+<li><b>Given</b> an injection attempt such as <code>x' OR 1=1 --</code>, <b>then</b> an empty list: it is just text no medicine is named.</li>
+<li><b>Given</b> <code>%%</code> or <code>a_</code>, <b>then</b> they match those characters, not "anything".</li>
+<li><b>Given</b> 50 searches in a row, <b>then</b> no connection is left in use.</li>
+<li><b>Given</b> a missing, blank, 1-character or 51-character name, <b>then</b> <code>400</code>. No match is <code>200</code> with an empty list.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>No user text in SQL text: values only through <code>PreparedStatement</code> parameters.</li>
+<li>Every JDBC resource is closed with try-with-resources.</li>
+<li>Catalogue rules are database constraints too: positive price, known form, one row per product.</li>
+<li>Money in integer paise; search text lower-cased with <code>Locale.ROOT</code>.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Use <code>DataSource</code>, <code>Connection</code>, <code>PreparedStatement</code> and <code>ResultSet</code> directly.</li>
+<li>Explain and prevent SQL injection.</li>
+<li>Close resources on every path, and see what a leak does to a pool.</li>
+<li>Escape <code>LIKE</code> wildcards.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/medicines?name=para</code></td><td>Up to 20 medicines whose name contains the text, any letter case.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>Results, possibly an empty list</td></tr><tr><td><span class="pill warn">400</span></td><td>No name, or blank, shorter than 2 or longer than 50 characters</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 15 Oct 2026. Special characters are URL-encoded in the address (<code>%27</code> is an apostrophe, <code>%25</code> a percent sign). JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: <code>para</code></h3><p><b>Why:</b> a contains-search in any case; ordered by name, strength, form.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /medicines?name=para HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 371
+
+{
+  &quot;query&quot;: &quot;para&quot;,
+  &quot;results&quot;: [
+    {
+      &quot;id&quot;: 3,
+      &quot;name&quot;: &quot;Paracetamol&quot;,
+      &quot;strength&quot;: &quot;125 mg/5 ml&quot;,
+      &quot;form&quot;: &quot;SYRUP&quot;,
+      &quot;pricePaise&quot;: 4500,
+      &quot;prescriptionRequired&quot;: false
+    },
+    {
+      &quot;id&quot;: 1,
+      &quot;name&quot;: &quot;Paracetamol&quot;,
+      &quot;strength&quot;: &quot;500 mg&quot;,
+      &quot;form&quot;: &quot;TABLET&quot;,
+      &quot;pricePaise&quot;: 2000,
+      &quot;prescriptionRequired&quot;: false
+    },
+    {
+      &quot;id&quot;: 2,
+      &quot;name&quot;: &quot;Paracetamol&quot;,
+      &quot;strength&quot;: &quot;650 mg&quot;,
+      &quot;form&quot;: &quot;TABLET&quot;,
+      &quot;pricePaise&quot;: 3050,
+      &quot;prescriptionRequired&quot;: false
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 2: <code>john's</code></h3><p><b>Why:</b> the apostrophe is a character in a parameter, not the end of a SQL string.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /medicines?name=john%27s HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 150
+
+{
+  &quot;query&quot;: &quot;john&#x27;s&quot;,
+  &quot;results&quot;: [
+    {
+      &quot;id&quot;: 14,
+      &quot;name&quot;: &quot;St. John&#x27;s Wort&quot;,
+      &quot;strength&quot;: &quot;300 mg&quot;,
+      &quot;form&quot;: &quot;CAPSULE&quot;,
+      &quot;pricePaise&quot;: 45000,
+      &quot;prescriptionRequired&quot;: false
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 3: <code>x' OR 1=1 --</code></h3><p><b>Why:</b> no medicine is called that. On the old code, this returned every medicine.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /medicines?name=x%27%20OR%201%3D1%20-- HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 37
+
+{
+  &quot;query&quot;: &quot;x&#x27; OR 1=1 --&quot;,
+  &quot;results&quot;: []
+}</code></pre></div></div></section><section class="example"><h3>Case 4: <code>%%</code></h3><p><b>Why:</b> escaped, so it means two percent signs, not "everything".</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /medicines?name=%25%25 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 27
+
+{
+  &quot;query&quot;: &quot;%%&quot;,
+  &quot;results&quot;: []
+}</code></pre></div></div></section><section class="example"><h3>Case 5: <code>aspirin</code></h3><p><b>Why:</b> not in this catalogue: an empty list, not a 404.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /medicines?name=aspirin HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 32
+
+{
+  &quot;query&quot;: &quot;aspirin&quot;,
+  &quot;results&quot;: []
+}</code></pre></div></div></section><section class="example"><h3>Case 6: <code>p</code></h3><p><b>Why:</b> one character would match most of the catalogue: <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /medicines?name=p HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Validation failure&quot;,
+  &quot;instance&quot;: &quot;/medicines&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: no name</h3><p><b>Why:</b> <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /medicines HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Required parameter &#x27;name&#x27; is not present.&quot;,
+  &quot;instance&quot;: &quot;/medicines&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>UNION payload; <code>x' OR 1=1 --</code></td><td>The old code leaks; the real one returns nothing</td><td><code>ConcatenatedSqlTrapTest</code></td></tr><tr><td>An apostrophe</td><td>The old code fails; the real one finds the product</td><td><code>theOldSearchBreaksOnAnApostrophe</code>, <code>anApostropheIsJustACharacter</code></td></tr><tr><td>Connections after many searches</td><td>The old code empties the pool; the real one returns every connection</td><td><code>theOldSearchLeaksAConnectionEveryTime</code>, <code>theRealSearchGivesEveryConnectionBack</code></td></tr><tr><td><code>%%</code>, <code>a_</code></td><td>Literal characters</td><td><code>wildcardsAreLiteral</code>, <code>escapingKeepsWildcardsLiteral</code></td></tr><tr><td>Price 0, form POWDER, a duplicate product</td><td>Refused by named constraints</td><td><code>namedConstraintsRefuseBadRowsFromAnyWriter</code></td></tr><tr><td>A prescription for a missing medicine</td><td>Refused by the foreign key</td><td><code>aPrescriptionMustPointAtARealMedicine</code></td></tr><tr><td>Two inserts, the second bad, in one transaction</td><td>Neither is kept after rollback</td><td><code>aFailedStatementInATransactionLeavesNothingAfterRollback</code></td></tr><tr><td>The same with auto-commit on</td><td>The first is kept</td><td><code>withAutoCommitTheFirstRowStaysWhenTheSecondFails</code></td></tr><tr><td>Missing, blank, 1 or 51 characters</td><td><code>400</code></td><td><code>aMissingTooShortOrTooLongNameIs400</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Building SQL by string concatenation (SQL injection) and leaking connections.</p>
+<p>Every test here runs the old code against the real PostgreSQL. The UNION payload returns the three fictional patients' names, phones and doctors. A 12-character payload returns all 15 medicines. An apostrophe ends the SQL string early, and the driver refuses the query with "Unterminated string literal". On a pool of 3 connections, the old search keeps all 3, and the 4th search times out. The real search, given the same text, returns nothing to leak, and after 50 searches no connection is in use. While building, each fix was undone once. Removing the LIKE escaping turned 1 test red, not closing the connection 8, and putting the text into the SQL string 5.</p>
+</div>
+<pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+import com.zaxxer.hikari.HikariDataSource;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.sql.SQLException;
+import java.sql.SQLTransientConnectionException;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The first test written for this station: the old search, run against the real database. */
+class ConcatenatedSqlTrapTest extends ApiTest {
+
+    /** 12 characters: a length limit on the search box is not a defence. */
+    static final String ALWAYS_TRUE = &quot;x&#x27; OR 1=1 --&quot;;
+    static final String DUMP_PRESCRIPTIONS = &quot;x&#x27; UNION SELECT patient_name, patient_phone, doctor FROM prescriptions --&quot;;
+
+    @Autowired
+    MedicineSearch search;
+
+    /** A pool of its own, so the leak cannot starve the other tests: 3 connections, give up after 250 ms. */
+    HikariDataSource smallPool() {
+        HikariDataSource app = (HikariDataSource) dataSource;
+        HikariDataSource pool = new HikariDataSource();
+        pool.setJdbcUrl(app.getJdbcUrl());
+        pool.setUsername(app.getUsername());
+        pool.setPassword(app.getPassword());
+        pool.setMaximumPoolSize(3);
+        pool.setConnectionTimeout(250);
+        return pool;
+    }
+
+    @Test
+    void theOldSearchHandsOverEveryPrescription() throws SQLException {
+        try (HikariDataSource pool = smallPool()) {
+            assertThat(OldMedicineSearch.byName(pool, DUMP_PRESCRIPTIONS))
+                    .contains(&quot;Asha Verma | 90000 00001 | Dr Mehta&quot;, &quot;Ravi Iyer | 90000 00002 | Dr Rao&quot;, &quot;Fatima Shaikh | 90000 00003 | Dr Mehta&quot;);
+        }
+        assertThat(search.byName(DUMP_PRESCRIPTIONS)).isEmpty();   // just text to the fixed query: no medicine has that name
+    }
+
+    @Test
+    void aShortPayloadFitsTheLengthLimitAndStillGetsEverything() throws SQLException {
+        try (HikariDataSource pool = smallPool()) {
+            assertThat(OldMedicineSearch.byName(pool, ALWAYS_TRUE)).hasSize(15);   // every medicine, whatever was typed
+        }
+        assertThat(search.byName(ALWAYS_TRUE)).isEmpty();
+    }
+
+    @Test
+    void theOldSearchBreaksOnAnApostrophe() throws SQLException {
+        try (HikariDataSource pool = smallPool()) {
+            assertThatThrownBy(() -&gt; OldMedicineSearch.byName(pool, &quot;john&#x27;s&quot;)).isInstanceOf(SQLException.class).hasMessageContaining(&quot;Unterminated string literal&quot;);
+        }
+        assertThat(search.byName(&quot;john&#x27;s&quot;)).extracting(Medicine::name).containsExactly(&quot;St. John&#x27;s Wort&quot;);
+    }
+
+    @Test
+    void theOldSearchLeaksAConnectionEveryTime() throws SQLException {
+        try (HikariDataSource pool = smallPool()) {
+            for (int i = 0; i &lt; 3; i++) {
+                OldMedicineSearch.byName(pool, &quot;para&quot;);
+            }
+            assertThat(pool.getHikariPoolMXBean().getActiveConnections()).isEqualTo(3);   // all taken, none returned
+            assertThatThrownBy(() -&gt; OldMedicineSearch.byName(pool, &quot;para&quot;))
+                    .isInstanceOf(SQLTransientConnectionException.class).hasMessageContaining(&quot;request timed out&quot;);
+        }
+    }
+
+    @Test
+    void theRealSearchGivesEveryConnectionBack() throws Exception {
+        for (int i = 0; i &lt; 50; i++) {
+            search(&quot;para&quot;);
+        }
+        assertThat(((HikariDataSource) dataSource).getHikariPoolMXBean().getActiveConnections()).isZero();
+    }
+}</code></pre><pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+
+/** The search before the fix, kept only in tests. Two bugs: SQL built from the user&#x27;s text, and nothing closed. */
+final class OldMedicineSearch {
+
+    private OldMedicineSearch() {
+    }
+
+    static List&lt;String&gt; byName(DataSource dataSource, String name) throws SQLException {
+        Connection connection = dataSource.getConnection();   // never closed: the pool never gets it back
+        Statement statement = connection.createStatement();
+        ResultSet rows = statement.executeQuery(
+                &quot;SELECT name, strength, form FROM medicines WHERE name ILIKE &#x27;%&quot; + name + &quot;%&#x27; ORDER BY name&quot;);
+        List&lt;String&gt; found = new ArrayList&lt;&gt;();
+        while (rows.next()) {
+            found.add(rows.getString(1) + &quot; | &quot; + rows.getString(2) + &quot; | &quot; + rows.getString(3));
+        }
+        return found;
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080; Flyway creates and fills the tables
+./mvnw test                 # all 15 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Search, then look at the same rows in the database:</p>
+<pre class="code"><code class="language-bash">curl &quot;http://localhost:8080/medicines?name=cillin&quot;
+docker compose exec postgres psql -U mediqo -d mediqo -c &quot;SELECT name, strength, form FROM medicines WHERE lower(name) LIKE &#x27;%cillin%&#x27;&quot;</code></pre>
+<p>Then try to insert a free medicine directly, and read the constraint's name in the error:</p>
+<pre class="code"><code class="language-bash">docker compose exec postgres psql -U mediqo -d mediqo -c &quot;INSERT INTO medicines (name, strength, form, price_paise, prescription_required) VALUES (&#x27;Free pill&#x27;, &#x27;1 mg&#x27;, &#x27;TABLET&#x27;, 0, false)&quot;</code></pre>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>Could not find a valid Docker environment</code></td><td>Docker is not running. Testcontainers needs it.</td><td>Start Docker, then run the tests again.</td></tr><tr><td><code>Connection to localhost:5432 refused</code></td><td>PostgreSQL is not up yet.</td><td><code>docker compose up -d</code>, wait a few seconds, start the app again.</td></tr><tr><td><code>Connection is not available, request timed out after 30000ms</code></td><td>Connections are not returned to the pool: a leak.</td><td>Find the <code>getConnection()</code> outside a try-with-resources.</td></tr><tr><td><code>port 5432 is already allocated</code></td><td>A local PostgreSQL uses the port.</td><td>Stop it, or map <code>"5433:5432"</code> in compose.yaml and change the URL in application.yaml.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/036-medicine-search-with-plain-jdbc/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/mediqo/pharmacy/
+│   ├── MedicineController.java   ├── MedicineSearch.java
+│   ├── Medicine.java             └── PharmacyApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__medicines_and_prescriptions.sql, V2__demo_catalogue.sql
+├── src/test/java/com/mediqo/pharmacy/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the database behind it.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">MedicineController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">MedicineSearch.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">Medicine.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">V1__medicines_and_prescriptions.sql</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">V2__demo_catalogue.sql</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">compose.yaml</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">PharmacyApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/mediqo/pharmacy/MedicineController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Validates the text and returns the results.</dd><dt>Why</dt><dd>Validation at the edge keeps nonsense away from the database; it is not what stops injection.</dd><dt>Without it</dt><dd>Relying on a length limit or a blacklist of quotes to stop injection.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.sql.SQLException;
+import java.util.List;
+
+@RestController
+class MedicineController {
+
+    record SearchResult(String query, List&lt;Medicine&gt; results) {
+    }
+
+    private final MedicineSearch search;
+
+    MedicineController(MedicineSearch search) {
+        this.search = search;
+    }
+
+    /** Products whose name contains the text, any letter case, at most 20. No match is an empty list, not a 404. */
+    @GetMapping(&quot;/medicines&quot;)
+    SearchResult byName(@RequestParam @NotBlank @Size(min = 2, max = 50) String name) throws SQLException {
+        String text = name.strip();
+        return new SearchResult(text, search.byName(text));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/mediqo/pharmacy/MedicineSearch.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The search in plain JDBC.</dd><dt>Why</dt><dd>Fixed SQL, one parameter for the text, one for the limit; try-with-resources closes the connection, statement and result set.</dd><dt>Without it</dt><dd>The trap: text glued into SQL, and connections never returned.</dd></dl><ul><li><code>prepareStatement(SQL)</code> sends the SQL once; <code>setString</code> sends the value separately.</li><li><code>ESCAPE '\'</code> plus <code>escapeLike</code> make <code>%</code> and <code>_</code> literal.</li><li>Closing a pooled connection returns it to the pool; it does not close the socket.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+import org.springframework.stereotype.Repository;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * The search in plain JDBC, every step visible. The SQL text is fixed; the user&#x27;s words travel separately as a
+ * parameter, so the database never reads them as SQL. try-with-resources closes the result set, the statement and
+ * the connection (which returns it to the pool) on every path, including exceptions.
+ */
+@Repository
+class MedicineSearch {
+
+    static final int LIMIT = 20;
+
+    private static final String SQL = &quot;&quot;&quot;
+            SELECT id, name, strength, form, price_paise, prescription_required
+              FROM medicines
+             WHERE lower(name) LIKE ? ESCAPE &#x27;\\&#x27;
+             ORDER BY name, strength, form
+             LIMIT ?&quot;&quot;&quot;;
+
+    private final DataSource dataSource;
+
+    MedicineSearch(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    List&lt;Medicine&gt; byName(String text) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(SQL)) {
+            statement.setString(1, &quot;%&quot; + escapeLike(text.toLowerCase(Locale.ROOT)) + &quot;%&quot;);
+            statement.setInt(2, LIMIT);
+            try (ResultSet rows = statement.executeQuery()) {
+                List&lt;Medicine&gt; found = new ArrayList&lt;&gt;();
+                while (rows.next()) {
+                    found.add(new Medicine(rows.getLong(&quot;id&quot;), rows.getString(&quot;name&quot;), rows.getString(&quot;strength&quot;),
+                            rows.getString(&quot;form&quot;), rows.getLong(&quot;price_paise&quot;), rows.getBoolean(&quot;prescription_required&quot;)));
+                }
+                return found;
+            }
+        }
+    }
+
+    /** In LIKE, % and _ are wildcards. A user typing &quot;%&quot; means the character, not &quot;everything&quot;. */
+    static String escapeLike(String text) {
+        return text.replace(&quot;\\&quot;, &quot;\\\\&quot;).replace(&quot;%&quot;, &quot;\\%&quot;).replace(&quot;_&quot;, &quot;\\_&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/mediqo/pharmacy/Medicine.java</p><div class="notes"><p>One catalogue row.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+/** One product in the catalogue, as the search returns it. */
+record Medicine(long id, String name, String strength, String form, long pricePaise, boolean prescriptionRequired) {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/resources/db/migration/V1__medicines_and_prescriptions.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The two tables and their named constraints.</dd><dt>Why</dt><dd>Rules the database enforces for every writer, not just this app.</dd><dt>Without it</dt><dd>A script or another service inserts a free medicine, or a duplicate in different letter case.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">-- The catalogue the search reads, and the table the old search leaked: prescriptions hold patients&#x27; names and phones.
+CREATE TABLE medicines (
+    id                    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name                  VARCHAR(100) NOT NULL,
+    strength              VARCHAR(30)  NOT NULL,
+    form                  VARCHAR(20)  NOT NULL,
+    price_paise           BIGINT       NOT NULL,
+    prescription_required BOOLEAN      NOT NULL,
+    CONSTRAINT medicines_price_positive CHECK (price_paise &gt; 0),
+    CONSTRAINT medicines_form_known     CHECK (form IN (&#x27;TABLET&#x27;, &#x27;CAPSULE&#x27;, &#x27;SYRUP&#x27;, &#x27;CREAM&#x27;, &#x27;INJECTION&#x27;, &#x27;DROPS&#x27;))
+);
+
+-- One row per product: &quot;Paracetamol&quot; and &quot;PARACETAMOL&quot; 500 mg tablets are the same product.
+CREATE UNIQUE INDEX medicines_unique_product ON medicines (lower(name), strength, form);
+
+CREATE TABLE prescriptions (
+    id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    patient_name  VARCHAR(100) NOT NULL,
+    patient_phone VARCHAR(15)  NOT NULL,
+    medicine_id   BIGINT       NOT NULL,
+    doctor        VARCHAR(100) NOT NULL,
+    issued_on     DATE         NOT NULL,
+    CONSTRAINT prescriptions_medicine_fk FOREIGN KEY (medicine_id) REFERENCES medicines (id)
+);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_catalogue.sql</p><div class="notes"><p>15 demo medicines and 3 fictional prescriptions. <code>''</code> is an apostrophe inside a SQL string.</p></div><div class="src"><pre class="code"><code class="language-sql">-- Demo data: products and prices are illustrative, patients are fictional, phone numbers are not real.
+INSERT INTO medicines (name, strength, form, price_paise, prescription_required) VALUES
+    (&#x27;Paracetamol&#x27;, &#x27;500 mg&#x27;, &#x27;TABLET&#x27;, 2_000, false),
+    (&#x27;Paracetamol&#x27;, &#x27;650 mg&#x27;, &#x27;TABLET&#x27;, 3_050, false),
+    (&#x27;Paracetamol&#x27;, &#x27;125 mg/5 ml&#x27;, &#x27;SYRUP&#x27;, 4_500, false),
+    (&#x27;Amoxicillin&#x27;, &#x27;500 mg&#x27;, &#x27;CAPSULE&#x27;, 9_800, true),
+    (&#x27;Azithromycin&#x27;, &#x27;500 mg&#x27;, &#x27;TABLET&#x27;, 12_000, true),
+    (&#x27;Cetirizine&#x27;, &#x27;10 mg&#x27;, &#x27;TABLET&#x27;, 1_800, false),
+    (&#x27;Metformin&#x27;, &#x27;500 mg&#x27;, &#x27;TABLET&#x27;, 3_500, true),
+    (&#x27;Amlodipine&#x27;, &#x27;5 mg&#x27;, &#x27;TABLET&#x27;, 4_200, true),
+    (&#x27;Pantoprazole&#x27;, &#x27;40 mg&#x27;, &#x27;TABLET&#x27;, 9_500, true),
+    (&#x27;Ibuprofen&#x27;, &#x27;400 mg&#x27;, &#x27;TABLET&#x27;, 2_400, false),
+    (&#x27;Clotrimazole&#x27;, &#x27;1%&#x27;, &#x27;CREAM&#x27;, 8_900, false),
+    (&#x27;Moxifloxacin&#x27;, &#x27;0.5%&#x27;, &#x27;DROPS&#x27;, 18_500, true),
+    (&#x27;Insulin glargine&#x27;, &#x27;100 IU/ml&#x27;, &#x27;INJECTION&#x27;, 74_000, true),
+    (&#x27;St. John&#x27;&#x27;s Wort&#x27;, &#x27;300 mg&#x27;, &#x27;CAPSULE&#x27;, 45_000, false),
+    (&#x27;Oral rehydration salts&#x27;, &#x27;21 g&#x27;, &#x27;SYRUP&#x27;, 2_100, false);
+
+INSERT INTO prescriptions (patient_name, patient_phone, medicine_id, doctor, issued_on) VALUES
+    (&#x27;Asha Verma&#x27;, &#x27;90000 00001&#x27;, (SELECT id FROM medicines WHERE name = &#x27;Metformin&#x27;), &#x27;Dr Mehta&#x27;, DATE &#x27;2026-09-02&#x27;),
+    (&#x27;Ravi Iyer&#x27;, &#x27;90000 00002&#x27;, (SELECT id FROM medicines WHERE name = &#x27;Amlodipine&#x27;), &#x27;Dr Rao&#x27;, DATE &#x27;2026-09-11&#x27;),
+    (&#x27;Fatima Shaikh&#x27;, &#x27;90000 00003&#x27;, (SELECT id FROM medicines WHERE name = &#x27;Azithromycin&#x27;), &#x27;Dr Mehta&#x27;, DATE &#x27;2026-10-01&#x27;);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>The database the app connects to (compose.yaml starts it).</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: mediqo-pharmacy
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/mediqo
+    username: mediqo
+    password: mediqo</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app, with a healthcheck.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: mediqo
+      POSTGRES_USER: mediqo
+      POSTGRES_PASSWORD: mediqo
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U mediqo -d mediqo&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/java/com/mediqo/pharmacy/PharmacyApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class PharmacyApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(PharmacyApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found (empty)</td><td><code>MedicineContractTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>ConcatenatedSqlTrapTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>MedicineDatabaseTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.mediqo.pharmacy.MedicineContractTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.mediqo.pharmacy.ConcatenatedSqlTrapTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.mediqo.pharmacy.MedicineDatabaseTest
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">ConcatenatedSqlTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">MedicineContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">MedicineDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">OldMedicineSearch.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/mediqo/pharmacy/ConcatenatedSqlTrapTest.java</p><div class="notes"><p>Written first: the old search's leak of prescriptions, its error on an apostrophe, and its connection leak, on a pool of its own.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+import com.zaxxer.hikari.HikariDataSource;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.sql.SQLException;
+import java.sql.SQLTransientConnectionException;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The first test written for this station: the old search, run against the real database. */
+class ConcatenatedSqlTrapTest extends ApiTest {
+
+    /** 12 characters: a length limit on the search box is not a defence. */
+    static final String ALWAYS_TRUE = &quot;x&#x27; OR 1=1 --&quot;;
+    static final String DUMP_PRESCRIPTIONS = &quot;x&#x27; UNION SELECT patient_name, patient_phone, doctor FROM prescriptions --&quot;;
+
+    @Autowired
+    MedicineSearch search;
+
+    /** A pool of its own, so the leak cannot starve the other tests: 3 connections, give up after 250 ms. */
+    HikariDataSource smallPool() {
+        HikariDataSource app = (HikariDataSource) dataSource;
+        HikariDataSource pool = new HikariDataSource();
+        pool.setJdbcUrl(app.getJdbcUrl());
+        pool.setUsername(app.getUsername());
+        pool.setPassword(app.getPassword());
+        pool.setMaximumPoolSize(3);
+        pool.setConnectionTimeout(250);
+        return pool;
+    }
+
+    @Test
+    void theOldSearchHandsOverEveryPrescription() throws SQLException {
+        try (HikariDataSource pool = smallPool()) {
+            assertThat(OldMedicineSearch.byName(pool, DUMP_PRESCRIPTIONS))
+                    .contains(&quot;Asha Verma | 90000 00001 | Dr Mehta&quot;, &quot;Ravi Iyer | 90000 00002 | Dr Rao&quot;, &quot;Fatima Shaikh | 90000 00003 | Dr Mehta&quot;);
+        }
+        assertThat(search.byName(DUMP_PRESCRIPTIONS)).isEmpty();   // just text to the fixed query: no medicine has that name
+    }
+
+    @Test
+    void aShortPayloadFitsTheLengthLimitAndStillGetsEverything() throws SQLException {
+        try (HikariDataSource pool = smallPool()) {
+            assertThat(OldMedicineSearch.byName(pool, ALWAYS_TRUE)).hasSize(15);   // every medicine, whatever was typed
+        }
+        assertThat(search.byName(ALWAYS_TRUE)).isEmpty();
+    }
+
+    @Test
+    void theOldSearchBreaksOnAnApostrophe() throws SQLException {
+        try (HikariDataSource pool = smallPool()) {
+            assertThatThrownBy(() -&gt; OldMedicineSearch.byName(pool, &quot;john&#x27;s&quot;)).isInstanceOf(SQLException.class).hasMessageContaining(&quot;Unterminated string literal&quot;);
+        }
+        assertThat(search.byName(&quot;john&#x27;s&quot;)).extracting(Medicine::name).containsExactly(&quot;St. John&#x27;s Wort&quot;);
+    }
+
+    @Test
+    void theOldSearchLeaksAConnectionEveryTime() throws SQLException {
+        try (HikariDataSource pool = smallPool()) {
+            for (int i = 0; i &lt; 3; i++) {
+                OldMedicineSearch.byName(pool, &quot;para&quot;);
+            }
+            assertThat(pool.getHikariPoolMXBean().getActiveConnections()).isEqualTo(3);   // all taken, none returned
+            assertThatThrownBy(() -&gt; OldMedicineSearch.byName(pool, &quot;para&quot;))
+                    .isInstanceOf(SQLTransientConnectionException.class).hasMessageContaining(&quot;request timed out&quot;);
+        }
+    }
+
+    @Test
+    void theRealSearchGivesEveryConnectionBack() throws Exception {
+        for (int i = 0; i &lt; 50; i++) {
+            search(&quot;para&quot;);
+        }
+        assertThat(((HikariDataSource) dataSource).getHikariPoolMXBean().getActiveConnections()).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/mediqo/pharmacy/MedicineContractTest.java</p><div class="notes"><p>Searches through HTTP, wildcards, the injection attempt, and every refusal.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP contract against the demo catalogue. */
+class MedicineContractTest extends ApiTest {
+
+    @Test
+    void aPartOfTheNameInAnyCaseFindsEveryForm() throws Exception {
+        search(&quot;PARA&quot;).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.query&quot;).value(&quot;PARA&quot;))
+                .andExpect(jsonPath(&quot;$.results[*].strength&quot;, contains(&quot;125 mg/5 ml&quot;, &quot;500 mg&quot;, &quot;650 mg&quot;)))
+                .andExpect(jsonPath(&quot;$.results[0].form&quot;).value(&quot;SYRUP&quot;))
+                .andExpect(jsonPath(&quot;$.results[1].pricePaise&quot;).value(2000))
+                .andExpect(jsonPath(&quot;$.results[1].prescriptionRequired&quot;).value(false));
+        search(&quot;cillin&quot;).andExpect(jsonPath(&quot;$.results[0].name&quot;).value(&quot;Amoxicillin&quot;))
+                .andExpect(jsonPath(&quot;$.results[0].prescriptionRequired&quot;).value(true));
+    }
+
+    @Test
+    void anApostropheIsJustACharacter() throws Exception {
+        search(&quot;john&#x27;s&quot;).andExpect(jsonPath(&quot;$.results[0].name&quot;).value(&quot;St. John&#x27;s Wort&quot;));
+    }
+
+    @Test
+    void noMatchIsAnEmptyListNotAnError() throws Exception {
+        search(&quot;aspirin&quot;).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.results&quot;, empty()));
+        search(ConcatenatedSqlTrapTest.ALWAYS_TRUE).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.results&quot;, empty()));
+    }
+
+    @Test
+    void wildcardsAreLiteral() throws Exception {
+        search(&quot;%%&quot;).andExpect(jsonPath(&quot;$.results&quot;, empty()));   // as a wildcard, &quot;%%&quot; would match every medicine
+        search(&quot;a_&quot;).andExpect(jsonPath(&quot;$.results&quot;, empty()));   // as a wildcard, &quot;_&quot; would match any letter after an &quot;a&quot;
+    }
+
+    @Test
+    void aMissingTooShortOrTooLongNameIs400() throws Exception {
+        search(null).andExpect(status().isBadRequest()).andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+        search(&quot;p&quot;).andExpect(status().isBadRequest());
+        search(&quot;   &quot;).andExpect(status().isBadRequest());
+        search(&quot;a&quot;.repeat(51)).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/mediqo/pharmacy/MedicineDatabaseTest.java</p><div class="notes"><p>Plain JDBC against the schema: named constraints, the foreign key, rollback and auto-commit.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * The database&#x27;s own rules, tested with plain JDBC and no Java validation in the way: named constraints refuse bad
+ * rows from any writer, and a failed statement inside a transaction leaves nothing behind after rollback.
+ */
+class MedicineDatabaseTest extends ApiTest {
+
+    static final String INSERT = &quot;INSERT INTO medicines (name, strength, form, price_paise, prescription_required) VALUES (?, ?, ?, ?, false)&quot;;
+
+    @AfterEach
+    void removeTestRows() throws SQLException {
+        try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(&quot;DELETE FROM medicines WHERE name LIKE &#x27;Test %&#x27;&quot;)) {
+            s.executeUpdate();
+        }
+    }
+
+    void insert(Connection c, String name, String strength, String form, long paise) throws SQLException {
+        try (PreparedStatement s = c.prepareStatement(INSERT)) {
+            s.setString(1, name);
+            s.setString(2, strength);
+            s.setString(3, form);
+            s.setLong(4, paise);
+            s.executeUpdate();
+        }
+    }
+
+    long count(String name) throws SQLException {
+        try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(&quot;SELECT count(*) FROM medicines WHERE name = ?&quot;)) {
+            s.setString(1, name);
+            try (ResultSet r = s.executeQuery()) {
+                r.next();
+                return r.getLong(1);
+            }
+        }
+    }
+
+    @Test
+    void namedConstraintsRefuseBadRowsFromAnyWriter() throws SQLException {
+        try (Connection c = dataSource.getConnection()) {
+            assertThatThrownBy(() -&gt; insert(c, &quot;Test free&quot;, &quot;1 mg&quot;, &quot;TABLET&quot;, 0)).hasMessageContaining(&quot;medicines_price_positive&quot;);
+            assertThatThrownBy(() -&gt; insert(c, &quot;Test powder&quot;, &quot;1 g&quot;, &quot;POWDER&quot;, 100)).hasMessageContaining(&quot;medicines_form_known&quot;);
+            assertThatThrownBy(() -&gt; insert(c, &quot;PARACETAMOL&quot;, &quot;500 mg&quot;, &quot;TABLET&quot;, 100)).hasMessageContaining(&quot;medicines_unique_product&quot;);
+        }
+    }
+
+    @Test
+    void aPrescriptionMustPointAtARealMedicine() throws SQLException {
+        try (Connection c = dataSource.getConnection(); PreparedStatement s = c.prepareStatement(
+                &quot;INSERT INTO prescriptions (patient_name, patient_phone, medicine_id, doctor, issued_on) VALUES (&#x27;Test&#x27;, &#x27;0&#x27;, 999999, &#x27;Dr X&#x27;, CURRENT_DATE)&quot;)) {
+            assertThatThrownBy(s::executeUpdate).hasMessageContaining(&quot;prescriptions_medicine_fk&quot;);
+        }
+    }
+
+    @Test
+    void aFailedStatementInATransactionLeavesNothingAfterRollback() throws SQLException {
+        try (Connection c = dataSource.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                insert(c, &quot;Test good&quot;, &quot;5 mg&quot;, &quot;TABLET&quot;, 500);
+                insert(c, &quot;Test bad&quot;, &quot;5 mg&quot;, &quot;TABLET&quot;, -1);   // refused by medicines_price_positive
+                c.commit();
+            } catch (SQLException refused) {
+                c.rollback();
+            } finally {
+                c.setAutoCommit(true);   // the pool hands this connection to someone else next
+            }
+        }
+        assertThat(count(&quot;Test good&quot;)).isZero();
+        assertThat(count(&quot;Test bad&quot;)).isZero();
+    }
+
+    @Test
+    void withAutoCommitTheFirstRowStaysWhenTheSecondFails() throws SQLException {
+        try (Connection c = dataSource.getConnection()) {
+            insert(c, &quot;Test kept&quot;, &quot;5 mg&quot;, &quot;TABLET&quot;, 500);
+            assertThatThrownBy(() -&gt; insert(c, &quot;Test refused&quot;, &quot;5 mg&quot;, &quot;TABLET&quot;, -1)).isInstanceOf(SQLException.class);
+        }
+        assertThat(count(&quot;Test kept&quot;)).isEqualTo(1);   // each statement was its own transaction
+    }
+
+    @Test
+    void escapingKeepsWildcardsLiteral() {
+        assertThat(MedicineSearch.escapeLike(&quot;50%_off\\&quot;)).isEqualTo(&quot;50\\%\\_off\\\\&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/mediqo/pharmacy/OldMedicineSearch.java</p><div class="notes"><p>The old code, kept only in tests.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+
+/** The search before the fix, kept only in tests. Two bugs: SQL built from the user&#x27;s text, and nothing closed. */
+final class OldMedicineSearch {
+
+    private OldMedicineSearch() {
+    }
+
+    static List&lt;String&gt; byName(DataSource dataSource, String name) throws SQLException {
+        Connection connection = dataSource.getConnection();   // never closed: the pool never gets it back
+        Statement statement = connection.createStatement();
+        ResultSet rows = statement.executeQuery(
+                &quot;SELECT name, strength, form FROM medicines WHERE name ILIKE &#x27;%&quot; + name + &quot;%&#x27; ORDER BY name&quot;);
+        List&lt;String&gt; found = new ArrayList&lt;&gt;();
+        while (rows.next()) {
+            found.add(rows.getString(1) + &quot; | &quot; + rows.getString(2) + &quot; | &quot; + rows.getString(3));
+        }
+        return found;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/mediqo/pharmacy/ApiTest.java</p><div class="notes"><p>Shared setup: the app with a real PostgreSQL.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import javax.sql.DataSource;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+
+/** Shared setup: the whole app, a real PostgreSQL with the demo catalogue from the migrations. */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    DataSource dataSource;
+
+    ResultActions search(String name) throws Exception {
+        return mvc.perform(name == null ? get(&quot;/medicines&quot;) : get(&quot;/medicines&quot;).param(&quot;name&quot;, name));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/mediqo/pharmacy/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker. The injection and the constraints must behave exactly as in production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/mediqo/pharmacy/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=FormFilterChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 15 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 19 tests pass (15 station tests and 4 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 25 minutes</p><h2>Filter by form</h2><p>Add an optional <code>?form=</code> (any case). The SQL gains <code>AND form = ?</code> only when a form is given; an unknown form is a <code>400</code> before the database is asked.</p><p><b>Done when:</b> both tests in <code>FormFilterChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Building SQL from fixed fragments you wrote is safe; the values still go in as parameters.</li><li>Count the parameters as you add them: the limit moves from position 2 to 3.</li></ul></details><p class="path">challenge/FormFilterChallengeTest.java</p><pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.is;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: an optional ?form= filter (any case). The SQL may grow an &quot;AND form = ?&quot; only when a form is given:
+ * fixed fragments of SQL, values always as parameters. An unknown form is a 400, before the database is asked.
+ */
+class FormFilterChallengeTest extends ApiTest {
+
+    @Test
+    void theFormNarrowsTheSearch() throws Exception {
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(&quot;/medicines&quot;).param(&quot;name&quot;, &quot;para&quot;).param(&quot;form&quot;, &quot;syrup&quot;))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.results[*].strength&quot;, contains(&quot;125 mg/5 ml&quot;)));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(&quot;/medicines&quot;).param(&quot;name&quot;, &quot;para&quot;).param(&quot;form&quot;, &quot;TABLET&quot;))
+                .andExpect(jsonPath(&quot;$.results[*].form&quot;, everyItem(is(&quot;TABLET&quot;))))
+                .andExpect(jsonPath(&quot;$.results.length()&quot;).value(2));
+    }
+
+    @Test
+    void anUnknownFormIs400() throws Exception {
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(&quot;/medicines&quot;).param(&quot;name&quot;, &quot;para&quot;).param(&quot;form&quot;, &quot;TABLET&#x27; OR 1=1 --&quot;))
+                .andExpect(status().isBadRequest());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/MedicineSearch.java</p><div class="src"><pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+import org.springframework.stereotype.Repository;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * The search in plain JDBC, with an optional form filter and a total. The SQL is assembled only from fixed fragments
+ * written here; every value the user sends is a parameter.
+ */
+@Repository
+class MedicineSearch {
+
+    static final int LIMIT = 20;
+
+    record Page(long total, List&lt;Medicine&gt; results) {
+    }
+
+    private final DataSource dataSource;
+
+    MedicineSearch(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    List&lt;Medicine&gt; byName(String text) throws SQLException {
+        return byName(text, null, LIMIT).results();
+    }
+
+    Page byName(String text, String form, int size) throws SQLException {
+        String sql = &quot;SELECT id, name, strength, form, price_paise, prescription_required, count(*) OVER () AS total&quot;
+                + &quot; FROM medicines WHERE lower(name) LIKE ? ESCAPE &#x27;\\&#x27;&quot;
+                + (form == null ? &quot;&quot; : &quot; AND form = ?&quot;)
+                + &quot; ORDER BY name, strength, form LIMIT ?&quot;;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            int i = 1;
+            statement.setString(i++, &quot;%&quot; + escapeLike(text.toLowerCase(Locale.ROOT)) + &quot;%&quot;);
+            if (form != null) {
+                statement.setString(i++, form);
+            }
+            statement.setInt(i, size);
+            try (ResultSet rows = statement.executeQuery()) {
+                List&lt;Medicine&gt; found = new ArrayList&lt;&gt;();
+                long total = 0;
+                while (rows.next()) {
+                    total = rows.getLong(&quot;total&quot;);   // the count before LIMIT, the same on every row
+                    found.add(new Medicine(rows.getLong(&quot;id&quot;), rows.getString(&quot;name&quot;), rows.getString(&quot;strength&quot;),
+                            rows.getString(&quot;form&quot;), rows.getLong(&quot;price_paise&quot;), rows.getBoolean(&quot;prescription_required&quot;)));
+                }
+                return new Page(total, found);
+            }
+        }
+    }
+
+    /** In LIKE, % and _ are wildcards. A user typing &quot;%&quot; means the character, not &quot;everything&quot;. */
+    static String escapeLike(String text) {
+        return text.replace(&quot;\\&quot;, &quot;\\\\&quot;).replace(&quot;%&quot;, &quot;\\%&quot;).replace(&quot;_&quot;, &quot;\\_&quot;);
+    }
+}</code></pre></div><p class="path">challenge/solution/MedicineController.java</p><div class="src"><pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Locale;
+
+@RestController
+class MedicineController {
+
+    record SearchResult(String query, long total, List&lt;Medicine&gt; results) {
+    }
+
+    private final MedicineSearch search;
+
+    MedicineController(MedicineSearch search) {
+        this.search = search;
+    }
+
+    @GetMapping(&quot;/medicines&quot;)
+    SearchResult byName(@RequestParam @NotBlank @Size(min = 2, max = 50) String name,
+                        @RequestParam(required = false) @Pattern(regexp = &quot;(?i)TABLET|CAPSULE|SYRUP|CREAM|INJECTION|DROPS&quot;) String form,
+                        @RequestParam(defaultValue = &quot;20&quot;) @Min(1) @Max(20) int size) throws SQLException {
+        String text = name.strip();
+        MedicineSearch.Page page = search.byName(text, form == null ? null : form.toUpperCase(Locale.ROOT), size);
+        return new SearchResult(text, page.total(), page.results());
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 30 minutes</p><h2>How many matches?</h2><p>Add <code>?size=</code> (1 to 20) and a <code>total</code> of every match, from the same single query.</p><p><b>Done when:</b> both tests in <code>TotalAndSizeChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li><code>count(*) OVER ()</code> counts the rows before <code>LIMIT</code> and repeats the number on every row.</li><li>With no rows, there is no row to read the total from: it is 0.</li></ul></details><p class="path">challenge/TotalAndSizeChallengeTest.java</p><pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: the app shows &quot;5 matches&quot; above the first 2. Add ?size= (1 to 20, default 20) and a &quot;total&quot; field with
+ * every match, in the same single query (count(*) OVER ()), not a second round trip.
+ */
+class TotalAndSizeChallengeTest extends ApiTest {
+
+    @Test
+    void sizeLimitsTheRowsAndTotalCountsThemAll() throws Exception {
+        mvc.perform(get(&quot;/medicines&quot;).param(&quot;name&quot;, &quot;ol&quot;).param(&quot;size&quot;, &quot;2&quot;))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.total&quot;).value(5))
+                .andExpect(jsonPath(&quot;$.results[*].name&quot;, contains(&quot;Clotrimazole&quot;, &quot;Pantoprazole&quot;)));
+    }
+
+    @Test
+    void noMatchHasATotalOfZeroAndABadSizeIs400() throws Exception {
+        search(&quot;aspirin&quot;).andExpect(jsonPath(&quot;$.total&quot;).value(0));
+        mvc.perform(get(&quot;/medicines&quot;).param(&quot;name&quot;, &quot;ol&quot;).param(&quot;size&quot;, &quot;0&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/medicines&quot;).param(&quot;name&quot;, &quot;ol&quot;).param(&quot;size&quot;, &quot;21&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/MedicineSearch.java</p><div class="src"><pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+import org.springframework.stereotype.Repository;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * The search in plain JDBC, with an optional form filter and a total. The SQL is assembled only from fixed fragments
+ * written here; every value the user sends is a parameter.
+ */
+@Repository
+class MedicineSearch {
+
+    static final int LIMIT = 20;
+
+    record Page(long total, List&lt;Medicine&gt; results) {
+    }
+
+    private final DataSource dataSource;
+
+    MedicineSearch(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    List&lt;Medicine&gt; byName(String text) throws SQLException {
+        return byName(text, null, LIMIT).results();
+    }
+
+    Page byName(String text, String form, int size) throws SQLException {
+        String sql = &quot;SELECT id, name, strength, form, price_paise, prescription_required, count(*) OVER () AS total&quot;
+                + &quot; FROM medicines WHERE lower(name) LIKE ? ESCAPE &#x27;\\&#x27;&quot;
+                + (form == null ? &quot;&quot; : &quot; AND form = ?&quot;)
+                + &quot; ORDER BY name, strength, form LIMIT ?&quot;;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            int i = 1;
+            statement.setString(i++, &quot;%&quot; + escapeLike(text.toLowerCase(Locale.ROOT)) + &quot;%&quot;);
+            if (form != null) {
+                statement.setString(i++, form);
+            }
+            statement.setInt(i, size);
+            try (ResultSet rows = statement.executeQuery()) {
+                List&lt;Medicine&gt; found = new ArrayList&lt;&gt;();
+                long total = 0;
+                while (rows.next()) {
+                    total = rows.getLong(&quot;total&quot;);   // the count before LIMIT, the same on every row
+                    found.add(new Medicine(rows.getLong(&quot;id&quot;), rows.getString(&quot;name&quot;), rows.getString(&quot;strength&quot;),
+                            rows.getString(&quot;form&quot;), rows.getLong(&quot;price_paise&quot;), rows.getBoolean(&quot;prescription_required&quot;)));
+                }
+                return new Page(total, found);
+            }
+        }
+    }
+
+    /** In LIKE, % and _ are wildcards. A user typing &quot;%&quot; means the character, not &quot;everything&quot;. */
+    static String escapeLike(String text) {
+        return text.replace(&quot;\\&quot;, &quot;\\\\&quot;).replace(&quot;%&quot;, &quot;\\%&quot;).replace(&quot;_&quot;, &quot;\\_&quot;);
+    }
+}</code></pre></div><p class="path">challenge/solution/MedicineController.java</p><div class="src"><pre class="code"><code class="language-java">package com.mediqo.pharmacy;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Locale;
+
+@RestController
+class MedicineController {
+
+    record SearchResult(String query, long total, List&lt;Medicine&gt; results) {
+    }
+
+    private final MedicineSearch search;
+
+    MedicineController(MedicineSearch search) {
+        this.search = search;
+    }
+
+    @GetMapping(&quot;/medicines&quot;)
+    SearchResult byName(@RequestParam @NotBlank @Size(min = 2, max = 50) String name,
+                        @RequestParam(required = false) @Pattern(regexp = &quot;(?i)TABLET|CAPSULE|SYRUP|CREAM|INJECTION|DROPS&quot;) String form,
+                        @RequestParam(defaultValue = &quot;20&quot;) @Min(1) @Max(20) int size) throws SQLException {
+        String text = name.strip();
+        MedicineSearch.Page page = search.byName(text, form == null ? null : form.toUpperCase(Locale.ROOT), size);
+        return new SearchResult(text, page.total(), page.results());
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>A search for 2 lakh products</h2>
+<p><code>LIKE '%text%'</code> cannot use a normal index, so it reads every row. With 2,00,000 products and typos ("paracitamol"), compare a trigram index (<code>pg_trgm</code>), PostgreSQL full-text search, and a search engine. Which handles typos, which handles brand and generic names, and what each costs to keep in sync?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transactions</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap tests against a real PostgreSQL: leak, apostrophe, pool exhaustion.</li>
+<li>Write the schema with named constraints, and test them with plain inserts.</li>
+<li>Write the search: fixed SQL, parameters, escaped wildcards, try-with-resources.</li>
+<li>Check that after many searches the pool has no connection in use.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td><code>PreparedStatement</code> with parameters</td><td>A few more lines than concatenation.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Concatenation with quote escaping by hand</td><td>One missed case (encodings, backslashes) and it is injectable again.</td><td><span class="pill bad">Never</span></td></tr><tr><td>Blocking characters such as <code>'</code> and <code>--</code></td><td>Breaks St. John's Wort; attackers find other ways.</td><td><span class="pill bad">Not a defence</span></td></tr><tr><td><code>JdbcClient</code> or <code>JdbcTemplate</code></td><td>Same safety, less code: they prepare and close for you.</td><td><span class="pill warn">From the next stations</span></td></tr><tr><td>A database user that can only read <code>medicines</code></td><td>One more role to manage; limits the damage of any mistake.</td><td><span class="pill warn">Defence in depth</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Table</th><th>Key and constraints</th><th>Why</th></tr></thead><tbody><tr><td><code>medicines</code></td><td>Identity PK. <code>medicines_price_positive</code>, <code>medicines_form_known</code>, unique index <code>medicines_unique_product</code> on <code>(lower(name), strength, form)</code>.</td><td>The catalogue's rules hold for every writer; "Paracetamol" and "PARACETAMOL" 500 mg tablets cannot both exist.</td></tr><tr><td><code>prescriptions</code></td><td>Identity PK, <code>prescriptions_medicine_fk</code> to <code>medicines</code>.</td><td>Personal health data: exactly what injection reached. No search reads it.</td></tr></tbody></table></div>
+<p><strong>Transactions:</strong> the search is one read with auto-commit on. <code>MedicineDatabaseTest</code> shows the difference a transaction makes: with <code>setAutoCommit(false)</code> and a rollback, a failed second insert takes the first with it; with auto-commit, the first stays. The next station builds on this.</p>
+<p><strong>Index:</strong> <code>lower(name) LIKE '%…%'</code> cannot use a B-tree index, so it scans the table. At 15 rows that is nothing; challenge 3 is about when it is not.</p>
+<pre class="code"><code class="language-sql">-- The catalogue the search reads, and the table the old search leaked: prescriptions hold patients&#x27; names and phones.
+CREATE TABLE medicines (
+    id                    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name                  VARCHAR(100) NOT NULL,
+    strength              VARCHAR(30)  NOT NULL,
+    form                  VARCHAR(20)  NOT NULL,
+    price_paise           BIGINT       NOT NULL,
+    prescription_required BOOLEAN      NOT NULL,
+    CONSTRAINT medicines_price_positive CHECK (price_paise &gt; 0),
+    CONSTRAINT medicines_form_known     CHECK (form IN (&#x27;TABLET&#x27;, &#x27;CAPSULE&#x27;, &#x27;SYRUP&#x27;, &#x27;CREAM&#x27;, &#x27;INJECTION&#x27;, &#x27;DROPS&#x27;))
+);
+
+-- One row per product: &quot;Paracetamol&quot; and &quot;PARACETAMOL&quot; 500 mg tablets are the same product.
+CREATE UNIQUE INDEX medicines_unique_product ON medicines (lower(name), strength, form);
+
+CREATE TABLE prescriptions (
+    id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    patient_name  VARCHAR(100) NOT NULL,
+    patient_phone VARCHAR(15)  NOT NULL,
+    medicine_id   BIGINT       NOT NULL,
+    doctor        VARCHAR(100) NOT NULL,
+    issued_on     DATE         NOT NULL,
+    CONSTRAINT prescriptions_medicine_fk FOREIGN KEY (medicine_id) REFERENCES medicines (id)
+);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Least privilege</dt><dd>The app's database user should read and write only what it needs. A search that cannot read <code>prescriptions</code> cannot leak it, even with a bug.</dd>
+<dt>Leak detection</dt><dd>HikariCP's <code>leakDetectionThreshold</code> logs where a connection was borrowed when it is held too long; watch active connections next to request rate.</dd>
+<dt>Health data</dt><dd>Prescriptions are sensitive personal data under India's Digital Personal Data Protection Act, 2023; a leak is a reportable incident, not only a bug.</dd>
+<dt>Logging</dt><dd>Log that a search happened, not the patient behind it; search text can contain names.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>What is SQL injection, and how do you prevent it?</summary><p>User input that becomes part of the SQL text and changes the query. Prevent it with parameters (PreparedStatement or a library that uses them); never build SQL from input. Validation and least privilege reduce the damage but do not prevent it.</p></details><details class="qa"><summary>What does closing a pooled connection do?</summary><p>It returns the connection to the pool for the next request. Not closing it keeps it borrowed until the pool runs out and requests time out.</p></details><details class="qa"><summary>Why try-with-resources?</summary><p>It closes every resource declared in it, in reverse order, on every path, including exceptions, which hand-written finally blocks often get wrong.</p></details><details class="qa"><summary>Can a PreparedStatement parameter be a table or column name?</summary><p>No. Parameters are values only. Identifiers must come from a fixed list in your code (an allowlist).</p></details><details class="qa"><summary>Why escape % and _ in a LIKE parameter?</summary><p>They are wildcards inside the pattern. Without escaping, a user&#x27;s &#x27;%&#x27; matches everything; it is not injection, but it is wrong results and extra load.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 15 tests pass.</td><td>You ran the trap and read the leaked rows.</td></tr><tr><td>Security</td><td>Parameters for every value.</td><td>An allowlist for anything that must be part of the SQL text.</td></tr><tr><td>Resources</td><td>try-with-resources everywhere.</td><td>You can watch a pool's active connections.</td></tr><tr><td>Database</td><td>Named constraints with tests.</td><td>Auto-commit vs a transaction, from the test.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This Foundations station has no flawed version to review. Use this checklist on any JDBC code:</p>
+<ul class="rules">
+<li>Is any <code>+</code> joining input into SQL text?</li>
+<li>Is every <code>getConnection()</code>, statement and result set in a try-with-resources?</li>
+<li>Are <code>LIKE</code> wildcards in user text escaped?</li>
+<li>Can this database user read tables this feature never needs?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
