@@ -1,0 +1,1963 @@
+<title>Station 044 · Hotel room availability calendar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 044</span>
+    <h1>Hotel room availability calendar</h1>
+    <p class="scenario">A room booked 10–12 June was sold again for 11–13 June because the overlap check compared only start dates.</p>
+    <p class="sim"><b>Simulation</b><span>Hotels, rooms and guests are demo data, not Ghoomo's. A block is a hold record; no payment is taken and no confirmation is sent.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Travel</li>
+      <li><b>Types</b>Database · Concurrency</li>
+      <li><b>Reviewer view</b>Yes</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>043 Doctor directory with JPA</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring Data JPA date query methods · half-open ranges · PostgreSQL 17 EXCLUDE with daterange · virtual threads · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Asha books 10 to 12 June</strong><p>Room 101, two nights: the 10th and the 11th.</p></li><li><strong>Kabir books 11 to 13 June</strong><p>The system checks whether another stay starts on the 11th. None does, so Kabir gets the room too. On the 11th, two families arrive with keys to the same room.</p></li><li><strong>The fix</strong><p>Two stays clash when each starts before the other ends. That rule is checked in Java for a clear message and enforced by the database for every race.</p></li></ol>
+<p class="lesson">Ranges clash when each starts before the other ends. Nothing simpler is right.</p>
+
+<h2>What are we building?</h2>
+<p><code>GET /rooms/{id}/availability</code> shows which nights a room is free; <code>POST /rooms/{id}/blocks</code> holds it for a stay, or says it is not available.</p>
+
+<h2>An everyday analogy</h2>
+<p>A hotel's paper register with one column per night. Booking 10 to 12 June ticks the boxes for the 10th and 11th, not the 12th. A new booking is allowed only if none of its boxes is ticked.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Check the dates</strong>: check-out after check-in, at most 30 nights.</li>
+<li><strong>Look for a clash</strong> with the overlap rule; if found, <code>409</code>.</li>
+<li><strong>Insert the hold.</strong> If another desk got there in the same instant, the database refuses: also <code>409</code>.</li>
+<li><strong>The calendar</strong> marks each night free unless a hold covers it.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: Asha holds 10 to 12 June. Can Meena hold 12 to 15 June?</summary><p>Yes. Asha's last night is the 11th; she leaves on the morning of the 12th. Meena's first night is the 12th. With a half-open range, 12 &lt; 12 is false, so they do not overlap.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No payment or confirmation.</strong> A hold is a record.</li>
+<li><strong>No room types or prices.</strong> One room at a time.</li>
+<li><strong>No time zones.</strong> Nights are local dates at the hotel.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Night</strong></td><td>A stay is counted in nights: the night that starts on a date.</td><td>"10 to 12 June" is two nights: the 10th and the 11th.</td><td><code>RoomBlock.holds</code></td></tr><tr><td><strong>Half-open range</strong></td><td>Start included, end excluded: [check-in, check-out).</td><td>You leave on the morning of check-out; that night is free.</td><td><code>'[)'</code></td></tr><tr><td><strong>Overlap</strong></td><td>Two stays share at least one night.</td><td>Two guests given the same room on the 11th.</td><td><code>checkIn &lt; otherOut AND checkOut &gt; otherIn</code></td></tr><tr><td><strong>Back-to-back</strong></td><td>One guest leaves the day the next arrives.</td><td>Out at 11 a.m., in at 2 p.m.</td><td>allowed</td></tr><tr><td><strong>EXCLUDE constraint</strong></td><td>No two rows may conflict, here: same room and overlapping dates.</td><td>One key per room per night.</td><td><code>room_blocks_no_overlap</code></td></tr><tr><td><strong>Deadlock</strong></td><td>Two transactions each waiting for the other; the database stops one.</td><td>Two people in a doorway, each waiting for the other to go first.</td><td>found by the concurrency test</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Ghoomo</strong> (a fictional hotel chain) sold a room booked for 10 to 12 June again for 11 to 13 June, because the overlap check compared only start dates.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Room 101 holds 10–12 June (Asha) and 15–16 June (Ravi).</p>
+<ol class="gwt">
+<li><b>Given</b> 11 to 13 June, <b>then</b> <code>409</code>: the night of the 11th is taken.</li>
+<li><b>Given</b> 12 to 15 June, <b>then</b> <code>201</code> for 3 nights: back to back with both stays.</li>
+<li><b>Given</b> the calendar for 9 to 17 June, <b>then</b> the 10th, 11th and 15th are taken, the others free.</li>
+<li><b>Given</b> 20 desks holding the same nights at once, <b>then</b> one <code>201</code> and 19 <code>409</code>, never a <code>500</code>, and no night held twice.</li>
+<li><b>Given</b> zero nights, check-out before check-in, or over 30 nights, <code>400</code>; an unknown room, <code>404</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>Ranges are half-open everywhere: Java check, calendar, and database.</li>
+<li>The database guarantees no overlap (<code>EXCLUDE</code>), whoever writes and however fast.</li>
+<li>Every way the database refuses a clash becomes <code>409</code>.</li>
+<li>Dates are ISO local dates.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Model stays as half-open ranges.</li>
+<li>Write the overlap condition, and test it on every shape.</li>
+<li>Express it as a Spring Data JPA query method with dates.</li>
+<li>Back a Java check with a database constraint for concurrency.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/rooms/{id}/availability?from=…&amp;to=…</code></td><td>Each night from <code>from</code> up to the night before <code>to</code>: free or not.</td></tr><tr><td><code>POST</code></td><td><code>/rooms/{id}/blocks</code></td><td><code>{"checkIn", "checkOut", "guestName"}</code>: hold the nights checkIn to checkOut − 1.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>A calendar</td></tr><tr><td><span class="pill ok">201</span></td><td>The room is held</td></tr><tr><td><span class="pill warn">400</span></td><td>Zero nights, end before start, too long a range, a missing field, an unknown field</td></tr><tr><td><span class="pill warn">404</span></td><td>No such room</td></tr><tr><td><span class="pill warn">409</span></td><td>At least one night is already held</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 15 Oct 2026, in this order, against the demo data. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: room 101, 9 to 17 June</h3><p><b>Why:</b> the 10th, 11th and 15th are held.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /rooms/101/availability?from=2026-06-09&amp;to=2026-06-17 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 393
+
+{
+  &quot;roomId&quot;: 101,
+  &quot;from&quot;: &quot;2026-06-09&quot;,
+  &quot;to&quot;: &quot;2026-06-17&quot;,
+  &quot;freeNights&quot;: 5,
+  &quot;nights&quot;: [
+    {
+      &quot;date&quot;: &quot;2026-06-09&quot;,
+      &quot;available&quot;: true
+    },
+    {
+      &quot;date&quot;: &quot;2026-06-10&quot;,
+      &quot;available&quot;: false
+    },
+    {
+      &quot;date&quot;: &quot;2026-06-11&quot;,
+      &quot;available&quot;: false
+    },
+    {
+      &quot;date&quot;: &quot;2026-06-12&quot;,
+      &quot;available&quot;: true
+    },
+    {
+      &quot;date&quot;: &quot;2026-06-13&quot;,
+      &quot;available&quot;: true
+    },
+    {
+      &quot;date&quot;: &quot;2026-06-14&quot;,
+      &quot;available&quot;: true
+    },
+    {
+      &quot;date&quot;: &quot;2026-06-15&quot;,
+      &quot;available&quot;: false
+    },
+    {
+      &quot;date&quot;: &quot;2026-06-16&quot;,
+      &quot;available&quot;: true
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 2: 11 to 13 June</h3><p><b>Why:</b> the original double booking, now <code>409</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /rooms/101/blocks HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;checkIn&quot;: &quot;2026-06-11&quot;,
+  &quot;checkOut&quot;: &quot;2026-06-13&quot;,
+  &quot;guestName&quot;: &quot;Kabir Shah&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 409 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Room 101 is already held for a night between 2026-06-11 and 2026-06-13.&quot;,
+  &quot;instance&quot;: &quot;/rooms/101/blocks&quot;,
+  &quot;status&quot;: 409,
+  &quot;title&quot;: &quot;Not available&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: 12 to 15 June</h3><p><b>Why:</b> arrives as Asha leaves, leaves as Ravi arrives: <code>201</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /rooms/101/blocks HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;checkIn&quot;: &quot;2026-06-12&quot;,
+  &quot;checkOut&quot;: &quot;2026-06-15&quot;,
+  &quot;guestName&quot;: &quot;Meena Rao&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Content-Type: application/json
+Content-Length: 103
+
+{
+  &quot;id&quot;: 3,
+  &quot;roomId&quot;: 101,
+  &quot;checkIn&quot;: &quot;2026-06-12&quot;,
+  &quot;checkOut&quot;: &quot;2026-06-15&quot;,
+  &quot;nights&quot;: 3,
+  &quot;guestName&quot;: &quot;Meena Rao&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: the calendar again</h3><p><b>Why:</b> only the 9th and 16th left.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /rooms/101/availability?from=2026-06-09&amp;to=2026-06-17 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 396
+
+{
+  &quot;roomId&quot;: 101,
+  &quot;from&quot;: &quot;2026-06-09&quot;,
+  &quot;to&quot;: &quot;2026-06-17&quot;,
+  &quot;freeNights&quot;: 2,
+  &quot;nights&quot;: [
+    {
+      &quot;date&quot;: &quot;2026-06-09&quot;,
+      &quot;available&quot;: true
+    },
+    {
+      &quot;date&quot;: &quot;2026-06-10&quot;,
+      &quot;available&quot;: false
+    },
+    {
+      &quot;date&quot;: &quot;2026-06-11&quot;,
+      &quot;available&quot;: false
+    },
+    {
+      &quot;date&quot;: &quot;2026-06-12&quot;,
+      &quot;available&quot;: false
+    },
+    {
+      &quot;date&quot;: &quot;2026-06-13&quot;,
+      &quot;available&quot;: false
+    },
+    {
+      &quot;date&quot;: &quot;2026-06-14&quot;,
+      &quot;available&quot;: false
+    },
+    {
+      &quot;date&quot;: &quot;2026-06-15&quot;,
+      &quot;available&quot;: false
+    },
+    {
+      &quot;date&quot;: &quot;2026-06-16&quot;,
+      &quot;available&quot;: true
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 5: in and out the same day</h3><p><b>Why:</b> no night to hold: <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /rooms/101/blocks HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;checkIn&quot;: &quot;2026-07-02&quot;,
+  &quot;checkOut&quot;: &quot;2026-07-02&quot;,
+  &quot;guestName&quot;: &quot;Day Visitor&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;checkOut must be after the start: the last date is the morning you leave.&quot;,
+  &quot;instance&quot;: &quot;/rooms/101/blocks&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Invalid dates&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: room 999</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /rooms/999/availability?from=2026-06-09&amp;to=2026-06-17 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No room 999.&quot;,
+  &quot;instance&quot;: &quot;/rooms/999/availability&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Room not found&quot;
+}</code></pre></div></div></section>
+<h2>Twenty desks at once</h2>
+<p class="muted">From <code>docs/capture.sh</code>: 20 parallel curl requests for room 102, 1 to 4 August (<code>docs/captures/rush.txt</code>).</p>
+<pre class="code"><code class="language-text">20 requests at once for room 102, 1 to 4 August: HTTP status counts
+      1 201
+     19 409</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>Eight shapes against 10–12 June</td><td>Overlap exactly when they share a night</td><td><code>theOverlapRuleOnEveryShape</code></td></tr><tr><td>A free gap; an overlap; another room</td><td><code>201</code>; <code>409</code>; <code>201</code></td><td><code>aFreeStayIsHeldAndAnOverlappingOneIsNot</code></td></tr><tr><td>The calendar</td><td>Each night marked</td><td><code>theCalendarShowsEachNight</code></td></tr><tr><td>20 holds for the same nights at once</td><td>1 held, 19 refused, no 500</td><td><code>twentyRequestsForTheSameNightsHoldItOnce</code></td></tr><tr><td>30 staggered overlapping holds at once</td><td>No night held twice, no 500</td><td><code>staggeredOverlappingRequestsNeverShareANight</code></td></tr><tr><td>Overlap, zero nights, unknown room, written directly</td><td>Refused by named constraints</td><td><code>namedConstraintsHoldWithoutJava</code></td></tr><tr><td>A group booking with one clash</td><td>All or nothing</td><td><code>aGroupBookingIsAllOrNothing</code></td></tr><tr><td>Bad dates, missing or unknown fields; unknown room</td><td><code>400</code>; <code>404</code></td><td><code>AvailabilityContractTest</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Comparing only start dates, so overlapping bookings are accepted.</p>
+<p>The old checks are kept as Spring Data methods in the tests. The start-date check says 11 to 13 June is free. The first fix, with both ends included, refuses a back-to-back stay from the 12th. The real rule is then tested on eight shapes.</p>
+<p>While building, each fix was undone once:</p>
+<ul>
+<li>Not mapping the constraint violation gave 2 errors: requests really do race past the Java check.</li>
+<li>Counting the check-out night in the calendar turned 1 test red.</li>
+<li>Dropping the <code>EXCLUDE</code> constraint turned 4 red.</li>
+<li>Swapping the arguments of the Java overlap check was <em>not</em> caught: the database turned every clash into the same <code>409</code>. The Java check gives a clear message without a failed insert; the constraint is the guarantee.</li>
+</ul>
+</div>
+<pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.time.LocalDate;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** The first test written for this station. Room 101 is held 10-12 June. */
+class StartDatesOnlyTrapTest extends ApiTest {
+
+    static final LocalDate JUNE_11 = LocalDate.of(2026, 6, 11);
+    static final LocalDate JUNE_12 = LocalDate.of(2026, 6, 12);
+    static final LocalDate JUNE_13 = LocalDate.of(2026, 6, 13);
+    static final LocalDate JUNE_14 = LocalDate.of(2026, 6, 14);
+
+    @Autowired
+    OldRoomBlockRepository old;
+
+    @Test
+    void comparingStartDatesSaysElevenToThirteenIsFree() {
+        assertThat(old.existsByRoomIdAndCheckInEquals(101L, JUNE_11)).isFalse();                                  // sold again
+        assertThat(blocks.existsByRoomIdAndCheckInBeforeAndCheckOutAfter(101L, JUNE_13, JUNE_11)).isTrue();  // the night of the 11th is taken
+    }
+
+    @Test
+    void includingTheCheckOutDayRefusesABackToBackStay() {
+        assertThat(old.existsByRoomIdAndCheckInLessThanEqualAndCheckOutGreaterThanEqual(101L, JUNE_14, JUNE_12)).isTrue();   // wrongly &quot;taken&quot;
+        assertThat(blocks.existsByRoomIdAndCheckInBeforeAndCheckOutAfter(101L, JUNE_14, JUNE_12)).isFalse();                  // in on the 12th, as Asha leaves
+    }
+
+    @ParameterizedTest(name = &quot;{0} to {1} against 10-12 June -&gt; overlaps {2}&quot;)
+    @CsvSource({
+            &quot;2026-06-11, 2026-06-13, true&quot;,    // starts inside
+            &quot;2026-06-08, 2026-06-11, true&quot;,    // ends inside
+            &quot;2026-06-10, 2026-06-12, true&quot;,    // the same stay
+            &quot;2026-06-10, 2026-06-11, true&quot;,    // within, same start
+            &quot;2026-06-08, 2026-06-14, true&quot;,    // covers it
+            &quot;2026-06-08, 2026-06-10, false&quot;,   // leaves the morning Asha arrives
+            &quot;2026-06-12, 2026-06-14, false&quot;,   // arrives the morning Asha leaves
+            &quot;2026-06-20, 2026-06-22, false&quot;})  // nowhere near
+    void theOverlapRuleOnEveryShape(LocalDate checkIn, LocalDate checkOut, boolean overlaps) {
+        assertThat(blocks.existsByRoomIdAndCheckInBeforeAndCheckOutAfter(101L, checkOut, checkIn)).isEqualTo(overlaps);
+    }
+}</code></pre><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.springframework.data.repository.Repository;
+
+import java.time.LocalDate;
+
+/** The overlap checks the team tried before, kept only in tests (Spring Data writes their queries too). */
+interface OldRoomBlockRepository extends Repository&lt;RoomBlock, Long&gt; {
+
+    /** The original: a stay clashes only if it starts on the same day as another. */
+    boolean existsByRoomIdAndCheckInEquals(Long roomId, LocalDate checkIn);   // &quot;Equals&quot;: a name ending in &quot;CheckIn&quot; would read &quot;In&quot; as the IN keyword
+
+    /** The first fix: ranges compared with both ends included, as if the check-out night were part of the stay. */
+    boolean existsByRoomIdAndCheckInLessThanEqualAndCheckOutGreaterThanEqual(Long roomId, LocalDate newCheckOut, LocalDate newCheckIn);
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 18 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Ask PostgreSQL about ranges directly:</p>
+<pre class="code"><code class="language-bash">docker compose exec postgres psql -U ghoomo -d ghoomo -c &quot;SELECT daterange(&#x27;2026-06-10&#x27;,&#x27;2026-06-12&#x27;,&#x27;[)&#x27;) &amp;&amp; daterange(&#x27;2026-06-12&#x27;,&#x27;2026-06-14&#x27;,&#x27;[)&#x27;) AS back_to_back, daterange(&#x27;2026-06-10&#x27;,&#x27;2026-06-12&#x27;,&#x27;[)&#x27;) &amp;&amp; daterange(&#x27;2026-06-11&#x27;,&#x27;2026-06-13&#x27;,&#x27;[)&#x27;) AS eleven_to_thirteen&quot;</code></pre>
+<p>Back to back is <code>f</code>; 11 to 13 is <code>t</code>.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>No property 'check' found for type 'RoomBlock'; Did you mean 'checkIn'</code></td><td>A derived method name ending in <code>CheckIn</code>: Spring Data reads <code>In</code> as the IN keyword.</td><td>Spell the comparison: <code>…CheckInEquals</code>. Found while building this station.</td></tr><tr><td><code>conflicting key value violates exclusion constraint "room_blocks_no_overlap"</code></td><td>An overlapping hold reached the database.</td><td>Expected under races; the app answers <code>409</code>.</td></tr><tr><td><code>deadlock detected</code></td><td>Two overlapping holds inserted at once, each waiting for the other.</td><td>PostgreSQL aborts one; the app answers <code>409</code>, because the other one holds those nights.</td></tr><tr><td><code>data type bigint has no default operator class for access method "gist"</code></td><td><code>btree_gist</code> is missing.</td><td>The migration creates it; a managed database may need it allowed.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/044-hotel-room-availability-calendar/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/ghoomo/rooms/
+│   ├── RoomController.java   ├── Availability.java   ├── RoomBlockRepository.java
+│   ├── RoomBlock.java   ├── Room.java   ├── RoomRepository.java   └── RoomsApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__rooms_and_blocks.sql, V2__demo_rooms.sql
+├── src/test/java/com/ghoomo/rooms/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the database behind it.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">RoomController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">Availability.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">RoomBlockRepository.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">RoomBlock.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">Room.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">RoomRepository.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">V1__rooms_and_blocks.sql</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">V2__demo_rooms.sql</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-9-b" aria-controls="code-9" aria-selected="false" data-group="code">compose.yaml</button><button class="file-btn" role="tab" id="code-10-b" aria-controls="code-10" aria-selected="false" data-group="code">RoomsApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/ghoomo/rooms/RoomController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Checks date ranges, returns the calendar or the hold.</dd><dt>Why</dt><dd>Zero-night and over-long ranges are refused before the database.</dd><dt>Without it</dt><dd>A zero-night stay reaching the database's CHECK and coming back as a 500.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+
+@RestController
+class RoomController {
+
+    /** Demo limits: a calendar shows up to 62 nights, a stay is up to 30 nights. */
+    static final int MAX_CALENDAR_NIGHTS = 62;
+    static final int MAX_STAY_NIGHTS = 30;
+
+    record NewBlock(@NotNull LocalDate checkIn, @NotNull LocalDate checkOut, @NotBlank @Size(max = 80) String guestName) {
+    }
+
+    private final Availability availability;
+
+    RoomController(Availability availability) {
+        this.availability = availability;
+    }
+
+    @GetMapping(&quot;/rooms/{id}/availability&quot;)
+    Availability.Calendar availability(@PathVariable long id,
+                                       @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                                       @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        requireRange(from, to, MAX_CALENDAR_NIGHTS, &quot;to&quot;);
+        return availability.calendar(id, from, to);
+    }
+
+    /** Holds a room for a stay (a demo hold record; no payment, no confirmation sent). */
+    @PostMapping(&quot;/rooms/{id}/blocks&quot;)
+    @ResponseStatus(HttpStatus.CREATED)
+    Availability.BlockView block(@PathVariable long id, @Valid @RequestBody NewBlock request) {
+        requireRange(request.checkIn(), request.checkOut(), MAX_STAY_NIGHTS, &quot;checkOut&quot;);
+        return availability.block(id, request.checkIn(), request.checkOut(), request.guestName().strip());
+    }
+
+    private static void requireRange(LocalDate start, LocalDate end, int maxNights, String endName) {
+        if (!end.isAfter(start)) {
+            throw Availability.problem(HttpStatus.BAD_REQUEST, &quot;Invalid dates&quot;, endName + &quot; must be after the start: the last date is the morning you leave.&quot;);
+        }
+        if (ChronoUnit.DAYS.between(start, end) &gt; maxNights) {
+            throw Availability.problem(HttpStatus.BAD_REQUEST, &quot;Invalid dates&quot;, &quot;At most &quot; + maxNights + &quot; nights.&quot;);
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/ghoomo/rooms/Availability.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Builds the calendar and holds rooms.</dd><dt>Why</dt><dd>A clear 409 from the Java check, and the same 409 when the database refuses a race.</dd><dt>Without it</dt><dd>Races turning into 500s.</dd></dl><ul><li>The constraint violation and a deadlock abort are both answered <code>409</code>; see Design.</li><li><code>saveAndFlush</code> runs the insert now, inside the try, so a refusal is caught here.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.ErrorResponseException;
+
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+
+@Service
+class Availability {
+
+    record Night(LocalDate date, boolean available) {
+    }
+
+    record Calendar(long roomId, LocalDate from, LocalDate to, int freeNights, List&lt;Night&gt; nights) {
+    }
+
+    record BlockView(long id, long roomId, LocalDate checkIn, LocalDate checkOut, long nights, String guestName) {
+        static BlockView of(RoomBlock b) {
+            return new BlockView(b.getId(), b.getRoomId(), b.getCheckIn(), b.getCheckOut(),
+                    b.getCheckIn().datesUntil(b.getCheckOut()).count(), b.getGuestName());
+        }
+    }
+
+    private final RoomRepository rooms;
+    private final RoomBlockRepository blocks;
+
+    Availability(RoomRepository rooms, RoomBlockRepository blocks) {
+        this.rooms = rooms;
+        this.blocks = blocks;
+    }
+
+    /** The nights from `from` up to, not including, `to`: the same half-open rule as a stay. */
+    @Transactional(readOnly = true)
+    Calendar calendar(long roomId, LocalDate from, LocalDate to) {
+        requireRoom(roomId);
+        List&lt;RoomBlock&gt; overlapping = blocks.findByRoomIdAndCheckInBeforeAndCheckOutAfterOrderByCheckIn(roomId, to, from);
+        List&lt;Night&gt; nights = new ArrayList&lt;&gt;();
+        for (LocalDate night = from; night.isBefore(to); night = night.plusDays(1)) {
+            LocalDate n = night;
+            nights.add(new Night(n, overlapping.stream().noneMatch(b -&gt; b.holds(n))));
+        }
+        return new Calendar(roomId, from, to, (int) nights.stream().filter(Night::available).count(), nights);
+    }
+
+    /**
+     * The friendly check first (a clear 409 for the usual case), then the insert. Two requests can both pass the
+     * check at the same moment; the database&#x27;s room_blocks_no_overlap lets only one insert win, and the other
+     * becomes the same 409, not a 500, whether it was refused by the constraint or aborted as a deadlock.
+     */
+    @Transactional
+    BlockView block(long roomId, LocalDate checkIn, LocalDate checkOut, String guestName) {
+        requireRoom(roomId);
+        if (blocks.existsByRoomIdAndCheckInBeforeAndCheckOutAfter(roomId, checkOut, checkIn)) {
+            throw taken(roomId, checkIn, checkOut);
+        }
+        try {
+            return BlockView.of(blocks.saveAndFlush(new RoomBlock(roomId, checkIn, checkOut, guestName)));
+        } catch (DataIntegrityViolationException e) {
+            if (String.valueOf(e.getMessage()).contains(&quot;room_blocks_no_overlap&quot;)) {
+                throw taken(roomId, checkIn, checkOut);
+            }
+            throw e;
+        } catch (PessimisticLockingFailureException e) {
+            // Two overlapping inserts can each wait for the other&#x27;s exclusion check: PostgreSQL then aborts one as a
+            // deadlock (found by BlockConcurrencyTest). The other commits its nights, so this request did clash.
+            throw taken(roomId, checkIn, checkOut);
+        }
+    }
+
+    private void requireRoom(long roomId) {
+        if (!rooms.existsById(roomId)) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;Room not found&quot;, &quot;No room &quot; + roomId + &quot;.&quot;);
+        }
+    }
+
+    private static ErrorResponseException taken(long roomId, LocalDate checkIn, LocalDate checkOut) {
+        return problem(HttpStatus.CONFLICT, &quot;Not available&quot;, &quot;Room &quot; + roomId + &quot; is already held for a night between &quot; + checkIn + &quot; and &quot; + checkOut + &quot;.&quot;);
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/ghoomo/rooms/RoomBlockRepository.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The overlap rule as a derived query method.</dd><dt>Why</dt><dd><code>CheckInBefore(newCheckOut)</code> and <code>CheckOutAfter(newCheckIn)</code> are the two halves of the rule.</dd><dt>Without it</dt><dd>Hand-written JPQL, or the start-date check.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.time.LocalDate;
+import java.util.List;
+
+/**
+ * Two half-open ranges [a, b) and [c, d) overlap exactly when a &lt; d and b &gt; c. With &quot;existing&quot; on the left:
+ * existing.checkIn &lt; new.checkOut AND existing.checkOut &gt; new.checkIn. Spring Data writes it from the method name:
+ * CheckInBefore(x) is check_in &lt; x, CheckOutAfter(y) is check_out &gt; y.
+ */
+interface RoomBlockRepository extends JpaRepository&lt;RoomBlock, Long&gt; {
+
+    boolean existsByRoomIdAndCheckInBeforeAndCheckOutAfter(Long roomId, LocalDate newCheckOut, LocalDate newCheckIn);
+
+    List&lt;RoomBlock&gt; findByRoomIdAndCheckInBeforeAndCheckOutAfterOrderByCheckIn(Long roomId, LocalDate to, LocalDate from);
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/ghoomo/rooms/RoomBlock.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>A hold as an entity, with <code>holds(night)</code> for the calendar.</dd><dt>Why</dt><dd>The same half-open rule in one line.</dd><dt>Without it</dt><dd>A calendar that marks the check-out night taken.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+import java.time.LocalDate;
+
+/** A room held for the nights checkIn up to, not including, checkOut. */
+@Entity
+@Table(name = &quot;room_blocks&quot;)
+public class RoomBlock {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private Long roomId;
+    private LocalDate checkIn;
+    private LocalDate checkOut;
+    private String guestName;
+
+    protected RoomBlock() {   // for JPA
+    }
+
+    RoomBlock(Long roomId, LocalDate checkIn, LocalDate checkOut, String guestName) {
+        this.roomId = roomId;
+        this.checkIn = checkIn;
+        this.checkOut = checkOut;
+        this.guestName = guestName;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public Long getRoomId() {
+        return roomId;
+    }
+
+    public LocalDate getCheckIn() {
+        return checkIn;
+    }
+
+    public LocalDate getCheckOut() {
+        return checkOut;
+    }
+
+    public String getGuestName() {
+        return guestName;
+    }
+
+    /** Is this night (the night starting on that date) held by the block? */
+    boolean holds(LocalDate night) {
+        return !night.isBefore(checkIn) &amp;&amp; night.isBefore(checkOut);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/ghoomo/rooms/Room.java</p><div class="notes"><p>A room.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = &quot;rooms&quot;)
+public class Room {
+
+    @Id
+    private Long id;
+    private String hotel;
+    private String name;
+    private short capacity;
+
+    protected Room() {   // for JPA
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public String getHotel() {
+        return hotel;
+    }
+
+    public String getName() {
+        return name;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/ghoomo/rooms/RoomRepository.java</p><div class="notes"><p>Rooms, for "does this room exist".</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+interface RoomRepository extends JpaRepository&lt;Room, Long&gt; {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/resources/db/migration/V1__rooms_and_blocks.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Rooms and holds, with the <code>EXCLUDE</code> constraint.</dd><dt>Why</dt><dd><code>daterange(check_in, check_out, '[)')</code> uses the same half-open rule as Java.</dd><dt>Without it</dt><dd>Two holds for one night when two desks press "book" together.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">CREATE TABLE rooms (
+    id       BIGINT       PRIMARY KEY,
+    hotel    VARCHAR(80)  NOT NULL,
+    name     VARCHAR(80)  NOT NULL,
+    capacity SMALLINT     NOT NULL,
+    CONSTRAINT rooms_capacity_range CHECK (capacity BETWEEN 1 AND 10)
+);
+
+-- A block holds a room for the nights from check_in up to, but not including, check_out: the half-open range
+-- [check_in, check_out). 10 to 12 June is the nights of the 10th and 11th; the next guest may check in on the 12th.
+CREATE TABLE room_blocks (
+    id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    room_id    BIGINT      NOT NULL,
+    check_in   DATE        NOT NULL,
+    check_out  DATE        NOT NULL,
+    guest_name VARCHAR(80) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT room_blocks_room_fk     FOREIGN KEY (room_id) REFERENCES rooms (id),
+    CONSTRAINT room_blocks_dates_order CHECK (check_out &gt; check_in)
+);
+
+-- The guarantee, for every writer and every race: no two blocks of one room share a night. &#x27;[)&#x27; is half-open, the
+-- same rule as the Java check, so back-to-back stays (out on the 12th, in on the 12th) are allowed.
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+ALTER TABLE room_blocks ADD CONSTRAINT room_blocks_no_overlap
+    EXCLUDE USING gist (room_id WITH =, daterange(check_in, check_out, &#x27;[)&#x27;) WITH &amp;&amp;);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_rooms.sql</p><div class="notes"><p>Two rooms and two holds.</p></div><div class="src"><pre class="code"><code class="language-sql">-- Demo data: hotels, rooms and guests are fictional.
+INSERT INTO rooms (id, hotel, name, capacity) VALUES
+    (101, &#x27;Ghoomo Candolim, Goa&#x27;, &#x27;Deluxe sea view&#x27;, 2),
+    (102, &#x27;Ghoomo Candolim, Goa&#x27;, &#x27;Family suite&#x27;, 4);
+
+INSERT INTO room_blocks (room_id, check_in, check_out, guest_name) VALUES
+    (101, DATE &#x27;2026-06-10&#x27;, DATE &#x27;2026-06-12&#x27;, &#x27;Asha Verma&#x27;),
+    (101, DATE &#x27;2026-06-15&#x27;, DATE &#x27;2026-06-16&#x27;, &#x27;Ravi Iyer&#x27;);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>open-in-view off, schema validation, strict JSON.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: ghoomo-rooms
+  mvc:
+    problemdetails:
+      enabled: true
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ghoomo
+    username: ghoomo
+    password: ghoomo
+  jpa:
+    # No database work after the service returns: a lazy association touched while writing JSON fails loudly
+    # instead of quietly running extra queries during the response.
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # Flyway owns the schema; Hibernate only checks the entities match it</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-9" aria-labelledby="code-9-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ghoomo
+      POSTGRES_USER: ghoomo
+      POSTGRES_PASSWORD: ghoomo
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U ghoomo -d ghoomo&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-10" aria-labelledby="code-10-b" hidden><p class="path">src/main/java/com/ghoomo/rooms/RoomsApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class RoomsApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(RoomsApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>AvailabilityContractTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>StartDatesOnlyTrapTest</code> (10 runs)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>BlockDatabaseTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Concurrency</td><td>A real concurrency test that proves the invariant holds</td><td><code>BlockConcurrencyTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, Hibernate 7, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.ghoomo.rooms.BlockConcurrencyTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0 -- in com.ghoomo.rooms.StartDatesOnlyTrapTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.ghoomo.rooms.AvailabilityContractTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.ghoomo.rooms.BlockDatabaseTest
+[INFO] Tests run: 18, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">StartDatesOnlyTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">BlockConcurrencyTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">BlockDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">AvailabilityContractTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">OldRoomBlockRepository.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-6-b" aria-controls="tests-6" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/ghoomo/rooms/StartDatesOnlyTrapTest.java</p><div class="notes"><p>Written first: the old checks, and the rule on eight shapes.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.time.LocalDate;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** The first test written for this station. Room 101 is held 10-12 June. */
+class StartDatesOnlyTrapTest extends ApiTest {
+
+    static final LocalDate JUNE_11 = LocalDate.of(2026, 6, 11);
+    static final LocalDate JUNE_12 = LocalDate.of(2026, 6, 12);
+    static final LocalDate JUNE_13 = LocalDate.of(2026, 6, 13);
+    static final LocalDate JUNE_14 = LocalDate.of(2026, 6, 14);
+
+    @Autowired
+    OldRoomBlockRepository old;
+
+    @Test
+    void comparingStartDatesSaysElevenToThirteenIsFree() {
+        assertThat(old.existsByRoomIdAndCheckInEquals(101L, JUNE_11)).isFalse();                                  // sold again
+        assertThat(blocks.existsByRoomIdAndCheckInBeforeAndCheckOutAfter(101L, JUNE_13, JUNE_11)).isTrue();  // the night of the 11th is taken
+    }
+
+    @Test
+    void includingTheCheckOutDayRefusesABackToBackStay() {
+        assertThat(old.existsByRoomIdAndCheckInLessThanEqualAndCheckOutGreaterThanEqual(101L, JUNE_14, JUNE_12)).isTrue();   // wrongly &quot;taken&quot;
+        assertThat(blocks.existsByRoomIdAndCheckInBeforeAndCheckOutAfter(101L, JUNE_14, JUNE_12)).isFalse();                  // in on the 12th, as Asha leaves
+    }
+
+    @ParameterizedTest(name = &quot;{0} to {1} against 10-12 June -&gt; overlaps {2}&quot;)
+    @CsvSource({
+            &quot;2026-06-11, 2026-06-13, true&quot;,    // starts inside
+            &quot;2026-06-08, 2026-06-11, true&quot;,    // ends inside
+            &quot;2026-06-10, 2026-06-12, true&quot;,    // the same stay
+            &quot;2026-06-10, 2026-06-11, true&quot;,    // within, same start
+            &quot;2026-06-08, 2026-06-14, true&quot;,    // covers it
+            &quot;2026-06-08, 2026-06-10, false&quot;,   // leaves the morning Asha arrives
+            &quot;2026-06-12, 2026-06-14, false&quot;,   // arrives the morning Asha leaves
+            &quot;2026-06-20, 2026-06-22, false&quot;})  // nowhere near
+    void theOverlapRuleOnEveryShape(LocalDate checkIn, LocalDate checkOut, boolean overlaps) {
+        assertThat(blocks.existsByRoomIdAndCheckInBeforeAndCheckOutAfter(101L, checkOut, checkIn)).isEqualTo(overlaps);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/ghoomo/rooms/BlockConcurrencyTest.java</p><div class="notes"><p>20 identical and 30 staggered holds, released by one latch; a self-join proves no night is shared.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** Several desks selling the same room at once: no night is ever held twice, and nobody gets a 500. */
+class BlockConcurrencyTest extends ApiTest {
+
+    @Test
+    void twentyRequestsForTheSameNightsHoldItOnce() throws Exception {
+        List&lt;Integer&gt; statuses = together(20, () -&gt; hold(102, &quot;2026-08-01&quot;, &quot;2026-08-04&quot;).andReturn().getResponse().getStatus());
+        assertThat(statuses).filteredOn(s -&gt; s == 201).hasSize(1);
+        assertThat(statuses).filteredOn(s -&gt; s == 409).hasSize(19);
+        assertThat(blocksOf(102)).isEqualTo(1);
+    }
+
+    @Test
+    void staggeredOverlappingRequestsNeverShareANight() throws Exception {
+        // 30 requests of 3 nights each, starting one day apart: neighbours overlap.
+        AtomicInteger day = new AtomicInteger();
+        List&lt;Integer&gt; statuses = together(30, () -&gt; {
+            int d = day.getAndIncrement();
+            return hold(102, &quot;2026-09-01&quot;.replace(&quot;01&quot;, &quot;%02d&quot;.formatted(1 + d % 28)), &quot;2026-09-01&quot;.replace(&quot;01&quot;, &quot;%02d&quot;.formatted(4 + d % 28)))
+                    .andReturn().getResponse().getStatus();
+        });
+        assertThat(statuses).doesNotContain(500).containsOnly(201, 409, 400);
+        long sharedNights = jdbc.sql(&quot;&quot;&quot;
+                SELECT count(*) FROM room_blocks a JOIN room_blocks b
+                  ON a.room_id = b.room_id AND a.id &lt; b.id AND a.check_in &lt; b.check_out AND a.check_out &gt; b.check_in&quot;&quot;&quot;).query(Long.class).single();
+        assertThat(sharedNights).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/ghoomo/rooms/BlockDatabaseTest.java</p><div class="notes"><p>Named constraints, back-to-back via SQL, and an all-or-nothing group.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The table&#x27;s rules with Java bypassed, and a rollback. */
+class BlockDatabaseTest extends ApiTest {
+
+    @Autowired
+    TransactionTemplate transaction;
+
+    void insert(long room, String in, String out) {
+        jdbc.sql(&quot;INSERT INTO room_blocks (room_id, check_in, check_out, guest_name) VALUES (?, ?::date, ?::date, &#x27;SQL&#x27;)&quot;).params(room, in, out).update();
+    }
+
+    @Test
+    void namedConstraintsHoldWithoutJava() {
+        assertThatThrownBy(() -&gt; insert(101, &quot;2026-06-11&quot;, &quot;2026-06-13&quot;)).hasMessageContaining(&quot;room_blocks_no_overlap&quot;);
+        assertThatThrownBy(() -&gt; insert(101, &quot;2026-07-05&quot;, &quot;2026-07-05&quot;)).hasMessageContaining(&quot;room_blocks_dates_order&quot;);
+        assertThatThrownBy(() -&gt; insert(999, &quot;2026-07-01&quot;, &quot;2026-07-02&quot;)).hasMessageContaining(&quot;room_blocks_room_fk&quot;);
+        insert(101, &quot;2026-06-12&quot;, &quot;2026-06-15&quot;);   // back to back on both sides: allowed by &#x27;[)&#x27;
+        assertThat(blocksOf(101)).isEqualTo(3);
+    }
+
+    @Test
+    void aGroupBookingIsAllOrNothing() {
+        assertThatThrownBy(() -&gt; transaction.executeWithoutResult(status -&gt; {
+            insert(102, &quot;2026-07-01&quot;, &quot;2026-07-03&quot;);
+            insert(101, &quot;2026-06-11&quot;, &quot;2026-06-12&quot;);   // room 101 is held that night: the whole group is refused
+        })).hasMessageContaining(&quot;room_blocks_no_overlap&quot;);
+        assertThat(blocksOf(102)).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/ghoomo/rooms/AvailabilityContractTest.java</p><div class="notes"><p>The calendar, holds, and refusals through HTTP.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP contract. Room 101: held 10-12 June and 15-16 June. */
+class AvailabilityContractTest extends ApiTest {
+
+    @Test
+    void theCalendarShowsEachNight() throws Exception {
+        mvc.perform(get(&quot;/rooms/101/availability&quot;).param(&quot;from&quot;, &quot;2026-06-09&quot;).param(&quot;to&quot;, &quot;2026-06-17&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.nights[*].date&quot;, contains(&quot;2026-06-09&quot;, &quot;2026-06-10&quot;, &quot;2026-06-11&quot;, &quot;2026-06-12&quot;, &quot;2026-06-13&quot;, &quot;2026-06-14&quot;, &quot;2026-06-15&quot;, &quot;2026-06-16&quot;)))
+                .andExpect(jsonPath(&quot;$.nights[*].available&quot;, contains(true, false, false, true, true, true, false, true)))
+                .andExpect(jsonPath(&quot;$.freeNights&quot;).value(5));
+    }
+
+    @Test
+    void aFreeStayIsHeldAndAnOverlappingOneIsNot() throws Exception {
+        hold(101, &quot;2026-06-12&quot;, &quot;2026-06-15&quot;).andExpect(status().isCreated())
+                .andExpect(jsonPath(&quot;$.nights&quot;).value(3)).andExpect(jsonPath(&quot;$.roomId&quot;).value(101));
+        hold(101, &quot;2026-06-11&quot;, &quot;2026-06-13&quot;).andExpect(status().isConflict()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Not available&quot;));
+        hold(102, &quot;2026-06-11&quot;, &quot;2026-06-13&quot;).andExpect(status().isCreated());   // another room, same nights
+    }
+
+    @Test
+    void anUnknownRoomIs404() throws Exception {
+        hold(999, &quot;2026-07-01&quot;, &quot;2026-07-02&quot;).andExpect(status().isNotFound()).andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+        mvc.perform(get(&quot;/rooms/999/availability&quot;).param(&quot;from&quot;, &quot;2026-06-09&quot;).param(&quot;to&quot;, &quot;2026-06-10&quot;)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void impossibleDatesAre400() throws Exception {
+        hold(101, &quot;2026-07-02&quot;, &quot;2026-07-02&quot;).andExpect(status().isBadRequest());   // zero nights
+        hold(101, &quot;2026-07-03&quot;, &quot;2026-07-01&quot;).andExpect(status().isBadRequest());
+        hold(101, &quot;2026-07-01&quot;, &quot;2026-08-15&quot;).andExpect(status().isBadRequest());   // over 30 nights
+        mvc.perform(get(&quot;/rooms/101/availability&quot;).param(&quot;from&quot;, &quot;2026-06-10&quot;).param(&quot;to&quot;, &quot;2026-06-10&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(post(&quot;/rooms/101/blocks&quot;).contentType(MediaType.APPLICATION_JSON)
+                .content(&quot;{\&quot;checkIn\&quot;:\&quot;2026-07-01\&quot;,\&quot;checkOut\&quot;:\&quot;2026-07-02\&quot;}&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(post(&quot;/rooms/101/blocks&quot;).contentType(MediaType.APPLICATION_JSON)
+                .content(&quot;{\&quot;checkIn\&quot;:\&quot;2026-07-01\&quot;,\&quot;checkOut\&quot;:\&quot;2026-07-02\&quot;,\&quot;guestName\&quot;:\&quot;A\&quot;,\&quot;nights\&quot;:5}&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/ghoomo/rooms/OldRoomBlockRepository.java</p><div class="notes"><p>The old checks as derived methods, kept only in tests.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.springframework.data.repository.Repository;
+
+import java.time.LocalDate;
+
+/** The overlap checks the team tried before, kept only in tests (Spring Data writes their queries too). */
+interface OldRoomBlockRepository extends Repository&lt;RoomBlock, Long&gt; {
+
+    /** The original: a stay clashes only if it starts on the same day as another. */
+    boolean existsByRoomIdAndCheckInEquals(Long roomId, LocalDate checkIn);   // &quot;Equals&quot;: a name ending in &quot;CheckIn&quot; would read &quot;In&quot; as the IN keyword
+
+    /** The first fix: ranges compared with both ends included, as if the check-out night were part of the stay. */
+    boolean existsByRoomIdAndCheckInLessThanEqualAndCheckOutGreaterThanEqual(Long roomId, LocalDate newCheckOut, LocalDate newCheckIn);
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/ghoomo/rooms/ApiTest.java</p><div class="notes"><p>Shared setup: the demo holds before each test, and the latch helper.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/** Shared setup: the app on a real PostgreSQL. Before each test, room 101 holds 10-12 June (Asha) and 15-16 June (Ravi). */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+    @Autowired
+    RoomBlockRepository blocks;
+
+    @BeforeEach
+    void demoBlocks() {
+        jdbc.sql(&quot;TRUNCATE room_blocks RESTART IDENTITY&quot;).update();
+        jdbc.sql(&quot;&quot;&quot;
+                INSERT INTO room_blocks (room_id, check_in, check_out, guest_name) VALUES
+                    (101, DATE &#x27;2026-06-10&#x27;, DATE &#x27;2026-06-12&#x27;, &#x27;Asha Verma&#x27;),
+                    (101, DATE &#x27;2026-06-15&#x27;, DATE &#x27;2026-06-16&#x27;, &#x27;Ravi Iyer&#x27;)&quot;&quot;&quot;).update();
+    }
+
+    ResultActions hold(long room, String checkIn, String checkOut) throws Exception {
+        return mvc.perform(post(&quot;/rooms/{id}/blocks&quot;, room).contentType(MediaType.APPLICATION_JSON)
+                .content(&quot;{\&quot;checkIn\&quot;:\&quot;%s\&quot;,\&quot;checkOut\&quot;:\&quot;%s\&quot;,\&quot;guestName\&quot;:\&quot;Test Guest\&quot;}&quot;.formatted(checkIn, checkOut)));
+    }
+
+    long blocksOf(long room) {
+        return jdbc.sql(&quot;SELECT count(*) FROM room_blocks WHERE room_id = ?&quot;).param(room).query(Long.class).single();
+    }
+
+    /** Runs n copies of the task on virtual threads, all released together by one latch. */
+    static &lt;T&gt; List&lt;T&gt; together(int n, Callable&lt;T&gt; task) throws Exception {
+        CountDownLatch start = new CountDownLatch(1);
+        List&lt;Future&lt;T&gt;&gt; futures = new ArrayList&lt;&gt;();
+        try (ExecutorService threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; n; i++) {
+                futures.add(threads.submit(() -&gt; {
+                    start.await();
+                    return task.call();
+                }));
+            }
+            start.countDown();
+        }
+        List&lt;T&gt; results = new ArrayList&lt;&gt;();
+        for (Future&lt;T&gt; f : futures) {
+            results.add(f.get());
+        }
+        return results;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-6" aria-labelledby="tests-6-b" hidden><p class="path">src/test/java/com/ghoomo/rooms/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker. Date ranges, EXCLUDE constraints and concurrent inserts must behave exactly as in production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/ghoomo/rooms/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=CancelBlockChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 18 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 21 tests pass (18 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>Cancel a hold</h2><p>Add <code>DELETE /rooms/{id}/blocks/{blockId}</code>: <code>204</code>, and the nights are free again. A block of another room, or none, is <code>404</code>.</p><p><b>Done when:</b> both tests in <code>CancelBlockChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li><code>findById</code>, then check the room before deleting.</li><li>A block id from another room must never delete that room's hold.</li></ul></details><p class="path">challenge/CancelBlockChallengeTest.java</p><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: DELETE /rooms/{id}/blocks/{blockId} releases a hold: 204, and its nights are free again. A block that
+ * does not exist, or belongs to another room, is 404.
+ */
+class CancelBlockChallengeTest extends ApiTest {
+
+    @Test
+    void cancellingFreesTheNights() throws Exception {
+        mvc.perform(delete(&quot;/rooms/101/blocks/1&quot;)).andExpect(status().isNoContent());   // Asha&#x27;s 10-12 June
+        mvc.perform(get(&quot;/rooms/101/availability&quot;).param(&quot;from&quot;, &quot;2026-06-10&quot;).param(&quot;to&quot;, &quot;2026-06-12&quot;))
+                .andExpect(jsonPath(&quot;$.nights[*].available&quot;, contains(true, true)));
+    }
+
+    @Test
+    void aBlockOfAnotherRoomOrNoneIs404() throws Exception {
+        mvc.perform(delete(&quot;/rooms/102/blocks/1&quot;)).andExpect(status().isNotFound());
+        mvc.perform(delete(&quot;/rooms/101/blocks/999&quot;)).andExpect(status().isNotFound());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/Availability.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.ErrorResponseException;
+
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+
+@Service
+class Availability {
+
+    record Night(LocalDate date, boolean available) {
+    }
+
+    record Calendar(long roomId, LocalDate from, LocalDate to, int freeNights, List&lt;Night&gt; nights) {
+    }
+
+    record BlockView(long id, long roomId, LocalDate checkIn, LocalDate checkOut, long nights, String guestName) {
+        static BlockView of(RoomBlock b) {
+            return new BlockView(b.getId(), b.getRoomId(), b.getCheckIn(), b.getCheckOut(),
+                    b.getCheckIn().datesUntil(b.getCheckOut()).count(), b.getGuestName());
+        }
+    }
+
+    private final RoomRepository rooms;
+    private final RoomBlockRepository blocks;
+
+    Availability(RoomRepository rooms, RoomBlockRepository blocks) {
+        this.rooms = rooms;
+        this.blocks = blocks;
+    }
+
+    /** The nights from `from` up to, not including, `to`: the same half-open rule as a stay. */
+    @Transactional(readOnly = true)
+    Calendar calendar(long roomId, LocalDate from, LocalDate to) {
+        requireRoom(roomId);
+        List&lt;RoomBlock&gt; overlapping = blocks.findByRoomIdAndCheckInBeforeAndCheckOutAfterOrderByCheckIn(roomId, to, from);
+        List&lt;Night&gt; nights = new ArrayList&lt;&gt;();
+        for (LocalDate night = from; night.isBefore(to); night = night.plusDays(1)) {
+            LocalDate n = night;
+            nights.add(new Night(n, overlapping.stream().noneMatch(b -&gt; b.holds(n))));
+        }
+        return new Calendar(roomId, from, to, (int) nights.stream().filter(Night::available).count(), nights);
+    }
+
+    /**
+     * The friendly check first (a clear 409 for the usual case), then the insert. Two requests can both pass the
+     * check at the same moment; the database&#x27;s room_blocks_no_overlap lets only one insert win, and the other
+     * becomes the same 409, not a 500, whether it was refused by the constraint or aborted as a deadlock.
+     */
+    @Transactional
+    BlockView block(long roomId, LocalDate checkIn, LocalDate checkOut, String guestName) {
+        requireRoom(roomId);
+        if (blocks.existsByRoomIdAndCheckInBeforeAndCheckOutAfter(roomId, checkOut, checkIn)) {
+            throw taken(roomId, checkIn, checkOut);
+        }
+        try {
+            return BlockView.of(blocks.saveAndFlush(new RoomBlock(roomId, checkIn, checkOut, guestName)));
+        } catch (DataIntegrityViolationException e) {
+            if (String.valueOf(e.getMessage()).contains(&quot;room_blocks_no_overlap&quot;)) {
+                throw taken(roomId, checkIn, checkOut);
+            }
+            throw e;
+        } catch (PessimisticLockingFailureException e) {
+            // Two overlapping inserts can each wait for the other&#x27;s exclusion check: PostgreSQL then aborts one as a
+            // deadlock (found by BlockConcurrencyTest). The other commits its nights, so this request did clash.
+            throw taken(roomId, checkIn, checkOut);
+        }
+    }
+
+    record RoomView(long id, String hotel, String name, int capacity) {
+    }
+
+    @Transactional(readOnly = true)
+    List&lt;RoomView&gt; free(LocalDate checkIn, LocalDate checkOut, int guests) {
+        return rooms.free(checkIn, checkOut, guests).stream().map(r -&gt; new RoomView(r.getId(), r.getHotel(), r.getName(), r.getCapacity())).toList();
+    }
+
+    /** Only a block of this room: an id from another room is &quot;not found&quot;, not deleted. */
+    @Transactional
+    void cancel(long roomId, long blockId) {
+        RoomBlock block = blocks.findById(blockId).filter(b -&gt; b.getRoomId() == roomId)
+                .orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;Block not found&quot;, &quot;Room &quot; + roomId + &quot; has no block &quot; + blockId + &quot;.&quot;));
+        blocks.delete(block);
+    }
+
+    private void requireRoom(long roomId) {
+        if (!rooms.existsById(roomId)) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;Room not found&quot;, &quot;No room &quot; + roomId + &quot;.&quot;);
+        }
+    }
+
+    private static ErrorResponseException taken(long roomId, LocalDate checkIn, LocalDate checkOut) {
+        return problem(HttpStatus.CONFLICT, &quot;Not available&quot;, &quot;Room &quot; + roomId + &quot; is already held for a night between &quot; + checkIn + &quot; and &quot; + checkOut + &quot;.&quot;);
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}</code></pre></div><p class="path">challenge/solution/RoomController.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+
+@RestController
+class RoomController {
+
+    /** Demo limits: a calendar shows up to 62 nights, a stay is up to 30 nights. */
+    static final int MAX_CALENDAR_NIGHTS = 62;
+    static final int MAX_STAY_NIGHTS = 30;
+
+    record NewBlock(@NotNull LocalDate checkIn, @NotNull LocalDate checkOut, @NotBlank @Size(max = 80) String guestName) {
+    }
+
+    private final Availability availability;
+
+    RoomController(Availability availability) {
+        this.availability = availability;
+    }
+
+    @GetMapping(&quot;/rooms/{id}/availability&quot;)
+    Availability.Calendar availability(@PathVariable long id,
+                                       @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                                       @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        requireRange(from, to, MAX_CALENDAR_NIGHTS, &quot;to&quot;);
+        return availability.calendar(id, from, to);
+    }
+
+    /** Holds a room for a stay (a demo hold record; no payment, no confirmation sent). */
+    @PostMapping(&quot;/rooms/{id}/blocks&quot;)
+    @ResponseStatus(HttpStatus.CREATED)
+    Availability.BlockView block(@PathVariable long id, @Valid @RequestBody NewBlock request) {
+        requireRange(request.checkIn(), request.checkOut(), MAX_STAY_NIGHTS, &quot;checkOut&quot;);
+        return availability.block(id, request.checkIn(), request.checkOut(), request.guestName().strip());
+    }
+
+    @GetMapping(&quot;/rooms/free&quot;)
+    List&lt;Availability.RoomView&gt; free(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkIn,
+                                     @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkOut,
+                                     @RequestParam @Min(1) @Max(10) int guests) {
+        requireRange(checkIn, checkOut, MAX_STAY_NIGHTS, &quot;checkOut&quot;);
+        return availability.free(checkIn, checkOut, guests);
+    }
+
+    @DeleteMapping(&quot;/rooms/{id}/blocks/{blockId}&quot;)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void cancel(@PathVariable long id, @PathVariable long blockId) {
+        availability.cancel(id, blockId);
+    }
+
+    private static void requireRange(LocalDate start, LocalDate end, int maxNights, String endName) {
+        if (!end.isAfter(start)) {
+            throw Availability.problem(HttpStatus.BAD_REQUEST, &quot;Invalid dates&quot;, endName + &quot; must be after the start: the last date is the morning you leave.&quot;);
+        }
+        if (ChronoUnit.DAYS.between(start, end) &gt; maxNights) {
+            throw Availability.problem(HttpStatus.BAD_REQUEST, &quot;Invalid dates&quot;, &quot;At most &quot; + maxNights + &quot; nights.&quot;);
+        }
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 30 minutes</p><h2>Find a free room</h2><p>Add <code>GET /rooms/free?checkIn&amp;checkOut&amp;guests</code>: rooms with enough beds and no night held in the range, by id, in one query.</p><p><b>Done when:</b> the test in <code>FreeRoomsChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>JPQL: <code>where r.capacity &gt;= :guests and not exists (select b from RoomBlock b where …)</code>.</li><li>Inside, the same overlap rule: <code>b.checkIn &lt; :checkOut and b.checkOut &gt; :checkIn</code>.</li></ul></details><p class="path">challenge/FreeRoomsChallengeTest.java</p><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+
+/**
+ * Challenge 2: GET /rooms/free?checkIn&amp;checkOut&amp;guests: every room with enough capacity and no night held in the
+ * range, by id. One query: rooms where NOT EXISTS an overlapping block, with the same half-open rule.
+ */
+class FreeRoomsChallengeTest extends ApiTest {
+
+    @Test
+    void roomsFreeForTheWholeStayWithEnoughBeds() throws Exception {
+        mvc.perform(get(&quot;/rooms/free&quot;).param(&quot;checkIn&quot;, &quot;2026-06-11&quot;).param(&quot;checkOut&quot;, &quot;2026-06-13&quot;).param(&quot;guests&quot;, &quot;2&quot;))
+                .andExpect(jsonPath(&quot;$[*].id&quot;, contains(102)));
+        mvc.perform(get(&quot;/rooms/free&quot;).param(&quot;checkIn&quot;, &quot;2026-06-12&quot;).param(&quot;checkOut&quot;, &quot;2026-06-14&quot;).param(&quot;guests&quot;, &quot;2&quot;))
+                .andExpect(jsonPath(&quot;$[*].id&quot;, contains(101, 102)));
+        mvc.perform(get(&quot;/rooms/free&quot;).param(&quot;checkIn&quot;, &quot;2026-06-12&quot;).param(&quot;checkOut&quot;, &quot;2026-06-14&quot;).param(&quot;guests&quot;, &quot;5&quot;))
+                .andExpect(jsonPath(&quot;$&quot;, empty()));
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/RoomRepository.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.time.LocalDate;
+import java.util.List;
+
+interface RoomRepository extends JpaRepository&lt;Room, Long&gt; {
+
+    /** Rooms with enough beds and no block overlapping [checkIn, checkOut): the same rule as the overlap check. */
+    @Query(&quot;&quot;&quot;
+            select r from Room r
+             where r.capacity &gt;= :guests
+               and not exists (select b from RoomBlock b
+                                where b.roomId = r.id and b.checkIn &lt; :checkOut and b.checkOut &gt; :checkIn)
+             order by r.id&quot;&quot;&quot;)
+    List&lt;Room&gt; free(LocalDate checkIn, LocalDate checkOut, int guests);
+}</code></pre></div><p class="path">challenge/solution/Room.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = &quot;rooms&quot;)
+public class Room {
+
+    @Id
+    private Long id;
+    private String hotel;
+    private String name;
+    private short capacity;
+
+    protected Room() {   // for JPA
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public String getHotel() {
+        return hotel;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public short getCapacity() {
+        return capacity;
+    }
+}</code></pre></div><p class="path">challenge/solution/Availability.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.ErrorResponseException;
+
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+
+@Service
+class Availability {
+
+    record Night(LocalDate date, boolean available) {
+    }
+
+    record Calendar(long roomId, LocalDate from, LocalDate to, int freeNights, List&lt;Night&gt; nights) {
+    }
+
+    record BlockView(long id, long roomId, LocalDate checkIn, LocalDate checkOut, long nights, String guestName) {
+        static BlockView of(RoomBlock b) {
+            return new BlockView(b.getId(), b.getRoomId(), b.getCheckIn(), b.getCheckOut(),
+                    b.getCheckIn().datesUntil(b.getCheckOut()).count(), b.getGuestName());
+        }
+    }
+
+    private final RoomRepository rooms;
+    private final RoomBlockRepository blocks;
+
+    Availability(RoomRepository rooms, RoomBlockRepository blocks) {
+        this.rooms = rooms;
+        this.blocks = blocks;
+    }
+
+    /** The nights from `from` up to, not including, `to`: the same half-open rule as a stay. */
+    @Transactional(readOnly = true)
+    Calendar calendar(long roomId, LocalDate from, LocalDate to) {
+        requireRoom(roomId);
+        List&lt;RoomBlock&gt; overlapping = blocks.findByRoomIdAndCheckInBeforeAndCheckOutAfterOrderByCheckIn(roomId, to, from);
+        List&lt;Night&gt; nights = new ArrayList&lt;&gt;();
+        for (LocalDate night = from; night.isBefore(to); night = night.plusDays(1)) {
+            LocalDate n = night;
+            nights.add(new Night(n, overlapping.stream().noneMatch(b -&gt; b.holds(n))));
+        }
+        return new Calendar(roomId, from, to, (int) nights.stream().filter(Night::available).count(), nights);
+    }
+
+    /**
+     * The friendly check first (a clear 409 for the usual case), then the insert. Two requests can both pass the
+     * check at the same moment; the database&#x27;s room_blocks_no_overlap lets only one insert win, and the other
+     * becomes the same 409, not a 500, whether it was refused by the constraint or aborted as a deadlock.
+     */
+    @Transactional
+    BlockView block(long roomId, LocalDate checkIn, LocalDate checkOut, String guestName) {
+        requireRoom(roomId);
+        if (blocks.existsByRoomIdAndCheckInBeforeAndCheckOutAfter(roomId, checkOut, checkIn)) {
+            throw taken(roomId, checkIn, checkOut);
+        }
+        try {
+            return BlockView.of(blocks.saveAndFlush(new RoomBlock(roomId, checkIn, checkOut, guestName)));
+        } catch (DataIntegrityViolationException e) {
+            if (String.valueOf(e.getMessage()).contains(&quot;room_blocks_no_overlap&quot;)) {
+                throw taken(roomId, checkIn, checkOut);
+            }
+            throw e;
+        } catch (PessimisticLockingFailureException e) {
+            // Two overlapping inserts can each wait for the other&#x27;s exclusion check: PostgreSQL then aborts one as a
+            // deadlock (found by BlockConcurrencyTest). The other commits its nights, so this request did clash.
+            throw taken(roomId, checkIn, checkOut);
+        }
+    }
+
+    record RoomView(long id, String hotel, String name, int capacity) {
+    }
+
+    @Transactional(readOnly = true)
+    List&lt;RoomView&gt; free(LocalDate checkIn, LocalDate checkOut, int guests) {
+        return rooms.free(checkIn, checkOut, guests).stream().map(r -&gt; new RoomView(r.getId(), r.getHotel(), r.getName(), r.getCapacity())).toList();
+    }
+
+    /** Only a block of this room: an id from another room is &quot;not found&quot;, not deleted. */
+    @Transactional
+    void cancel(long roomId, long blockId) {
+        RoomBlock block = blocks.findById(blockId).filter(b -&gt; b.getRoomId() == roomId)
+                .orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;Block not found&quot;, &quot;Room &quot; + roomId + &quot; has no block &quot; + blockId + &quot;.&quot;));
+        blocks.delete(block);
+    }
+
+    private void requireRoom(long roomId) {
+        if (!rooms.existsById(roomId)) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;Room not found&quot;, &quot;No room &quot; + roomId + &quot;.&quot;);
+        }
+    }
+
+    private static ErrorResponseException taken(long roomId, LocalDate checkIn, LocalDate checkOut) {
+        return problem(HttpStatus.CONFLICT, &quot;Not available&quot;, &quot;Room &quot; + roomId + &quot; is already held for a night between &quot; + checkIn + &quot; and &quot; + checkOut + &quot;.&quot;);
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}</code></pre></div><p class="path">challenge/solution/RoomController.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+
+@RestController
+class RoomController {
+
+    /** Demo limits: a calendar shows up to 62 nights, a stay is up to 30 nights. */
+    static final int MAX_CALENDAR_NIGHTS = 62;
+    static final int MAX_STAY_NIGHTS = 30;
+
+    record NewBlock(@NotNull LocalDate checkIn, @NotNull LocalDate checkOut, @NotBlank @Size(max = 80) String guestName) {
+    }
+
+    private final Availability availability;
+
+    RoomController(Availability availability) {
+        this.availability = availability;
+    }
+
+    @GetMapping(&quot;/rooms/{id}/availability&quot;)
+    Availability.Calendar availability(@PathVariable long id,
+                                       @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                                       @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        requireRange(from, to, MAX_CALENDAR_NIGHTS, &quot;to&quot;);
+        return availability.calendar(id, from, to);
+    }
+
+    /** Holds a room for a stay (a demo hold record; no payment, no confirmation sent). */
+    @PostMapping(&quot;/rooms/{id}/blocks&quot;)
+    @ResponseStatus(HttpStatus.CREATED)
+    Availability.BlockView block(@PathVariable long id, @Valid @RequestBody NewBlock request) {
+        requireRange(request.checkIn(), request.checkOut(), MAX_STAY_NIGHTS, &quot;checkOut&quot;);
+        return availability.block(id, request.checkIn(), request.checkOut(), request.guestName().strip());
+    }
+
+    @GetMapping(&quot;/rooms/free&quot;)
+    List&lt;Availability.RoomView&gt; free(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkIn,
+                                     @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkOut,
+                                     @RequestParam @Min(1) @Max(10) int guests) {
+        requireRange(checkIn, checkOut, MAX_STAY_NIGHTS, &quot;checkOut&quot;);
+        return availability.free(checkIn, checkOut, guests);
+    }
+
+    @DeleteMapping(&quot;/rooms/{id}/blocks/{blockId}&quot;)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void cancel(@PathVariable long id, @PathVariable long blockId) {
+        availability.cancel(id, blockId);
+    }
+
+    private static void requireRange(LocalDate start, LocalDate end, int maxNights, String endName) {
+        if (!end.isAfter(start)) {
+            throw Availability.problem(HttpStatus.BAD_REQUEST, &quot;Invalid dates&quot;, endName + &quot; must be after the start: the last date is the morning you leave.&quot;);
+        }
+        if (ChronoUnit.DAYS.between(start, end) &gt; maxNights) {
+            throw Availability.problem(HttpStatus.BAD_REQUEST, &quot;Invalid dates&quot;, &quot;At most &quot; + maxNights + &quot; nights.&quot;);
+        }
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Room types instead of rooms</h2>
+<p>Guests book "a deluxe room", not room 101; the hotel assigns rooms at check-in. The rule becomes "never more deluxe stays on a night than deluxe rooms". Compare a per-night counter row per room type (with a conditional update, as in the flash sale), assigning a concrete room at booking time, and a nightly inventory table. Which one can a database constraint guard?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Decide the range rule (half-open) and write the overlap condition.</li>
+<li>Write the trap test with the old checks and every overlap shape.</li>
+<li>Put the same rule in the database as an <code>EXCLUDE</code> constraint.</li>
+<li>Write the Java check for clear messages, and map every database refusal to <code>409</code>; prove it with parallel holds.</li>
+</ol>
+<h2>Why two kinds of refusal</h2>
+<p>When two overlapping holds arrive together, both pass the Java check. Both inserts then meet the exclusion constraint. Usually one waits for the other and gets the constraint violation. Sometimes each insert waits for the other, and PostgreSQL ends the cycle by aborting one as a deadlock. That happened once while building this station, and came back as a <code>500</code>. In both cases the surviving hold commits those nights, so the refused request truly clashed, and the app answers <code>409</code>. The deadlock cannot be produced on demand, so no test claims to cover it.</p>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Java check + <code>EXCLUDE</code> constraint</td><td>Two places with the same rule; refusals to map.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Java check only</td><td>Races double-book.</td><td><span class="pill bad">Not enough</span></td></tr><tr><td>Compare start dates</td><td>Misses most overlaps.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>One row per room per night with a unique key</td><td>Simple constraint; many rows; long stays are many inserts.</td><td><span class="pill warn">Also correct</span></td></tr><tr><td>Lock the room row (<code>SELECT … FOR UPDATE</code>) before checking</td><td>Serialises holds per room; no deadlock between overlapping inserts.</td><td><span class="pill warn">Valid alternative</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Table</th><th>Constraints</th><th>Why</th></tr></thead><tbody><tr><td><code>rooms</code></td><td>PK, capacity 1 to 10</td><td>What can be held.</td></tr><tr><td><code>room_blocks</code></td><td><code>room_blocks_room_fk</code>, <code>room_blocks_dates_order</code> (at least one night), <code>room_blocks_no_overlap</code> (EXCLUDE, <code>'[)'</code>)</td><td>The no-double-booking rule, for every writer and every race.</td></tr></tbody></table></div>
+<pre class="code"><code class="language-sql">CREATE TABLE rooms (
+    id       BIGINT       PRIMARY KEY,
+    hotel    VARCHAR(80)  NOT NULL,
+    name     VARCHAR(80)  NOT NULL,
+    capacity SMALLINT     NOT NULL,
+    CONSTRAINT rooms_capacity_range CHECK (capacity BETWEEN 1 AND 10)
+);
+
+-- A block holds a room for the nights from check_in up to, but not including, check_out: the half-open range
+-- [check_in, check_out). 10 to 12 June is the nights of the 10th and 11th; the next guest may check in on the 12th.
+CREATE TABLE room_blocks (
+    id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    room_id    BIGINT      NOT NULL,
+    check_in   DATE        NOT NULL,
+    check_out  DATE        NOT NULL,
+    guest_name VARCHAR(80) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT room_blocks_room_fk     FOREIGN KEY (room_id) REFERENCES rooms (id),
+    CONSTRAINT room_blocks_dates_order CHECK (check_out &gt; check_in)
+);
+
+-- The guarantee, for every writer and every race: no two blocks of one room share a night. &#x27;[)&#x27; is half-open, the
+-- same rule as the Java check, so back-to-back stays (out on the 12th, in on the 12th) are allowed.
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+ALTER TABLE room_blocks ADD CONSTRAINT room_blocks_no_overlap
+    EXCLUDE USING gist (room_id WITH =, daterange(check_in, check_out, &#x27;[)&#x27;) WITH &amp;&amp;);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Channel managers</dt><dd>Hotels sell through several sites at once; all of them must go through one inventory that a constraint guards.</dd>
+<dt>Deadlocks</dt><dd>Occasional deadlocks under contention are normal for exclusion constraints. Count them; a rising rate means many desks fight over the same rooms.</dd>
+<dt>Time</dt><dd>Check-in dates are the hotel's local dates, not UTC. A guest's phone in another time zone must not shift them.</dd>
+<dt>Holds that expire</dt><dd>Real holds while a guest pays expire after minutes; that needs a status or an expiry column in the constraint.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>When do two date ranges overlap?</summary><p>For half-open ranges [a, b) and [c, d): when a &lt; d and c &lt; b. Checking only starts, or using &lt;= with exclusive ends, gets edge cases wrong.</p></details><details class="qa"><summary>Why half-open ranges for stays?</summary><p>The check-out day is not a night of the stay. Half-open ranges make back-to-back stays not overlap, and lengths are simply end − start.</p></details><details class="qa"><summary>Why is a Java overlap check not enough?</summary><p>Two requests can check at the same moment, both see no clash, and both insert. Only a constraint in the database decides between them.</p></details><details class="qa"><summary>What is an EXCLUDE constraint?</summary><p>A PostgreSQL constraint that forbids two rows for which given operators all return true, for example same room (=) and overlapping daterange (&amp;&amp;).</p></details><details class="qa"><summary>How do you write date conditions as JPA query methods?</summary><p>With keywords on date fields: CheckInBefore(x) is check_in &lt; x, CheckOutAfter(y) is check_out &gt; y; Spring Data generates the query from the method name.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 18 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>Ranges</td><td>Half-open, everywhere.</td><td>Every overlap shape from memory.</td></tr><tr><td>Concurrency</td><td>A constraint behind the Java check.</td><td>Why a deadlock abort is also a 409 here.</td></tr><tr><td>JPA</td><td>Date query methods.</td><td>Why a name ending in CheckIn breaks.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate simplifies the room code. The clash check becomes "a stay already starts that day". The try/catch around the insert goes. The calendar is "inclusive on both ends", and same-day stays are allowed for day rooms. Read the three files and list every problem before opening the findings.</p>
+<p class="path">review/Availability.java</p>
+<pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.ErrorResponseException;
+
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+
+@Service
+class Availability {
+
+    record Night(LocalDate date, boolean available) {
+    }
+
+    record Calendar(long roomId, LocalDate from, LocalDate to, int freeNights, List&lt;Night&gt; nights) {
+    }
+
+    record BlockView(long id, long roomId, LocalDate checkIn, LocalDate checkOut, long nights, String guestName) {
+        static BlockView of(RoomBlock b) {
+            return new BlockView(b.getId(), b.getRoomId(), b.getCheckIn(), b.getCheckOut(),
+                    b.getCheckIn().datesUntil(b.getCheckOut()).count(), b.getGuestName());
+        }
+    }
+
+    private final RoomRepository rooms;
+    private final RoomBlockRepository blocks;
+
+    Availability(RoomRepository rooms, RoomBlockRepository blocks) {
+        this.rooms = rooms;
+        this.blocks = blocks;
+    }
+
+    /** The nights from `from` up to, not including, `to`: the same half-open rule as a stay. */
+    @Transactional(readOnly = true)
+    Calendar calendar(long roomId, LocalDate from, LocalDate to) {
+        requireRoom(roomId);
+        List&lt;RoomBlock&gt; overlapping = blocks.findByRoomIdAndCheckInBeforeAndCheckOutAfterOrderByCheckIn(roomId, to, from);
+        List&lt;Night&gt; nights = new ArrayList&lt;&gt;();
+        for (LocalDate night = from; night.isBefore(to); night = night.plusDays(1)) {
+            LocalDate n = night;
+            nights.add(new Night(n, overlapping.stream().noneMatch(b -&gt; b.holds(n))));
+        }
+        return new Calendar(roomId, from, to, (int) nights.stream().filter(Night::available).count(), nights);
+    }
+
+    /** PR: &quot;Simpler clash check: a room is taken if a stay already starts that day. Saves a query shape.&quot; */
+    @Transactional
+    BlockView block(long roomId, LocalDate checkIn, LocalDate checkOut, String guestName) {
+        requireRoom(roomId);
+        boolean clash = blocks.findAll().stream().anyMatch(b -&gt; b.getRoomId() == roomId &amp;&amp; b.getCheckIn().equals(checkIn));
+        if (clash) {
+            throw taken(roomId, checkIn, checkOut);
+        }
+        return BlockView.of(blocks.saveAndFlush(new RoomBlock(roomId, checkIn, checkOut, guestName)));
+    }
+
+    private void requireRoom(long roomId) {
+        if (!rooms.existsById(roomId)) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;Room not found&quot;, &quot;No room &quot; + roomId + &quot;.&quot;);
+        }
+    }
+
+    private static ErrorResponseException taken(long roomId, LocalDate checkIn, LocalDate checkOut) {
+        return problem(HttpStatus.CONFLICT, &quot;Not available&quot;, &quot;Room &quot; + roomId + &quot; is already held for a night between &quot; + checkIn + &quot; and &quot; + checkOut + &quot;.&quot;);
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}</code></pre>
+<p class="path">review/RoomBlock.java</p>
+<pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+import java.time.LocalDate;
+
+/** A room held for the nights checkIn up to, not including, checkOut. */
+@Entity
+@Table(name = &quot;room_blocks&quot;)
+public class RoomBlock {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private Long roomId;
+    private LocalDate checkIn;
+    private LocalDate checkOut;
+    private String guestName;
+
+    protected RoomBlock() {   // for JPA
+    }
+
+    RoomBlock(Long roomId, LocalDate checkIn, LocalDate checkOut, String guestName) {
+        this.roomId = roomId;
+        this.checkIn = checkIn;
+        this.checkOut = checkOut;
+        this.guestName = guestName;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public Long getRoomId() {
+        return roomId;
+    }
+
+    public LocalDate getCheckIn() {
+        return checkIn;
+    }
+
+    public LocalDate getCheckOut() {
+        return checkOut;
+    }
+
+    public String getGuestName() {
+        return guestName;
+    }
+
+    /** PR: &quot;Inclusive on both ends, like the dates on the booking.&quot; */
+    boolean holds(LocalDate night) {
+        return !night.isBefore(checkIn) &amp;&amp; !night.isAfter(checkOut);
+    }
+}</code></pre>
+<p class="path">review/RoomController.java</p>
+<pre class="code"><code class="language-java">package com.ghoomo.rooms;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+
+@RestController
+class RoomController {
+
+    /** Demo limits: a calendar shows up to 62 nights, a stay is up to 30 nights. */
+    static final int MAX_CALENDAR_NIGHTS = 62;
+    static final int MAX_STAY_NIGHTS = 30;
+
+    record NewBlock(@NotNull LocalDate checkIn, @NotNull LocalDate checkOut, @NotBlank @Size(max = 80) String guestName) {
+    }
+
+    private final Availability availability;
+
+    RoomController(Availability availability) {
+        this.availability = availability;
+    }
+
+    @GetMapping(&quot;/rooms/{id}/availability&quot;)
+    Availability.Calendar availability(@PathVariable long id,
+                                       @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                                       @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        requireRange(from, to, MAX_CALENDAR_NIGHTS, &quot;to&quot;);
+        return availability.calendar(id, from, to);
+    }
+
+    /** Holds a room for a stay (a demo hold record; no payment, no confirmation sent). */
+    @PostMapping(&quot;/rooms/{id}/blocks&quot;)
+    @ResponseStatus(HttpStatus.CREATED)
+    Availability.BlockView block(@PathVariable long id, @Valid @RequestBody NewBlock request) {
+        requireRange(request.checkIn(), request.checkOut(), MAX_STAY_NIGHTS, &quot;checkOut&quot;);
+        return availability.block(id, request.checkIn(), request.checkOut(), request.guestName().strip());
+    }
+
+    private static void requireRange(LocalDate start, LocalDate end, int maxNights, String endName) {
+        if (end.isBefore(start)) {   // PR: &quot;allow same-day stays for day rooms&quot;
+            throw Availability.problem(HttpStatus.BAD_REQUEST, &quot;Invalid dates&quot;, endName + &quot; must be after the start: the last date is the morning you leave.&quot;);
+        }
+        if (ChronoUnit.DAYS.between(start, end) &gt; maxNights) {
+            throw Availability.problem(HttpStatus.BAD_REQUEST, &quot;Invalid dates&quot;, &quot;At most &quot; + maxNights + &quot; nights.&quot;);
+        }
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>The clash check compares start dates only</summary><p>The original bug again, as a stream over every block. On its own it would be masked: the database refuses the overlap anyway.</p><p class="evidence"><b>Test evidence:</b> With finding 2, an ordinary overlapping hold becomes a <code>500</code>: <code>aFreeStayIsHeldAndAnOverlappingOneIsNot</code> errors.</p></details><details class="finding"><summary><span class="sev">2</span>The database's refusal is not mapped</summary><p>Without the catch, every clash the database stops, including every race, is a <code>500</code>.</p><p class="evidence"><b>Test evidence:</b> <code>twentyRequestsForTheSameNightsHoldItOnce</code> and <code>staggeredOverlappingRequestsNeverShareANight</code> error.</p></details><details class="finding"><summary><span class="sev">3</span>The calendar includes the check-out night</summary><p>"Inclusive on both ends, like the dates on the booking" marks the morning-of-departure night as taken: the 12th looks booked when it is free.</p><p class="evidence"><b>Test evidence:</b> <code>theCalendarShowsEachNight</code> fails.</p></details><details class="finding"><summary><span class="sev">4</span>Same-day stays allowed</summary><p>"Day rooms" are a different product. A stay with no night reaches the database's <code>room_blocks_dates_order</code> and comes back as a <code>500</code>.</p><p class="evidence"><b>Test evidence:</b> <code>impossibleDatesAre400</code> errors.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the three flawed files copied over the real ones, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>BlockDatabaseTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill ok">2 / 2</span></td></tr><tr><td><code>StartDatesOnlyTrapTest</code></td><td><span class="pill ok">10 / 10</span></td><td><span class="pill ok">10 / 10</span></td></tr><tr><td><code>AvailabilityContractTest</code></td><td><span class="pill ok">4 / 4</span></td><td><span class="pill bad">1 / 4</span></td></tr><tr><td><code>BlockConcurrencyTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">0 / 2</span></td></tr></tbody></table></div>
+<p class="note">No double booking got through: the constraint refused every one. What the flaws broke is how the app answers, which is why the database rule and the Java rule both matter.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
