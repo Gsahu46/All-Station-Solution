@@ -1,0 +1,1804 @@
+<title>Station 037 · Bus ticket booking in one transaction</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 037</span>
+    <h1>Bus ticket booking in one transaction</h1>
+    <p class="scenario">A crash between saving the booking and its passengers left bookings with no passengers.</p>
+    <p class="sim"><b>Simulation</b><span>Trips and fares are demo data, not Safarbus's. A booking is a record in this app's database; no payment is taken and no ticket is issued.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Travel</li>
+      <li><b>Types</b>Database</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>036 Medicine search with plain JDBC</p>
+      <p><span class="eyebrow">Builds toward</span><br>038 Gym memberships with migrations and constraints · 042 Flash sale without overselling · 113 Seller bulk price upload</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · plain JDBC transactions: auto-commit, commit, rollback · generated keys · batch insert · PostgreSQL 17 · Flyway · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>A family books two seats</strong><p>The app saves the booking, then each passenger. Each insert is saved the moment it runs.</p></li><li><strong>Something fails in between</strong><p>The server restarts after the booking row, or seat 12 was taken a second earlier. The booking stays, charged for two seats, with one passenger or none. Support finds bookings no conductor can match to anyone.</p></li><li><strong>The fix</strong><p>Booking and passengers in one transaction: all rows are committed together, or a rollback removes them all.</p></li></ol>
+<p class="lesson">Rows that only make sense together are saved together.</p>
+
+<h2>What are we building?</h2>
+<p><code>POST /bookings</code> books up to six seats on a trip, one passenger per seat, and returns the booking id and total. If any seat is taken, nothing is booked.</p>
+
+<h2>An everyday analogy</h2>
+<p>A railway reservation form for a family: the clerk enters every name, and only then presses "confirm". If one berth is gone, the whole form comes back. Nobody gets a ticket for half a family.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Check the request</strong>: the trip exists, seats are on the bus and different.</li>
+<li><strong>Begin</strong>: switch auto-commit off.</li>
+<li><strong>Insert</strong> the booking (the database returns its id), then all passengers in one batch.</li>
+<li><strong>Commit</strong>, or on any failure <strong>roll back</strong>: no half-booking either way.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: why can't a CHECK constraint stop a booking with no passengers?</summary><p>A CHECK looks at one row at a time. "This booking has at least one passenger" is about rows in another table, which are inserted after the booking. Only a transaction makes them appear together.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No payment.</strong> A confirmed booking is a record.</li>
+<li><strong>No seat hold.</strong> A seat is free or booked; holding it while someone pays is challenge 3.</li>
+<li><strong>No Spring <code>@Transactional</code>.</strong> Plain JDBC, so every step is visible; Spring does the same for you later.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Transaction</strong></td><td>A group of changes that become visible together, or not at all.</td><td>A cheque: either the whole amount moves, or none of it.</td><td><code>BookingStore.save</code></td></tr><tr><td><strong>Auto-commit</strong></td><td>JDBC's default: every statement is its own transaction, saved the moment it runs.</td><td>Posting each page of a letter separately.</td><td>the trap</td></tr><tr><td><strong>Commit</strong></td><td>Make the transaction's changes permanent and visible.</td><td>Signing the form.</td><td><code>c.commit()</code></td></tr><tr><td><strong>Rollback</strong></td><td>Throw away every change since the transaction began.</td><td>Tearing up the unsigned form.</td><td><code>c.rollback()</code></td></tr><tr><td><strong>Generated key</strong></td><td>An id the database creates on insert and hands back.</td><td>The token number the counter gives you.</td><td><code>new String[]{"id"}</code></td></tr><tr><td><strong>Batch</strong></td><td>Many rows for one statement sent together.</td><td>Handing over a stack of forms at once.</td><td><code>addBatch</code> / <code>executeBatch</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Safarbus</strong> (a fictional bus operator) found bookings with no passengers: a crash between saving the booking and its passengers left half-saved bookings.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> two passengers for seats 12 and 13 on trip 101, <b>then</b> <code>201</code>, a new booking id, total ₹2,500.00, and two passenger rows.</li>
+<li><b>Given</b> seats 11 and 12 when 12 is already booked, <b>then</b> <code>409</code> naming seat 12, and no new rows at all; seat 11 can be booked straight after.</li>
+<li><b>Given</b> a failure after the booking row (a crash, a refused passenger, a Java error), <b>then</b> no booking row remains.</li>
+<li><b>Given</b> seat 41 on a 40-seat bus, or the same seat twice, <b>then</b> <code>422</code>; an unknown trip, <code>404</code>.</li>
+<li><b>Given</b> a bad phone, an age over 120, seat 0, no passengers, seven passengers, or an extra field, <b>then</b> <code>400</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>The booking and its passengers are written in one transaction.</li>
+<li>One seat on one trip belongs to one booking: a database constraint decides, so two people racing for it cannot both win.</li>
+<li>A passenger's trip is always its booking's trip (a composite foreign key).</li>
+<li>Money in integer paise; the total is fare × passengers.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Turn auto-commit off, commit, and roll back with plain JDBC.</li>
+<li>Read a generated key after an insert.</li>
+<li>Insert many rows with a JDBC batch.</li>
+<li>Turn a constraint violation into a clear <code>409</code>.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Body</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/bookings</code></td><td><code>{"tripId", "contactPhone", "passengers": [{"name", "age", "seatNo"}]}</code>, 1 to 6 passengers.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">201</span></td><td>Booked: every passenger saved</td></tr><tr><td><span class="pill warn">400</span></td><td>A bad phone, name, age or seat number; 0 or more than 6 passengers; an unknown field</td></tr><tr><td><span class="pill warn">404</span></td><td>No such trip</td></tr><tr><td><span class="pill warn">409</span></td><td>A seat is already booked; nothing was saved</td></tr><tr><td><span class="pill warn">422</span></td><td>A seat the bus does not have, or the same seat twice</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 15 Oct 2026, in this order, against one fresh database. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: seats 12 and 13</h3><p><b>Why:</b> one transaction: booking, then both passengers, then commit.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /bookings HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;tripId&quot;: 101,
+  &quot;contactPhone&quot;: &quot;9876543210&quot;,
+  &quot;passengers&quot;: [
+    {
+      &quot;name&quot;: &quot;Asha Verma&quot;,
+      &quot;age&quot;: 34,
+      &quot;seatNo&quot;: 12
+    },
+    {
+      &quot;name&quot;: &quot;Kabir Verma&quot;,
+      &quot;age&quot;: 8,
+      &quot;seatNo&quot;: 13
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Content-Type: application/json
+Content-Length: 85
+
+{
+  &quot;bookingId&quot;: 1,
+  &quot;tripId&quot;: 101,
+  &quot;seats&quot;: [
+    12,
+    13
+  ],
+  &quot;totalPaise&quot;: 250000,
+  &quot;status&quot;: &quot;CONFIRMED&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: seats 11 and 12</h3><p><b>Why:</b> seat 12 is taken; the whole transaction is rolled back.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /bookings HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;tripId&quot;: 101,
+  &quot;contactPhone&quot;: &quot;9123456780&quot;,
+  &quot;passengers&quot;: [
+    {
+      &quot;name&quot;: &quot;Ravi Iyer&quot;,
+      &quot;age&quot;: 41,
+      &quot;seatNo&quot;: 11
+    },
+    {
+      &quot;name&quot;: &quot;Meena Iyer&quot;,
+      &quot;age&quot;: 39,
+      &quot;seatNo&quot;: 12
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 409 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Seat 12 is already booked on trip 101. Nothing was booked.&quot;,
+  &quot;instance&quot;: &quot;/bookings&quot;,
+  &quot;status&quot;: 409,
+  &quot;title&quot;: &quot;Seat already booked&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: seat 11 alone</h3><p><b>Why:</b> the failed attempt left nothing behind, so seat 11 is free.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /bookings HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;tripId&quot;: 101,
+  &quot;contactPhone&quot;: &quot;9123456780&quot;,
+  &quot;passengers&quot;: [
+    {
+      &quot;name&quot;: &quot;Ravi Iyer&quot;,
+      &quot;age&quot;: 41,
+      &quot;seatNo&quot;: 11
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Content-Type: application/json
+Content-Length: 82
+
+{
+  &quot;bookingId&quot;: 3,
+  &quot;tripId&quot;: 101,
+  &quot;seats&quot;: [
+    11
+  ],
+  &quot;totalPaise&quot;: 125000,
+  &quot;status&quot;: &quot;CONFIRMED&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: seat 41</h3><p><b>Why:</b> the bus has 40 seats: <code>422</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /bookings HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;tripId&quot;: 101,
+  &quot;contactPhone&quot;: &quot;9123456780&quot;,
+  &quot;passengers&quot;: [
+    {
+      &quot;name&quot;: &quot;Ravi Iyer&quot;,
+      &quot;age&quot;: 41,
+      &quot;seatNo&quot;: 41
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Trip 101 has seats 1 to 40.&quot;,
+  &quot;instance&quot;: &quot;/bookings&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;No such seat&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: trip 999</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /bookings HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;tripId&quot;: 999,
+  &quot;contactPhone&quot;: &quot;9123456780&quot;,
+  &quot;passengers&quot;: [
+    {
+      &quot;name&quot;: &quot;Ravi Iyer&quot;,
+      &quot;age&quot;: 41,
+      &quot;seatNo&quot;: 1
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No trip 999.&quot;,
+  &quot;instance&quot;: &quot;/bookings&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Trip not found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: phone 12345</h3><p><b>Why:</b> <code>400</code>, before the database is touched.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /bookings HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;tripId&quot;: 101,
+  &quot;contactPhone&quot;: &quot;12345&quot;,
+  &quot;passengers&quot;: [
+    {
+      &quot;name&quot;: &quot;Ravi Iyer&quot;,
+      &quot;age&quot;: 41,
+      &quot;seatNo&quot;: 1
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Invalid request content.&quot;,
+  &quot;instance&quot;: &quot;/bookings&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section>
+<h2>The database after these six requests</h2>
+<p class="muted">Queried with psql right after the captures (<code>docs/captures/db-after.txt</code>). Two bookings, each with all its passengers; nothing from the refused attempt. There is no booking 2: the refused attempt took that id before it was rolled back, and sequences never roll back, so ids can have gaps. Never use them to count bookings.</p>
+<pre class="code"><code class="language-text"> booking | total_paise | passengers | seats  
+---------+-------------+------------+--------
+       1 |      250000 |          2 | 12, 13
+       3 |      125000 |          1 | 11
+(2 rows)</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>Two passengers</td><td><code>201</code>, id 1, both rows</td><td><code>aBookingSavesEveryPassengerAndReturnsTheNewId</code></td></tr><tr><td>One of two seats taken</td><td><code>409</code>, nothing saved, the other seat stays free</td><td><code>aTakenSeatIs409AndNothingIsSaved</code></td></tr><tr><td>The same seat on another trip</td><td>Allowed</td><td><code>theSameSeatOnAnotherTripIsFine</code></td></tr><tr><td>A passenger the database refuses</td><td>The booking row is rolled back</td><td><code>aRefusedPassengerRollsBackTheWholeBooking</code></td></tr><tr><td>A Java error after the booking row</td><td>The booking row is rolled back</td><td><code>aJavaErrorMidwayRollsBackToo</code></td></tr><tr><td>The process dies before commit</td><td>Nothing is committed</td><td><code>aDeadConnectionCommitsNothing</code></td></tr><tr><td>Phone, age, a passenger on another trip; a seat twice on one trip</td><td>Refused by named constraints</td><td><code>namedConstraintsHoldWithoutJava</code>, <code>oneSeatOnOneTripBelongsToOneBookingOnly</code></td></tr><tr><td>Seat 41; the same seat twice</td><td><code>422</code></td><td><code>seatsThatCannotBeBookedAre422</code></td></tr><tr><td>Bad fields, 0 or 7 passengers, an extra field</td><td><code>400</code></td><td><code>badBodiesAre400</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Auto-commit on: a crash leaves a booking without its passengers.</p>
+<p>The old code runs against the real PostgreSQL. A crash between the two inserts leaves a booking with no passengers. A taken seat halfway leaves a booking charged for two seats with one passenger. The real store, given the same failure, leaves nothing. While building, each fix was undone once. Leaving auto-commit on turned 8 tests red. Removing the rollback turned only 1 red, and only after a test was added for a Java error midway. PostgreSQL will not commit a transaction in which a statement failed, but <code>setAutoCommit(true)</code> in the <code>finally</code> block commits a transaction that had no database error. Not restoring auto-commit was not caught, because HikariCP resets it when the connection returns to the pool. The line stays, so the code does not depend on the pool.</p>
+</div>
+<pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import org.junit.jupiter.api.Test;
+
+import java.sql.SQLException;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The first test written for this station: the old code&#x27;s half-saved bookings, on the real database. */
+class AutoCommitTrapTest extends ApiTest {
+
+    @Test
+    void aCrashAfterTheBookingRowLeavesABookingWithNoPassengers() throws Exception {
+        assertThatThrownBy(() -&gt; OldBookingStore.save(dataSource, trip101(), &quot;9876543210&quot;, seats(4, 5),
+                () -&gt; { throw new IllegalStateException(&quot;crash between the two inserts&quot;); }))
+                .hasMessage(&quot;crash between the two inserts&quot;);
+        assertThat(bookingsWithoutPassengers()).isEqualTo(1);
+    }
+
+    @Test
+    void aTakenSeatHalfwayLeavesHalfABooking() throws Exception {
+        store.save(trip101(), &quot;9876543210&quot;, seats(5));
+        assertThatThrownBy(() -&gt; OldBookingStore.save(dataSource, trip101(), &quot;9123456780&quot;, seats(4, 5), () -&gt; { }))
+                .isInstanceOf(SQLException.class);
+        // The second booking exists, charged for two seats, with seat 4 only.
+        assertThat(bookings()).isEqualTo(2);
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM booking_passengers WHERE booking_id = 2&quot;).query(Long.class).single()).isEqualTo(1);
+    }
+
+    @Test
+    void inOneTransactionTheSameFailureLeavesNothing() throws Exception {
+        store.save(trip101(), &quot;9876543210&quot;, seats(5));
+        assertThatThrownBy(() -&gt; store.save(trip101(), &quot;9123456780&quot;, seats(4, 5))).isInstanceOf(SQLException.class);
+        assertThat(bookings()).isEqualTo(1);
+        assertThat(passengers()).isEqualTo(1);
+        assertThat(bookingsWithoutPassengers()).isZero();
+    }
+}</code></pre><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.List;
+
+/** The booking code before the fix, kept only in tests: auto-commit on, so every statement commits by itself. */
+final class OldBookingStore {
+
+    private OldBookingStore() {
+    }
+
+    /** afterBooking runs between the two inserts: the moment a crash or a timeout would hit. */
+    static long save(DataSource dataSource, Trip trip, String phone, List&lt;Passenger&gt; passengers, Runnable afterBooking) throws SQLException {
+        try (Connection c = dataSource.getConnection()) {
+            long bookingId;
+            try (PreparedStatement s = c.prepareStatement(&quot;INSERT INTO bookings (trip_id, contact_phone, total_paise) VALUES (?, ?, ?)&quot;, new String[]{&quot;id&quot;})) {
+                s.setLong(1, trip.id());
+                s.setString(2, phone);
+                s.setLong(3, trip.farePaise() * passengers.size());
+                s.executeUpdate();   // committed now
+                try (ResultSet keys = s.getGeneratedKeys()) {
+                    keys.next();
+                    bookingId = keys.getLong(1);
+                }
+            }
+            afterBooking.run();
+            for (Passenger p : passengers) {
+                try (PreparedStatement s = c.prepareStatement(
+                        &quot;INSERT INTO booking_passengers (booking_id, trip_id, seat_no, name, age, fare_paise) VALUES (?, ?, ?, ?, ?, ?)&quot;)) {
+                    s.setLong(1, bookingId);
+                    s.setLong(2, trip.id());
+                    s.setInt(3, p.seatNo());
+                    s.setString(4, p.name());
+                    s.setInt(5, p.age());
+                    s.setLong(6, trip.farePaise());
+                    s.executeUpdate();   // each passenger committed on its own
+                }
+            }
+            return bookingId;
+        }
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 15 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Watch a transaction from outside. In one terminal, open psql and start a transaction by hand:</p>
+<pre class="code"><code class="language-sql">docker compose exec postgres psql -U safarbus -d safarbus
+BEGIN;
+INSERT INTO bookings (trip_id, contact_phone, total_paise) VALUES (101, &#x27;9876543210&#x27;, 125000);</code></pre>
+<p>In a second terminal, count bookings with <code>docker compose exec postgres psql -U safarbus -d safarbus -c "SELECT count(*) FROM bookings"</code>: the new row is not visible. Type <code>ROLLBACK;</code> in the first, and it never will be.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>current transaction is aborted, commands ignored until end of transaction block</code></td><td>A statement failed inside a transaction; PostgreSQL refuses the rest.</td><td>Roll back, then start again.</td></tr><tr><td><code>Batch entry 1 … was aborted</code></td><td>One row of a batch failed; the message names the constraint.</td><td>Read the constraint name; call <code>getNextException()</code> for every failing row.</td></tr><tr><td><code>Could not find a valid Docker environment</code></td><td>Docker is not running.</td><td>Start Docker, then run the tests again.</td></tr><tr><td><code>Connection to localhost:5432 refused</code></td><td>PostgreSQL is not up yet.</td><td><code>docker compose up -d</code>, wait, start the app again.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/037-bus-ticket-booking-in-one-transaction/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/safarbus/bookings/
+│   ├── BookingController.java   ├── BookingStore.java   ├── Trips.java
+│   ├── Passenger.java   ├── Trip.java   └── BookingsApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__trips_bookings_passengers.sql, V2__demo_trips.sql
+├── src/test/java/com/safarbus/bookings/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the database behind it.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">BookingController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">BookingStore.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">Trips.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">Passenger.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">Trip.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">V1__trips_bookings_passengers.sql</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">V2__demo_trips.sql</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">compose.yaml</button><button class="file-btn" role="tab" id="code-9-b" aria-controls="code-9" aria-selected="false" data-group="code">BookingsApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/safarbus/bookings/BookingController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Checks the request, saves the booking, and turns a taken seat into a <code>409</code>.</dd><dt>Why</dt><dd>Request checks that need the trip (seat range, duplicates) happen before the transaction.</dd><dt>Without it</dt><dd>Checking "is the seat free?" in Java first: two requests can both see it free. The constraint decides.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.sql.SQLException;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@RestController
+class BookingController {
+
+    record BookingRequest(@NotNull Long tripId,
+                          @NotNull @Pattern(regexp = &quot;[6-9]\\d{9}&quot;, message = &quot;must be a 10-digit Indian mobile number&quot;) String contactPhone,
+                          @NotNull @Size(min = 1, max = 6) List&lt;@NotNull @Valid Passenger&gt; passengers) {
+    }
+
+    record BookingResponse(long bookingId, long tripId, List&lt;Integer&gt; seats, long totalPaise, String status) {
+    }
+
+    private final Trips trips;
+    private final BookingStore store;
+
+    BookingController(Trips trips, BookingStore store) {
+        this.trips = trips;
+        this.store = store;
+    }
+
+    /** Records a booking (a demo booking record; no payment is taken). */
+    @PostMapping(&quot;/bookings&quot;)
+    @ResponseStatus(HttpStatus.CREATED)
+    BookingResponse book(@Valid @RequestBody BookingRequest request) throws SQLException {
+        Trip trip = trips.find(request.tripId()).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;Trip not found&quot;, &quot;No trip &quot; + request.tripId() + &quot;.&quot;));
+        List&lt;Integer&gt; seats = request.passengers().stream().map(Passenger::seatNo).toList();
+        if (seats.stream().distinct().count() != seats.size()) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Same seat twice&quot;, &quot;Each passenger needs a different seat.&quot;);
+        }
+        if (seats.stream().anyMatch(s -&gt; s &gt; trip.seats())) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;No such seat&quot;, &quot;Trip &quot; + trip.id() + &quot; has seats 1 to &quot; + trip.seats() + &quot;.&quot;);
+        }
+        try {
+            long bookingId = store.save(trip, request.contactPhone(), request.passengers());
+            return new BookingResponse(bookingId, trip.id(), seats, trip.farePaise() * seats.size(), &quot;CONFIRMED&quot;);
+        } catch (SQLException e) {
+            if (BookingStore.violates(e, &quot;booking_passengers_seat_once&quot;)) {
+                // The database decided, so two people racing for one seat cannot both win.
+                List&lt;Integer&gt; taken = store.taken(trip.id(), seats);
+                String which = taken.stream().map(String::valueOf).collect(Collectors.joining(&quot;, &quot;));
+                throw problem(HttpStatus.CONFLICT, &quot;Seat already booked&quot;, (taken.size() == 1 ? &quot;Seat &quot; + which + &quot; is&quot; : &quot;Seats &quot; + which + &quot; are&quot;)
+                        + &quot; already booked on trip &quot; + trip.id() + &quot;. Nothing was booked.&quot;);
+            }
+            throw e;
+        }
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/safarbus/bookings/BookingStore.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Saves a booking and its passengers as one transaction.</dd><dt>Why</dt><dd>Auto-commit off, two inserts, commit; rollback on any failure; auto-commit restored.</dd><dt>Without it</dt><dd>The trap: every insert committed on its own.</dd></dl><ul><li><code>prepareStatement(sql, new String[]{"id"})</code> asks the driver to return the new id.</li><li>The passengers go as one batch: one statement, six rows, one round trip.</li><li>Calling <code>setAutoCommit(true)</code> during a transaction commits it, which is why the rollback must come first.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import org.springframework.stereotype.Repository;
+
+import javax.sql.DataSource;
+import java.sql.Array;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Saves a booking and its passengers as one unit. Auto-commit is switched off, so the booking row and every passenger
+ * row become visible together at commit, or, after any failure, not at all.
+ */
+@Repository
+class BookingStore {
+
+    private final DataSource dataSource;
+
+    BookingStore(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    long save(Trip trip, String phone, List&lt;Passenger&gt; passengers) throws SQLException {
+        try (Connection c = dataSource.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                long bookingId = insertBooking(c, trip, phone, trip.farePaise() * passengers.size());
+                insertPassengers(c, bookingId, trip, passengers);
+                c.commit();
+                return bookingId;
+            } catch (SQLException | RuntimeException e) {
+                c.rollback();   // the booking row goes too: nothing half-saved
+                throw e;
+            } finally {
+                c.setAutoCommit(true);   // the pool lends this connection out again next
+            }
+        }
+    }
+
+    /** The database creates the id; RETURN_GENERATED_KEYS for the &quot;id&quot; column hands it back. */
+    private static long insertBooking(Connection c, Trip trip, String phone, long totalPaise) throws SQLException {
+        try (PreparedStatement s = c.prepareStatement(
+                &quot;INSERT INTO bookings (trip_id, contact_phone, total_paise) VALUES (?, ?, ?)&quot;, new String[]{&quot;id&quot;})) {
+            s.setLong(1, trip.id());
+            s.setString(2, phone);
+            s.setLong(3, totalPaise);
+            s.executeUpdate();
+            try (ResultSet keys = s.getGeneratedKeys()) {
+                keys.next();
+                return keys.getLong(1);
+            }
+        }
+    }
+
+    /** One statement, one row per passenger, sent to the database as a batch: one round trip, not six. */
+    private static void insertPassengers(Connection c, long bookingId, Trip trip, List&lt;Passenger&gt; passengers) throws SQLException {
+        try (PreparedStatement s = c.prepareStatement(
+                &quot;INSERT INTO booking_passengers (booking_id, trip_id, seat_no, name, age, fare_paise) VALUES (?, ?, ?, ?, ?, ?)&quot;)) {
+            for (Passenger p : passengers) {
+                s.setLong(1, bookingId);
+                s.setLong(2, trip.id());
+                s.setInt(3, p.seatNo());
+                s.setString(4, p.name().strip());
+                s.setInt(5, p.age());
+                s.setLong(6, trip.farePaise());
+                s.addBatch();
+            }
+            s.executeBatch();
+        }
+    }
+
+    /** Which of these seats are already booked on the trip. */
+    List&lt;Integer&gt; taken(long tripId, List&lt;Integer&gt; seats) throws SQLException {
+        try (Connection c = dataSource.getConnection();
+             PreparedStatement s = c.prepareStatement(&quot;SELECT seat_no FROM booking_passengers WHERE trip_id = ? AND seat_no = ANY (?) ORDER BY seat_no&quot;)) {
+            Array array = c.createArrayOf(&quot;integer&quot;, seats.toArray());
+            s.setLong(1, tripId);
+            s.setArray(2, array);
+            try (ResultSet r = s.executeQuery()) {
+                List&lt;Integer&gt; found = new ArrayList&lt;&gt;();
+                while (r.next()) {
+                    found.add(r.getInt(1));
+                }
+                return found;
+            }
+        }
+    }
+
+    /** A unique violation (SQLState 23505) of this constraint. PostgreSQL&#x27;s driver puts both on the batch&#x27;s own exception. */
+    static boolean violates(SQLException e, String constraint) {
+        return &quot;23505&quot;.equals(e.getSQLState()) &amp;&amp; String.valueOf(e.getMessage()).contains(constraint);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/safarbus/bookings/Trips.java</p><div class="notes"><p>Reads a trip with plain JDBC.</p></div><div class="src"><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import org.springframework.stereotype.Repository;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Optional;
+
+@Repository
+class Trips {
+
+    private final DataSource dataSource;
+
+    Trips(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    Optional&lt;Trip&gt; find(long id) throws SQLException {
+        try (Connection c = dataSource.getConnection();
+             PreparedStatement s = c.prepareStatement(&quot;SELECT id, route, seats, fare_paise FROM trips WHERE id = ?&quot;)) {
+            s.setLong(1, id);
+            try (ResultSet r = s.executeQuery()) {
+                return r.next() ? Optional.of(new Trip(r.getLong(&quot;id&quot;), r.getString(&quot;route&quot;), r.getInt(&quot;seats&quot;), r.getLong(&quot;fare_paise&quot;))) : Optional.empty();
+            }
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/safarbus/bookings/Passenger.java</p><div class="notes"><p>One passenger, with validation for the request.</p></div><div class="src"><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
+record Passenger(@NotBlank @Size(max = 60) String name, @NotNull @Min(0) @Max(120) Integer age, @NotNull @Min(1) Integer seatNo) {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/safarbus/bookings/Trip.java</p><div class="notes"><p>A trip: seats and fare.</p></div><div class="src"><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+/** A scheduled bus. Every seat costs the same fare (demo rule). */
+record Trip(long id, String route, int seats, long farePaise) {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/resources/db/migration/V1__trips_bookings_passengers.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The three tables and their named constraints.</dd><dt>Why</dt><dd>The seat rule and the trip consistency are enforced for every writer.</dd><dt>Without it</dt><dd>Two bookings for one seat, or a passenger on a different bus from their booking.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">CREATE TABLE trips (
+    id          BIGINT       PRIMARY KEY,
+    route       VARCHAR(100) NOT NULL,
+    departs_at  TIMESTAMPTZ  NOT NULL,
+    seats       SMALLINT     NOT NULL,
+    fare_paise  BIGINT       NOT NULL,
+    CONSTRAINT trips_seats_range   CHECK (seats BETWEEN 1 AND 60),
+    CONSTRAINT trips_fare_positive CHECK (fare_paise &gt; 0)
+);
+
+CREATE TABLE bookings (
+    id            BIGINT      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    trip_id       BIGINT      NOT NULL,
+    contact_phone CHAR(10)    NOT NULL,
+    total_paise   BIGINT      NOT NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT bookings_trip_fk        FOREIGN KEY (trip_id) REFERENCES trips (id),
+    CONSTRAINT bookings_phone_digits   CHECK (contact_phone ~ &#x27;^[6-9][0-9]{9}$&#x27;),
+    CONSTRAINT bookings_total_positive CHECK (total_paise &gt; 0),
+    -- Lets passengers reference (booking, trip) together, so a passenger&#x27;s trip is always its booking&#x27;s trip.
+    CONSTRAINT bookings_id_trip_unique UNIQUE (id, trip_id)
+);
+
+-- A booking with no passengers cannot be stopped by a CHECK on one row: the transaction is what prevents it.
+CREATE TABLE booking_passengers (
+    booking_id BIGINT       NOT NULL,
+    trip_id    BIGINT       NOT NULL,
+    seat_no    SMALLINT     NOT NULL,
+    name       VARCHAR(60)  NOT NULL,
+    age        SMALLINT     NOT NULL,
+    fare_paise BIGINT       NOT NULL,
+    PRIMARY KEY (booking_id, seat_no),
+    CONSTRAINT booking_passengers_booking_fk FOREIGN KEY (booking_id, trip_id) REFERENCES bookings (id, trip_id),
+    CONSTRAINT booking_passengers_seat_once  UNIQUE (trip_id, seat_no),
+    CONSTRAINT booking_passengers_seat_range CHECK (seat_no BETWEEN 1 AND 60),
+    CONSTRAINT booking_passengers_age_range  CHECK (age BETWEEN 0 AND 120),
+    CONSTRAINT booking_passengers_fare_positive CHECK (fare_paise &gt; 0)
+);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_trips.sql</p><div class="notes"><p>Two demo trips.</p></div><div class="src"><pre class="code"><code class="language-sql">-- Demo trips (routes, times and fares are illustrative).
+INSERT INTO trips (id, route, departs_at, seats, fare_paise) VALUES
+    (101, &#x27;Pune to Goa&#x27;, TIMESTAMPTZ &#x27;2026-10-20 21:00 Asia/Kolkata&#x27;, 40, 125000),
+    (102, &#x27;Bengaluru to Chennai&#x27;, TIMESTAMPTZ &#x27;2026-10-21 22:30 Asia/Kolkata&#x27;, 36, 85000);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>The database, problem details, and unknown JSON fields refused.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: safarbus-bookings
+  mvc:
+    problemdetails:
+      enabled: true
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/safarbus
+    username: safarbus
+    password: safarbus</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: safarbus
+      POSTGRES_USER: safarbus
+      POSTGRES_PASSWORD: safarbus
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U safarbus -d safarbus&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-9" aria-labelledby="code-9-b" hidden><p class="path">src/main/java/com/safarbus/bookings/BookingsApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class BookingsApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(BookingsApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>BookingContractTest</code> (6)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>AutoCommitTrapTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>BookingDatabaseTest</code> (6)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 -- in com.safarbus.bookings.BookingDatabaseTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 -- in com.safarbus.bookings.BookingContractTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.safarbus.bookings.AutoCommitTrapTest
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">AutoCommitTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">BookingContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">BookingDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">OldBookingStore.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/safarbus/bookings/AutoCommitTrapTest.java</p><div class="notes"><p>Written first: the old code's half-saved bookings, and the real store's clean failure.</p></div><div class="src"><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import org.junit.jupiter.api.Test;
+
+import java.sql.SQLException;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The first test written for this station: the old code&#x27;s half-saved bookings, on the real database. */
+class AutoCommitTrapTest extends ApiTest {
+
+    @Test
+    void aCrashAfterTheBookingRowLeavesABookingWithNoPassengers() throws Exception {
+        assertThatThrownBy(() -&gt; OldBookingStore.save(dataSource, trip101(), &quot;9876543210&quot;, seats(4, 5),
+                () -&gt; { throw new IllegalStateException(&quot;crash between the two inserts&quot;); }))
+                .hasMessage(&quot;crash between the two inserts&quot;);
+        assertThat(bookingsWithoutPassengers()).isEqualTo(1);
+    }
+
+    @Test
+    void aTakenSeatHalfwayLeavesHalfABooking() throws Exception {
+        store.save(trip101(), &quot;9876543210&quot;, seats(5));
+        assertThatThrownBy(() -&gt; OldBookingStore.save(dataSource, trip101(), &quot;9123456780&quot;, seats(4, 5), () -&gt; { }))
+                .isInstanceOf(SQLException.class);
+        // The second booking exists, charged for two seats, with seat 4 only.
+        assertThat(bookings()).isEqualTo(2);
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM booking_passengers WHERE booking_id = 2&quot;).query(Long.class).single()).isEqualTo(1);
+    }
+
+    @Test
+    void inOneTransactionTheSameFailureLeavesNothing() throws Exception {
+        store.save(trip101(), &quot;9876543210&quot;, seats(5));
+        assertThatThrownBy(() -&gt; store.save(trip101(), &quot;9123456780&quot;, seats(4, 5))).isInstanceOf(SQLException.class);
+        assertThat(bookings()).isEqualTo(1);
+        assertThat(passengers()).isEqualTo(1);
+        assertThat(bookingsWithoutPassengers()).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/safarbus/bookings/BookingContractTest.java</p><div class="notes"><p>Bookings through HTTP, the taken seat, and every refusal, with row counts after each.</p></div><div class="src"><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.test.json.JsonCompareMode;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP contract: trip 101, Pune to Goa, 40 seats at ₹1,250. */
+class BookingContractTest extends ApiTest {
+
+    static final String TWO = &quot;&quot;&quot;
+            {&quot;tripId&quot;:101,&quot;contactPhone&quot;:&quot;9876543210&quot;,&quot;passengers&quot;:[
+              {&quot;name&quot;:&quot;Asha Verma&quot;,&quot;age&quot;:34,&quot;seatNo&quot;:12},{&quot;name&quot;:&quot;Kabir Verma&quot;,&quot;age&quot;:8,&quot;seatNo&quot;:13}]}&quot;&quot;&quot;;
+
+    @Test
+    void aBookingSavesEveryPassengerAndReturnsTheNewId() throws Exception {
+        book(TWO).andExpect(status().isCreated()).andExpect(content().json(&quot;&quot;&quot;
+                {&quot;bookingId&quot;:1,&quot;tripId&quot;:101,&quot;seats&quot;:[12,13],&quot;totalPaise&quot;:250000,&quot;status&quot;:&quot;CONFIRMED&quot;}&quot;&quot;&quot;, JsonCompareMode.STRICT));
+        assertThat(passengers()).isEqualTo(2);
+    }
+
+    @Test
+    void aTakenSeatIs409AndNothingIsSaved() throws Exception {
+        book(TWO).andExpect(status().isCreated());
+        book(&quot;&quot;&quot;
+                {&quot;tripId&quot;:101,&quot;contactPhone&quot;:&quot;9123456780&quot;,&quot;passengers&quot;:[
+                  {&quot;name&quot;:&quot;Ravi Iyer&quot;,&quot;age&quot;:41,&quot;seatNo&quot;:11},{&quot;name&quot;:&quot;Meena Iyer&quot;,&quot;age&quot;:39,&quot;seatNo&quot;:12}]}&quot;&quot;&quot;)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Seat 12 is already booked on trip 101. Nothing was booked.&quot;));
+        assertThat(bookings()).isEqualTo(1);
+        assertThat(passengers()).isEqualTo(2);
+        book(&quot;&quot;&quot;
+                {&quot;tripId&quot;:101,&quot;contactPhone&quot;:&quot;9123456780&quot;,&quot;passengers&quot;:[{&quot;name&quot;:&quot;Ravi Iyer&quot;,&quot;age&quot;:41,&quot;seatNo&quot;:11}]}&quot;&quot;&quot;)
+                .andExpect(status().isCreated());   // seat 11 was never held by the failed attempt
+    }
+
+    @Test
+    void theSameSeatOnAnotherTripIsFine() throws Exception {
+        book(TWO).andExpect(status().isCreated());
+        book(TWO.replace(&quot;101&quot;, &quot;102&quot;)).andExpect(status().isCreated()).andExpect(jsonPath(&quot;$.totalPaise&quot;).value(170000));
+    }
+
+    @Test
+    void anUnknownTripIs404() throws Exception {
+        book(TWO.replace(&quot;101&quot;, &quot;999&quot;)).andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
+    @Test
+    void seatsThatCannotBeBookedAre422() throws Exception {
+        book(TWO.replace(&quot;\&quot;seatNo\&quot;:13&quot;, &quot;\&quot;seatNo\&quot;:41&quot;)).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;No such seat&quot;));
+        book(TWO.replace(&quot;\&quot;seatNo\&quot;:13&quot;, &quot;\&quot;seatNo\&quot;:12&quot;)).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Same seat twice&quot;));
+        assertThat(bookings()).isZero();
+    }
+
+    @Test
+    void badBodiesAre400() throws Exception {
+        book(TWO.replace(&quot;9876543210&quot;, &quot;12345&quot;)).andExpect(status().isBadRequest());
+        book(TWO.replace(&quot;\&quot;age\&quot;:8&quot;, &quot;\&quot;age\&quot;:130&quot;)).andExpect(status().isBadRequest());
+        book(TWO.replace(&quot;\&quot;seatNo\&quot;:12&quot;, &quot;\&quot;seatNo\&quot;:0&quot;)).andExpect(status().isBadRequest());
+        book(&quot;&quot;&quot;
+                {&quot;tripId&quot;:101,&quot;contactPhone&quot;:&quot;9876543210&quot;,&quot;passengers&quot;:[]}&quot;&quot;&quot;).andExpect(status().isBadRequest());
+        String seven = &quot;{\&quot;name\&quot;:\&quot;P\&quot;,\&quot;age\&quot;:30,\&quot;seatNo\&quot;:%d}&quot;;
+        StringBuilder many = new StringBuilder();
+        for (int i = 1; i &lt;= 7; i++) {
+            many.append(i &gt; 1 ? &quot;,&quot; : &quot;&quot;).append(seven.formatted(i));
+        }
+        book(&quot;{\&quot;tripId\&quot;:101,\&quot;contactPhone\&quot;:\&quot;9876543210\&quot;,\&quot;passengers\&quot;:[&quot; + many + &quot;]}&quot;).andExpect(status().isBadRequest());
+        book(TWO.replace(&quot;\&quot;tripId\&quot;:101&quot;, &quot;\&quot;tripId\&quot;:101,\&quot;totalPaise\&quot;:1&quot;)).andExpect(status().isBadRequest());
+        assertThat(bookings()).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/safarbus/bookings/BookingDatabaseTest.java</p><div class="notes"><p>Constraints without Java, a dead connection, rollbacks, generated ids and the batch.</p></div><div class="src"><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import com.zaxxer.hikari.HikariDataSource;
+import org.junit.jupiter.api.Test;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The database&#x27;s rules with Java bypassed, and what commit, rollback and a dead connection do. */
+class BookingDatabaseTest extends ApiTest {
+
+    void sql(Connection c, String sql) throws SQLException {
+        try (PreparedStatement s = c.prepareStatement(sql)) {
+            s.executeUpdate();
+        }
+    }
+
+    @Test
+    void namedConstraintsHoldWithoutJava() throws SQLException {
+        try (Connection c = dataSource.getConnection()) {
+            sql(c, &quot;INSERT INTO bookings (trip_id, contact_phone, total_paise) VALUES (101, &#x27;9876543210&#x27;, 125000)&quot;);   // booking 1
+            sql(c, &quot;INSERT INTO booking_passengers VALUES (1, 101, 7, &#x27;A&#x27;, 30, 125000)&quot;);
+            assertThatThrownBy(() -&gt; sql(c, &quot;INSERT INTO bookings (trip_id, contact_phone, total_paise) VALUES (101, &#x27;12345&#x27;, 125000)&quot;))
+                    .hasMessageContaining(&quot;bookings_phone_digits&quot;);
+            assertThatThrownBy(() -&gt; sql(c, &quot;INSERT INTO booking_passengers VALUES (1, 101, 8, &#x27;B&#x27;, 130, 125000)&quot;))
+                    .hasMessageContaining(&quot;booking_passengers_age_range&quot;);
+            assertThatThrownBy(() -&gt; sql(c, &quot;INSERT INTO booking_passengers VALUES (1, 102, 9, &#x27;C&#x27;, 30, 125000)&quot;))
+                    .hasMessageContaining(&quot;booking_passengers_booking_fk&quot;);   // a passenger on another trip than its booking
+        }
+    }
+
+    @Test
+    void oneSeatOnOneTripBelongsToOneBookingOnly() throws Exception {
+        store.save(trip101(), &quot;9876543210&quot;, seats(7));
+        try (Connection c = dataSource.getConnection()) {
+            sql(c, &quot;INSERT INTO bookings (trip_id, contact_phone, total_paise) VALUES (101, &#x27;9123456780&#x27;, 125000)&quot;);   // booking 2
+            assertThatThrownBy(() -&gt; sql(c, &quot;INSERT INTO booking_passengers VALUES (2, 101, 7, &#x27;B&#x27;, 30, 125000)&quot;))
+                    .hasMessageContaining(&quot;booking_passengers_seat_once&quot;);
+        }
+    }
+
+    @Test
+    void aDeadConnectionCommitsNothing() throws SQLException {
+        HikariDataSource pool = (HikariDataSource) dataSource;   // a connection of its own, outside the pool, to kill
+        Connection c = DriverManager.getConnection(pool.getJdbcUrl(), pool.getUsername(), pool.getPassword());
+        c.setAutoCommit(false);
+        sql(c, &quot;INSERT INTO bookings (trip_id, contact_phone, total_paise) VALUES (101, &#x27;9876543210&#x27;, 125000)&quot;);
+        c.abort(Runnable::run);   // the process dies before commit: the server rolls the transaction back
+        assertThat(bookings()).isZero();
+    }
+
+    @Test
+    void aRefusedPassengerRollsBackTheWholeBooking() throws Exception {
+        List&lt;Passenger&gt; oneTooOld = List.of(new Passenger(&quot;Fine&quot;, 30, 1), new Passenger(&quot;Refused by the database&quot;, 130, 2));
+        assertThatThrownBy(() -&gt; store.save(trip101(), &quot;9876543210&quot;, oneTooOld)).hasMessageContaining(&quot;booking_passengers_age_range&quot;);
+        assertThat(bookings()).isZero();
+        assertThat(passengers()).isZero();
+    }
+
+    @Test
+    void aJavaErrorMidwayRollsBackToo() throws Exception {
+        // A passenger with no name fails in Java (strip() on null) after the booking row is inserted. Without the
+        // rollback, the finally block&#x27;s setAutoCommit(true) would commit that booking: JDBC commits on that call.
+        assertThatThrownBy(() -&gt; store.save(trip101(), &quot;9876543210&quot;, List.of(new Passenger(null, 30, 1))))
+                .isInstanceOf(NullPointerException.class);
+        assertThat(bookings()).isZero();
+    }
+
+    @Test
+    void generatedIdsComeBackAndTheBatchSavesEveryRow() throws Exception {
+        long first = store.save(trip101(), &quot;9876543210&quot;, seats(1, 2, 3, 4, 5, 6));
+        long second = store.save(trip101(), &quot;9876543210&quot;, seats(7));
+        assertThat(second).isEqualTo(first + 1);
+        assertThat(jdbc.sql(&quot;SELECT seat_no FROM booking_passengers WHERE booking_id = ? ORDER BY seat_no&quot;).param(first).query(Integer.class).list())
+                .containsExactly(1, 2, 3, 4, 5, 6);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/safarbus/bookings/OldBookingStore.java</p><div class="notes"><p>The old code, kept only in tests, with a hook where a crash would hit.</p></div><div class="src"><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.List;
+
+/** The booking code before the fix, kept only in tests: auto-commit on, so every statement commits by itself. */
+final class OldBookingStore {
+
+    private OldBookingStore() {
+    }
+
+    /** afterBooking runs between the two inserts: the moment a crash or a timeout would hit. */
+    static long save(DataSource dataSource, Trip trip, String phone, List&lt;Passenger&gt; passengers, Runnable afterBooking) throws SQLException {
+        try (Connection c = dataSource.getConnection()) {
+            long bookingId;
+            try (PreparedStatement s = c.prepareStatement(&quot;INSERT INTO bookings (trip_id, contact_phone, total_paise) VALUES (?, ?, ?)&quot;, new String[]{&quot;id&quot;})) {
+                s.setLong(1, trip.id());
+                s.setString(2, phone);
+                s.setLong(3, trip.farePaise() * passengers.size());
+                s.executeUpdate();   // committed now
+                try (ResultSet keys = s.getGeneratedKeys()) {
+                    keys.next();
+                    bookingId = keys.getLong(1);
+                }
+            }
+            afterBooking.run();
+            for (Passenger p : passengers) {
+                try (PreparedStatement s = c.prepareStatement(
+                        &quot;INSERT INTO booking_passengers (booking_id, trip_id, seat_no, name, age, fare_paise) VALUES (?, ?, ?, ?, ?, ?)&quot;)) {
+                    s.setLong(1, bookingId);
+                    s.setLong(2, trip.id());
+                    s.setInt(3, p.seatNo());
+                    s.setString(4, p.name());
+                    s.setInt(5, p.age());
+                    s.setLong(6, trip.farePaise());
+                    s.executeUpdate();   // each passenger committed on its own
+                }
+            }
+            return bookingId;
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/safarbus/bookings/ApiTest.java</p><div class="notes"><p>Shared setup: empty booking tables before each test, row counters.</p></div><div class="src"><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import javax.sql.DataSource;
+import java.util.List;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/** Shared setup: the app with a real PostgreSQL, no bookings before each test. Trips 101 (40 seats) and 102 exist. */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    DataSource dataSource;
+    @Autowired
+    JdbcClient jdbc;
+    @Autowired
+    Trips trips;
+    @Autowired
+    BookingStore store;
+
+    @BeforeEach
+    void noBookings() {
+        jdbc.sql(&quot;TRUNCATE booking_passengers, bookings RESTART IDENTITY&quot;).update();
+    }
+
+    ResultActions book(String json) throws Exception {
+        return mvc.perform(post(&quot;/bookings&quot;).contentType(MediaType.APPLICATION_JSON).content(json));
+    }
+
+    long bookings() {
+        return jdbc.sql(&quot;SELECT count(*) FROM bookings&quot;).query(Long.class).single();
+    }
+
+    long passengers() {
+        return jdbc.sql(&quot;SELECT count(*) FROM booking_passengers&quot;).query(Long.class).single();
+    }
+
+    long bookingsWithoutPassengers() {
+        return jdbc.sql(&quot;SELECT count(*) FROM bookings b WHERE NOT EXISTS (SELECT 1 FROM booking_passengers p WHERE p.booking_id = b.id)&quot;)
+                .query(Long.class).single();
+    }
+
+    Trip trip101() throws Exception {
+        return trips.find(101).orElseThrow();
+    }
+
+    static List&lt;Passenger&gt; seats(int... seatNos) {
+        return java.util.Arrays.stream(seatNos).mapToObj(n -&gt; new Passenger(&quot;Passenger &quot; + n, 30, n)).toList();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/safarbus/bookings/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker. Transactions, batches and constraints must behave exactly as in production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/safarbus/bookings/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=CancelBookingChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 15 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 19 tests pass (15 station tests and 4 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 25 minutes</p><h2>Cancel a booking</h2><p>Add <code>DELETE /bookings/{id}</code>: delete the passengers and the booking in one transaction, then the seats are free. <code>204</code>, or <code>404</code> for no such booking.</p><p><b>Done when:</b> both tests in <code>CancelBookingChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Children first: passengers reference the booking.</li><li><code>executeUpdate()</code> returns how many rows it deleted: 0 means no such booking.</li></ul></details><p class="path">challenge/CancelBookingChallengeTest.java</p><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: DELETE /bookings/{id} cancels a booking: its passengers and the booking row go in one transaction
+ * (children first, because of the foreign key), and the seats can be booked again. 204, or 404 if there is no such
+ * booking.
+ */
+class CancelBookingChallengeTest extends ApiTest {
+
+    @Test
+    void cancellingFreesTheSeats() throws Exception {
+        book(BookingContractTest.TWO).andExpect(status().isCreated());
+        mvc.perform(delete(&quot;/bookings/1&quot;)).andExpect(status().isNoContent());
+        assertThat(bookings()).isZero();
+        assertThat(passengers()).isZero();
+        book(BookingContractTest.TWO).andExpect(status().isCreated());
+    }
+
+    @Test
+    void anUnknownBookingIs404() throws Exception {
+        mvc.perform(delete(&quot;/bookings/999&quot;)).andExpect(status().isNotFound());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/BookingStore.java</p><div class="src"><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import org.springframework.stereotype.Repository;
+
+import javax.sql.DataSource;
+import java.sql.Array;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Saves a booking and its passengers as one unit. Auto-commit is switched off, so the booking row and every passenger
+ * row become visible together at commit, or, after any failure, not at all.
+ */
+@Repository
+class BookingStore {
+
+    private final DataSource dataSource;
+
+    BookingStore(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    long save(Trip trip, String phone, List&lt;Passenger&gt; passengers) throws SQLException {
+        try (Connection c = dataSource.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                long bookingId = insertBooking(c, trip, phone, passengers.stream().mapToLong(p -&gt; fare(trip, p)).sum());
+                insertPassengers(c, bookingId, trip, passengers);
+                c.commit();
+                return bookingId;
+            } catch (SQLException | RuntimeException e) {
+                c.rollback();   // the booking row goes too: nothing half-saved
+                throw e;
+            } finally {
+                c.setAutoCommit(true);   // the pool lends this connection out again next
+            }
+        }
+    }
+
+    /** The database creates the id; RETURN_GENERATED_KEYS for the &quot;id&quot; column hands it back. */
+    private static long insertBooking(Connection c, Trip trip, String phone, long totalPaise) throws SQLException {
+        try (PreparedStatement s = c.prepareStatement(
+                &quot;INSERT INTO bookings (trip_id, contact_phone, total_paise) VALUES (?, ?, ?)&quot;, new String[]{&quot;id&quot;})) {
+            s.setLong(1, trip.id());
+            s.setString(2, phone);
+            s.setLong(3, totalPaise);
+            s.executeUpdate();
+            try (ResultSet keys = s.getGeneratedKeys()) {
+                keys.next();
+                return keys.getLong(1);
+            }
+        }
+    }
+
+    /** One statement, one row per passenger, sent to the database as a batch: one round trip, not six. */
+    private static void insertPassengers(Connection c, long bookingId, Trip trip, List&lt;Passenger&gt; passengers) throws SQLException {
+        try (PreparedStatement s = c.prepareStatement(
+                &quot;INSERT INTO booking_passengers (booking_id, trip_id, seat_no, name, age, fare_paise) VALUES (?, ?, ?, ?, ?, ?)&quot;)) {
+            for (Passenger p : passengers) {
+                s.setLong(1, bookingId);
+                s.setLong(2, trip.id());
+                s.setInt(3, p.seatNo());
+                s.setString(4, p.name().strip());
+                s.setInt(5, p.age());
+                s.setLong(6, fare(trip, p));
+                s.addBatch();
+            }
+            s.executeBatch();
+        }
+    }
+
+    /** Demo rule: 60 and over pay 75%, rounded to the nearest paisa, half up. */
+    static long fare(Trip trip, Passenger p) {
+        return p.age() &gt;= 60 ? (trip.farePaise() * 75 + 50) / 100 : trip.farePaise();
+    }
+
+    /** Deletes the passengers, then the booking, in one transaction. False if there was no such booking. */
+    boolean cancel(long bookingId) throws SQLException {
+        try (Connection c = dataSource.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                int rows;
+                try (PreparedStatement s = c.prepareStatement(&quot;DELETE FROM booking_passengers WHERE booking_id = ?&quot;)) {
+                    s.setLong(1, bookingId);
+                    s.executeUpdate();
+                }
+                try (PreparedStatement s = c.prepareStatement(&quot;DELETE FROM bookings WHERE id = ?&quot;)) {
+                    s.setLong(1, bookingId);
+                    rows = s.executeUpdate();
+                }
+                c.commit();
+                return rows == 1;
+            } catch (SQLException | RuntimeException e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        }
+    }
+
+    /** Which of these seats are already booked on the trip. */
+    List&lt;Integer&gt; taken(long tripId, List&lt;Integer&gt; seats) throws SQLException {
+        try (Connection c = dataSource.getConnection();
+             PreparedStatement s = c.prepareStatement(&quot;SELECT seat_no FROM booking_passengers WHERE trip_id = ? AND seat_no = ANY (?) ORDER BY seat_no&quot;)) {
+            Array array = c.createArrayOf(&quot;integer&quot;, seats.toArray());
+            s.setLong(1, tripId);
+            s.setArray(2, array);
+            try (ResultSet r = s.executeQuery()) {
+                List&lt;Integer&gt; found = new ArrayList&lt;&gt;();
+                while (r.next()) {
+                    found.add(r.getInt(1));
+                }
+                return found;
+            }
+        }
+    }
+
+    /** A unique violation (SQLState 23505) of this constraint. PostgreSQL&#x27;s driver puts both on the batch&#x27;s own exception. */
+    static boolean violates(SQLException e, String constraint) {
+        return &quot;23505&quot;.equals(e.getSQLState()) &amp;&amp; String.valueOf(e.getMessage()).contains(constraint);
+    }
+}</code></pre></div><p class="path">challenge/solution/BookingController.java</p><div class="src"><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.sql.SQLException;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@RestController
+class BookingController {
+
+    record BookingRequest(@NotNull Long tripId,
+                          @NotNull @Pattern(regexp = &quot;[6-9]\\d{9}&quot;, message = &quot;must be a 10-digit Indian mobile number&quot;) String contactPhone,
+                          @NotNull @Size(min = 1, max = 6) List&lt;@NotNull @Valid Passenger&gt; passengers) {
+    }
+
+    record BookingResponse(long bookingId, long tripId, List&lt;Integer&gt; seats, long totalPaise, String status) {
+    }
+
+    private final Trips trips;
+    private final BookingStore store;
+
+    BookingController(Trips trips, BookingStore store) {
+        this.trips = trips;
+        this.store = store;
+    }
+
+    /** Records a booking (a demo booking record; no payment is taken). */
+    @PostMapping(&quot;/bookings&quot;)
+    @ResponseStatus(HttpStatus.CREATED)
+    BookingResponse book(@Valid @RequestBody BookingRequest request) throws SQLException {
+        Trip trip = trips.find(request.tripId()).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;Trip not found&quot;, &quot;No trip &quot; + request.tripId() + &quot;.&quot;));
+        List&lt;Integer&gt; seats = request.passengers().stream().map(Passenger::seatNo).toList();
+        if (seats.stream().distinct().count() != seats.size()) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Same seat twice&quot;, &quot;Each passenger needs a different seat.&quot;);
+        }
+        if (seats.stream().anyMatch(s -&gt; s &gt; trip.seats())) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;No such seat&quot;, &quot;Trip &quot; + trip.id() + &quot; has seats 1 to &quot; + trip.seats() + &quot;.&quot;);
+        }
+        try {
+            long bookingId = store.save(trip, request.contactPhone(), request.passengers());
+            long total = request.passengers().stream().mapToLong(p -&gt; BookingStore.fare(trip, p)).sum();
+            return new BookingResponse(bookingId, trip.id(), seats, total, &quot;CONFIRMED&quot;);
+        } catch (SQLException e) {
+            if (BookingStore.violates(e, &quot;booking_passengers_seat_once&quot;)) {
+                // The database decided, so two people racing for one seat cannot both win.
+                List&lt;Integer&gt; taken = store.taken(trip.id(), seats);
+                String which = taken.stream().map(String::valueOf).collect(Collectors.joining(&quot;, &quot;));
+                throw problem(HttpStatus.CONFLICT, &quot;Seat already booked&quot;, (taken.size() == 1 ? &quot;Seat &quot; + which + &quot; is&quot; : &quot;Seats &quot; + which + &quot; are&quot;)
+                        + &quot; already booked on trip &quot; + trip.id() + &quot;. Nothing was booked.&quot;);
+            }
+            throw e;
+        }
+    }
+
+    @DeleteMapping(&quot;/bookings/{id}&quot;)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void cancel(@PathVariable long id) throws SQLException {
+        if (!store.cancel(id)) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;Booking not found&quot;, &quot;No booking &quot; + id + &quot;.&quot;);
+        }
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 30 minutes</p><h2>Senior fares</h2><p>Passengers aged 60 or more pay 75% (demo rule), rounded to the nearest paisa, half up. Each passenger row stores its own fare, and the booking's total is exactly their sum.</p><p><b>Done when:</b> both tests in <code>SeniorFareChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>One method computes a passenger's fare; the total and each row both use it.</li><li>In whole paise: <code>(fare × 75 + 50) / 100</code> rounds half up.</li></ul></details><p class="path">challenge/SeniorFareChallengeTest.java</p><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: passengers aged 60 or more pay 75% of the fare (demo rule), rounded to the nearest paisa, half up.
+ * Each passenger row stores its own fare, and the booking&#x27;s total is exactly the sum of them.
+ */
+class SeniorFareChallengeTest extends ApiTest {
+
+    @Test
+    void seniorsPayThreeQuartersAndTheTotalIsTheSumOfTheRows() throws Exception {
+        book(&quot;&quot;&quot;
+                {&quot;tripId&quot;:101,&quot;contactPhone&quot;:&quot;9876543210&quot;,&quot;passengers&quot;:[
+                  {&quot;name&quot;:&quot;Asha Verma&quot;,&quot;age&quot;:34,&quot;seatNo&quot;:12},{&quot;name&quot;:&quot;Kamala Verma&quot;,&quot;age&quot;:65,&quot;seatNo&quot;:13}]}&quot;&quot;&quot;)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath(&quot;$.totalPaise&quot;).value(125_000 + 93_750));
+        assertThat(jdbc.sql(&quot;SELECT fare_paise FROM booking_passengers ORDER BY seat_no&quot;).query(Long.class).list()).containsExactly(125_000L, 93_750L);
+        assertThat(jdbc.sql(&quot;SELECT b.total_paise = (SELECT sum(fare_paise) FROM booking_passengers p WHERE p.booking_id = b.id) FROM bookings b&quot;)
+                .query(Boolean.class).single()).isTrue();
+    }
+
+    @Test
+    void halfAPaisaRoundsUp() throws Exception {
+        jdbc.sql(&quot;UPDATE trips SET fare_paise = 85_001 WHERE id = 102&quot;).update();   // 75% is 63,750.75
+        try {
+            book(&quot;&quot;&quot;
+                    {&quot;tripId&quot;:102,&quot;contactPhone&quot;:&quot;9876543210&quot;,&quot;passengers&quot;:[{&quot;name&quot;:&quot;Old&quot;,&quot;age&quot;:60,&quot;seatNo&quot;:1}]}&quot;&quot;&quot;)
+                    .andExpect(jsonPath(&quot;$.totalPaise&quot;).value(63_751));
+        } finally {
+            jdbc.sql(&quot;UPDATE trips SET fare_paise = 85000 WHERE id = 102&quot;).update();
+        }
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/BookingStore.java</p><div class="src"><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import org.springframework.stereotype.Repository;
+
+import javax.sql.DataSource;
+import java.sql.Array;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Saves a booking and its passengers as one unit. Auto-commit is switched off, so the booking row and every passenger
+ * row become visible together at commit, or, after any failure, not at all.
+ */
+@Repository
+class BookingStore {
+
+    private final DataSource dataSource;
+
+    BookingStore(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    long save(Trip trip, String phone, List&lt;Passenger&gt; passengers) throws SQLException {
+        try (Connection c = dataSource.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                long bookingId = insertBooking(c, trip, phone, passengers.stream().mapToLong(p -&gt; fare(trip, p)).sum());
+                insertPassengers(c, bookingId, trip, passengers);
+                c.commit();
+                return bookingId;
+            } catch (SQLException | RuntimeException e) {
+                c.rollback();   // the booking row goes too: nothing half-saved
+                throw e;
+            } finally {
+                c.setAutoCommit(true);   // the pool lends this connection out again next
+            }
+        }
+    }
+
+    /** The database creates the id; RETURN_GENERATED_KEYS for the &quot;id&quot; column hands it back. */
+    private static long insertBooking(Connection c, Trip trip, String phone, long totalPaise) throws SQLException {
+        try (PreparedStatement s = c.prepareStatement(
+                &quot;INSERT INTO bookings (trip_id, contact_phone, total_paise) VALUES (?, ?, ?)&quot;, new String[]{&quot;id&quot;})) {
+            s.setLong(1, trip.id());
+            s.setString(2, phone);
+            s.setLong(3, totalPaise);
+            s.executeUpdate();
+            try (ResultSet keys = s.getGeneratedKeys()) {
+                keys.next();
+                return keys.getLong(1);
+            }
+        }
+    }
+
+    /** One statement, one row per passenger, sent to the database as a batch: one round trip, not six. */
+    private static void insertPassengers(Connection c, long bookingId, Trip trip, List&lt;Passenger&gt; passengers) throws SQLException {
+        try (PreparedStatement s = c.prepareStatement(
+                &quot;INSERT INTO booking_passengers (booking_id, trip_id, seat_no, name, age, fare_paise) VALUES (?, ?, ?, ?, ?, ?)&quot;)) {
+            for (Passenger p : passengers) {
+                s.setLong(1, bookingId);
+                s.setLong(2, trip.id());
+                s.setInt(3, p.seatNo());
+                s.setString(4, p.name().strip());
+                s.setInt(5, p.age());
+                s.setLong(6, fare(trip, p));
+                s.addBatch();
+            }
+            s.executeBatch();
+        }
+    }
+
+    /** Demo rule: 60 and over pay 75%, rounded to the nearest paisa, half up. */
+    static long fare(Trip trip, Passenger p) {
+        return p.age() &gt;= 60 ? (trip.farePaise() * 75 + 50) / 100 : trip.farePaise();
+    }
+
+    /** Deletes the passengers, then the booking, in one transaction. False if there was no such booking. */
+    boolean cancel(long bookingId) throws SQLException {
+        try (Connection c = dataSource.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                int rows;
+                try (PreparedStatement s = c.prepareStatement(&quot;DELETE FROM booking_passengers WHERE booking_id = ?&quot;)) {
+                    s.setLong(1, bookingId);
+                    s.executeUpdate();
+                }
+                try (PreparedStatement s = c.prepareStatement(&quot;DELETE FROM bookings WHERE id = ?&quot;)) {
+                    s.setLong(1, bookingId);
+                    rows = s.executeUpdate();
+                }
+                c.commit();
+                return rows == 1;
+            } catch (SQLException | RuntimeException e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        }
+    }
+
+    /** Which of these seats are already booked on the trip. */
+    List&lt;Integer&gt; taken(long tripId, List&lt;Integer&gt; seats) throws SQLException {
+        try (Connection c = dataSource.getConnection();
+             PreparedStatement s = c.prepareStatement(&quot;SELECT seat_no FROM booking_passengers WHERE trip_id = ? AND seat_no = ANY (?) ORDER BY seat_no&quot;)) {
+            Array array = c.createArrayOf(&quot;integer&quot;, seats.toArray());
+            s.setLong(1, tripId);
+            s.setArray(2, array);
+            try (ResultSet r = s.executeQuery()) {
+                List&lt;Integer&gt; found = new ArrayList&lt;&gt;();
+                while (r.next()) {
+                    found.add(r.getInt(1));
+                }
+                return found;
+            }
+        }
+    }
+
+    /** A unique violation (SQLState 23505) of this constraint. PostgreSQL&#x27;s driver puts both on the batch&#x27;s own exception. */
+    static boolean violates(SQLException e, String constraint) {
+        return &quot;23505&quot;.equals(e.getSQLState()) &amp;&amp; String.valueOf(e.getMessage()).contains(constraint);
+    }
+}</code></pre></div><p class="path">challenge/solution/BookingController.java</p><div class="src"><pre class="code"><code class="language-java">package com.safarbus.bookings;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.sql.SQLException;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@RestController
+class BookingController {
+
+    record BookingRequest(@NotNull Long tripId,
+                          @NotNull @Pattern(regexp = &quot;[6-9]\\d{9}&quot;, message = &quot;must be a 10-digit Indian mobile number&quot;) String contactPhone,
+                          @NotNull @Size(min = 1, max = 6) List&lt;@NotNull @Valid Passenger&gt; passengers) {
+    }
+
+    record BookingResponse(long bookingId, long tripId, List&lt;Integer&gt; seats, long totalPaise, String status) {
+    }
+
+    private final Trips trips;
+    private final BookingStore store;
+
+    BookingController(Trips trips, BookingStore store) {
+        this.trips = trips;
+        this.store = store;
+    }
+
+    /** Records a booking (a demo booking record; no payment is taken). */
+    @PostMapping(&quot;/bookings&quot;)
+    @ResponseStatus(HttpStatus.CREATED)
+    BookingResponse book(@Valid @RequestBody BookingRequest request) throws SQLException {
+        Trip trip = trips.find(request.tripId()).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;Trip not found&quot;, &quot;No trip &quot; + request.tripId() + &quot;.&quot;));
+        List&lt;Integer&gt; seats = request.passengers().stream().map(Passenger::seatNo).toList();
+        if (seats.stream().distinct().count() != seats.size()) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Same seat twice&quot;, &quot;Each passenger needs a different seat.&quot;);
+        }
+        if (seats.stream().anyMatch(s -&gt; s &gt; trip.seats())) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;No such seat&quot;, &quot;Trip &quot; + trip.id() + &quot; has seats 1 to &quot; + trip.seats() + &quot;.&quot;);
+        }
+        try {
+            long bookingId = store.save(trip, request.contactPhone(), request.passengers());
+            long total = request.passengers().stream().mapToLong(p -&gt; BookingStore.fare(trip, p)).sum();
+            return new BookingResponse(bookingId, trip.id(), seats, total, &quot;CONFIRMED&quot;);
+        } catch (SQLException e) {
+            if (BookingStore.violates(e, &quot;booking_passengers_seat_once&quot;)) {
+                // The database decided, so two people racing for one seat cannot both win.
+                List&lt;Integer&gt; taken = store.taken(trip.id(), seats);
+                String which = taken.stream().map(String::valueOf).collect(Collectors.joining(&quot;, &quot;));
+                throw problem(HttpStatus.CONFLICT, &quot;Seat already booked&quot;, (taken.size() == 1 ? &quot;Seat &quot; + which + &quot; is&quot; : &quot;Seats &quot; + which + &quot; are&quot;)
+                        + &quot; already booked on trip &quot; + trip.id() + &quot;. Nothing was booked.&quot;);
+            }
+            throw e;
+        }
+    }
+
+    @DeleteMapping(&quot;/bookings/{id}&quot;)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void cancel(@PathVariable long id) throws SQLException {
+        if (!store.cancel(id)) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;Booking not found&quot;, &quot;No booking &quot; + id + &quot;.&quot;);
+        }
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Holding a seat while the customer pays</h2>
+<p>Payment takes up to 5 minutes and happens at a payment gateway, outside this database. You cannot keep a transaction open that long. Design a seat hold: what is stored, when it expires, what happens when payment succeeds after the hold expired, and how the unique constraint changes.</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap tests: a crash and a taken seat on the old code.</li>
+<li>Write the schema: a unique seat per trip, a composite foreign key.</li>
+<li>Write the store: auto-commit off, insert with a generated key, batch, commit, rollback.</li>
+<li>Test every failure path: a database error, a Java error, a dead connection.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>One JDBC transaction around both inserts</td><td>A few lines of commit/rollback code.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Auto-commit and a cleanup job for orphans</td><td>Customers see half-bookings until the job runs; the job can delete a booking mid-save.</td><td><span class="pill bad">The trap, plus a patch</span></td></tr><tr><td>Spring <code>@Transactional</code></td><td>The same transaction, without the boilerplate.</td><td><span class="pill warn">From later stations</span></td></tr><tr><td>Check seats with a SELECT first</td><td>Two requests both see the seat free.</td><td><span class="pill bad">A race</span></td></tr><tr><td>Passengers as a JSON column on the booking</td><td>One row, atomic by itself; no seat constraint per trip.</td><td><span class="pill warn">Loses the seat rule</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Table</th><th>Key and constraints</th><th>Why</th></tr></thead><tbody><tr><td><code>trips</code></td><td>PK <code>id</code>. Seats 1 to 60, fare &gt; 0.</td><td>What can be booked.</td></tr><tr><td><code>bookings</code></td><td>Identity PK. FK to trips. <code>bookings_phone_digits</code>, total &gt; 0, <code>UNIQUE (id, trip_id)</code>.</td><td>The unique pair lets passengers reference booking and trip together.</td></tr><tr><td><code>booking_passengers</code></td><td>PK <code>(booking_id, seat_no)</code>. <code>booking_passengers_booking_fk (booking_id, trip_id)</code>. <code>booking_passengers_seat_once (trip_id, seat_no)</code>. Seat, age, fare checks.</td><td>One seat on one trip, once, decided by the database; a passenger's trip always matches their booking's.</td></tr></tbody></table></div>
+<p><strong>Transaction boundary:</strong> <code>BookingStore.save</code>, at PostgreSQL's default <code>READ COMMITTED</code>. The seat check needs no stronger isolation: the unique constraint is checked against every committed and in-progress row, so a second booking for the same seat waits for the first and then fails.</p>
+<pre class="code"><code class="language-sql">CREATE TABLE trips (
+    id          BIGINT       PRIMARY KEY,
+    route       VARCHAR(100) NOT NULL,
+    departs_at  TIMESTAMPTZ  NOT NULL,
+    seats       SMALLINT     NOT NULL,
+    fare_paise  BIGINT       NOT NULL,
+    CONSTRAINT trips_seats_range   CHECK (seats BETWEEN 1 AND 60),
+    CONSTRAINT trips_fare_positive CHECK (fare_paise &gt; 0)
+);
+
+CREATE TABLE bookings (
+    id            BIGINT      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    trip_id       BIGINT      NOT NULL,
+    contact_phone CHAR(10)    NOT NULL,
+    total_paise   BIGINT      NOT NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT bookings_trip_fk        FOREIGN KEY (trip_id) REFERENCES trips (id),
+    CONSTRAINT bookings_phone_digits   CHECK (contact_phone ~ &#x27;^[6-9][0-9]{9}$&#x27;),
+    CONSTRAINT bookings_total_positive CHECK (total_paise &gt; 0),
+    -- Lets passengers reference (booking, trip) together, so a passenger&#x27;s trip is always its booking&#x27;s trip.
+    CONSTRAINT bookings_id_trip_unique UNIQUE (id, trip_id)
+);
+
+-- A booking with no passengers cannot be stopped by a CHECK on one row: the transaction is what prevents it.
+CREATE TABLE booking_passengers (
+    booking_id BIGINT       NOT NULL,
+    trip_id    BIGINT       NOT NULL,
+    seat_no    SMALLINT     NOT NULL,
+    name       VARCHAR(60)  NOT NULL,
+    age        SMALLINT     NOT NULL,
+    fare_paise BIGINT       NOT NULL,
+    PRIMARY KEY (booking_id, seat_no),
+    CONSTRAINT booking_passengers_booking_fk FOREIGN KEY (booking_id, trip_id) REFERENCES bookings (id, trip_id),
+    CONSTRAINT booking_passengers_seat_once  UNIQUE (trip_id, seat_no),
+    CONSTRAINT booking_passengers_seat_range CHECK (seat_no BETWEEN 1 AND 60),
+    CONSTRAINT booking_passengers_age_range  CHECK (age BETWEEN 0 AND 120),
+    CONSTRAINT booking_passengers_fare_positive CHECK (fare_paise &gt; 0)
+);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Short transactions</dt><dd>Keep only database work inside a transaction. A slow call (payment, SMS) inside it holds locks and a pooled connection.</dd>
+<dt>Batches</dt><dd>PostgreSQL's driver can rewrite a batch into one multi-row insert (<code>reWriteBatchedInserts=true</code>); measure before turning it on.</dd>
+<dt>Finding orphans</dt><dd>A query for bookings without passengers is a cheap health check; after this fix it should always return zero.</dd>
+<dt>Retries</dt><dd>A client that times out may retry a booking that did commit. Idempotency keys (station 085) make that safe.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>What is auto-commit in JDBC?</summary><p>The default mode: each statement runs in its own transaction and commits immediately. For several statements that belong together, switch it off, commit at the end, and roll back on failure.</p></details><details class="qa"><summary>What happens if you call setAutoCommit(true) in the middle of a transaction?</summary><p>The JDBC specification says the transaction is committed. That is why the rollback must happen before auto-commit is restored.</p></details><details class="qa"><summary>How do you get a generated id after an insert?</summary><p>prepareStatement(sql, new String[]{&quot;id&quot;}) or Statement.RETURN_GENERATED_KEYS, then getGeneratedKeys() after executeUpdate(). In PostgreSQL, INSERT ... RETURNING id does the same in SQL.</p></details><details class="qa"><summary>Why a batch insert?</summary><p>One statement, many parameter sets, sent together: fewer round trips. Inside a transaction, a failing row fails the batch and the rollback undoes it all.</p></details><details class="qa"><summary>Who should decide that a seat is free, Java or the database?</summary><p>The database, with a unique constraint. A Java check followed by an insert has a gap where another request can take the seat.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 15 tests pass.</td><td>You watched an uncommitted row from a second session.</td></tr><tr><td>Transactions</td><td>Commit at the end, rollback on failure.</td><td>Why the rollback comes before <code>setAutoCommit(true)</code>.</td></tr><tr><td>JDBC</td><td>Generated keys and a batch.</td><td>Reading every error of a failed batch.</td></tr><tr><td>Database</td><td>A unique seat per trip.</td><td>The composite foreign key and why it needs a unique pair.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This Foundations station has no flawed version to review. Use this checklist on any multi-row write:</p>
+<ul class="rules">
+<li>Which rows only make sense together? Are they in one transaction?</li>
+<li>Is there a rollback on every failure path, including Java exceptions?</li>
+<li>Is anything slow (a network call) inside the transaction?</li>
+<li>Is "is it free?" decided by a constraint, or by a check before the insert?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
