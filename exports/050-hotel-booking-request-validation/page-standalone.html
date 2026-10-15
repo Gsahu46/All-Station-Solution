@@ -1,0 +1,1616 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 050 · Hotel booking request validation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 050</span>
+    <h1>Hotel booking request validation</h1>
+    <p class="scenario">Bookings arrive with check-out before check-in and 6 guests in a 2-person room.</p>
+    <p class="sim"><b>Simulation</b><span>Hotels, room types and guests are demo data, not Ghoomo's. A booking request is a record kept in memory: no room is held, nothing is paid, and it is gone when the app restarts. Stay limits (30 nights, 365 days ahead) are demo rules.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Travel</li>
+      <li><b>Types</b>None</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>004 Event registration form · 006 One error shape for a banking API</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Jakarta Bean Validation (Hibernate Validator) · custom ConstraintValidator · validation groups · RFC 9457 problem details</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Careful field checks</strong><p>Ghoomo's booking API checked every field: dates required and in the future, 1 to 10 adults, 0 to 10 children, a valid phone.</p></li><li><strong>Impossible bookings got through</strong><p>Support found requests with check-out before check-in, and 6 guests in a room for 2. Every field was valid on its own; nothing compared them.</p></li><li><strong>The fix</strong><p>Rules that look at the whole request, written as custom validators, run only once each field has passed, and answered with 422 instead of 400.</p></li></ol>
+<p class="lesson">Valid parts do not make a valid whole. Some rules can only be checked by looking at two fields at once.</p>
+
+<h2>What are we building?</h2>
+<p><code>POST /hotel-bookings</code> takes a booking request and either records it (<code>201</code>), says a field is broken (<code>400</code>), or says the fields do not add up (<code>422</code>), naming each field with its message. <code>GET /hotel-bookings/{id}</code> reads a recorded request back.</p>
+
+<h2>An everyday analogy</h2>
+<p>A hotel front desk. First the clerk checks the form is filled in properly: dates written as dates, a phone number with 10 digits. Only then do they check it makes sense: leaving after arriving, and a room big enough for everyone. A form with an empty box goes back for the box, not for a lecture on room sizes.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Read</strong> the JSON; unreadable bodies and wrong types are <code>400</code>.</li>
+<li><strong>Field rules</strong> (the Default group) run on <code>@Valid</code>; any failure is <code>400</code>, with every broken field named.</li>
+<li><strong>Cross-field rules</strong> (the <code>Consistency</code> group) run next; any failure is <code>422</code>, again naming fields.</li>
+<li><strong>Record</strong> the request and answer <code>201</code> with its <code>Location</code>.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: why not run all the rules at once?</summary><p>A cross-field rule needs its fields. With check-in missing, "the stay is impossible" would be a confusing second error about the same mistake. Running the groups in order reports the missing date alone.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No availability.</strong> Whether the room is free is station 044.</li>
+<li><strong>No database.</strong> Hotels and requests live in memory.</li>
+<li><strong>No payment.</strong> A request record, not a confirmed booking.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Field validation</strong></td><td>A rule about one value on its own.</td><td>"The date must be a real date."</td><td><code>@NotNull</code>, <code>@Min</code>, <code>@IndianMobile</code></td></tr><tr><td><strong>Cross-field validation</strong></td><td>A rule that compares two or more values.</td><td>"Check-out comes after check-in."</td><td><code>@ValidStay</code>, <code>@RoomFitsGuests</code></td></tr><tr><td><strong>ConstraintValidator</strong></td><td>A class you write to check a rule Bean Validation does not have built in.</td><td>A custom stamp at the counter.</td><td><code>ValidStay.Validator</code></td></tr><tr><td><strong>Validation group</strong></td><td>A named set of rules you run at a chosen moment.</td><td>Checking the form is filled in, then checking it makes sense.</td><td><code>Consistency</code></td></tr><tr><td><strong>400 Bad Request</strong></td><td>The request is broken: unreadable, or a field breaks its own rule.</td><td>A form with the phone box empty.</td><td>Default group</td></tr><tr><td><strong>422 Unprocessable Content</strong></td><td>Every field is fine, but together they describe something impossible.</td><td>A neat form asking to leave before arriving.</td><td>Consistency group</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Ghoomo</strong> (a fictional travel app) accepted booking requests that could never be honoured, because each field was checked alone. Staff had to call guests back to sort them out.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> 2 adults, a STANDARD room, 3 nights starting in 30 days, <b>then</b> <code>201</code>, 3 nights, the phone as 10 digits, and <code>GET</code> returns it.</li>
+<li><b>Given</b> check-out before check-in, or on the same day, <b>then</b> <code>422</code> naming <code>checkOut</code>.</li>
+<li><b>Given</b> 4 adults and 2 children in a STANDARD room (sleeps 2), <b>then</b> <code>422</code> naming <code>guests</code>.</li>
+<li><b>Given</b> check-in yesterday, over 365 days ahead, a stay over 30 nights, an unknown hotel or room type, <b>then</b> <code>422</code> naming the field.</li>
+<li><b>Given</b> 0 adults, a phone of 5 digits, no room type, a date as 30-11-2026, 2.5 adults, or broken JSON, <b>then</b> <code>400</code>.</li>
+<li><b>Given</b> a missing check-in and 6 guests, <b>then</b> only the <code>400</code> for check-in.</li>
+<li><b>Given</b> an unknown booking id, <b>then</b> <code>404</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>A rule about one field is a field constraint; a rule about several is a class-level constraint.</li>
+<li>Field failures are <code>400</code>, cross-field failures <code>422</code>, both RFC 9457 problems with an <code>errors</code> map, field to message.</li>
+<li>"Today" is today in India (<code>Asia/Kolkata</code>).</li>
+<li>Room types are identifiers, normalised with <code>Locale.ROOT</code>.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Write a custom <code>ConstraintValidator</code> for one field and for a whole object.</li>
+<li>Use validation groups to order checks and to separate <code>400</code> from <code>422</code>.</li>
+<li>Give a validator Spring beans (a <code>Clock</code>, a catalogue).</li>
+<li>Report every error on the field it concerns.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/hotel-bookings</code></td><td>Request a booking: <code>hotelId</code>, <code>roomType</code>, <code>checkIn</code>, <code>checkOut</code>, <code>adults</code> (1 to 10), <code>children</code> (0 to 10, optional), <code>guestName</code>, <code>phone</code>.</td></tr><tr><td><code>GET</code></td><td><code>/hotel-bookings/{id}</code></td><td>Read a recorded request back (added so "not found" has something to miss).</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">201</span></td><td>Recorded; <code>Location</code> points at it</td></tr><tr><td><span class="pill ok">200</span></td><td>The request, read back</td></tr><tr><td><span class="pill warn">400</span></td><td>Unreadable JSON, a wrong type, or a field that breaks its own rule</td></tr><tr><td><span class="pill warn">404</span></td><td>No such booking request</td></tr><tr><td><span class="pill warn">422</span></td><td>Every field is fine, but together they are impossible: dates, stay length, hotel, room type or guests</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 15 Oct 2026, in this order. Dates are relative to that day (check-in in 30 days). JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: a valid request</h3><p><b>Why:</b> every field fine, and they add up: recorded.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /hotel-bookings HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;hotelId&quot;: 1,
+  &quot;roomType&quot;: &quot;STANDARD&quot;,
+  &quot;checkIn&quot;: &quot;2026-11-14&quot;,
+  &quot;checkOut&quot;: &quot;2026-11-17&quot;,
+  &quot;adults&quot;: 2,
+  &quot;children&quot;: 0,
+  &quot;guestName&quot;: &quot;Asha Verma&quot;,
+  &quot;phone&quot;: &quot;98765 43210&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /hotel-bookings/1
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 1,
+  &quot;hotelId&quot;: 1,
+  &quot;hotelName&quot;: &quot;Ghoomo Inn, Jaipur&quot;,
+  &quot;roomType&quot;: &quot;STANDARD&quot;,
+  &quot;checkIn&quot;: &quot;2026-11-14&quot;,
+  &quot;checkOut&quot;: &quot;2026-11-17&quot;,
+  &quot;nights&quot;: 3,
+  &quot;adults&quot;: 2,
+  &quot;children&quot;: 0,
+  &quot;guestName&quot;: &quot;Asha Verma&quot;,
+  &quot;phone&quot;: &quot;9876543210&quot;,
+  &quot;status&quot;: &quot;REQUESTED&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: read it back</h3><p><b>Why:</b> <code>200</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /hotel-bookings/1 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 224
+
+{
+  &quot;id&quot;: 1,
+  &quot;hotelId&quot;: 1,
+  &quot;hotelName&quot;: &quot;Ghoomo Inn, Jaipur&quot;,
+  &quot;roomType&quot;: &quot;STANDARD&quot;,
+  &quot;checkIn&quot;: &quot;2026-11-14&quot;,
+  &quot;checkOut&quot;: &quot;2026-11-17&quot;,
+  &quot;nights&quot;: 3,
+  &quot;adults&quot;: 2,
+  &quot;children&quot;: 0,
+  &quot;guestName&quot;: &quot;Asha Verma&quot;,
+  &quot;phone&quot;: &quot;9876543210&quot;,
+  &quot;status&quot;: &quot;REQUESTED&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: check-out before check-in</h3><p><b>Why:</b> the first support ticket: <code>422</code> on <code>checkOut</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /hotel-bookings HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;hotelId&quot;: 1,
+  &quot;roomType&quot;: &quot;STANDARD&quot;,
+  &quot;checkIn&quot;: &quot;2026-11-17&quot;,
+  &quot;checkOut&quot;: &quot;2026-11-14&quot;,
+  &quot;adults&quot;: 2,
+  &quot;children&quot;: 0,
+  &quot;guestName&quot;: &quot;Asha Verma&quot;,
+  &quot;phone&quot;: &quot;98765 43210&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Each field is valid, but together they are not a possible booking.&quot;,
+  &quot;instance&quot;: &quot;/hotel-bookings&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Booking does not add up&quot;,
+  &quot;errors&quot;: {
+    &quot;checkOut&quot;: &quot;must be after checkIn: a stay is at least one night&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 4: 4 adults and 2 children in a STANDARD room</h3><p><b>Why:</b> the second ticket: <code>422</code> on <code>guests</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /hotel-bookings HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;hotelId&quot;: 1,
+  &quot;roomType&quot;: &quot;STANDARD&quot;,
+  &quot;checkIn&quot;: &quot;2026-11-14&quot;,
+  &quot;checkOut&quot;: &quot;2026-11-17&quot;,
+  &quot;adults&quot;: 4,
+  &quot;children&quot;: 2,
+  &quot;guestName&quot;: &quot;Asha Verma&quot;,
+  &quot;phone&quot;: &quot;98765 43210&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Each field is valid, but together they are not a possible booking.&quot;,
+  &quot;instance&quot;: &quot;/hotel-bookings&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Booking does not add up&quot;,
+  &quot;errors&quot;: {
+    &quot;guests&quot;: &quot;6 guests do not fit a STANDARD room, which sleeps 2&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 5: a 5-digit phone and 0 adults</h3><p><b>Why:</b> two broken fields, both named: <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /hotel-bookings HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;hotelId&quot;: 1,
+  &quot;roomType&quot;: &quot;STANDARD&quot;,
+  &quot;checkIn&quot;: &quot;2026-11-14&quot;,
+  &quot;checkOut&quot;: &quot;2026-11-17&quot;,
+  &quot;adults&quot;: 0,
+  &quot;children&quot;: 0,
+  &quot;guestName&quot;: &quot;Asha Verma&quot;,
+  &quot;phone&quot;: &quot;12345&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Some fields are missing or malformed.&quot;,
+  &quot;instance&quot;: &quot;/hotel-bookings&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;,
+  &quot;errors&quot;: {
+    &quot;adults&quot;: &quot;must be greater than or equal to 1&quot;,
+    &quot;phone&quot;: &quot;must be a 10-digit Indian mobile number&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 6: no check-in and 6 adults</h3><p><b>Why:</b> the field error alone; the room rule waits: <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /hotel-bookings HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;hotelId&quot;: 1,
+  &quot;roomType&quot;: &quot;STANDARD&quot;,
+  &quot;checkOut&quot;: &quot;2026-11-17&quot;,
+  &quot;adults&quot;: 6,
+  &quot;children&quot;: 0,
+  &quot;guestName&quot;: &quot;Asha Verma&quot;,
+  &quot;phone&quot;: &quot;98765 43210&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Some fields are missing or malformed.&quot;,
+  &quot;instance&quot;: &quot;/hotel-bookings&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;,
+  &quot;errors&quot;: {
+    &quot;checkIn&quot;: &quot;must not be null&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 7: booking 999</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /hotel-bookings/999 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No booking request 999.&quot;,
+  &quot;instance&quot;: &quot;/hotel-bookings/999&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Booking not found&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>A valid request, read back</td><td><code>201</code>, <code>200</code></td><td><code>aValidRequestIsRecordedAndCanBeReadBack</code></td></tr><tr><td>"family" and "+91 98765-43210" on a Turkish server</td><td>FAMILY, 9876543210</td><td><code>phoneAndRoomTypeAreNormalisedEvenOnATurkishServer</code></td></tr><tr><td>0 adults, bad phone, no room type, non-ISO date, 2.5 adults, broken JSON</td><td><code>400</code></td><td><code>brokenFieldsAre400AndNamed</code></td></tr><tr><td>0 nights, 31 nights, yesterday, 366 days ahead, unknown hotel or room</td><td><code>422</code>, field named</td><td><code>fieldsThatDoNotAddUpAre422AndNamed</code></td></tr><tr><td>Tonight for one night; exactly 30 nights; 4 in a room for 4; no children field</td><td>Allowed</td><td><code>theEdgesAreAllowed</code></td></tr><tr><td>A missing date and too many guests</td><td>Only the <code>400</code></td><td><code>aBrokenFieldIsReportedAloneNotAsAnImpossibleStay</code></td></tr><tr><td>Unknown booking</td><td><code>404</code></td><td><code>unknownBookingsAre404</code></td></tr><tr><td>Default group vs Consistency group</td><td>Cross-field rules run only in their group</td><td><code>BookingValidatorTest</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Validating each field alone, so check-out before check-in passes.</p>
+<p>The old request is kept in the tests as <code>OldHotelBookingRequest</code>: careful field rules, including <code>@FutureOrPresent</code> on both dates. The test runs the two bookings from the support tickets through the app's own validator: no violations at all. Then it sends the same bookings to the fixed API, which answers <code>422</code> and names the field.</p>
+<p>While building, each part was undone once. Without <code>@ValidStay</code>, 3 tests turned red; without <code>@RoomFitsGuests</code>, 3; uppercasing room types with the server's locale instead of <code>Locale.ROOT</code>, 1 (the Turkish test). Moving the room rule into the Default group turned 5 red: it ran next to the field rules, so a missing date also produced a guests error, and too many guests became a <code>400</code>.</p>
+</div>
+<pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import jakarta.validation.Validator;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * The first test written for this station: the two bookings from the support tickets, through the old request&#x27;s
+ * field-by-field rules (with the app&#x27;s own validator) and through the fixed API.
+ */
+class FieldByFieldTrapTest extends ApiTest {
+
+    @Autowired
+    Validator validator;
+
+    @Test
+    void checkOutBeforeCheckInPassesEveryFieldRule() throws Exception {
+        var old = new OldHotelBookingRequest(1L, &quot;STANDARD&quot;, today().plusDays(33), today().plusDays(30), 2, 0, &quot;Asha Verma&quot;, &quot;9876543210&quot;);
+        assertThat(validator.validate(old)).isEmpty();   // both dates are in the future: each one is &quot;valid&quot;
+
+        book(booking().replace(day(33), &quot;OUT&quot;).replace(day(30), day(33)).replace(&quot;OUT&quot;, day(30)))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.errors.checkOut&quot;).value(&quot;must be after checkIn: a stay is at least one night&quot;));
+    }
+
+    @Test
+    void sixGuestsInATwoPersonRoomPassEveryFieldRule() throws Exception {
+        var old = new OldHotelBookingRequest(1L, &quot;STANDARD&quot;, today().plusDays(30), today().plusDays(33), 4, 2, &quot;Asha Verma&quot;, &quot;9876543210&quot;);
+        assertThat(validator.validate(old)).isEmpty();   // 4 adults is within 1 to 10, 2 children within 0 to 10
+
+        book(booking().replace(&quot;\&quot;adults\&quot;:2,\&quot;children\&quot;:0&quot;, &quot;\&quot;adults\&quot;:4,\&quot;children\&quot;:2&quot;))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.errors.guests&quot;).value(&quot;6 guests do not fit a STANDARD room, which sleeps 2&quot;));
+    }
+}</code></pre><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import jakarta.validation.constraints.FutureOrPresent;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+
+import java.time.LocalDate;
+
+/**
+ * The request as it shipped, kept only in tests: every field checked on its own, carefully, and nothing that looks
+ * at two fields at once.
+ */
+record OldHotelBookingRequest(
+        @NotNull Long hotelId,
+        @NotBlank String roomType,
+        @NotNull @FutureOrPresent LocalDate checkIn,
+        @NotNull @FutureOrPresent LocalDate checkOut,
+        @NotNull @Min(1) @Max(10) Integer adults,
+        @Min(0) @Max(10) Integer children,
+        @NotBlank String guestName,
+        @NotBlank @Pattern(regexp = &quot;[6-9][0-9]{9}&quot;) String phone) {
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr><tr><td>Docker</td><td>Not needed for this station</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 12 tests</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>In <code>HotelBookingRequest</code>, remove <code>groups = Consistency.class</code> from <code>@RoomFitsGuests</code> and run the contract tests.</p>
+<pre class="code"><code class="language-bash">./mvnw test -Dtest=BookingContractTest</code></pre>
+<p>Too many guests now comes back as <code>400</code>, and a request missing its check-in also gets a guests error. Put it back.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>A class-level rule never runs</td><td>It is in a group nobody validates.</td><td>Validate that group (<code>validator.validate(r, Consistency.class)</code>), or list it in a <code>@GroupSequence</code>.</td></tr><tr><td><code>NullPointerException</code> inside a validator</td><td>A cross-field validator ran with a field missing.</td><td>Return <code>true</code> for missing values, and run after the field rules.</td></tr><tr><td>A cross-field error shows at the top, not on a field</td><td>The default violation has no property path.</td><td><code>disableDefaultConstraintViolation()</code>, then <code>addPropertyNode("checkOut")</code>.</td></tr><tr><td>Constructor injection fails in a validator</td><td>It was created outside Spring.</td><td>Validate with Spring's <code>Validator</code> bean, not <code>Validation.buildDefaultValidatorFactory()</code>.</td></tr><tr><td>"FAMİLY" with a dotted İ</td><td><code>toUpperCase()</code> uses the server locale.</td><td><code>toUpperCase(Locale.ROOT)</code> for identifiers.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/050-hotel-booking-request-validation/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/ghoomo/bookings/
+│   ├── BookingController.java   ├── BookingDesk.java   ├── HotelBookingRequest.java   ├── Consistency.java
+│   ├── ValidStay.java   ├── RoomFitsGuests.java   ├── IndianMobile.java
+│   ├── ApiErrors.java   ├── HotelCatalog.java   └── BookingsApplication.java
+├── src/main/resources/application.yaml
+├── src/test/java/com/ghoomo/bookings/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the validators.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">BookingController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">BookingDesk.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">HotelBookingRequest.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">ValidStay.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">RoomFitsGuests.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">IndianMobile.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">Consistency.java</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">ApiErrors.java</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">HotelCatalog.java</button><button class="file-btn" role="tab" id="code-9-b" aria-controls="code-9" aria-selected="false" data-group="code">BookingsApplication.java</button><button class="file-btn" role="tab" id="code-10-b" aria-controls="code-10" aria-selected="false" data-group="code">application.yaml</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/ghoomo/bookings/BookingController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd><code>@Valid</code> runs the field rules; then the desk; <code>Location</code> on success.</dd><dt>Why</dt><dd>Field errors stop here with <code>400</code>.</dd><dt>Without it</dt><dd>Cross-field checks on half-filled requests.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+
+@RestController
+class BookingController {
+
+    private final BookingDesk desk;
+
+    BookingController(BookingDesk desk) {
+        this.desk = desk;
+    }
+
+    /** @Valid runs the Default group only: a broken field stops here with 400, before any cross-field check. */
+    @PostMapping(&quot;/hotel-bookings&quot;)
+    ResponseEntity&lt;BookingDesk.BookingView&gt; book(@Valid @RequestBody HotelBookingRequest request) {
+        BookingDesk.BookingView booking = desk.request(request);
+        return ResponseEntity.created(URI.create(&quot;/hotel-bookings/&quot; + booking.id())).body(booking);
+    }
+
+    @GetMapping(&quot;/hotel-bookings/{id}&quot;)
+    BookingDesk.BookingView get(@PathVariable long id) {
+        return desk.find(id).orElseThrow(() -&gt; {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No booking request &quot; + id + &quot;.&quot;);
+            p.setTitle(&quot;Booking not found&quot;);
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        });
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/ghoomo/bookings/BookingDesk.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Runs the <code>Consistency</code> group; answers <code>422</code> with an errors map, or records the request.</dd><dt>Why</dt><dd>The second step, on purpose after the first.</dd><dt>Without it</dt><dd>Impossible bookings recorded.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponseException;
+
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+
+/** Checks that a booking request adds up, then records it. A request record only: no room is held, nothing is paid. */
+@Service
+class BookingDesk {
+
+    record BookingView(long id, long hotelId, String hotelName, String roomType, LocalDate checkIn, LocalDate checkOut,
+                       long nights, int adults, int children, String guestName, String phone, String status) {
+    }
+
+    private final Validator validator;
+    private final HotelCatalog catalog;
+    private final Map&lt;Long, BookingView&gt; bookings = new ConcurrentHashMap&lt;&gt;();   // shortcut: in memory, lost on restart; a real desk uses a table
+    private final AtomicLong ids = new AtomicLong();
+
+    BookingDesk(Validator validator, HotelCatalog catalog) {
+        this.validator = validator;
+        this.catalog = catalog;
+    }
+
+    /** Called after @Valid passed: every field is well-formed. Now the fields must agree with each other. */
+    BookingView request(HotelBookingRequest r) {
+        Set&lt;ConstraintViolation&lt;HotelBookingRequest&gt;&gt; violations = validator.validate(r, Consistency.class);
+        if (!violations.isEmpty()) {
+            Map&lt;String, String&gt; errors = new TreeMap&lt;&gt;();
+            violations.forEach(v -&gt; errors.merge(v.getPropertyPath().toString(), v.getMessage(), (a, b) -&gt; a + &quot;; &quot; + b));
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Each field is valid, but together they are not a possible booking.&quot;);
+            p.setTitle(&quot;Booking does not add up&quot;);
+            p.setProperty(&quot;errors&quot;, errors);
+            throw new ErrorResponseException(HttpStatus.UNPROCESSABLE_CONTENT, p, null);
+        }
+        HotelCatalog.Hotel hotel = catalog.find(r.hotelId()).orElseThrow();   // RoomFitsGuests checked it exists
+        long id = ids.incrementAndGet();
+        BookingView booking = new BookingView(id, hotel.id(), hotel.name(), HotelCatalog.roomType(r.roomType()), r.checkIn(), r.checkOut(),
+                ChronoUnit.DAYS.between(r.checkIn(), r.checkOut()), r.adults(), r.childrenOrZero(), r.guestName().strip(),
+                IndianMobile.Validator.digits(r.phone()), &quot;REQUESTED&quot;);
+        bookings.put(id, booking);
+        return booking;
+    }
+
+    Optional&lt;BookingView&gt; find(long id) {
+        return Optional.ofNullable(bookings.get(id));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/ghoomo/bookings/HotelBookingRequest.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The request: field rules on components, two class-level rules in the <code>Consistency</code> group.</dd><dt>Why</dt><dd>Which rule is which, visible in one place.</dd><dt>Without it</dt><dd>Rules scattered through the service.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
+import java.time.LocalDate;
+
+/**
+ * Field rules (Default group) say each value is well-formed: 400 when broken. Class rules (Consistency group) say
+ * the values make sense together: 422 when broken. They are separate so a missing date is never reported as an
+ * impossible stay.
+ */
+@ValidStay(groups = Consistency.class)
+@RoomFitsGuests(groups = Consistency.class)
+record HotelBookingRequest(
+        @NotNull Long hotelId,
+        @NotBlank @Size(max = 20) String roomType,
+        @NotNull LocalDate checkIn,
+        @NotNull LocalDate checkOut,
+        @NotNull @Min(1) @Max(10) Integer adults,
+        @Min(0) @Max(10) Integer children,
+        @NotBlank @Size(max = 80) String guestName,
+        @NotBlank @IndianMobile String phone) {
+
+    int childrenOrZero() {
+        return children == null ? 0 : children;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/ghoomo/bookings/ValidStay.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Dates: today or later (India), within a year, check-out after check-in, at most 30 nights.</dd><dt>Why</dt><dd>A class-level validator, made by Spring so it gets the <code>Clock</code>.</dd><dt>Without it</dt><dd>"Today" in UTC, and a check-out before check-in.</dd></dl><ul><li>Each failure is put on its field (<code>addPropertyNode</code>), so the form can show it in the right place.</li><li>Missing dates return <code>true</code>: they are <code>@NotNull</code>'s errors, already reported.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import jakarta.validation.Constraint;
+import jakarta.validation.ConstraintValidator;
+import jakarta.validation.ConstraintValidatorContext;
+import jakarta.validation.Payload;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+
+/**
+ * Cross-field: the stay makes sense as a whole. Check-in today or later and at most a year ahead; check-out after
+ * check-in; at most 30 nights. Demo rules. A class-level constraint, because no single field can see the other.
+ */
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Constraint(validatedBy = ValidStay.Validator.class)
+@interface ValidStay {
+
+    int MAX_NIGHTS = 30;
+    int MAX_DAYS_AHEAD = 365;
+
+    String message() default &quot;the stay is not possible&quot;;
+
+    Class&lt;?&gt;[] groups() default {};
+
+    Class&lt;? extends Payload&gt;[] payload() default {};
+
+    /** Created by Spring, so it can be given the Clock like any other bean. */
+    class Validator implements ConstraintValidator&lt;ValidStay, HotelBookingRequest&gt; {
+
+        private final Clock clock;
+
+        Validator(Clock clock) {
+            this.clock = clock;
+        }
+
+        @Override
+        public boolean isValid(HotelBookingRequest r, ConstraintValidatorContext context) {
+            if (r.checkIn() == null || r.checkOut() == null) {
+                return true;   // a missing date is a field error (400), reported by @NotNull
+            }
+            context.disableDefaultConstraintViolation();
+            LocalDate today = LocalDate.now(clock);
+            boolean ok = true;
+            if (r.checkIn().isBefore(today)) {
+                ok = fail(context, &quot;checkIn&quot;, &quot;must be today (&quot; + today + &quot;) or later&quot;);
+            } else if (r.checkIn().isAfter(today.plusDays(MAX_DAYS_AHEAD))) {
+                ok = fail(context, &quot;checkIn&quot;, &quot;bookings open at most &quot; + MAX_DAYS_AHEAD + &quot; days ahead&quot;);
+            }
+            if (!r.checkOut().isAfter(r.checkIn())) {
+                ok = fail(context, &quot;checkOut&quot;, &quot;must be after checkIn: a stay is at least one night&quot;);
+            } else if (ChronoUnit.DAYS.between(r.checkIn(), r.checkOut()) &gt; MAX_NIGHTS) {
+                ok = fail(context, &quot;checkOut&quot;, &quot;a stay is at most &quot; + MAX_NIGHTS + &quot; nights&quot;);
+            }
+            return ok;
+        }
+
+        static boolean fail(ConstraintValidatorContext context, String field, String message) {
+            context.buildConstraintViolationWithTemplate(message).addPropertyNode(field).addConstraintViolation();
+            return false;
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/ghoomo/bookings/RoomFitsGuests.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Hotel, room type, and adults + children within what the room sleeps.</dd><dt>Why</dt><dd>Gets the catalogue bean injected.</dd><dt>Without it</dt><dd>6 guests in a room for 2.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import jakarta.validation.Constraint;
+import jakarta.validation.ConstraintValidator;
+import jakarta.validation.ConstraintValidatorContext;
+import jakarta.validation.Payload;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+import java.util.TreeSet;
+
+/** Cross-field and catalogue: the hotel exists, has this room type, and the room sleeps everyone (adults + children). */
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Constraint(validatedBy = RoomFitsGuests.Validator.class)
+@interface RoomFitsGuests {
+
+    String message() default &quot;the room does not fit the guests&quot;;
+
+    Class&lt;?&gt;[] groups() default {};
+
+    Class&lt;? extends Payload&gt;[] payload() default {};
+
+    /** Created by Spring, so it can use the catalogue bean. */
+    class Validator implements ConstraintValidator&lt;RoomFitsGuests, HotelBookingRequest&gt; {
+
+        private final HotelCatalog catalog;
+
+        Validator(HotelCatalog catalog) {
+            this.catalog = catalog;
+        }
+
+        @Override
+        public boolean isValid(HotelBookingRequest r, ConstraintValidatorContext context) {
+            if (r.hotelId() == null || r.roomType() == null || r.adults() == null) {
+                return true;   // missing fields are reported by the Default group (400)
+            }
+            context.disableDefaultConstraintViolation();
+            HotelCatalog.Hotel hotel = catalog.find(r.hotelId()).orElse(null);
+            if (hotel == null) {
+                return ValidStay.Validator.fail(context, &quot;hotelId&quot;, &quot;no hotel &quot; + r.hotelId());
+            }
+            Integer sleeps = hotel.sleeps().get(HotelCatalog.roomType(r.roomType()));
+            if (sleeps == null) {
+                return ValidStay.Validator.fail(context, &quot;roomType&quot;, hotel.name() + &quot; has no such room type; it has &quot; + new TreeSet&lt;&gt;(hotel.sleeps().keySet()));
+            }
+            int guests = r.adults() + r.childrenOrZero();
+            if (guests &gt; sleeps) {
+                return ValidStay.Validator.fail(context, &quot;guests&quot;, guests + &quot; guests do not fit a &quot; + HotelCatalog.roomType(r.roomType()) + &quot; room, which sleeps &quot; + sleeps);
+            }
+            return true;
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/ghoomo/bookings/IndianMobile.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>A field-level validator: 10 digits starting 6 to 9, with +91, 0, spaces or hyphens allowed.</dd><dt>Why</dt><dd>One reusable annotation.</dd><dt>Without it</dt><dd>A regex copied into every request.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import jakarta.validation.Constraint;
+import jakarta.validation.ConstraintValidator;
+import jakarta.validation.ConstraintValidatorContext;
+import jakarta.validation.Payload;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+/** An Indian mobile number: 10 digits starting 6 to 9, optionally written with +91 or 0, spaces or hyphens. */
+@Target(ElementType.FIELD)
+@Retention(RetentionPolicy.RUNTIME)
+@Constraint(validatedBy = IndianMobile.Validator.class)
+@interface IndianMobile {
+
+    String message() default &quot;must be a 10-digit Indian mobile number&quot;;
+
+    Class&lt;?&gt;[] groups() default {};
+
+    Class&lt;? extends Payload&gt;[] payload() default {};
+
+    class Validator implements ConstraintValidator&lt;IndianMobile, String&gt; {
+
+        @Override
+        public boolean isValid(String value, ConstraintValidatorContext context) {
+            return value == null || digits(value) != null;   // null is @NotBlank&#x27;s job, not this one&#x27;s
+        }
+
+        /** The 10 digits, or null if this is not a mobile number. */
+        static String digits(String value) {
+            String d = value.replaceAll(&quot;[\\s-]&quot;, &quot;&quot;);
+            if (d.startsWith(&quot;+91&quot;)) {
+                d = d.substring(3);
+            } else if (d.length() == 11 &amp;&amp; d.startsWith(&quot;0&quot;)) {
+                d = d.substring(1);
+            }
+            return d.matches(&quot;[6-9][0-9]{9}&quot;) ? d : null;
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/ghoomo/bookings/Consistency.java</p><div class="notes"><p>The validation group: an empty interface used as a name.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+/**
+ * A validation group: checks that compare fields with each other or with the catalogue. They run only after every
+ * field passed on its own (the Default group), and their failures are 422, not 400.
+ */
+interface Consistency {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/java/com/ghoomo/bookings/ApiErrors.java</p><div class="notes"><p>Adds the <code>errors</code> map to Spring's <code>400</code> problem.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+
+import java.util.Map;
+import java.util.TreeMap;
+
+/**
+ * Spring already turns an invalid @Valid body into an RFC 9457 problem (the base class). We add an &quot;errors&quot; map,
+ * field -&gt; message, so the booking form can show each message next to its input. The 422 for fields that do not add up has the same shape (BookingDesk).
+ */
+@RestControllerAdvice
+class ApiErrors extends ResponseEntityExceptionHandler {
+
+    @Override
+    protected ResponseEntity&lt;Object&gt; handleMethodArgumentNotValid(
+            MethodArgumentNotValidException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        Map&lt;String, String&gt; errors = new TreeMap&lt;&gt;();
+        ex.getBindingResult().getFieldErrors().forEach(e -&gt; errors.putIfAbsent(e.getField(), e.getDefaultMessage()));
+        ex.getBody().setDetail(&quot;Some fields are missing or malformed.&quot;);
+        ex.getBody().setProperty(&quot;errors&quot;, errors);
+        return handleExceptionInternal(ex, null, headers, status, request);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">src/main/java/com/ghoomo/bookings/HotelCatalog.java</p><div class="notes"><p>Demo hotels and what each room type sleeps; room types normalised with <code>Locale.ROOT</code>.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import org.springframework.stereotype.Component;
+
+import java.util.Map;
+import java.util.Optional;
+
+/** Demo catalogue (invented hotels): room types and how many guests each sleeps. A real one lives in a database. */
+@Component
+class HotelCatalog {
+
+    record Hotel(long id, String name, Map&lt;String, Integer&gt; sleeps) {
+    }
+
+    private static final Map&lt;Long, Hotel&gt; HOTELS = Map.of(
+            1L, new Hotel(1, &quot;Ghoomo Inn, Jaipur&quot;, Map.of(&quot;STANDARD&quot;, 2, &quot;DELUXE&quot;, 3, &quot;FAMILY&quot;, 4)),
+            2L, new Hotel(2, &quot;Ghoomo Stays, Goa&quot;, Map.of(&quot;DORM_BED&quot;, 1, &quot;STANDARD&quot;, 2)));
+
+    Optional&lt;Hotel&gt; find(long id) {
+        return Optional.ofNullable(HOTELS.get(id));
+    }
+
+    /** Room types are identifiers: compared upper-case in Locale.ROOT, so &quot;family&quot; works on every server locale. */
+    static String roomType(String raw) {
+        return raw.strip().toUpperCase(java.util.Locale.ROOT);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-9" aria-labelledby="code-9-b" hidden><p class="path">src/main/java/com/ghoomo/bookings/BookingsApplication.java</p><div class="notes"><p>Entry point; a <code>Clock</code> in India time.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+import java.time.Clock;
+import java.time.ZoneId;
+
+@SpringBootApplication
+public class BookingsApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(BookingsApplication.class, args);
+    }
+
+    /** &quot;Today&quot; is today in India: a check-in for today is valid until midnight IST, not midnight UTC. */
+    @Bean
+    Clock clock() {
+        return Clock.system(ZoneId.of(&quot;Asia/Kolkata&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-10" aria-labelledby="code-10-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Problem details on; decimals refused for whole-number fields.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: ghoomo-bookings
+  mvc:
+    problemdetails:
+      enabled: true
+  jackson:
+    deserialization:
+      # By default Jackson turns 2.5 into 2 for a whole-number field. Two and a half adults is a client bug: 400.
+      accept-float-as-int: false</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>BookingContractTest</code> (7)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>FieldByFieldTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>This station's concepts</td><td>Groups and validators on their own</td><td><code>BookingValidatorTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, Hibernate Validator. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.ghoomo.bookings.FieldByFieldTrapTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0 -- in com.ghoomo.bookings.BookingContractTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.ghoomo.bookings.BookingValidatorTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">FieldByFieldTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">BookingContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">BookingValidatorTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">OldHotelBookingRequest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/ghoomo/bookings/FieldByFieldTrapTest.java</p><div class="notes"><p>Written first: both support tickets pass the old rules, and fail the new API with <code>422</code>.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import jakarta.validation.Validator;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * The first test written for this station: the two bookings from the support tickets, through the old request&#x27;s
+ * field-by-field rules (with the app&#x27;s own validator) and through the fixed API.
+ */
+class FieldByFieldTrapTest extends ApiTest {
+
+    @Autowired
+    Validator validator;
+
+    @Test
+    void checkOutBeforeCheckInPassesEveryFieldRule() throws Exception {
+        var old = new OldHotelBookingRequest(1L, &quot;STANDARD&quot;, today().plusDays(33), today().plusDays(30), 2, 0, &quot;Asha Verma&quot;, &quot;9876543210&quot;);
+        assertThat(validator.validate(old)).isEmpty();   // both dates are in the future: each one is &quot;valid&quot;
+
+        book(booking().replace(day(33), &quot;OUT&quot;).replace(day(30), day(33)).replace(&quot;OUT&quot;, day(30)))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.errors.checkOut&quot;).value(&quot;must be after checkIn: a stay is at least one night&quot;));
+    }
+
+    @Test
+    void sixGuestsInATwoPersonRoomPassEveryFieldRule() throws Exception {
+        var old = new OldHotelBookingRequest(1L, &quot;STANDARD&quot;, today().plusDays(30), today().plusDays(33), 4, 2, &quot;Asha Verma&quot;, &quot;9876543210&quot;);
+        assertThat(validator.validate(old)).isEmpty();   // 4 adults is within 1 to 10, 2 children within 0 to 10
+
+        book(booking().replace(&quot;\&quot;adults\&quot;:2,\&quot;children\&quot;:0&quot;, &quot;\&quot;adults\&quot;:4,\&quot;children\&quot;:2&quot;))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.errors.guests&quot;).value(&quot;6 guests do not fit a STANDARD room, which sleeps 2&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/ghoomo/bookings/BookingContractTest.java</p><div class="notes"><p>Valid, <code>400</code>, <code>422</code>, edges, the order of checks, <code>404</code>.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.Locale;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The HTTP contract: a valid booking, 400 for a broken field, 422 for fields that do not add up, 404 for none. */
+class BookingContractTest extends ApiTest {
+
+    @Test
+    void aValidRequestIsRecordedAndCanBeReadBack() throws Exception {
+        String location = book(booking()).andExpect(status().isCreated())
+                .andExpect(content().json(&quot;&quot;&quot;
+                        {&quot;hotelId&quot;:1,&quot;hotelName&quot;:&quot;Ghoomo Inn, Jaipur&quot;,&quot;roomType&quot;:&quot;STANDARD&quot;,&quot;checkIn&quot;:&quot;%s&quot;,&quot;checkOut&quot;:&quot;%s&quot;,
+                         &quot;nights&quot;:3,&quot;adults&quot;:2,&quot;children&quot;:0,&quot;guestName&quot;:&quot;Asha Verma&quot;,&quot;phone&quot;:&quot;9876543210&quot;,&quot;status&quot;:&quot;REQUESTED&quot;}&quot;&quot;&quot;
+                        .formatted(day(30), day(33))))
+                .andReturn().getResponse().getHeader(&quot;Location&quot;);
+        mvc.perform(get(location)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.nights&quot;).value(3));
+    }
+
+    @Test
+    void phoneAndRoomTypeAreNormalisedEvenOnATurkishServer() throws Exception {
+        Locale before = Locale.getDefault();
+        Locale.setDefault(Locale.forLanguageTag(&quot;tr&quot;));   // where &quot;family&quot;.toUpperCase() is &quot;FAMİLY&quot;, with a dotted İ
+        try {
+            book(booking().replace(&quot;STANDARD&quot;, &quot;family&quot;).replace(&quot;98765 43210&quot;, &quot;+91 98765-43210&quot;))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath(&quot;$.roomType&quot;).value(&quot;FAMILY&quot;)).andExpect(jsonPath(&quot;$.phone&quot;).value(&quot;9876543210&quot;));
+        } finally {
+            Locale.setDefault(before);
+        }
+    }
+
+    @Test
+    void brokenFieldsAre400AndNamed() throws Exception {
+        book(booking().replace(&quot;\&quot;adults\&quot;:2&quot;, &quot;\&quot;adults\&quot;:0&quot;)).andExpect(status().isBadRequest()).andExpect(jsonPath(&quot;$.errors.adults&quot;).exists());
+        book(booking().replace(&quot;98765 43210&quot;, &quot;12345&quot;)).andExpect(status().isBadRequest())
+                .andExpect(jsonPath(&quot;$.errors.phone&quot;).value(&quot;must be a 10-digit Indian mobile number&quot;));
+        book(booking().replace(&quot;\&quot;roomType\&quot;:\&quot;STANDARD\&quot;,&quot;, &quot;&quot;)).andExpect(status().isBadRequest()).andExpect(jsonPath(&quot;$.errors.roomType&quot;).exists());
+        book(booking().replace(day(30), &quot;30-11-2026&quot;)).andExpect(status().isBadRequest());   // not an ISO date: unreadable
+        book(booking().replace(&quot;\&quot;adults\&quot;:2&quot;, &quot;\&quot;adults\&quot;:2.5&quot;)).andExpect(status().isBadRequest());
+        book(&quot;{&quot;).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void fieldsThatDoNotAddUpAre422AndNamed() throws Exception {
+        book(booking().replace(day(33), day(30))).andExpect(status().isUnprocessableContent())   // zero nights
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Booking does not add up&quot;)).andExpect(jsonPath(&quot;$.errors.checkOut&quot;).exists());
+        book(booking().replace(day(33), day(61))).andExpect(status().isUnprocessableContent())   // 31 nights
+                .andExpect(jsonPath(&quot;$.errors.checkOut&quot;).value(&quot;a stay is at most 30 nights&quot;));
+        book(booking().replace(day(30), day(-1))).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.errors.checkIn&quot;).exists());
+        book(booking().replace(day(30), day(366)).replace(day(33), day(368))).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.errors.checkIn&quot;).value(&quot;bookings open at most 365 days ahead&quot;));
+        book(booking().replace(&quot;\&quot;hotelId\&quot;:1&quot;, &quot;\&quot;hotelId\&quot;:9&quot;)).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.errors.hotelId&quot;).value(&quot;no hotel 9&quot;));
+        book(booking().replace(&quot;STANDARD&quot;, &quot;SUITE&quot;)).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.errors.roomType&quot;).value(&quot;Ghoomo Inn, Jaipur has no such room type; it has [DELUXE, FAMILY, STANDARD]&quot;));
+    }
+
+    @Test
+    void theEdgesAreAllowed() throws Exception {
+        book(booking().replace(day(30), day(0)).replace(day(33), day(1))).andExpect(status().isCreated());     // tonight, one night
+        book(booking().replace(day(33), day(60))).andExpect(status().isCreated()).andExpect(jsonPath(&quot;$.nights&quot;).value(30));
+        book(booking().replace(&quot;STANDARD&quot;, &quot;FAMILY&quot;).replace(&quot;\&quot;adults\&quot;:2&quot;, &quot;\&quot;adults\&quot;:4&quot;)).andExpect(status().isCreated());   // 4 in a room for 4
+        book(booking().replace(&quot;,\&quot;children\&quot;:0&quot;, &quot;&quot;)).andExpect(status().isCreated()).andExpect(jsonPath(&quot;$.children&quot;).value(0));
+    }
+
+    @Test
+    void aBrokenFieldIsReportedAloneNotAsAnImpossibleStay() throws Exception {
+        // checkIn missing and 6 guests: the cross-field rules do not run until every field is valid, so only the 400.
+        book(booking().replace(&quot;\&quot;checkIn\&quot;:\&quot;&quot; + day(30) + &quot;\&quot;,&quot;, &quot;&quot;).replace(&quot;\&quot;adults\&quot;:2&quot;, &quot;\&quot;adults\&quot;:6&quot;))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath(&quot;$.errors.checkIn&quot;).exists()).andExpect(jsonPath(&quot;$.errors.guests&quot;).doesNotExist());
+    }
+
+    @Test
+    void unknownBookingsAre404() throws Exception {
+        mvc.perform(get(&quot;/hotel-bookings/999&quot;)).andExpect(status().isNotFound()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;No booking request 999.&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/ghoomo/bookings/BookingValidatorTest.java</p><div class="notes"><p>Which group runs which rule; the mobile formats accepted and refused.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** The validators on their own, through Spring&#x27;s Validator (so they get the Clock and the catalogue): which group runs what. */
+class BookingValidatorTest extends ApiTest {
+
+    @Autowired
+    Validator validator;
+
+    static HotelBookingRequest request(int checkInDay, int checkOutDay, int adults, int children) {
+        return new HotelBookingRequest(1L, &quot;standard&quot;, today().plusDays(checkInDay), today().plusDays(checkOutDay), adults, children, &quot;Asha Verma&quot;, &quot;9876543210&quot;);
+    }
+
+    @Test
+    void theDefaultGroupDoesNotLookAcrossFields() {
+        assertThat(validator.validate(request(33, 30, 6, 0))).isEmpty();
+    }
+
+    @Test
+    void theConsistencyGroupReportsEveryProblemOnItsField() {
+        assertThat(validator.validate(request(33, 30, 6, 0), Consistency.class))
+                .extracting(v -&gt; v.getPropertyPath().toString()).containsExactlyInAnyOrder(&quot;checkOut&quot;, &quot;guests&quot;);
+    }
+
+    @Test
+    void theMobileValidatorAcceptsCommonWritingsOnly() {
+        for (String ok : new String[]{&quot;9876543210&quot;, &quot;98765 43210&quot;, &quot;+91 98765 43210&quot;, &quot;+919876543210&quot;, &quot;09876543210&quot;, &quot;98765-43210&quot;}) {
+            assertThat(IndianMobile.Validator.digits(ok)).as(ok).isEqualTo(&quot;9876543210&quot;);
+        }
+        for (String bad : new String[]{&quot;5876543210&quot;, &quot;987654321&quot;, &quot;98765432100&quot;, &quot;+1 9876543210&quot;, &quot;98765O4321&quot;}) {
+            assertThat(IndianMobile.Validator.digits(bad)).as(bad).isNull();
+        }
+        assertThat(validator.validate(request(30, 33, 2, 0))).extracting(ConstraintViolation::getMessage).isEmpty();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/ghoomo/bookings/OldHotelBookingRequest.java</p><div class="notes"><p>The old request, kept only in tests.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import jakarta.validation.constraints.FutureOrPresent;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+
+import java.time.LocalDate;
+
+/**
+ * The request as it shipped, kept only in tests: every field checked on its own, carefully, and nothing that looks
+ * at two fields at once.
+ */
+record OldHotelBookingRequest(
+        @NotNull Long hotelId,
+        @NotBlank String roomType,
+        @NotNull @FutureOrPresent LocalDate checkIn,
+        @NotNull @FutureOrPresent LocalDate checkOut,
+        @NotNull @Min(1) @Max(10) Integer adults,
+        @Min(0) @Max(10) Integer children,
+        @NotBlank String guestName,
+        @NotBlank @Pattern(regexp = &quot;[6-9][0-9]{9}&quot;) String phone) {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/ghoomo/bookings/ApiTest.java</p><div class="notes"><p>Shared setup: a valid request with dates relative to today in India.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import java.time.LocalDate;
+import java.time.ZoneId;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/**
+ * Shared setup: the whole app through MockMvc. Dates are relative to today in India, so the tests never go stale.
+ * Ghoomo Inn, Jaipur (hotel 1): STANDARD sleeps 2, DELUXE 3, FAMILY 4.
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+
+    static LocalDate today() {
+        return LocalDate.now(ZoneId.of(&quot;Asia/Kolkata&quot;));
+    }
+
+    static String day(int fromToday) {
+        return today().plusDays(fromToday).toString();
+    }
+
+    /** A valid request: 2 adults in a STANDARD room, 3 nights starting in 30 days. Tests change one thing at a time. */
+    static String booking() {
+        return &quot;&quot;&quot;
+                {&quot;hotelId&quot;:1,&quot;roomType&quot;:&quot;STANDARD&quot;,&quot;checkIn&quot;:&quot;%s&quot;,&quot;checkOut&quot;:&quot;%s&quot;,&quot;adults&quot;:2,&quot;children&quot;:0,
+                 &quot;guestName&quot;:&quot;Asha Verma&quot;,&quot;phone&quot;:&quot;98765 43210&quot;}&quot;&quot;&quot;.formatted(day(30), day(33));
+    }
+
+    ResultActions book(String body) throws Exception {
+        return mvc.perform(post(&quot;/hotel-bookings&quot;).contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/ghoomo/bookings/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=ChildAgesChallengeTest</code>.</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 12 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 16 tests pass (12 station tests and 4 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 25 minutes</p><h2>One age per child</h2><p>Add <code>childAges</code>: one age, 0 to 17, per child. An age out of range is a broken field (<code>400</code>); a list that does not match <code>children</code> is a request that does not add up (<code>422</code>).</p><p><b>Done when:</b> both tests in <code>ChildAgesChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Field rules on list elements: <code>List&lt;@NotNull @Min(0) @Max(17) Integer&gt;</code>.</li><li>A new class-level constraint in the <code>Consistency</code> group compares the list's size with <code>children</code>.</li><li>Keep an eight-argument constructor so existing code still compiles.</li></ul></details><p class="path">challenge/ChildAgesChallengeTest.java</p><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: with children, the request carries &quot;childAges&quot;, one age (0 to 17) per child. An age out of range is a
+ * broken field (400, under &quot;childAges[1]&quot;); a list that does not match the number of children is a request that does
+ * not add up (422, under &quot;childAges&quot;). No children: the list may be absent or empty.
+ */
+class ChildAgesChallengeTest extends ApiTest {
+
+    String family(String children, String ages) {
+        return booking().replace(&quot;STANDARD&quot;, &quot;FAMILY&quot;).replace(&quot;\&quot;children\&quot;:0&quot;, &quot;\&quot;children\&quot;:&quot; + children + (ages == null ? &quot;&quot; : &quot;,\&quot;childAges\&quot;:&quot; + ages));
+    }
+
+    @Test
+    void oneAgePerChild() throws Exception {
+        book(family(&quot;2&quot;, &quot;[4,11]&quot;)).andExpect(status().isCreated());
+        book(family(&quot;0&quot;, null)).andExpect(status().isCreated());
+        book(family(&quot;2&quot;, &quot;[4]&quot;)).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.errors.childAges&quot;).value(&quot;give one age for each of the 2 children&quot;));
+        book(family(&quot;2&quot;, null)).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.errors.childAges&quot;).exists());
+    }
+
+    @Test
+    void anAgeOutOfRangeIsABrokenField() throws Exception {
+        book(family(&quot;2&quot;, &quot;[4,18]&quot;)).andExpect(status().isBadRequest()).andExpect(jsonPath(&quot;$.errors[&#x27;childAges[1]&#x27;]&quot;).exists());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/ChildAgesMatch.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import jakarta.validation.Constraint;
+import jakarta.validation.ConstraintValidator;
+import jakarta.validation.ConstraintValidatorContext;
+import jakarta.validation.Payload;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+/** Cross-field: one age per child. */
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Constraint(validatedBy = ChildAgesMatch.Validator.class)
+@interface ChildAgesMatch {
+
+    String message() default &quot;one age per child&quot;;
+
+    Class&lt;?&gt;[] groups() default {};
+
+    Class&lt;? extends Payload&gt;[] payload() default {};
+
+    class Validator implements ConstraintValidator&lt;ChildAgesMatch, HotelBookingRequest&gt; {
+
+        @Override
+        public boolean isValid(HotelBookingRequest r, ConstraintValidatorContext context) {
+            int ages = r.childAges() == null ? 0 : r.childAges().size();
+            if (ages == r.childrenOrZero()) {
+                return true;
+            }
+            context.disableDefaultConstraintViolation();
+            return ValidStay.Validator.fail(context, &quot;childAges&quot;, &quot;give one age for each of the &quot; + r.childrenOrZero() + &quot; children&quot;);
+        }
+    }
+}</code></pre></div><p class="path">challenge/solution/HotelBookingRequest.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
+import java.time.LocalDate;
+import java.util.List;
+
+/**
+ * Field rules (Default group) say each value is well-formed: 400 when broken. Class rules (Consistency group) say
+ * the values make sense together: 422 when broken. They are separate so a missing date is never reported as an
+ * impossible stay.
+ */
+@ValidStay(groups = Consistency.class)
+@RoomFitsGuests(groups = Consistency.class)
+@ChildAgesMatch(groups = Consistency.class)
+record HotelBookingRequest(
+        @NotNull Long hotelId,
+        @NotBlank @Size(max = 20) String roomType,
+        @NotNull LocalDate checkIn,
+        @NotNull LocalDate checkOut,
+        @NotNull @Min(1) @Max(10) Integer adults,
+        @Min(0) @Max(10) Integer children,
+        @NotBlank @Size(max = 80) String guestName,
+        @NotBlank @IndianMobile String phone,
+        @Size(max = 10) List&lt;@NotNull @Min(0) @Max(17) Integer&gt; childAges,
+        @Gstin String gstin) {
+
+    /** The station&#x27;s original eight fields: no ages, no GSTIN. */
+    HotelBookingRequest(Long hotelId, String roomType, LocalDate checkIn, LocalDate checkOut, Integer adults, Integer children,
+                        String guestName, String phone) {
+        this(hotelId, roomType, checkIn, checkOut, adults, children, guestName, phone, null, null);
+    }
+
+    int childrenOrZero() {
+        return children == null ? 0 : children;
+    }
+}</code></pre></div><p class="path">challenge/solution/BookingDesk.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponseException;
+
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+
+/** Checks that a booking request adds up, then records it. A request record only: no room is held, nothing is paid. */
+@Service
+class BookingDesk {
+
+    record BookingView(long id, long hotelId, String hotelName, String roomType, LocalDate checkIn, LocalDate checkOut,
+                       long nights, int adults, int children, String guestName, String phone, String gstin, String status) {
+    }
+
+    private final Validator validator;
+    private final HotelCatalog catalog;
+    private final Map&lt;Long, BookingView&gt; bookings = new ConcurrentHashMap&lt;&gt;();   // shortcut: in memory, lost on restart; a real desk uses a table
+    private final AtomicLong ids = new AtomicLong();
+
+    BookingDesk(Validator validator, HotelCatalog catalog) {
+        this.validator = validator;
+        this.catalog = catalog;
+    }
+
+    /** Called after @Valid passed: every field is well-formed. Now the fields must agree with each other. */
+    BookingView request(HotelBookingRequest r) {
+        Set&lt;ConstraintViolation&lt;HotelBookingRequest&gt;&gt; violations = validator.validate(r, Consistency.class);
+        if (!violations.isEmpty()) {
+            Map&lt;String, String&gt; errors = new TreeMap&lt;&gt;();
+            violations.forEach(v -&gt; errors.merge(v.getPropertyPath().toString(), v.getMessage(), (a, b) -&gt; a + &quot;; &quot; + b));
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Each field is valid, but together they are not a possible booking.&quot;);
+            p.setTitle(&quot;Booking does not add up&quot;);
+            p.setProperty(&quot;errors&quot;, errors);
+            throw new ErrorResponseException(HttpStatus.UNPROCESSABLE_CONTENT, p, null);
+        }
+        HotelCatalog.Hotel hotel = catalog.find(r.hotelId()).orElseThrow();   // RoomFitsGuests checked it exists
+        long id = ids.incrementAndGet();
+        BookingView booking = new BookingView(id, hotel.id(), hotel.name(), HotelCatalog.roomType(r.roomType()), r.checkIn(), r.checkOut(),
+                ChronoUnit.DAYS.between(r.checkIn(), r.checkOut()), r.adults(), r.childrenOrZero(), r.guestName().strip(),
+                IndianMobile.Validator.digits(r.phone()), r.gstin() == null ? null : r.gstin().strip().toUpperCase(java.util.Locale.ROOT), &quot;REQUESTED&quot;);
+        bookings.put(id, booking);
+        return booking;
+    }
+
+    Optional&lt;BookingView&gt; find(long id) {
+        return Optional.ofNullable(bookings.get(id));
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 30 minutes</p><h2>A GSTIN for the invoice</h2><p>Add an optional <code>gstin</code> with a field-level validator: the 15-character shape and the published check character. Show it upper case. A format check only: it does not prove the GSTIN is registered.</p><p><b>Done when:</b> both tests in <code>GstinChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Check character: for the first 14 characters (digits 0 to 9, letters 10 to 35), multiply by 1 and 2 alternately, add each product's quotient and remainder by 36, and the check is (36 − sum mod 36) mod 36.</li><li><code>null</code> is valid: optional means the validator says yes to nothing.</li></ul></details><p class="path">challenge/GstinChallengeTest.java</p><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: a company may add an optional &quot;gstin&quot; for its invoice. Write a field-level ConstraintValidator: 15
+ * characters (2-digit state code, 10-character PAN, entity code, &quot;Z&quot;, check character) and the published check
+ * character method. Lower case is accepted; the booking shows it upper case. A wrong one is 400. A format check only:
+ * it does not prove the GSTIN is registered.
+ */
+class GstinChallengeTest extends ApiTest {
+
+    String withGstin(String gstin) {
+        return booking().replace(&quot;\&quot;guestName\&quot;&quot;, &quot;\&quot;gstin\&quot;:\&quot;&quot; + gstin + &quot;\&quot;,\&quot;guestName\&quot;&quot;);
+    }
+
+    @Test
+    void aWellFormedGstinIsKeptUpperCase() throws Exception {
+        book(withGstin(&quot;27aapfu0939f1zv&quot;)).andExpect(status().isCreated()).andExpect(jsonPath(&quot;$.gstin&quot;).value(&quot;27AAPFU0939F1ZV&quot;));
+        book(booking()).andExpect(status().isCreated()).andExpect(jsonPath(&quot;$.gstin&quot;).doesNotExist());
+    }
+
+    @Test
+    void aWrongCheckCharacterOrShapeIs400() throws Exception {
+        book(withGstin(&quot;27AAPFU0939F1ZW&quot;)).andExpect(status().isBadRequest()).andExpect(jsonPath(&quot;$.errors.gstin&quot;).exists());
+        book(withGstin(&quot;27AAPFU0939F1V&quot;)).andExpect(status().isBadRequest());
+        book(withGstin(&quot;2AAAPFU0939F1ZV&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/Gstin.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import jakarta.validation.Constraint;
+import jakarta.validation.ConstraintValidator;
+import jakarta.validation.ConstraintValidatorContext;
+import jakarta.validation.Payload;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+import java.util.Locale;
+
+/** A GSTIN&#x27;s shape and check character. A format check only: it does not prove the GSTIN is registered. */
+@Target(ElementType.FIELD)
+@Retention(RetentionPolicy.RUNTIME)
+@Constraint(validatedBy = Gstin.Validator.class)
+@interface Gstin {
+
+    String message() default &quot;must be a 15-character GSTIN with a valid check character&quot;;
+
+    Class&lt;?&gt;[] groups() default {};
+
+    Class&lt;? extends Payload&gt;[] payload() default {};
+
+    class Validator implements ConstraintValidator&lt;Gstin, String&gt; {
+
+        private static final String CHARS = &quot;0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ&quot;;
+
+        @Override
+        public boolean isValid(String value, ConstraintValidatorContext context) {
+            if (value == null) {
+                return true;   // optional
+            }
+            String g = value.strip().toUpperCase(Locale.ROOT);
+            return g.matches(&quot;[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]&quot;) &amp;&amp; g.charAt(14) == checkCharacter(g);
+        }
+
+        /** The first 14 characters, weighted 1 and 2 alternately, base 36. */
+        static char checkCharacter(String g) {
+            int sum = 0;
+            for (int i = 0; i &lt; 14; i++) {
+                int product = CHARS.indexOf(g.charAt(i)) * (i % 2 == 0 ? 1 : 2);
+                sum += product / 36 + product % 36;
+            }
+            return CHARS.charAt((36 - sum % 36) % 36);
+        }
+    }
+}</code></pre></div><p class="path">challenge/solution/HotelBookingRequest.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
+import java.time.LocalDate;
+import java.util.List;
+
+/**
+ * Field rules (Default group) say each value is well-formed: 400 when broken. Class rules (Consistency group) say
+ * the values make sense together: 422 when broken. They are separate so a missing date is never reported as an
+ * impossible stay.
+ */
+@ValidStay(groups = Consistency.class)
+@RoomFitsGuests(groups = Consistency.class)
+@ChildAgesMatch(groups = Consistency.class)
+record HotelBookingRequest(
+        @NotNull Long hotelId,
+        @NotBlank @Size(max = 20) String roomType,
+        @NotNull LocalDate checkIn,
+        @NotNull LocalDate checkOut,
+        @NotNull @Min(1) @Max(10) Integer adults,
+        @Min(0) @Max(10) Integer children,
+        @NotBlank @Size(max = 80) String guestName,
+        @NotBlank @IndianMobile String phone,
+        @Size(max = 10) List&lt;@NotNull @Min(0) @Max(17) Integer&gt; childAges,
+        @Gstin String gstin) {
+
+    /** The station&#x27;s original eight fields: no ages, no GSTIN. */
+    HotelBookingRequest(Long hotelId, String roomType, LocalDate checkIn, LocalDate checkOut, Integer adults, Integer children,
+                        String guestName, String phone) {
+        this(hotelId, roomType, checkIn, checkOut, adults, children, guestName, phone, null, null);
+    }
+
+    int childrenOrZero() {
+        return children == null ? 0 : children;
+    }
+}</code></pre></div><p class="path">challenge/solution/BookingDesk.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.bookings;
+
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponseException;
+
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+
+/** Checks that a booking request adds up, then records it. A request record only: no room is held, nothing is paid. */
+@Service
+class BookingDesk {
+
+    record BookingView(long id, long hotelId, String hotelName, String roomType, LocalDate checkIn, LocalDate checkOut,
+                       long nights, int adults, int children, String guestName, String phone, String gstin, String status) {
+    }
+
+    private final Validator validator;
+    private final HotelCatalog catalog;
+    private final Map&lt;Long, BookingView&gt; bookings = new ConcurrentHashMap&lt;&gt;();   // shortcut: in memory, lost on restart; a real desk uses a table
+    private final AtomicLong ids = new AtomicLong();
+
+    BookingDesk(Validator validator, HotelCatalog catalog) {
+        this.validator = validator;
+        this.catalog = catalog;
+    }
+
+    /** Called after @Valid passed: every field is well-formed. Now the fields must agree with each other. */
+    BookingView request(HotelBookingRequest r) {
+        Set&lt;ConstraintViolation&lt;HotelBookingRequest&gt;&gt; violations = validator.validate(r, Consistency.class);
+        if (!violations.isEmpty()) {
+            Map&lt;String, String&gt; errors = new TreeMap&lt;&gt;();
+            violations.forEach(v -&gt; errors.merge(v.getPropertyPath().toString(), v.getMessage(), (a, b) -&gt; a + &quot;; &quot; + b));
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Each field is valid, but together they are not a possible booking.&quot;);
+            p.setTitle(&quot;Booking does not add up&quot;);
+            p.setProperty(&quot;errors&quot;, errors);
+            throw new ErrorResponseException(HttpStatus.UNPROCESSABLE_CONTENT, p, null);
+        }
+        HotelCatalog.Hotel hotel = catalog.find(r.hotelId()).orElseThrow();   // RoomFitsGuests checked it exists
+        long id = ids.incrementAndGet();
+        BookingView booking = new BookingView(id, hotel.id(), hotel.name(), HotelCatalog.roomType(r.roomType()), r.checkIn(), r.checkOut(),
+                ChronoUnit.DAYS.between(r.checkIn(), r.checkOut()), r.adults(), r.childrenOrZero(), r.guestName().strip(),
+                IndianMobile.Validator.digits(r.phone()), r.gstin() == null ? null : r.gstin().strip().toUpperCase(java.util.Locale.ROOT), &quot;REQUESTED&quot;);
+        bookings.put(id, booking);
+        return booking;
+    }
+
+    Optional&lt;BookingView&gt; find(long id) {
+        return Optional.ofNullable(bookings.get(id));
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Where does each check belong?</h2>
+<p>For each rule here (date format, check-out after check-in, room sleeps everyone, room free on those nights, phone is real), decide where it is checked: in the app's form, in the request (400), in the service (422), in the database, or by calling someone else. Which ones must be repeated on the server even if the app checks them?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design (none in this station)</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: the support tickets through the old rules.</li>
+<li>Sort every rule: about one field, or about several (or about the catalogue)?</li>
+<li>Write the cross-field rules as class-level constraints in their own group; put each violation on its field.</li>
+<li>Run the groups in order and map them to <code>400</code> and <code>422</code>.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Class-level constraints in a group, run after <code>@Valid</code></td><td>Two small annotations and validators.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Field rules only</td><td>Impossible combinations pass.</td><td><span class="pill bad">The trap</span></td></tr><tr><td><code>if</code> checks in the service</td><td>Works, but rules scatter and errors take ad-hoc shapes.</td><td><span class="pill warn">Fine for one rule</span></td></tr><tr><td>A <code>@GroupSequence</code> on the request</td><td>One <code>@Valid</code> runs both in order, but both failures become the same status.</td><td><span class="pill warn">When 400 for all is fine</span></td></tr><tr><td><code>400</code> for everything</td><td>Clients cannot tell "fix this field" from "rethink the booking".</td><td><span class="pill warn">Common, less helpful</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>None in this station: requests live in a <code>ConcurrentHashMap</code>. When they move to a table, the stay rule becomes a constraint too (<code>CHECK (check_out &gt; check_in)</code>), so a script that skips the API still cannot store one.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Time zones</dt><dd>"Check-in today" depends on whose today. The app uses India time; a hotel abroad would use the hotel's zone.</dd>
+<dt>Clients read your errors</dt><dd>The <code>errors</code> map lets a form put each message beside its field. Changing a key breaks every client that reads it.</dd>
+<dt>Rules change</dt><dd>30 nights and 365 days are business numbers. Keep them in one place, and test the edges so a change is a one-line diff.</dd>
+<dt>Validation is not authorisation</dt><dd>A valid request from the wrong user is still wrong; that check is separate.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>How do you validate that one field depends on another?</summary><p>A class-level constraint: an annotation on the type and a ConstraintValidator that receives the whole object. Put the violation on the relevant field with addPropertyNode.</p></details><details class="qa"><summary>What are validation groups for?</summary><p>To run subsets of rules at chosen moments: here, field rules first and cross-field rules only once the fields are valid. Groups can also differ between create and update.</p></details><details class="qa"><summary>400 or 422?</summary><p>400 when the request is malformed or a field breaks its own rule; 422 when it is well-formed but describes something the server cannot do. Many APIs use 400 for both; the split helps clients know what to fix.</p></details><details class="qa"><summary>Can a ConstraintValidator use Spring beans?</summary><p>Yes, when validation goes through Spring&#x27;s Validator: Spring creates the validator and injects its constructor arguments, such as a Clock or a repository.</p></details><details class="qa"><summary>Why return true for null in a custom validator?</summary><p>Each constraint checks one thing. Whether a value is required is @NotNull&#x27;s job; returning false for null would report the same mistake twice.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 12 tests pass.</td><td>You moved a rule between groups and explained the result.</td></tr><tr><td>Validators</td><td>A field and a class-level validator.</td><td>A validator using Spring beans.</td></tr><tr><td>Errors</td><td>Every error on its field.</td><td>A clear rule for 400 vs 422 you can defend.</td></tr><tr><td>Edges</td><td>Zero nights refused, one night allowed.</td><td>Time zone and locale considered.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This Foundations station has no flawed version to review. Use this checklist on any request validation:</p>
+<ul class="rules">
+<li>Which rules compare two fields, and where are they checked?</li>
+<li>Can a cross-field rule run on a half-filled request?</li>
+<li>Does each error name the field the user must change?</li>
+<li>Are the edges (zero, one, the maximum) tested on both sides?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
