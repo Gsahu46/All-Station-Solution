@@ -6,7 +6,7 @@
 #  1. Runs the station's tests                  -> docs/test-run.txt       (must pass, or the build stops)
 #  2. Runs them against review/*.java            -> docs/review-run.txt     (expected to fail; skipped if no review/)
 #  3. Runs station + challenge tests with
-#     challenge/solution/* copied in             -> docs/challenge-run.txt  (must pass; skipped if no challenge/)
+#     challenge/solution/* copied in (.java by package, .properties to resources)             -> docs/challenge-run.txt  (must pass; skipped if no challenge/)
 #  4. --capture: starts compose + the app and runs docs/capture.sh -> docs/captures/*.txt
 #  5. Renders exports/<slug>/page.html and station.json, and the station's README.md
 #  6. Packs exports/<slug>/starter.zip (no solutions) and solutions.zip, and updates exports/index.json
@@ -54,6 +54,7 @@ if compgen -G "challenge/*Test.java" >/dev/null; then
   echo "3/6 challenge tests against the solutions"
   copy_project "$TMP/solved"
   for f in challenge/solution/*.java; do cp "$f" "$TMP/solved/src/main/java/$(pkg_dir "$f")/"; done
+  for f in challenge/solution/*.properties; do [ -f "$f" ] && cp "$f" "$TMP/solved/src/main/resources/"; done   # message bundles
   for f in challenge/*Test.java; do cp "$f" "$TMP/solved/src/test/java/$(pkg_dir "$f")/"; done
   if [ -f challenge/solution/pom-additions.xml ]; then
     python3 - "$TMP/solved/pom.xml" challenge/solution/pom-additions.xml <<'PY'
