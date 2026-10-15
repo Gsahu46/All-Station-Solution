@@ -1,0 +1,1512 @@
+<title>Station 033 · Bug triage from a customer ticket</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 033</span>
+    <h1>Bug triage from a customer ticket</h1>
+    <p class="scenario">A customer reports &#x27;refund button does nothing&#x27;; the only clue is a stack trace with a request id.</p>
+    <p class="sim"><b>Simulation</b><span>Orders and amounts are demo data, not Kartwala's. A refund creates a record in memory; no payment provider is called and no money moves. The ledger failure in the drill is switched on by a setting.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>E-commerce</li>
+      <li><b>Types</b>Operations</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>026 Request ids for parcel tracking · 032 Return and refund eligibility</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · stack traces · MDC request ids · @RestControllerAdvice · ProblemDetail · Micrometer · Actuator · MockMvc</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>A ticket arrives</strong><p>"I press refund and nothing happens." Support attaches a screenshot from the app's error log: a request id and a stack trace.</p></li><li><strong>Last time, a quick patch</strong><p>A similar ticket last month was closed with a null check where that request came in. The ticket closed; the bug moved to the cancel-whole-order path.</p></li><li><strong>This time, the cause</strong><p>Reproduce the request in a failing test, read the trace to the line that failed, ask why the value was null, and fix it where it is created, so every path is safe.</p></li></ol>
+<p class="lesson">Fix the reason, not the place it showed up, and keep the test that proved it.</p>
+
+<h2>What are we building?</h2>
+<p><code>POST /refunds</code> records a refund for some lines of an order, or for every line not yet refunded. When something unexpected fails, the customer gets a message with a request id, and that id leads support straight to the stack trace.</p>
+
+<h2>An everyday analogy</h2>
+<p>A doctor with a patient who has a fever. Paracetamol makes the fever go away today (the patch). A blood test finds the infection, and the right medicine stops it coming back (the cause).</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Read the ticket</strong>: the request id and the error.</li>
+<li><strong>Find the logs</strong> for that id, and the stack trace.</li>
+<li><strong>Reproduce</strong> the request in a test that fails.</li>
+<li><strong>Fix the cause</strong> until the test passes, and keep the test.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: the patch made the ticket's request work. Why was that not enough?</summary><p>It guarded one entrance to the code. The calculator underneath still assumed every order had a coupon, so the next caller (the whole-order path) failed the same way.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No money moves.</strong> A refund record is created in memory.</li>
+<li><strong>No log platform.</strong> Logs go to the console; searching them by id works the same in any tool.</li>
+<li><strong>No front-end.</strong> The app's "does nothing" was it ignoring a 500; the API now explains itself.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Stack trace</strong></td><td>The list of method calls that were running when an error happened, newest first.</td><td>Footprints back from where someone fell.</td><td><code>at …couponShare(…)</code></td></tr><tr><td><strong>Request id</strong></td><td>A label on one request, shown to the customer and written on every log line of that request.</td><td>A token number at a bank counter.</td><td><code>X-Request-Id</code></td></tr><tr><td><strong>Symptom</strong></td><td>What the customer sees.</td><td>A fever.</td><td>"The button does nothing"</td></tr><tr><td><strong>Root cause</strong></td><td>The mistake that produces the symptom.</td><td>The infection behind the fever.</td><td>a null coupon</td></tr><tr><td><strong>Failing test first</strong></td><td>A test that reproduces the bug before you change any code.</td><td>Showing the leak with water before fixing the pipe.</td><td><code>NullCouponTrapTest</code></td></tr><tr><td><strong>Null object</strong></td><td>A real object that means "nothing", used instead of <code>null</code>.</td><td>A blank form instead of no form.</td><td><code>Coupon.NONE</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Kartwala</strong> (a fictional shopping app) gets a ticket: the refund button does nothing for order KW-1042. The only clue is a stack trace with a request id.</p>
+
+<h2>The ticket's stack trace</h2>
+<p class="muted">Real output: the ticket's request replayed on the old code (kept in the tests as <code>OldRefundCalculator</code>), this app's frames only. Produced by <code>docs/capture.sh</code>, saved in <code>docs/captures/ticket-stack-trace.txt</code>.</p>
+<pre class="code"><code class="language-text">java.lang.NullPointerException: Cannot invoke &quot;com.kartwala.refunds.Coupon.discountPaise()&quot; because the return value of &quot;com.kartwala.refunds.OldOrder.coupon()&quot; is null
+	at com.kartwala.refunds.OldRefundCalculator.couponShare(OldRefundCalculator.java:17)
+	at com.kartwala.refunds.OldRefundCalculator.refundable(OldRefundCalculator.java:13)
+	at com.kartwala.refunds.TicketReplay.main(TicketReplay.java:14)</code></pre>
+<h2>Reading it</h2>
+<ol class="steps">
+<li><strong>The first line</strong> is the exception and its message. Since Java 15 (by default), a <code>NullPointerException</code> says what was null: the return value of <code>coupon()</code>.</li>
+<li><strong>The first <code>at</code> line</strong> is where it failed: <code>couponShare</code>. The lines below are who called it.</li>
+<li>In a full log, frames from Spring and Tomcat sit around these. Look for the first frame in your own package.</li>
+<li>Ask <em>why</em> it was null: an order without a coupon had <code>null</code> for its coupon. That is the cause.</li>
+</ol>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> the ticket's request (KW-1042, line L2, no coupon), <b>then</b> <code>201</code>, ₹599.00 recorded.</li>
+<li><b>Given</b> a whole-order refund of KW-1042, <b>then</b> <code>201</code>, ₹2,598.00: the other path works too.</li>
+<li><b>Given</b> KW-1041 (₹200 coupon) refunded line by line, <b>then</b> the amounts add up to exactly what was paid, ₹1,598.00.</li>
+<li><b>Given</b> a line already refunded, <code>409</code>; a line the order does not have, <code>422</code>; an unknown order, <code>404</code>.</li>
+<li><b>Given</b> an unexpected failure, <b>then</b> <code>500</code> with the request id in the body and header, and one ERROR log line with that id and the stack trace.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>A failing test that reproduces the ticket comes before the fix, and stays.</li>
+<li>Fix where the bad value is created, so every caller is safe.</li>
+<li>Coupon share is proportional to price; the refund that empties the order gets what is left.</li>
+<li>Money in integer paise; ids normalised with <code>Locale.ROOT</code>.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Read a stack trace: message, first frame, your own frames, the cause.</li>
+<li>Find every log line of one request by its id.</li>
+<li>Reproduce a bug with a failing test before fixing it.</li>
+<li>Tell a fix of the cause from a patch of the symptom.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Body</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/refunds</code></td><td><code>{"orderId", "lineIds"?}</code>. Without <code>lineIds</code>, every line not yet refunded.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">201</span></td><td>A refund record was created</td></tr><tr><td><span class="pill warn">400</span></td><td>Not JSON, a bad order or line id, or an unknown field</td></tr><tr><td><span class="pill warn">404</span></td><td>No such order</td></tr><tr><td><span class="pill warn">409</span></td><td>The line, or the whole order, is already refunded</td></tr><tr><td><span class="pill warn">422</span></td><td>A line the order does not have</td></tr><tr><td><span class="pill bad">500</span></td><td>Something unexpected; the body has the request id to quote</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 15 Oct 2026, in this order, against one app. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: the ticket's request</h3><p><b>Why:</b> no coupon is now <code>Coupon.NONE</code>: the belt's full ₹599.00.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /refunds HTTP/1.1
+Content-Type: application/json
+X-Request-Id: req-5b1e9d42
+
+{
+  &quot;orderId&quot;: &quot;KW-1042&quot;,
+  &quot;lineIds&quot;: [
+    &quot;L2&quot;
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+X-Request-Id: req-5b1e9d42
+Content-Type: application/json
+Content-Length: 99
+
+{
+  &quot;refundId&quot;: &quot;RF-5001&quot;,
+  &quot;orderId&quot;: &quot;KW-1042&quot;,
+  &quot;lineIds&quot;: [
+    &quot;L2&quot;
+  ],
+  &quot;amountPaise&quot;: 59900,
+  &quot;status&quot;: &quot;RECORDED&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: the same line again</h3><p><b>Why:</b> a line is refunded once: <code>409</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /refunds HTTP/1.1
+Content-Type: application/json
+X-Request-Id: req-5b1e9d43
+
+{
+  &quot;orderId&quot;: &quot;KW-1042&quot;,
+  &quot;lineIds&quot;: [
+    &quot;L2&quot;
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 409 
+X-Request-Id: req-5b1e9d43
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Line L2 of KW-1042 is already refunded.&quot;,
+  &quot;instance&quot;: &quot;/refunds&quot;,
+  &quot;status&quot;: 409,
+  &quot;title&quot;: &quot;Already refunded&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: the rest of KW-1042</h3><p><b>Why:</b> the whole-order path, which last month's patch missed.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /refunds HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;orderId&quot;: &quot;KW-1042&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+X-Request-Id: 69b943fa-4133-4a8f-8959-87a4b5067a1c
+Content-Type: application/json
+Content-Length: 100
+
+{
+  &quot;refundId&quot;: &quot;RF-5002&quot;,
+  &quot;orderId&quot;: &quot;KW-1042&quot;,
+  &quot;lineIds&quot;: [
+    &quot;L1&quot;
+  ],
+  &quot;amountPaise&quot;: 199900,
+  &quot;status&quot;: &quot;RECORDED&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: the dupatta from KW-1041</h3><p><b>Why:</b> ₹499 minus its share of the ₹200 coupon (₹55.50, rounded down to whole paise).</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /refunds HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;orderId&quot;: &quot;KW-1041&quot;,
+  &quot;lineIds&quot;: [
+    &quot;L2&quot;
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+X-Request-Id: 2be020c0-6f5b-4846-83de-9c50be697cb2
+Content-Type: application/json
+Content-Length: 99
+
+{
+  &quot;refundId&quot;: &quot;RF-5003&quot;,
+  &quot;orderId&quot;: &quot;KW-1041&quot;,
+  &quot;lineIds&quot;: [
+    &quot;L2&quot;
+  ],
+  &quot;amountPaise&quot;: 44350,
+  &quot;status&quot;: &quot;RECORDED&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: the rest of KW-1041</h3><p><b>Why:</b> the last refund gets what is left, so the two add up to the ₹1,598.00 paid.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /refunds HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;orderId&quot;: &quot;KW-1041&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+X-Request-Id: a4d6ff24-d034-4d24-b5ce-2a73510c49d8
+Content-Type: application/json
+Content-Length: 100
+
+{
+  &quot;refundId&quot;: &quot;RF-5004&quot;,
+  &quot;orderId&quot;: &quot;KW-1041&quot;,
+  &quot;lineIds&quot;: [
+    &quot;L1&quot;
+  ],
+  &quot;amountPaise&quot;: 115450,
+  &quot;status&quot;: &quot;RECORDED&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: line L9</h3><p><b>Why:</b> <code>422</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /refunds HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;orderId&quot;: &quot;KW-1041&quot;,
+  &quot;lineIds&quot;: [
+    &quot;L9&quot;
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+X-Request-Id: cac3af63-c0b4-440d-aa0f-3392b82f1424
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Order KW-1041 has no line L9.&quot;,
+  &quot;instance&quot;: &quot;/refunds&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Unknown line&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: KW-9999</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /refunds HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;orderId&quot;: &quot;KW-9999&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+X-Request-Id: 43b5c253-a473-4f94-b5ed-62272dee1b3d
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No order KW-9999.&quot;,
+  &quot;instance&quot;: &quot;/refunds&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Order not found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 8: the metric</h3><p><b>Why:</b> the count the dashboard and alert read.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /actuator/metrics/refunds.requests?tag=outcome:recorded HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+X-Request-Id: 826f3657-02b4-4f9f-85ab-13ce6cc09b9d
+Content-Disposition: inline;filename=f.txt
+Content-Type: application/vnd.spring-boot.actuator.v3+json
+Content-Length: 97
+
+{
+  &quot;availableTags&quot;: [],
+  &quot;measurements&quot;: [
+    {
+      &quot;statistic&quot;: &quot;COUNT&quot;,
+      &quot;value&quot;: 4.0
+    }
+  ],
+  &quot;name&quot;: &quot;refunds.requests&quot;
+}</code></pre></div></div></section>
+<h2>The same requests in the app's log</h2>
+<p class="muted">The running app's own console lines searched for the ids of cases 1 and 2 (<code>docs/captures/app-log.txt</code>; timestamps and process id removed). Only case 1 has a line: case 2's <code>409</code> is a client's mistake, not a failure, so it writes none.</p>
+<pre class="code"><code class="language-text">INFO [rid:req-5b1e9d42] --- [kartwala-refunds] [nio-8080-exec-2] com.kartwala.refunds.RefundService       : Refund RF-5001 recorded for KW-1042 lines [L2] amount 59900 paise</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>The ticket's exact request</td><td><code>201</code>, ₹599.00</td><td><code>theTicketsExactRequestIsRecorded</code></td></tr><tr><td>Whole order, no coupon</td><td><code>201</code>, ₹2,598.00</td><td><code>theWholeOrderPathWorksWithoutACouponToo</code></td></tr><tr><td>The same line twice in one request; part then rest</td><td>Counted once; totals equal what was paid</td><td><code>partRefundsOfACouponOrderAddUpToWhatWasPaid</code></td></tr><tr><td>A line twice; the whole order twice</td><td><code>409</code></td><td><code>aLineIsRefundedOnce</code></td></tr><tr><td>Unknown order; unknown line</td><td><code>404</code>; <code>422</code></td><td><code>unknownOrdersAndLinesAreRefused</code></td></tr><tr><td>No order id; bad ids; an extra field; not JSON</td><td><code>400</code></td><td><code>badBodiesAre400</code></td></tr><tr><td>The ledger fails</td><td><code>500</code> with the id, an ERROR line, the metric</td><td><code>anUnexpectedErrorLeavesATrailFromTheCustomerToTheStackTrace</code></td></tr><tr><td>The failure ends</td><td>Refunds work; nothing half-recorded</td><td><code>afterTheFailureRefundsRecover</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Fixing the symptom without a failing test first, so the bug returns.</p>
+<p>The first test reproduces the ticket on the old code: the same <code>NullPointerException</code>, failing in <code>couponShare</code>. The second shows last month's patch: the ticket's path now works, and the whole-order path still throws. The third shows the fix at the cause: every path is safe. While building, each fix was undone once. Keeping the null coupon turned 7 tests red; not logging the error turned 1 red, dropping the last-refund rule 2, and leaving the request id out of the 500 body 1.</p>
+</div>
+<pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * The first test written for this ticket: it reproduces the customer&#x27;s request on the old code before anything is
+ * changed, then shows why last month&#x27;s patch let the bug come back.
+ */
+class NullCouponTrapTest {
+
+    static final Line JEANS = new Line(&quot;L1&quot;, &quot;Denim jeans&quot;, 199_900);
+    static final Line BELT = new Line(&quot;L2&quot;, &quot;Leather belt&quot;, 59_900);
+
+    @Test
+    void theTicketsRequestThrowsOnTheOldCode() {
+        OldOrder ticket = new OldOrder(&quot;KW-1042&quot;, List.of(JEANS, BELT), null);
+        assertThatThrownBy(() -&gt; OldRefundCalculator.refundable(ticket, List.of(BELT)))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining(&quot;because the return value of \&quot;com.kartwala.refunds.OldOrder.coupon()\&quot; is null&quot;)
+                .satisfies(e -&gt; assertThat(e.getStackTrace()[0].getMethodName()).isEqualTo(&quot;couponShare&quot;));
+    }
+
+    @Test
+    void thePatchClosedTheTicketButTheBugCameBackOnAnotherPath() {
+        OldOrder ticket = new OldOrder(&quot;KW-1042&quot;, List.of(JEANS, BELT), null);
+        assertThat(OldRefundCalculator.patchedPartRefund(ticket, List.of(BELT))).isEqualTo(59_900);   // the symptom is gone
+        assertThatThrownBy(() -&gt; OldRefundCalculator.wholeOrderRefund(ticket)).isInstanceOf(NullPointerException.class);   // the cause is not
+    }
+
+    @Test
+    void theFixIsInTheModelSoEveryPathIsSafe() {
+        Order ticket = new Order(&quot;KW-1042&quot;, List.of(JEANS, BELT), null);
+        assertThat(ticket.coupon()).isSameAs(Coupon.NONE);
+        assertThat(RefundCalculator.amount(ticket, List.of(BELT), false, 0)).isEqualTo(59_900);
+        assertThat(RefundCalculator.amount(ticket, List.of(JEANS, BELT), true, 0)).isEqualTo(259_800);
+        assertThat(RefundCalculator.amount(ticket, List.of(JEANS), false, 0)).isEqualTo(199_900);
+    }
+}</code></pre><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import java.util.List;
+
+/** The refund code before the fix, kept only in tests. */
+final class OldRefundCalculator {
+
+    private OldRefundCalculator() {
+    }
+
+    static long refundable(OldOrder order, List&lt;Line&gt; lines) {
+        long linesTotal = total(lines);
+        return linesTotal - couponShare(order, linesTotal);
+    }
+
+    static long couponShare(OldOrder order, long linesTotal) {
+        return order.coupon().discountPaise() * linesTotal / total(order.lines());   // assumes every order has a coupon
+    }
+
+    /** Last month&#x27;s fix for a ticket like this one: a null check where that ticket&#x27;s request came in. */
+    static long patchedPartRefund(OldOrder order, List&lt;Line&gt; lines) {
+        if (order.coupon() == null) {
+            return total(lines);
+        }
+        return refundable(order, lines);
+    }
+
+    /** The cancel-the-whole-order path, written later. It calls the calculator directly, as it should. */
+    static long wholeOrderRefund(OldOrder order) {
+        return refundable(order, order.lines());
+    }
+
+    static long total(List&lt;Line&gt; lines) {
+        return lines.stream().mapToLong(Line::pricePaise).sum();
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr><tr><td>Docker</td><td>Not needed for this station</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run                                    # the API on http://localhost:8080
+./mvnw spring-boot:run -Dspring-boot.run.arguments=--kartwala.refunds.simulate-ledger-failure=true   # the failure drill
+./mvnw test                                               # all 15 tests</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd spring-boot:run &quot;-Dspring-boot.run.arguments=--kartwala.refunds.simulate-ledger-failure=true&quot;
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Bring the bug back: in <code>Order.java</code>, delete the line <code>coupon = coupon == null ? Coupon.NONE : coupon;</code> and run the tests. Read the first failure's stack trace the way the Spec tab does. Then put it back.</p>
+<pre class="code"><code class="language-bash">curl -i -X POST http://localhost:8080/refunds -H &quot;Content-Type: application/json&quot; \
+     -H &quot;X-Request-Id: my-ticket-0001&quot; -d &#x27;{&quot;orderId&quot;:&quot;KW-1042&quot;,&quot;lineIds&quot;:[&quot;L2&quot;]}&#x27;</code></pre>
+<p>Then search the app's console for <code>rid:my-ticket-0001</code>.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>A stack trace with no line of your own code</td><td>The error came from a library, called by your code further down.</td><td>Read down to the first frame in <code>com.kartwala</code>, and look for <code>Caused by:</code>.</td></tr><tr><td>An ERROR log line with <code>[rid:-]</code></td><td>It was logged after the request finished (outside the filter).</td><td>Handle the exception inside the request, as <code>UnexpectedErrorHandler</code> does.</td></tr><tr><td>The NPE message says only <code>null</code></td><td>Helpful NullPointerException messages switched off, or Java older than 15.</td><td>Java 15 and later have them on by default; check for <code>-XX:-ShowCodeDetailsInExceptionMessages</code>.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/033-bug-triage-from-a-customer-ticket/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/kartwala/refunds/
+│   ├── RequestIdFilter.java   ├── RefundController.java   ├── RefundService.java
+│   ├── Order.java   ├── Coupon.java   ├── Line.java   ├── Orders.java
+│   ├── RefundCalculator.java   ├── RefundLedger.java
+│   ├── UnexpectedErrorHandler.java   └── RefundsApplication.java
+├── src/main/resources/application.yaml
+├── src/test/java/com/kartwala/refunds/   (see Tests; TicketReplay prints the ticket&#x27;s trace)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the pieces it uses.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">RequestIdFilter.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">RefundController.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">RefundService.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">Order.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">RefundCalculator.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">UnexpectedErrorHandler.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">RefundLedger.java</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">Coupon.java</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">Line.java</button><button class="file-btn" role="tab" id="code-9-b" aria-controls="code-9" aria-selected="false" data-group="code">Orders.java</button><button class="file-btn" role="tab" id="code-10-b" aria-controls="code-10" aria-selected="false" data-group="code">RefundsApplication.java</button><button class="file-btn" role="tab" id="code-11-b" aria-controls="code-11" aria-selected="false" data-group="code">application.yaml</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/kartwala/refunds/RequestIdFilter.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Gives each request an id, puts it in the MDC and the response header.</dd><dt>Why</dt><dd>A filter, so it wraps everything, including errors.</dd><dt>Without it</dt><dd>An id only on some log lines, or one a caller can fill with fake log text.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.MDC;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.util.UUID;
+import java.util.regex.Pattern;
+
+/**
+ * Gives every request an id, puts it in the MDC so every log line of the request carries it, and returns it in the
+ * X-Request-Id response header. A filter, not an interceptor: it runs for every request, including the ones that
+ * never reach a controller (unknown paths, errors before dispatch).
+ */
+@Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
+class RequestIdFilter extends OncePerRequestFilter {
+
+    static final String HEADER = &quot;X-Request-Id&quot;;
+    static final String MDC_KEY = &quot;requestId&quot;;
+
+    /** What we accept from a caller. Anything else (newlines, fake log text, 10 KB) is replaced, never logged. */
+    private static final Pattern SAFE = Pattern.compile(&quot;[A-Za-z0-9-]{8,64}&quot;);
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
+        String incoming = request.getHeader(HEADER);
+        String id = incoming != null &amp;&amp; SAFE.matcher(incoming).matches() ? incoming : UUID.randomUUID().toString();
+        MDC.put(MDC_KEY, id);
+        response.setHeader(HEADER, id);
+        try {
+            chain.doFilter(request, response);
+        } finally {
+            MDC.remove(MDC_KEY);   // the thread serves another request next; it must not inherit this id
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/kartwala/refunds/RefundController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Validates the body and returns the refund record.</dd><dt>Why</dt><dd>Ids normalised once, at the edge.</dd><dt>Without it</dt><dd>A null check here for the coupon: that was the patch.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.Locale;
+
+@RestController
+class RefundController {
+
+    record RefundRequest(@NotNull @Pattern(regexp = &quot;(?i)KW-\\d{4}&quot;, message = &quot;must look like KW-1042&quot;) String orderId,
+                         @Size(max = 50) List&lt;@NotNull @Pattern(regexp = &quot;(?i)L\\d{1,2}&quot;, message = &quot;must look like L2&quot;) String&gt; lineIds) {
+    }
+
+    record RefundResponse(String refundId, String orderId, List&lt;String&gt; lineIds, long amountPaise, String status) {
+    }
+
+    private final RefundService service;
+
+    RefundController(RefundService service) {
+        this.service = service;
+    }
+
+    /** Records a refund (a record is created; the payment provider is not called in this station). */
+    @PostMapping(&quot;/refunds&quot;)
+    @ResponseStatus(HttpStatus.CREATED)
+    RefundResponse refund(@Valid @RequestBody RefundRequest request) {
+        List&lt;String&gt; lineIds = request.lineIds() == null ? null : request.lineIds().stream().map(id -&gt; id.toUpperCase(Locale.ROOT)).toList();
+        RefundLedger.Refund r = service.refund(request.orderId().toUpperCase(Locale.ROOT), lineIds);
+        return new RefundResponse(r.refundId(), r.orderId(), r.lineIds(), r.amountPaise(), &quot;RECORDED&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/kartwala/refunds/RefundService.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Checks the lines, computes the amount, records the refund.</dd><dt>Why</dt><dd>No line ids means the rest of the order; a line twice in one request counts once.</dd><dt>Without it</dt><dd>Refunding a line twice, or over-refunding with rounding.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponseException;
+
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+/** Checks the lines, computes the amount, records the refund. No lineIds means every line not yet refunded. */
+@Service
+class RefundService {
+
+    private static final Logger log = LoggerFactory.getLogger(RefundService.class);
+
+    private final Orders orders;
+    private final RefundLedger ledger;
+    private final MeterRegistry metrics;
+
+    RefundService(Orders orders, RefundLedger ledger, MeterRegistry metrics) {
+        this.orders = orders;
+        this.ledger = ledger;
+        this.metrics = metrics;
+    }
+
+    /** synchronized: the &quot;already refunded?&quot; check and the record happen together. shortcut: one app instance only; a database needs a unique constraint per line. */
+    synchronized RefundLedger.Refund refund(String orderId, List&lt;String&gt; requestedLineIds) {
+        Order order = orders.find(orderId).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;Order not found&quot;, &quot;No order &quot; + orderId + &quot;.&quot;));
+        List&lt;RefundLedger.Refund&gt; earlier = ledger.forOrder(orderId);
+        Set&lt;String&gt; refunded = earlier.stream().flatMap(r -&gt; r.lineIds().stream()).collect(Collectors.toSet());
+        Set&lt;String&gt; wanted = requestedLineIds == null || requestedLineIds.isEmpty()
+                ? order.lines().stream().map(Line::id).filter(id -&gt; !refunded.contains(id)).collect(Collectors.toCollection(LinkedHashSet::new))
+                : new LinkedHashSet&lt;&gt;(requestedLineIds);   // the same line twice in one request counts once
+        if (wanted.isEmpty()) {
+            throw problem(HttpStatus.CONFLICT, &quot;Already refunded&quot;, &quot;Every line of &quot; + orderId + &quot; is already refunded.&quot;);
+        }
+        List&lt;Line&gt; lines = wanted.stream().map(id -&gt; order.line(id).orElseThrow(() -&gt;
+                problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Unknown line&quot;, &quot;Order &quot; + orderId + &quot; has no line &quot; + id + &quot;.&quot;))).toList();
+        for (Line line : lines) {
+            if (refunded.contains(line.id())) {
+                throw problem(HttpStatus.CONFLICT, &quot;Already refunded&quot;, &quot;Line &quot; + line.id() + &quot; of &quot; + orderId + &quot; is already refunded.&quot;);
+            }
+        }
+        boolean last = refunded.size() + lines.size() == order.lines().size();
+        long already = earlier.stream().mapToLong(RefundLedger.Refund::amountPaise).sum();
+        long amount = RefundCalculator.amount(order, lines, last, already);
+        RefundLedger.Refund refund = ledger.record(orderId, List.copyOf(wanted), amount);
+        metrics.counter(&quot;refunds.requests&quot;, &quot;outcome&quot;, &quot;recorded&quot;).increment();
+        log.info(&quot;Refund {} recorded for {} lines {} amount {} paise&quot;, refund.refundId(), orderId, wanted, amount);
+        return refund;
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/kartwala/refunds/Order.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>An order and what was paid.</dd><dt>Why</dt><dd>The fix lives here: the constructor turns a null coupon into <code>Coupon.NONE</code>, so no caller ever sees null.</dd><dt>Without it</dt><dd>The trap: a null that every caller has to remember.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * An order and what was paid. The root cause of the ticket was here: an order without a coupon had a null coupon,
+ * and every piece of code that read it had to remember. Now the constructor turns null into Coupon.NONE, once, so
+ * no caller can forget, including callers written next year.
+ */
+record Order(String id, List&lt;Line&gt; lines, Coupon coupon) {
+
+    Order {
+        lines = List.copyOf(lines);
+        coupon = coupon == null ? Coupon.NONE : coupon;
+    }
+
+    long itemsTotalPaise() {
+        return lines.stream().mapToLong(Line::pricePaise).sum();
+    }
+
+    long paidPaise() {
+        return itemsTotalPaise() - coupon.discountPaise();
+    }
+
+    Optional&lt;Line&gt; line(String lineId) {
+        return lines.stream().filter(l -&gt; l.id().equals(lineId)).findFirst();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/kartwala/refunds/RefundCalculator.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>How much comes back for some lines.</dd><dt>Why</dt><dd>Proportional coupon share, rounded down; the last refund gets what is left.</dd><dt>Without it</dt><dd><code>order.coupon().discountPaise()</code> with a coupon that might be null.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import java.util.List;
+
+/**
+ * How much comes back for some lines of an order: their prices minus their share of the coupon, in proportion to
+ * price. The share is rounded down, so a part refund can be a fraction of a paisa generous; the refund that empties
+ * the order gets exactly what is left of what was paid, so the refunds of an order always add up to what was paid.
+ */
+final class RefundCalculator {
+
+    private RefundCalculator() {
+    }
+
+    static long amount(Order order, List&lt;Line&gt; lines, boolean lastLinesOfTheOrder, long alreadyRefundedPaise) {
+        if (lastLinesOfTheOrder) {
+            return order.paidPaise() - alreadyRefundedPaise;
+        }
+        long linesTotal = lines.stream().mapToLong(Line::pricePaise).sum();
+        long couponShare = Math.multiplyExact(order.coupon().discountPaise(), linesTotal) / order.itemsTotalPaise();
+        return linesTotal - couponShare;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/kartwala/refunds/UnexpectedErrorHandler.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Turns an unexpected exception into a 500 the customer can quote, and a log line support can find.</dd><dt>Why</dt><dd>Logs while the request id is still in the MDC, once, at ERROR, with the stack trace.</dd><dt>Without it</dt><dd>Letting it escape: the servlet container logs it after the filter has cleared the id.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+
+/**
+ * Spring&#x27;s own exceptions and ErrorResponseException keep their problem details (the parent class). Anything else is
+ * a bug: it is logged once, at ERROR, with its stack trace, while the request id is still in the MDC, and the caller
+ * gets a 500 that says the refund was not recorded and shows the id to quote. Before, the error escaped the filter,
+ * the id was gone from the log line, and the app showed nothing.
+ */
+@RestControllerAdvice
+class UnexpectedErrorHandler extends ResponseEntityExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(UnexpectedErrorHandler.class);
+
+    private final MeterRegistry metrics;
+
+    UnexpectedErrorHandler(MeterRegistry metrics) {
+        this.metrics = metrics;
+    }
+
+    @ExceptionHandler(Exception.class)
+    ProblemDetail unexpected(Exception e) {
+        log.error(&quot;Refund request failed&quot;, e);
+        metrics.counter(&quot;refunds.requests&quot;, &quot;outcome&quot;, &quot;failed&quot;).increment();
+        String requestId = MDC.get(RequestIdFilter.MDC_KEY);
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
+                &quot;The refund was not recorded. Please try again; if it fails again, quote request id &quot; + requestId + &quot; to support.&quot;);
+        p.setTitle(&quot;Something went wrong&quot;);
+        p.setProperty(&quot;requestId&quot;, requestId);
+        return p;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/kartwala/refunds/RefundLedger.java</p><div class="notes"><p>Refund records in memory, and the switch the failure drill uses.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * Refund records, in memory (demo). A record is created; no money moves. The failure switch exists for the failure
+ * drill: it makes the ledger fail the way a real one does when its database is down.
+ */
+@Component
+class RefundLedger {
+
+    record Refund(String refundId, String orderId, List&lt;String&gt; lineIds, long amountPaise) {
+    }
+
+    private final Map&lt;String, List&lt;Refund&gt;&gt; byOrder = new ConcurrentHashMap&lt;&gt;();
+    private final AtomicLong sequence = new AtomicLong(5000);
+    private volatile boolean simulateFailure;
+
+    RefundLedger(@Value(&quot;${kartwala.refunds.simulate-ledger-failure:false}&quot;) boolean simulateFailure) {
+        this.simulateFailure = simulateFailure;
+    }
+
+    List&lt;Refund&gt; forOrder(String orderId) {
+        failIfDrill();
+        return List.copyOf(byOrder.getOrDefault(orderId, List.of()));
+    }
+
+    Refund record(String orderId, List&lt;String&gt; lineIds, long amountPaise) {
+        failIfDrill();
+        Refund refund = new Refund(&quot;RF-&quot; + sequence.incrementAndGet(), orderId, List.copyOf(lineIds), amountPaise);
+        byOrder.computeIfAbsent(orderId, id -&gt; new ArrayList&lt;&gt;()).add(refund);
+        return refund;
+    }
+
+    void simulateFailure(boolean on) {
+        simulateFailure = on;
+    }
+
+    private void failIfDrill() {
+        if (simulateFailure) {
+            throw new IllegalStateException(&quot;Refund ledger did not answer (failure drill)&quot;);
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/java/com/kartwala/refunds/Coupon.java</p><div class="notes"><p>A coupon, and <code>Coupon.NONE</code>.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+/** A coupon applied to the whole order. NONE stands for &quot;no coupon&quot;, so no code ever meets a null coupon. */
+record Coupon(String code, long discountPaise) {
+
+    static final Coupon NONE = new Coupon(&quot;&quot;, 0);
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">src/main/java/com/kartwala/refunds/Line.java</p><div class="notes"><p>One line of an order.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+/** One line of an order. */
+record Line(String id, String item, long pricePaise) {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-9" aria-labelledby="code-9-b" hidden><p class="path">src/main/java/com/kartwala/refunds/Orders.java</p><div class="notes"><p>Two demo orders: one with a coupon, and the ticket's, without.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+/** Demo orders in memory. KW-1042 is the order from the customer&#x27;s ticket: no coupon. */
+@Component
+class Orders {
+
+    private final Map&lt;String, Order&gt; byId = Map.of(
+            &quot;KW-1041&quot;, new Order(&quot;KW-1041&quot;, List.of(
+                    new Line(&quot;L1&quot;, &quot;Cotton kurta&quot;, 129_900),
+                    new Line(&quot;L2&quot;, &quot;Dupatta&quot;, 49_900)), new Coupon(&quot;FEST200&quot;, 20_000)),
+            &quot;KW-1042&quot;, new Order(&quot;KW-1042&quot;, List.of(
+                    new Line(&quot;L1&quot;, &quot;Denim jeans&quot;, 199_900),
+                    new Line(&quot;L2&quot;, &quot;Leather belt&quot;, 59_900)), null));
+
+    Optional&lt;Order&gt; find(String orderId) {
+        return Optional.ofNullable(byId.get(orderId));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-10" aria-labelledby="code-10-b" hidden><p class="path">src/main/java/com/kartwala/refunds/RefundsApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class RefundsApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(RefundsApplication.class, args);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-11" aria-labelledby="code-11-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>The request id in the log pattern, the metrics endpoint, strict JSON, and the drill switch (off).</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: kartwala-refunds
+  mvc:
+    problemdetails:
+      enabled: true
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+# Every log line carries the request id from the MDC, or &quot;-&quot; outside a request.
+logging:
+  pattern:
+    level: &quot;%5p [rid:%X{requestId:--}]&quot;
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+kartwala:
+  refunds:
+    simulate-ledger-failure: false   # true only for a failure drill</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>RefundContractTest</code> (6)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>NullCouponTrapTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Operations</td><td>Metric, alert, rollback, runbook; a controlled failure drill</td><td><code>OperationsDrillTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>This station</td><td>Amounts without Spring</td><td><code>RefundCalculatorTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.refunds.RefundCalculatorTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.refunds.OperationsDrillTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.refunds.RefundContractTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.refunds.NullCouponTrapTest
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">NullCouponTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">RefundContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">OperationsDrillTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">RefundCalculatorTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">OldRefundCalculator.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">TicketReplay.java</button><button class="file-btn" role="tab" id="tests-6-b" aria-controls="tests-6" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/kartwala/refunds/NullCouponTrapTest.java</p><div class="notes"><p>Written first: the ticket on the old code, the patch that missed a path, and the fix.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * The first test written for this ticket: it reproduces the customer&#x27;s request on the old code before anything is
+ * changed, then shows why last month&#x27;s patch let the bug come back.
+ */
+class NullCouponTrapTest {
+
+    static final Line JEANS = new Line(&quot;L1&quot;, &quot;Denim jeans&quot;, 199_900);
+    static final Line BELT = new Line(&quot;L2&quot;, &quot;Leather belt&quot;, 59_900);
+
+    @Test
+    void theTicketsRequestThrowsOnTheOldCode() {
+        OldOrder ticket = new OldOrder(&quot;KW-1042&quot;, List.of(JEANS, BELT), null);
+        assertThatThrownBy(() -&gt; OldRefundCalculator.refundable(ticket, List.of(BELT)))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining(&quot;because the return value of \&quot;com.kartwala.refunds.OldOrder.coupon()\&quot; is null&quot;)
+                .satisfies(e -&gt; assertThat(e.getStackTrace()[0].getMethodName()).isEqualTo(&quot;couponShare&quot;));
+    }
+
+    @Test
+    void thePatchClosedTheTicketButTheBugCameBackOnAnotherPath() {
+        OldOrder ticket = new OldOrder(&quot;KW-1042&quot;, List.of(JEANS, BELT), null);
+        assertThat(OldRefundCalculator.patchedPartRefund(ticket, List.of(BELT))).isEqualTo(59_900);   // the symptom is gone
+        assertThatThrownBy(() -&gt; OldRefundCalculator.wholeOrderRefund(ticket)).isInstanceOf(NullPointerException.class);   // the cause is not
+    }
+
+    @Test
+    void theFixIsInTheModelSoEveryPathIsSafe() {
+        Order ticket = new Order(&quot;KW-1042&quot;, List.of(JEANS, BELT), null);
+        assertThat(ticket.coupon()).isSameAs(Coupon.NONE);
+        assertThat(RefundCalculator.amount(ticket, List.of(BELT), false, 0)).isEqualTo(59_900);
+        assertThat(RefundCalculator.amount(ticket, List.of(JEANS, BELT), true, 0)).isEqualTo(259_800);
+        assertThat(RefundCalculator.amount(ticket, List.of(JEANS), false, 0)).isEqualTo(199_900);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/kartwala/refunds/RefundContractTest.java</p><div class="notes"><p>The ticket's request, both paths, the money, and every refusal.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP contract. KW-1041 has a ₹200 coupon (kurta L1, dupatta L2); KW-1042, the ticket&#x27;s order, has none. */
+class RefundContractTest extends ApiTest {
+
+    @Test
+    void theTicketsExactRequestIsRecorded() throws Exception {
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-1042&quot;,&quot;lineIds&quot;:[&quot;L2&quot;]}&quot;&quot;&quot;)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath(&quot;$.amountPaise&quot;).value(59_900))
+                .andExpect(jsonPath(&quot;$.status&quot;).value(&quot;RECORDED&quot;));
+    }
+
+    @Test
+    void theWholeOrderPathWorksWithoutACouponToo() throws Exception {
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;kw-1042&quot;}&quot;&quot;&quot;)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath(&quot;$.orderId&quot;).value(&quot;KW-1042&quot;))
+                .andExpect(jsonPath(&quot;$.lineIds&quot;, contains(&quot;L1&quot;, &quot;L2&quot;)))
+                .andExpect(jsonPath(&quot;$.amountPaise&quot;).value(259_800));
+    }
+
+    @Test
+    void partRefundsOfACouponOrderAddUpToWhatWasPaid() throws Exception {
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-1041&quot;,&quot;lineIds&quot;:[&quot;l2&quot;,&quot;L2&quot;]}&quot;&quot;&quot;)
+                .andExpect(jsonPath(&quot;$.lineIds&quot;, contains(&quot;L2&quot;)))
+                .andExpect(jsonPath(&quot;$.amountPaise&quot;).value(44_350));
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-1041&quot;}&quot;&quot;&quot;)
+                .andExpect(jsonPath(&quot;$.lineIds&quot;, contains(&quot;L1&quot;)))
+                .andExpect(jsonPath(&quot;$.amountPaise&quot;).value(115_450));
+    }
+
+    @Test
+    void aLineIsRefundedOnce() throws Exception {
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-1042&quot;,&quot;lineIds&quot;:[&quot;L2&quot;]}&quot;&quot;&quot;).andExpect(status().isCreated());
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-1042&quot;,&quot;lineIds&quot;:[&quot;L2&quot;]}&quot;&quot;&quot;).andExpect(status().isConflict())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Line L2 of KW-1042 is already refunded.&quot;));
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-1042&quot;}&quot;&quot;&quot;).andExpect(jsonPath(&quot;$.lineIds&quot;, contains(&quot;L1&quot;)));
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-1042&quot;}&quot;&quot;&quot;).andExpect(status().isConflict());
+    }
+
+    @Test
+    void unknownOrdersAndLinesAreRefused() throws Exception {
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-9999&quot;,&quot;lineIds&quot;:[&quot;L1&quot;]}&quot;&quot;&quot;).andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-1042&quot;,&quot;lineIds&quot;:[&quot;L9&quot;]}&quot;&quot;&quot;).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Unknown line&quot;));
+    }
+
+    @Test
+    void badBodiesAre400() throws Exception {
+        refund(&quot;&quot;&quot;
+                {&quot;lineIds&quot;:[&quot;L1&quot;]}&quot;&quot;&quot;).andExpect(status().isBadRequest());
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;1042&quot;}&quot;&quot;&quot;).andExpect(status().isBadRequest());
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-1042&quot;,&quot;lineIds&quot;:[&quot;belt&quot;]}&quot;&quot;&quot;).andExpect(status().isBadRequest());
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-1042&quot;,&quot;amountPaise&quot;:1}&quot;&quot;&quot;).andExpect(status().isBadRequest());
+        refund(&quot;not json&quot;).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/kartwala/refunds/OperationsDrillTest.java</p><div class="notes"><p>The failure drill: a 500 with the id, the ERROR line with the trace, the metric, recovery.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.http.MediaType;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * The failure drill, as a test: the ledger fails, and everything the triage runbook relies on must be there. The
+ * caller sees a 500 with the request id, the log has one ERROR line with that id and the stack trace, the metric moves.
+ */
+@ExtendWith(OutputCaptureExtension.class)
+class OperationsDrillTest extends ApiTest {
+
+    @Autowired
+    RefundLedger ledger;
+    @Autowired
+    MeterRegistry metrics;
+
+    double failed() {
+        var c = metrics.find(&quot;refunds.requests&quot;).tag(&quot;outcome&quot;, &quot;failed&quot;).counter();
+        return c == null ? 0 : c.count();
+    }
+
+    @Test
+    void anUnexpectedErrorLeavesATrailFromTheCustomerToTheStackTrace(CapturedOutput output) throws Exception {
+        ledger.simulateFailure(true);
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-1042&quot;,&quot;lineIds&quot;:[&quot;L2&quot;]}&quot;&quot;&quot;, &quot;drill-req-0001&quot;)
+                .andExpect(status().isInternalServerError())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(header().string(&quot;X-Request-Id&quot;, &quot;drill-req-0001&quot;))
+                .andExpect(jsonPath(&quot;$.requestId&quot;).value(&quot;drill-req-0001&quot;))
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;The refund was not recorded. Please try again; if it fails again, quote request id drill-req-0001 to support.&quot;));
+        assertThat(output.getOut())
+                .containsPattern(&quot;ERROR \\[rid:drill-req-0001\\] .* Refund request failed&quot;)
+                .contains(&quot;java.lang.IllegalStateException: Refund ledger did not answer (failure drill)&quot;)
+                .containsPattern(&quot;at com\\.kartwala\\.refunds\\.RefundLedger\\.failIfDrill&quot;);
+        assertThat(failed()).isEqualTo(1);
+    }
+
+    @Test
+    void afterTheFailureRefundsRecover() throws Exception {
+        ledger.simulateFailure(true);
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-1042&quot;,&quot;lineIds&quot;:[&quot;L2&quot;]}&quot;&quot;&quot;).andExpect(status().isInternalServerError());
+        ledger.simulateFailure(false);
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-1042&quot;,&quot;lineIds&quot;:[&quot;L2&quot;]}&quot;&quot;&quot;).andExpect(status().isCreated());   // nothing was recorded by the failed try
+    }
+
+    @Test
+    void clientMistakesAreNotCountedAsFailuresAndTheMetricIsPublished() throws Exception {
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-9999&quot;}&quot;&quot;&quot;).andExpect(status().isNotFound());
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-1042&quot;,&quot;lineIds&quot;:[&quot;L2&quot;]}&quot;&quot;&quot;).andExpect(status().isCreated());
+        assertThat(failed()).isZero();
+        mvc.perform(get(&quot;/actuator/metrics/refunds.requests&quot;).param(&quot;tag&quot;, &quot;outcome:recorded&quot;))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.measurements[0].value&quot;).value(1.0));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/kartwala/refunds/RefundCalculatorTest.java</p><div class="notes"><p>Coupon share, the last refund's remainder, and no coupon.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** The amounts, without Spring. */
+class RefundCalculatorTest {
+
+    static final Line KURTA = new Line(&quot;L1&quot;, &quot;Cotton kurta&quot;, 129_900);
+    static final Line DUPATTA = new Line(&quot;L2&quot;, &quot;Dupatta&quot;, 49_900);
+    static final Order WITH_COUPON = new Order(&quot;KW-1041&quot;, List.of(KURTA, DUPATTA), new Coupon(&quot;FEST200&quot;, 20_000));
+
+    @Test
+    void aLineGivesBackItsPriceMinusItsShareOfTheCoupon() {
+        // 20,000 x 49,900 / 179,800 = 5,550.6 paise of coupon, rounded down to 5,550.
+        assertThat(RefundCalculator.amount(WITH_COUPON, List.of(DUPATTA), false, 0)).isEqualTo(44_350);
+    }
+
+    @Test
+    void theLastRefundTakesWhatIsLeftSoTheTotalIsExactlyWhatWasPaid() {
+        long first = RefundCalculator.amount(WITH_COUPON, List.of(DUPATTA), false, 0);
+        long last = RefundCalculator.amount(WITH_COUPON, List.of(KURTA), true, first);
+        assertThat(first + last).isEqualTo(WITH_COUPON.paidPaise()).isEqualTo(159_800);
+        assertThat(last).isEqualTo(115_450);
+    }
+
+    @Test
+    void aMissingCouponIsNoCouponForEveryCaller() {
+        Order noCoupon = new Order(&quot;KW-1042&quot;, List.of(KURTA), null);
+        assertThat(noCoupon.coupon().discountPaise()).isZero();
+        assertThat(noCoupon.paidPaise()).isEqualTo(129_900);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/kartwala/refunds/OldRefundCalculator.java</p><div class="notes"><p>The old code, with last month's patch.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import java.util.List;
+
+/** The refund code before the fix, kept only in tests. */
+final class OldRefundCalculator {
+
+    private OldRefundCalculator() {
+    }
+
+    static long refundable(OldOrder order, List&lt;Line&gt; lines) {
+        long linesTotal = total(lines);
+        return linesTotal - couponShare(order, linesTotal);
+    }
+
+    static long couponShare(OldOrder order, long linesTotal) {
+        return order.coupon().discountPaise() * linesTotal / total(order.lines());   // assumes every order has a coupon
+    }
+
+    /** Last month&#x27;s fix for a ticket like this one: a null check where that ticket&#x27;s request came in. */
+    static long patchedPartRefund(OldOrder order, List&lt;Line&gt; lines) {
+        if (order.coupon() == null) {
+            return total(lines);
+        }
+        return refundable(order, lines);
+    }
+
+    /** The cancel-the-whole-order path, written later. It calls the calculator directly, as it should. */
+    static long wholeOrderRefund(OldOrder order) {
+        return refundable(order, order.lines());
+    }
+
+    static long total(List&lt;Line&gt; lines) {
+        return lines.stream().mapToLong(Line::pricePaise).sum();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/kartwala/refunds/TicketReplay.java</p><div class="notes"><p>Prints the ticket's real stack trace for this page.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import java.util.List;
+
+/**
+ * Replays the ticket&#x27;s request (KW-1042, line L2) on the old code and prints the exception the way the log showed it,
+ * keeping only this app&#x27;s frames. Run by docs/capture.sh, so the stack trace on the page is a real one.
+ */
+public class TicketReplay {
+
+    public static void main(String[] args) {
+        OldOrder order = new OldOrder(&quot;KW-1042&quot;, List.of(new Line(&quot;L1&quot;, &quot;Denim jeans&quot;, 199_900), new Line(&quot;L2&quot;, &quot;Leather belt&quot;, 59_900)), null);
+        try {
+            OldRefundCalculator.refundable(order, List.of(order.lines().get(1)));
+        } catch (NullPointerException e) {
+            System.out.println(e);
+            for (StackTraceElement frame : e.getStackTrace()) {
+                if (frame.getClassName().startsWith(&quot;com.kartwala&quot;)) {
+                    System.out.println(&quot;\tat &quot; + frame);
+                }
+            }
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-6" aria-labelledby="tests-6-b" hidden><p class="path">src/test/java/com/kartwala/refunds/ApiTest.java</p><div class="notes"><p>Shared setup: a fresh app per test, since refunds change the ledger.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/** Shared setup. Refunds change the ledger, so every test method gets a fresh app. */
+@SpringBootTest
+@AutoConfigureMockMvc
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+
+    ResultActions refund(String json, String requestId) throws Exception {
+        var request = post(&quot;/refunds&quot;).contentType(MediaType.APPLICATION_JSON).content(json);
+        return mvc.perform(requestId == null ? request : request.header(&quot;X-Request-Id&quot;, requestId));
+    }
+
+    ResultActions refund(String json) throws Exception {
+        return refund(json, null);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/kartwala/refunds/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=FreeOrderTicketChallengeTest</code>. Read the stack trace first.</li>
+<li>Fix the cause until it passes, then run <code>./mvnw test</code> to check the other 15 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 19 tests pass (15 station tests and 4 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>A second ticket: free samples</h2><p>"Refund for my free samples fails." The log shows <code>java.lang.ArithmeticException: / by zero</code> in <code>RefundCalculator.amount</code>, for an order where every line cost ₹0. The failing test is written for you; fix the cause.</p><p><b>Done when:</b> both tests in <code>FreeOrderTicketChallengeTest</code> pass, and nothing else turns red.</p><details class="qa"><summary>Hints</summary><ul><li>Which number is zero, and why can it be?</li><li>Nothing was paid, so nothing comes back: answer 0 before dividing.</li></ul></details><p class="path">challenge/FreeOrderTicketChallengeTest.java</p><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Challenge 1: a second ticket. &quot;Refund for my free samples fails.&quot; The log shows
+ * java.lang.ArithmeticException: / by zero at com.kartwala.refunds.RefundCalculator.amount
+ * for an order where every line was free (two ₹0 sample lines, no coupon). This is the failing test, written first.
+ * Fix the cause so it passes, and keep every other test green.
+ */
+class FreeOrderTicketChallengeTest {
+
+    static final Order SAMPLES = new Order(&quot;KW-1077&quot;, List.of(new Line(&quot;L1&quot;, &quot;Sample serum&quot;, 0), new Line(&quot;L2&quot;, &quot;Sample cream&quot;, 0)), null);
+
+    @Test
+    void aPartRefundOfAFreeOrderIsZeroNotAnError() {
+        assertThat(RefundCalculator.amount(SAMPLES, List.of(SAMPLES.lines().get(0)), false, 0)).isZero();
+    }
+
+    @Test
+    void theWholeFreeOrderIsZeroToo() {
+        assertThat(RefundCalculator.amount(SAMPLES, SAMPLES.lines(), true, 0)).isZero();
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/RefundCalculator.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import java.util.List;
+
+/**
+ * How much comes back for some lines of an order: their prices minus their share of the coupon, in proportion to
+ * price. The share is rounded down, so a part refund can be a fraction of a paisa generous; the refund that empties
+ * the order gets exactly what is left of what was paid, so the refunds of an order always add up to what was paid.
+ */
+final class RefundCalculator {
+
+    private RefundCalculator() {
+    }
+
+    static long amount(Order order, List&lt;Line&gt; lines, boolean lastLinesOfTheOrder, long alreadyRefundedPaise) {
+        if (lastLinesOfTheOrder) {
+            return order.paidPaise() - alreadyRefundedPaise;
+        }
+        long linesTotal = lines.stream().mapToLong(Line::pricePaise).sum();
+        if (order.itemsTotalPaise() == 0) {
+            return 0;   // every line was free: nothing was paid, nothing to share the coupon over
+        }
+        long couponShare = Math.multiplyExact(order.coupon().discountPaise(), linesTotal) / order.itemsTotalPaise();
+        return linesTotal - couponShare;
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 30 minutes</p><h2>The request id on every refusal</h2><p>Support wants the request id on every problem response (<code>400</code>, <code>404</code>, <code>409</code>, <code>422</code>), not only on <code>500</code>, so a customer who sees "already refunded" can be traced too.</p><p><b>Done when:</b> both tests in <code>RequestIdOnEveryProblemChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li><code>ResponseEntityExceptionHandler</code> builds every Spring problem response through one protected method.</li><li>Override <code>createResponseEntity</code> and add the property when the body is a <code>ProblemDetail</code>.</li></ul></details><p class="path">challenge/RequestIdOnEveryProblemChallengeTest.java</p><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: support asks for the request id on every refusal, not just on 500s, so a customer who sees &quot;already
+ * refunded&quot; can be traced too. Every problem response (400, 404, 409, 422) carries &quot;requestId&quot;, equal to the
+ * X-Request-Id header.
+ */
+class RequestIdOnEveryProblemChallengeTest extends ApiTest {
+
+    @Test
+    void refusalsCarryTheRequestId() throws Exception {
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-9999&quot;}&quot;&quot;&quot;, &quot;support-case-77&quot;).andExpect(status().isNotFound())
+                .andExpect(jsonPath(&quot;$.requestId&quot;).value(&quot;support-case-77&quot;));
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;KW-1042&quot;,&quot;lineIds&quot;:[&quot;L9&quot;]}&quot;&quot;&quot;, &quot;support-case-78&quot;).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.requestId&quot;).value(&quot;support-case-78&quot;));
+    }
+
+    @Test
+    void badBodiesCarryItToo() throws Exception {
+        refund(&quot;not json&quot;, &quot;support-case-79&quot;).andExpect(status().isBadRequest())
+                .andExpect(jsonPath(&quot;$.requestId&quot;).value(&quot;support-case-79&quot;));
+        refund(&quot;&quot;&quot;
+                {&quot;orderId&quot;:&quot;1042&quot;}&quot;&quot;&quot;, &quot;support-case-80&quot;).andExpect(status().isBadRequest())
+                .andExpect(jsonPath(&quot;$.requestId&quot;).value(&quot;support-case-80&quot;));
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/UnexpectedErrorHandler.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.refunds;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+
+/**
+ * Spring&#x27;s own exceptions and ErrorResponseException keep their problem details (the parent class). Anything else is
+ * a bug: it is logged once, at ERROR, with its stack trace, while the request id is still in the MDC, and the caller
+ * gets a 500 that says the refund was not recorded and shows the id to quote. Before, the error escaped the filter,
+ * the id was gone from the log line, and the app showed nothing.
+ */
+@RestControllerAdvice
+class UnexpectedErrorHandler extends ResponseEntityExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(UnexpectedErrorHandler.class);
+
+    private final MeterRegistry metrics;
+
+    UnexpectedErrorHandler(MeterRegistry metrics) {
+        this.metrics = metrics;
+    }
+
+    @ExceptionHandler(Exception.class)
+    ProblemDetail unexpected(Exception e) {
+        log.error(&quot;Refund request failed&quot;, e);
+        metrics.counter(&quot;refunds.requests&quot;, &quot;outcome&quot;, &quot;failed&quot;).increment();
+        String requestId = MDC.get(RequestIdFilter.MDC_KEY);
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
+                &quot;The refund was not recorded. Please try again; if it fails again, quote request id &quot; + requestId + &quot; to support.&quot;);
+        p.setTitle(&quot;Something went wrong&quot;);
+        p.setProperty(&quot;requestId&quot;, requestId);
+        return p;
+    }
+
+    /** Every problem the parent class builds (Spring&#x27;s exceptions and ErrorResponseException) passes through here. */
+    @Override
+    protected ResponseEntity&lt;Object&gt; createResponseEntity(Object body, HttpHeaders headers, HttpStatusCode statusCode, WebRequest request) {
+        if (body instanceof ProblemDetail p) {
+            p.setProperty(&quot;requestId&quot;, MDC.get(RequestIdFilter.MDC_KEY));
+        }
+        return super.createResponseEntity(body, headers, statusCode, request);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>A triage template for support</h2>
+<p>Write the one-page template support fills before a ticket reaches engineering: what the customer did, when, the request id, the order, the exact message shown. For each field, say which step of the runbook it saves. What would you add so that a ticket like this one is linked to the failing test that closed it?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design (none in this station)</li></ul><p class="rule">Short at Foundations: the choices that matter here.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Find the request id's log lines and the stack trace.</li>
+<li>Write the failing test: the ticket's request on the code as it is.</li>
+<li>Ask why the value was null until the answer is a design choice (null meant "no coupon").</li>
+<li>Fix it there, run every test, and keep the new one.</li>
+<li>Make the next ticket easier: the 500 carries the id, and the log line has it.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Fix</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td><code>Coupon.NONE</code> set in the record's constructor</td><td>One line; every caller is safe.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td><code>Optional&lt;Coupon&gt;</code> accessor</td><td>Every caller must unwrap; also safe.</td><td><span class="pill warn">Also fine</span></td></tr><tr><td>A null check in the calculator</td><td>Fixes this calculator; the next reader of the coupon can forget again.</td><td><span class="pill warn">Partial</span></td></tr><tr><td>A null check where the request comes in</td><td>The ticket closes; other paths still fail.</td><td><span class="pill bad">The trap</span></td></tr><tr><td><code>catch (Exception e)</code> returning 0</td><td>A silent wrong refund instead of an error.</td><td><span class="pill bad">Worse</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>None in this station. With a database, the cause is often a nullable column: <code>coupon_id</code> nullable is fine if the code models it, and a <code>unique (order_id, line_id)</code> on the refund lines table makes "refunded once" hold across app instances.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>14. Operations: metric, alert, rollback, runbook, failure drill</li><li>15. Real-world considerations</li></ul><p class="rule">An Operations station: everything someone on call needs, and a drill to prove it works.</p></aside>
+<h2>Operations</h2>
+<dl class="facts">
+<dt>Metric</dt><dd><code>refunds.requests</code>, tagged <code>outcome</code> = recorded or failed. Client mistakes (4xx) are not failures and are not counted as them.</dd>
+<dt>Alert</dt><dd>Page the on-call engineer when <code>failed</code> is more than 2% of all refund requests for 10 minutes, or more than 0 for an hour at low traffic (thresholds are a starting point; tune them on real traffic).</dd>
+<dt>Rollback</dt><dd>The fix changes no stored data, so rolling back is redeploying the previous version. Refunds recorded meanwhile stay valid. If a release raises <code>failed</code>, roll back first and investigate from the request ids after.</dd>
+</dl>
+<h2>Runbook: "the refund button does nothing"</h2>
+<ol class="steps">
+<li>Get the request id: from the customer's screenshot (the 500 body now shows it), or the app's error report.</li>
+<li>Search the logs for <code>[rid:&lt;that id&gt;]</code>. Read the ERROR line's exception, message and first frame in <code>com.kartwala</code>.</li>
+<li>Check <code>refunds.requests{outcome=failed}</code>: one customer, or everyone? Everyone after a release: roll back.</li>
+<li>One kind of order: write a failing test with that order's shape before touching code. Fix the cause; link the test to the ticket.</li>
+</ol>
+<h2>Failure drill</h2>
+<p>A controlled failure drill, run before you need the runbook for real:</p>
+<ol class="steps">
+<li>Start a test instance with <code>--kartwala.refunds.simulate-ledger-failure=true</code>.</li>
+<li>Send a refund with <code>X-Request-Id: drill-req-0001</code>: expect <code>500</code>, and <code>requestId: drill-req-0001</code> in the body.</li>
+<li>Follow the runbook from that id alone: find the ERROR line and its stack trace, and see <code>outcome=failed</code> in <code>/actuator/metrics/refunds.requests</code>.</li>
+<li>Restart without the switch; the same refund now gives <code>201</code>, because nothing was recorded by the failed try.</li>
+</ol>
+<p class="muted">The same drill runs on every build as <code>OperationsDrillTest</code> (3 tests, passing in <code>docs/test-run.txt</code>).</p>
+<h2>Real-world considerations</h2>
+<dl class="facts">
+<dt>Privacy</dt><dd>Stack traces and log lines must not carry card numbers, addresses or phone numbers; log ids, not people.</dd>
+<dt>Error trackers</dt><dd>Tools such as Sentry group identical stack traces and count them; the request id links each event to its logs.</dd>
+<dt>Regression tests</dt><dd>A bug's test is named after what it proves, not the ticket number, and stays in the suite for good.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>How do you read a Java stack trace?</summary><p>Read the exception type and message first, then the first frame (where it was thrown), then down to the first frame in your own code. With a chain, the last &#x27;Caused by:&#x27; is usually the origin.</p></details><details class="qa"><summary>A customer reports an error. What do you do first?</summary><p>Get the request id or time, find the logs for it, read the error, and reproduce it with a failing test before changing anything.</p></details><details class="qa"><summary>Symptom fix vs root-cause fix?</summary><p>A symptom fix makes the visible failure go away where it was seen. A root-cause fix removes the reason, so every path that could hit it is safe. The failing test proves which one you did.</p></details><details class="qa"><summary>Why log unexpected errors in a @RestControllerAdvice?</summary><p>It runs inside the request, while the MDC still has the request id, and it can return a useful body. An exception that escapes is logged by the container after the filter cleared the id.</p></details><details class="qa"><summary>What is the null object pattern?</summary><p>A real object standing for &#x27;nothing&#x27; (Coupon.NONE, discount 0), so callers never need a null check.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 15 tests pass.</td><td>You brought the bug back and read the trace.</td></tr><tr><td>Triage</td><td>From request id to the failing line.</td><td>From the failing line to why the value was wrong.</td></tr><tr><td>Testing</td><td>A failing test before the fix.</td><td>A test for the other paths the same cause could reach.</td></tr><tr><td>Operations</td><td>The 500 shows the id; the log has it.</td><td>You ran the failure drill and followed the runbook.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This Foundations station has no flawed version to review. Use this checklist on any bug fix:</p>
+<ul class="rules">
+<li>Is there a test that fails without the fix? Did someone see it fail?</li>
+<li>Is the fix where the bad value is created, or where it was noticed?</li>
+<li>Which other paths read the same value?</li>
+<li>Would the next error of this kind reach a log line with a request id?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
