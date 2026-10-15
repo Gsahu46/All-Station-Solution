@@ -1,0 +1,1343 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 043 · Doctor directory with JPA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 043</span>
+    <h1>Doctor directory with JPA</h1>
+    <p class="scenario">Hand-written SQL for every doctor search; adding a &#x27;speciality&#x27; filter took a week.</p>
+    <p class="sim"><b>Simulation</b><span>Doctors, clinics, phone numbers, salaries and notes are fictional demo data. The private columns exist so the trap test can show what leaks.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Healthcare</li>
+      <li><b>Types</b>Database</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>038 Gym memberships with migrations and constraints</p>
+      <p><span class="eyebrow">Builds toward</span><br>044 Hotel room availability calendar · 045 Order DTOs with MapStruct · 046 Employee leave requests · 053 Sign-up emails on MySQL and PostgreSQL · 063 Hotel search with optional filters · 065 Seller catalog pages · 068 Flexible product attributes with jsonb · 078 Customers see only their own accounts</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring Data JPA · Hibernate 7 · @Entity, JpaRepository, derived queries, @EntityGraph · DTO records · PostgreSQL 17 · Flyway · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>A week per filter</strong><p>Every doctor search was SQL written by hand. Adding "speciality" meant new SQL, new mapping, new tests: a week.</p></li><li><strong>JPA, returned as is</strong><p>The team switched to JPA and returned the Doctor entity straight from the controller. Some requests failed with a lazy-loading error. The others sent each doctor's personal phone, salary and HR notes to every visitor of the public directory.</p></li><li><strong>The fix</strong><p>Entities stay inside the service. The API returns a small record with only what the directory shows, built while the database session is open.</p></li></ol>
+<p class="lesson">The API's shape is a decision. Never let it be whatever the table happens to hold.</p>
+
+<h2>What are we building?</h2>
+<p><code>GET /doctors?speciality=…&amp;city=…</code> searches the public directory, and <code>GET /doctors/{id}</code> shows one doctor: name, speciality, city, registration number and clinic.</p>
+
+<h2>An everyday analogy</h2>
+<p>A hospital's notice board shows each doctor's name, speciality and room. The HR file with salary and home phone stays in the office. You copy what the board needs onto the board; you do not pin up the file.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Pick a repository method</strong> for the filters given; Spring Data has written its query.</li>
+<li><strong>Load doctors and their clinics</strong> in one query.</li>
+<li><strong>Copy each into a <code>DoctorView</code></strong>, inside the transaction.</li>
+<li><strong>Return the views</strong>; the entities never reach the JSON writer.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: if the entity has a <code>@JsonIgnore</code> on salary, is returning it fine?</summary><p>Safer, but fragile: the next private column added to the table is public until someone remembers to hide it, and the lazy clinic can still fail. A DTO lists what is public; everything else is private by default.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>Read-only.</strong> No adding or editing doctors here.</li>
+<li><strong>No appointments.</strong> Just the directory.</li>
+<li><strong>No full-text search.</strong> Exact speciality and city, any letter case.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>JPA</strong></td><td>A standard way to map Java classes to tables, so you work with objects instead of SQL rows.</td><td>A translator between your language and the database's.</td><td><code>jakarta.persistence</code></td></tr><tr><td><strong>Entity</strong></td><td>A class whose objects are rows of a table, managed by Hibernate.</td><td>A file card that is also the record in the cabinet.</td><td><code>Doctor</code></td></tr><tr><td><strong>Repository</strong></td><td>An interface; Spring Data writes the code behind it.</td><td>Asking the librarian instead of searching the shelves.</td><td><code>DoctorRepository</code></td></tr><tr><td><strong>Derived query</strong></td><td>A query written from a method's name.</td><td>"Find by speciality and city, ordered by name".</td><td><code>findBySpecialityIgnoreCaseAndCity…</code></td></tr><tr><td><strong>DTO</strong></td><td>A plain object shaped for the API, separate from the entity.</td><td>The visiting card, not the HR file.</td><td><code>DoctorView</code></td></tr><tr><td><strong>Lazy loading</strong></td><td>A linked object is fetched only when first touched, while the session is open.</td><td>A file fetched from storage when you ask, if the archive is still open.</td><td><code>Doctor.clinic</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Mediqo</strong> (a fictional clinic chain) wrote SQL by hand for every doctor search; adding a speciality filter took a week.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> <code>speciality=cardiology&amp;city=PUNE</code>, <b>then</b> Dr Asha Mehta and Dr Fatima Ali, by name.</li>
+<li><b>Given</b> only a speciality, only a city, or neither, <b>then</b> the matching doctors; a speciality nobody has, an empty list.</li>
+<li><b>Given</b> doctor 1, <b>then</b> exactly id, name, speciality, city, registration number, clinic and clinic address; no personal phone, salary or notes anywhere.</li>
+<li><b>Given</b> a search of all doctors, <b>then</b> one database query, not one more per clinic.</li>
+<li><b>Given</b> an unknown doctor, <code>404</code>; a filter with digits or over 40 characters, or a non-numeric id, <code>400</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>Entities never leave the service; the API returns <code>DoctorView</code>.</li>
+<li><code>open-in-view</code> is off: no database access while JSON is written.</li>
+<li>Flyway owns the schema; Hibernate only validates it.</li>
+<li>Rules stay database constraints too: unique registration number, valid clinic, positive salary.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Map tables with <code>@Entity</code>, <code>@Id</code> and <code>@ManyToOne</code>.</li>
+<li>Use <code>JpaRepository</code> and derived query methods.</li>
+<li>Separate entities from DTOs, and say why.</li>
+<li>Explain lazy loading, <code>open-in-view</code>, and N+1 queries.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/doctors?speciality=…&amp;city=…</code></td><td>Doctors in the directory; both filters optional, any letter case.</td></tr><tr><td><code>GET</code></td><td><code>/doctors/{id}</code></td><td>One doctor.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>A list (possibly empty) or one doctor</td></tr><tr><td><span class="pill warn">400</span></td><td>A filter that is not 2 to 40 letters and spaces, or a non-numeric id</td></tr><tr><td><span class="pill warn">404</span></td><td>No such doctor</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 15 Oct 2026. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: cardiology in Pune</h3><p><b>Why:</b> a derived query with two IgnoreCase conditions.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /doctors?speciality=cardiology&amp;city=pune HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 391
+
+[
+  {
+    &quot;id&quot;: 1,
+    &quot;name&quot;: &quot;Dr Asha Mehta&quot;,
+    &quot;speciality&quot;: &quot;Cardiology&quot;,
+    &quot;city&quot;: &quot;Pune&quot;,
+    &quot;registrationNumber&quot;: &quot;MMC-2011-04512&quot;,
+    &quot;clinic&quot;: &quot;Mediqo Koregaon Park&quot;,
+    &quot;clinicAddress&quot;: &quot;Lane 5, Koregaon Park, Pune 411001&quot;
+  },
+  {
+    &quot;id&quot;: 5,
+    &quot;name&quot;: &quot;Dr Fatima Ali&quot;,
+    &quot;speciality&quot;: &quot;Cardiology&quot;,
+    &quot;city&quot;: &quot;Pune&quot;,
+    &quot;registrationNumber&quot;: &quot;MMC-2020-09045&quot;,
+    &quot;clinic&quot;: &quot;Mediqo Koregaon Park&quot;,
+    &quot;clinicAddress&quot;: &quot;Lane 5, Koregaon Park, Pune 411001&quot;
+  }
+]</code></pre></div></div></section><section class="example"><h3>Case 2: cardiology anywhere</h3><p><b>Why:</b> another derived method; each doctor's clinic came in the same query.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /doctors?speciality=Cardiology HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 599
+
+[
+  {
+    &quot;id&quot;: 1,
+    &quot;name&quot;: &quot;Dr Asha Mehta&quot;,
+    &quot;speciality&quot;: &quot;Cardiology&quot;,
+    &quot;city&quot;: &quot;Pune&quot;,
+    &quot;registrationNumber&quot;: &quot;MMC-2011-04512&quot;,
+    &quot;clinic&quot;: &quot;Mediqo Koregaon Park&quot;,
+    &quot;clinicAddress&quot;: &quot;Lane 5, Koregaon Park, Pune 411001&quot;
+  },
+  {
+    &quot;id&quot;: 5,
+    &quot;name&quot;: &quot;Dr Fatima Ali&quot;,
+    &quot;speciality&quot;: &quot;Cardiology&quot;,
+    &quot;city&quot;: &quot;Pune&quot;,
+    &quot;registrationNumber&quot;: &quot;MMC-2020-09045&quot;,
+    &quot;clinic&quot;: &quot;Mediqo Koregaon Park&quot;,
+    &quot;clinicAddress&quot;: &quot;Lane 5, Koregaon Park, Pune 411001&quot;
+  },
+  {
+    &quot;id&quot;: 4,
+    &quot;name&quot;: &quot;Dr Kabir Khan&quot;,
+    &quot;speciality&quot;: &quot;Cardiology&quot;,
+    &quot;city&quot;: &quot;Bengaluru&quot;,
+    &quot;registrationNumber&quot;: &quot;KMC-2018-02290&quot;,
+    &quot;clinic&quot;: &quot;Mediqo Indiranagar&quot;,
+    &quot;clinicAddress&quot;: &quot;100 Feet Road, Indiranagar, Bengaluru 560038&quot;
+  }
+]</code></pre></div></div></section><section class="example"><h3>Case 3: doctor 1</h3><p><b>Why:</b> the view: what the directory shows, nothing else.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /doctors/1 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 194
+
+{
+  &quot;id&quot;: 1,
+  &quot;name&quot;: &quot;Dr Asha Mehta&quot;,
+  &quot;speciality&quot;: &quot;Cardiology&quot;,
+  &quot;city&quot;: &quot;Pune&quot;,
+  &quot;registrationNumber&quot;: &quot;MMC-2011-04512&quot;,
+  &quot;clinic&quot;: &quot;Mediqo Koregaon Park&quot;,
+  &quot;clinicAddress&quot;: &quot;Lane 5, Koregaon Park, Pune 411001&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: doctor 99</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /doctors/99 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No doctor 99.&quot;,
+  &quot;instance&quot;: &quot;/doctors/99&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Doctor not found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: <code>Cardio1ogy</code></h3><p><b>Why:</b> <code>400</code>, before the database.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /doctors?speciality=Cardio1ogy HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Validation failure&quot;,
+  &quot;instance&quot;: &quot;/doctors&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>Both filters, mixed case</td><td>Two doctors, by name</td><td><code>bothFiltersInAnyCase</code></td></tr><tr><td>One filter; none; nobody matches</td><td>The right doctors; all six; empty</td><td><code>oneFilterOrNone</code></td></tr><tr><td>One doctor; any list</td><td>Exactly the view's fields; no phone digits anywhere</td><td><code>oneDoctorAsTheDirectoryShowsThem</code></td></tr><tr><td>Searching every doctor</td><td>1 query (3 without the entity graph)</td><td><code>aSearchLoadsDoctorsAndClinicsInOneQuery</code></td></tr><tr><td>Duplicate registration, unknown clinic, zero salary, written directly</td><td>Refused by named constraints</td><td><code>namedConstraintsHoldWithoutJava</code></td></tr><tr><td>An import with a duplicate</td><td>Rolled back</td><td><code>aFailedImportLeavesTheDirectoryAsItWas</code></td></tr><tr><td>Unknown doctor; bad filters or id</td><td><code>404</code>; <code>400</code></td><td><code>DoctorContractTest</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Returning entities directly as JSON, leaking fields and lazy-loading errors.</p>
+<p>The test writes a <code>Doctor</code> entity with the app's own JSON mapper (Jackson 3), as the old controller did. Outside a transaction (open-in-view off), the lazy clinic cannot be loaded: <code>LazyInitializationException … no session</code>. Inside one (what open-in-view on would do), the JSON contains <code>personalPhone</code>, <code>salaryPaise</code>, <code>internalNotes</code>, and Hibernate's own <code>hibernateLazyInitializer</code>. A probe while building found a third outcome. With package-private getters on <code>Clinic</code>, the proxy was written as <code>{"hibernateLazyInitializer":{}}</code> with no error at all. Entities usually have public getters, so this station uses them and shows the two common outcomes. While building, adding the personal phone to the view turned 2 tests red. Removing the entity graph from the full list turned 1 red: 3 queries instead of 1.</p>
+</div>
+<pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import org.hibernate.LazyInitializationException;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.json.JsonMapper;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * The first test written for this station: what the old controller did, returning the Doctor entity as JSON, with
+ * the app&#x27;s own JSON mapper. Two outcomes, both bad, depending on whether a transaction is still open.
+ */
+class EntityAsJsonTrapTest extends ApiTest {
+
+    @Autowired
+    JsonMapper json;
+    @Autowired
+    TransactionTemplate transaction;
+    @Autowired
+    DoctorDirectory directory;
+
+    @Test
+    void outsideATransactionTheLazyClinicCannotBeLoaded() {
+        Doctor doctor = doctors.findById(1L).orElseThrow();   // the clinic is a placeholder until touched
+        assertThatThrownBy(() -&gt; json.writeValueAsString(doctor))
+                .hasRootCauseInstanceOf(LazyInitializationException.class)
+                .hasMessageContaining(&quot;no session&quot;);
+    }
+
+    @Test
+    void insideOneEveryPrivateColumnLeaks() {
+        // What open-in-view=true would have done: the session stays open while the JSON is written.
+        String body = transaction.execute(status -&gt; json.writeValueAsString(doctors.findById(1L).orElseThrow()));
+        assertThat(body).contains(&quot;\&quot;personalPhone\&quot;:\&quot;90000 10001\&quot;&quot;, &quot;\&quot;salaryPaise\&quot;:45000000&quot;,
+                &quot;\&quot;internalNotes\&quot;:\&quot;On notice period until December\&quot;&quot;, &quot;hibernateLazyInitializer&quot;);
+    }
+
+    @Test
+    void theViewHasOnlyWhatTheDirectoryShows() {
+        String body = json.writeValueAsString(directory.one(1L).orElseThrow());
+        assertThat(body).doesNotContain(&quot;personalPhone&quot;, &quot;salary&quot;, &quot;internalNotes&quot;, &quot;hibernate&quot;)
+                .contains(&quot;\&quot;clinic\&quot;:\&quot;Mediqo Koregaon Park\&quot;&quot;);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 11 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>See the SQL Spring Data writes for a method name. Start the app with SQL logging on, then search:</p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run -Dspring-boot.run.arguments=--logging.level.org.hibernate.SQL=debug
+curl &quot;http://localhost:8080/doctors?speciality=cardiology&amp;city=pune&quot;</code></pre>
+<p>The log shows one <code>select … from doctors … join clinics …</code> with <code>upper(…)</code> on both filters.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>LazyInitializationException: Could not initialize proxy … no session</code></td><td>A lazy link was touched after the transaction ended.</td><td>Map to a DTO inside the transaction, or load the link with <code>@EntityGraph</code>.</td></tr><tr><td><code>Schema-validation: missing column</code></td><td>An entity field has no matching column.</td><td>Add a Flyway migration; <code>ddl-auto: validate</code> never changes the schema.</td></tr><tr><td><code>No property 'specialty' found for type 'Doctor'</code></td><td>A derived method name does not match a field.</td><td>Method names must spell the field exactly.</td></tr><tr><td><code>Could not find a valid Docker environment</code></td><td>Docker is not running.</td><td>Start Docker, then run the tests again.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/043-doctor-directory-with-jpa/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/mediqo/doctors/
+│   ├── DoctorController.java   ├── DoctorDirectory.java   ├── DoctorRepository.java
+│   ├── DoctorView.java   ├── Doctor.java   ├── Clinic.java   └── DoctorsApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__clinics_and_doctors.sql, V2__demo_directory.sql
+├── src/test/java/com/mediqo/doctors/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the entities and the database.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">DoctorController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">DoctorDirectory.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">DoctorRepository.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">DoctorView.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">Doctor.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">Clinic.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">V1__clinics_and_doctors.sql</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">V2__demo_directory.sql</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-9-b" aria-controls="code-9" aria-selected="false" data-group="code">compose.yaml</button><button class="file-btn" role="tab" id="code-10-b" aria-controls="code-10" aria-selected="false" data-group="code">DoctorsApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/mediqo/doctors/DoctorController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Validates the filters and returns views.</dd><dt>Why</dt><dd>It never sees an entity.</dd><dt>Without it</dt><dd>Returning <code>Doctor</code>: the trap.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import jakarta.validation.constraints.Pattern;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+class DoctorController {
+
+    private final DoctorDirectory directory;
+
+    DoctorController(DoctorDirectory directory) {
+        this.directory = directory;
+    }
+
+    /** Both filters optional, any letter case: /doctors?speciality=cardiology&amp;city=Pune */
+    @GetMapping(&quot;/doctors&quot;)
+    List&lt;DoctorView&gt; search(@RequestParam(required = false) @Pattern(regexp = &quot;[\\p{L} ]{2,40}&quot;, message = &quot;letters and spaces, 2 to 40&quot;) String speciality,
+                            @RequestParam(required = false) @Pattern(regexp = &quot;[\\p{L} ]{2,40}&quot;, message = &quot;letters and spaces, 2 to 40&quot;) String city) {
+        return directory.search(speciality == null ? null : speciality.strip(), city == null ? null : city.strip());
+    }
+
+    @GetMapping(&quot;/doctors/{id}&quot;)
+    DoctorView one(@PathVariable long id) {
+        return directory.one(id).orElseThrow(() -&gt; {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No doctor &quot; + id + &quot;.&quot;);
+            p.setTitle(&quot;Doctor not found&quot;);
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        });
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/mediqo/doctors/DoctorDirectory.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Chooses the repository method and maps to <code>DoctorView</code>.</dd><dt>Why</dt><dd><code>@Transactional(readOnly = true)</code>: the mapping runs while the session is open.</dd><dt>Without it</dt><dd>Mapping in the controller after the session closed: lazy-loading errors.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Optional;
+
+/** Picks the query for the filters given and maps entities to views inside the transaction. */
+@Service
+class DoctorDirectory {
+
+    private final DoctorRepository doctors;
+
+    DoctorDirectory(DoctorRepository doctors) {
+        this.doctors = doctors;
+    }
+
+    @Transactional(readOnly = true)
+    List&lt;DoctorView&gt; search(String speciality, String city) {
+        List&lt;Doctor&gt; found;
+        if (speciality != null &amp;&amp; city != null) {
+            found = doctors.findBySpecialityIgnoreCaseAndCityIgnoreCaseOrderByName(speciality, city);
+        } else if (speciality != null) {
+            found = doctors.findBySpecialityIgnoreCaseOrderByName(speciality);
+        } else if (city != null) {
+            found = doctors.findByCityIgnoreCaseOrderByName(city);
+        } else {
+            found = doctors.findAllByOrderByName();
+        }
+        return found.stream().map(DoctorView::of).toList();
+    }
+
+    @Transactional(readOnly = true)
+    Optional&lt;DoctorView&gt; one(long id) {
+        return doctors.findWithClinicById(id).map(DoctorView::of);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/mediqo/doctors/DoctorRepository.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Derived query methods, each with an entity graph.</dd><dt>Why</dt><dd>A new filter is a new method name; <code>@EntityGraph</code> joins the clinic so there is one query.</dd><dt>Without it</dt><dd>One query for doctors plus one per clinic (N+1).</dd></dl><ul><li><code>IgnoreCase</code> becomes <code>upper(…) = upper(…)</code> in SQL.</li><li><code>findWithClinicById</code>: words between <code>find</code> and <code>By</code> are free text, so the method can be named for what it does.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Spring Data writes the queries from the method names: findBy + Speciality + IgnoreCase + And + City ... OrderBy Name.
+ * Adding a filter is a new method name, not a week of SQL. @EntityGraph loads each doctor&#x27;s clinic in the same query
+ * (a join), so mapping to DoctorView does not run one more query per doctor.
+ */
+interface DoctorRepository extends JpaRepository&lt;Doctor, Long&gt; {
+
+    @EntityGraph(attributePaths = &quot;clinic&quot;)
+    List&lt;Doctor&gt; findBySpecialityIgnoreCaseAndCityIgnoreCaseOrderByName(String speciality, String city);
+
+    @EntityGraph(attributePaths = &quot;clinic&quot;)
+    List&lt;Doctor&gt; findBySpecialityIgnoreCaseOrderByName(String speciality);
+
+    @EntityGraph(attributePaths = &quot;clinic&quot;)
+    List&lt;Doctor&gt; findByCityIgnoreCaseOrderByName(String city);
+
+    @EntityGraph(attributePaths = &quot;clinic&quot;)
+    List&lt;Doctor&gt; findAllByOrderByName();
+
+    @EntityGraph(attributePaths = &quot;clinic&quot;)
+    Optional&lt;Doctor&gt; findWithClinicById(Long id);
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/mediqo/doctors/DoctorView.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>What the directory shows.</dd><dt>Why</dt><dd>Fields are listed on purpose; new private columns stay private.</dd><dt>Without it</dt><dd>Every column of the table in the public API.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+/** What the public directory shows. Personal phone, salary and notes are not here, so they cannot leak. */
+record DoctorView(long id, String name, String speciality, String city, String registrationNumber, String clinic, String clinicAddress) {
+
+    static DoctorView of(Doctor d) {
+        return new DoctorView(d.getId(), d.getName(), d.getSpeciality(), d.getCity(), d.getRegistrationNumber(),
+                d.getClinic().getName(), d.getClinic().getAddress());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/mediqo/doctors/Doctor.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The doctors table as an entity, with a lazy link to the clinic.</dd><dt>Why</dt><dd>Hibernate tracks and loads it; <code>protected</code> no-argument constructor for JPA.</dd><dt>Without it</dt><dd>Nothing to map rows to.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+
+/**
+ * A row of the doctors table, as Hibernate manages it. It holds private columns (personal phone, salary, notes) and a
+ * lazy link to the clinic, which is why it never leaves the service: the API returns DoctorView instead.
+ */
+@Entity
+@Table(name = &quot;doctors&quot;)
+public class Doctor {
+
+    @Id
+    private Long id;
+    private String name;
+    private String speciality;
+    private String city;
+    private String registrationNumber;
+    private String personalPhone;
+    private long salaryPaise;
+    private String internalNotes;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = &quot;clinic_id&quot;)
+    private Clinic clinic;
+
+    protected Doctor() {   // for JPA
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getSpeciality() {
+        return speciality;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public String getRegistrationNumber() {
+        return registrationNumber;
+    }
+
+    public String getPersonalPhone() {
+        return personalPhone;
+    }
+
+    public long getSalaryPaise() {
+        return salaryPaise;
+    }
+
+    public String getInternalNotes() {
+        return internalNotes;
+    }
+
+    public Clinic getClinic() {
+        return clinic;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/mediqo/doctors/Clinic.java</p><div class="notes"><p>The clinics table as an entity.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = &quot;clinics&quot;)
+public class Clinic {
+
+    @Id
+    private Long id;
+    private String name;
+    private String city;
+    private String address;
+
+    protected Clinic() {   // for JPA
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/resources/db/migration/V1__clinics_and_doctors.sql</p><div class="notes"><p>Both tables, named constraints, and an index for the search.</p></div><div class="src"><pre class="code"><code class="language-sql">CREATE TABLE clinics (
+    id      BIGINT       PRIMARY KEY,
+    name    VARCHAR(80)  NOT NULL,
+    city    VARCHAR(40)  NOT NULL,
+    address VARCHAR(200) NOT NULL
+);
+
+CREATE TABLE doctors (
+    id                  BIGINT       PRIMARY KEY,
+    name                VARCHAR(80)  NOT NULL,
+    speciality          VARCHAR(40)  NOT NULL,
+    city                VARCHAR(40)  NOT NULL,
+    registration_number VARCHAR(20)  NOT NULL,   -- public: printed on prescriptions
+    personal_phone      VARCHAR(15)  NOT NULL,   -- private: for the clinic only
+    salary_paise        BIGINT       NOT NULL,   -- private
+    internal_notes      VARCHAR(500),            -- private
+    clinic_id           BIGINT       NOT NULL,
+    CONSTRAINT doctors_registration_unique UNIQUE (registration_number),
+    CONSTRAINT doctors_clinic_fk           FOREIGN KEY (clinic_id) REFERENCES clinics (id),
+    CONSTRAINT doctors_salary_positive     CHECK (salary_paise &gt; 0)
+);
+-- upper(), because Spring Data writes IgnoreCase as upper(column) = upper(?): an index on lower() would never be used.
+CREATE INDEX doctors_speciality_city ON doctors (upper(speciality), upper(city));</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_directory.sql</p><div class="notes"><p>Two clinics and six doctors.</p></div><div class="src"><pre class="code"><code class="language-sql">-- Demo data: clinics, doctors, phone numbers and notes are fictional.
+INSERT INTO clinics (id, name, city, address) VALUES
+    (1, &#x27;Mediqo Koregaon Park&#x27;, &#x27;Pune&#x27;, &#x27;Lane 5, Koregaon Park, Pune 411001&#x27;),
+    (2, &#x27;Mediqo Indiranagar&#x27;, &#x27;Bengaluru&#x27;, &#x27;100 Feet Road, Indiranagar, Bengaluru 560038&#x27;);
+
+INSERT INTO doctors (id, name, speciality, city, registration_number, personal_phone, salary_paise, internal_notes, clinic_id) VALUES
+    (1, &#x27;Dr Asha Mehta&#x27;, &#x27;Cardiology&#x27;, &#x27;Pune&#x27;, &#x27;MMC-2011-04512&#x27;, &#x27;90000 10001&#x27;, 45000000, &#x27;On notice period until December&#x27;, 1),
+    (2, &#x27;Dr Ravi Iyer&#x27;, &#x27;Dermatology&#x27;, &#x27;Pune&#x27;, &#x27;MMC-2015-11873&#x27;, &#x27;90000 10002&#x27;, 30000000, NULL, 1),
+    (3, &#x27;Dr Meena Rao&#x27;, &#x27;Paediatrics&#x27;, &#x27;Bengaluru&#x27;, &#x27;KMC-2009-07731&#x27;, &#x27;90000 10003&#x27;, 38000000, &#x27;Asked for weekends off&#x27;, 2),
+    (4, &#x27;Dr Kabir Khan&#x27;, &#x27;Cardiology&#x27;, &#x27;Bengaluru&#x27;, &#x27;KMC-2018-02290&#x27;, &#x27;90000 10004&#x27;, 32000000, NULL, 2),
+    (5, &#x27;Dr Fatima Ali&#x27;, &#x27;Cardiology&#x27;, &#x27;Pune&#x27;, &#x27;MMC-2020-09045&#x27;, &#x27;90000 10005&#x27;, 28000000, NULL, 1),
+    (6, &#x27;Dr John Dsouza&#x27;, &#x27;Orthopaedics&#x27;, &#x27;Bengaluru&#x27;, &#x27;KMC-2012-05518&#x27;, &#x27;90000 10006&#x27;, 36000000, NULL, 2);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p><code>open-in-view: false</code> and <code>ddl-auto: validate</code>, with why.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: mediqo-doctors
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/mediqo
+    username: mediqo
+    password: mediqo
+  jpa:
+    # No database work after the service returns: a lazy association touched while writing JSON fails loudly
+    # instead of quietly running extra queries during the response.
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # Flyway owns the schema; Hibernate only checks the entities match it</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-9" aria-labelledby="code-9-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: mediqo
+      POSTGRES_USER: mediqo
+      POSTGRES_PASSWORD: mediqo
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U mediqo -d mediqo&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-10" aria-labelledby="code-10-b" hidden><p class="path">src/main/java/com/mediqo/doctors/DoctorsApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class DoctorsApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(DoctorsApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>DoctorContractTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>EntityAsJsonTrapTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>DoctorDatabaseTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, Hibernate 7, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.mediqo.doctors.DoctorDatabaseTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.mediqo.doctors.EntityAsJsonTrapTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.mediqo.doctors.DoctorContractTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">EntityAsJsonTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">DoctorContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">DoctorDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/mediqo/doctors/EntityAsJsonTrapTest.java</p><div class="notes"><p>Written first: the entity as JSON outside and inside a transaction, and the view.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import org.hibernate.LazyInitializationException;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.json.JsonMapper;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * The first test written for this station: what the old controller did, returning the Doctor entity as JSON, with
+ * the app&#x27;s own JSON mapper. Two outcomes, both bad, depending on whether a transaction is still open.
+ */
+class EntityAsJsonTrapTest extends ApiTest {
+
+    @Autowired
+    JsonMapper json;
+    @Autowired
+    TransactionTemplate transaction;
+    @Autowired
+    DoctorDirectory directory;
+
+    @Test
+    void outsideATransactionTheLazyClinicCannotBeLoaded() {
+        Doctor doctor = doctors.findById(1L).orElseThrow();   // the clinic is a placeholder until touched
+        assertThatThrownBy(() -&gt; json.writeValueAsString(doctor))
+                .hasRootCauseInstanceOf(LazyInitializationException.class)
+                .hasMessageContaining(&quot;no session&quot;);
+    }
+
+    @Test
+    void insideOneEveryPrivateColumnLeaks() {
+        // What open-in-view=true would have done: the session stays open while the JSON is written.
+        String body = transaction.execute(status -&gt; json.writeValueAsString(doctors.findById(1L).orElseThrow()));
+        assertThat(body).contains(&quot;\&quot;personalPhone\&quot;:\&quot;90000 10001\&quot;&quot;, &quot;\&quot;salaryPaise\&quot;:45000000&quot;,
+                &quot;\&quot;internalNotes\&quot;:\&quot;On notice period until December\&quot;&quot;, &quot;hibernateLazyInitializer&quot;);
+    }
+
+    @Test
+    void theViewHasOnlyWhatTheDirectoryShows() {
+        String body = json.writeValueAsString(directory.one(1L).orElseThrow());
+        assertThat(body).doesNotContain(&quot;personalPhone&quot;, &quot;salary&quot;, &quot;internalNotes&quot;, &quot;hibernate&quot;)
+                .contains(&quot;\&quot;clinic\&quot;:\&quot;Mediqo Koregaon Park\&quot;&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/mediqo/doctors/DoctorContractTest.java</p><div class="notes"><p>Searches, one doctor, and refusals through HTTP.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.test.json.JsonCompareMode;
+
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.not;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP contract on the demo directory. */
+class DoctorContractTest extends ApiTest {
+
+    @Test
+    void bothFiltersInAnyCase() throws Exception {
+        mvc.perform(get(&quot;/doctors&quot;).param(&quot;speciality&quot;, &quot;cardiology&quot;).param(&quot;city&quot;, &quot;PUNE&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$[*].name&quot;, contains(&quot;Dr Asha Mehta&quot;, &quot;Dr Fatima Ali&quot;)));
+    }
+
+    @Test
+    void oneFilterOrNone() throws Exception {
+        mvc.perform(get(&quot;/doctors&quot;).param(&quot;speciality&quot;, &quot;Cardiology&quot;))
+                .andExpect(jsonPath(&quot;$[*].name&quot;, contains(&quot;Dr Asha Mehta&quot;, &quot;Dr Fatima Ali&quot;, &quot;Dr Kabir Khan&quot;)));
+        mvc.perform(get(&quot;/doctors&quot;).param(&quot;city&quot;, &quot;bengaluru&quot;))
+                .andExpect(jsonPath(&quot;$[*].name&quot;, contains(&quot;Dr John Dsouza&quot;, &quot;Dr Kabir Khan&quot;, &quot;Dr Meena Rao&quot;)));
+        mvc.perform(get(&quot;/doctors&quot;)).andExpect(jsonPath(&quot;$.length()&quot;).value(6));
+        mvc.perform(get(&quot;/doctors&quot;).param(&quot;speciality&quot;, &quot;Neurology&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$&quot;, empty()));
+    }
+
+    @Test
+    void oneDoctorAsTheDirectoryShowsThem() throws Exception {
+        mvc.perform(get(&quot;/doctors/1&quot;)).andExpect(status().isOk()).andExpect(content().json(&quot;&quot;&quot;
+                {&quot;id&quot;:1,&quot;name&quot;:&quot;Dr Asha Mehta&quot;,&quot;speciality&quot;:&quot;Cardiology&quot;,&quot;city&quot;:&quot;Pune&quot;,&quot;registrationNumber&quot;:&quot;MMC-2011-04512&quot;,
+                 &quot;clinic&quot;:&quot;Mediqo Koregaon Park&quot;,&quot;clinicAddress&quot;:&quot;Lane 5, Koregaon Park, Pune 411001&quot;}&quot;&quot;&quot;, JsonCompareMode.STRICT));
+        mvc.perform(get(&quot;/doctors&quot;)).andExpect(content().string(not(org.hamcrest.Matchers.containsString(&quot;90000&quot;))));
+    }
+
+    @Test
+    void anUnknownDoctorIs404() throws Exception {
+        mvc.perform(get(&quot;/doctors/99&quot;)).andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Doctor not found&quot;));
+    }
+
+    @Test
+    void badFiltersAre400() throws Exception {
+        mvc.perform(get(&quot;/doctors&quot;).param(&quot;speciality&quot;, &quot;Cardio1ogy&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/doctors&quot;).param(&quot;city&quot;, &quot;x&quot;.repeat(41))).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/doctors/abc&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/mediqo/doctors/DoctorDatabaseTest.java</p><div class="notes"><p>Named constraints, a rollback, and the query count from Hibernate's statistics.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The table&#x27;s rules with Java bypassed, a rollback, and how many queries a search costs. */
+class DoctorDatabaseTest extends ApiTest {
+
+    @Autowired
+    TransactionTemplate transaction;
+    @Autowired
+    EntityManagerFactory entityManagerFactory;
+    @Autowired
+    DoctorDirectory directory;
+
+    void insert(long id, String registration, long salary, long clinic) {
+        jdbc.sql(&quot;INSERT INTO doctors (id, name, speciality, city, registration_number, personal_phone, salary_paise, clinic_id) VALUES (?, &#x27;Dr Test&#x27;, &#x27;Neurology&#x27;, &#x27;Pune&#x27;, ?, &#x27;0&#x27;, ?, ?)&quot;)
+                .params(id, registration, salary, clinic).update();
+    }
+
+    @Test
+    void namedConstraintsHoldWithoutJava() {
+        assertThatThrownBy(() -&gt; insert(100, &quot;MMC-2011-04512&quot;, 1, 1)).hasMessageContaining(&quot;doctors_registration_unique&quot;);
+        assertThatThrownBy(() -&gt; insert(100, &quot;MMC-2099-00001&quot;, 1, 9)).hasMessageContaining(&quot;doctors_clinic_fk&quot;);
+        assertThatThrownBy(() -&gt; insert(100, &quot;MMC-2099-00001&quot;, 0, 1)).hasMessageContaining(&quot;doctors_salary_positive&quot;);
+    }
+
+    @Test
+    void aFailedImportLeavesTheDirectoryAsItWas() {
+        assertThatThrownBy(() -&gt; transaction.executeWithoutResult(status -&gt; {
+            insert(100, &quot;MMC-2099-00001&quot;, 1, 1);
+            insert(101, &quot;MMC-2099-00001&quot;, 1, 1);   // same registration: the whole import rolls back
+        })).hasMessageContaining(&quot;doctors_registration_unique&quot;);
+        assertThat(doctors.count()).isEqualTo(6);
+    }
+
+    @Test
+    void aSearchLoadsDoctorsAndClinicsInOneQuery() {
+        Statistics stats = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        stats.clear();
+        directory.search(null, null);
+        assertThat(stats.getPrepareStatementCount()).isEqualTo(1);   // @EntityGraph: a join, not 1 + one per clinic
+
+        stats.clear();
+        transaction.executeWithoutResult(status -&gt; doctors.findAll().forEach(d -&gt; d.getClinic().getName()));
+        assertThat(stats.getPrepareStatementCount()).isEqualTo(3);   // without it: 1 for doctors + 1 per clinic (2)
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/mediqo/doctors/ApiTest.java</p><div class="notes"><p>Shared setup, with Hibernate statistics on.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+
+/**
+ * Shared setup: the app on a real PostgreSQL with the demo directory. Cardiology: Dr Asha Mehta and Dr Fatima Ali
+ * (Pune), Dr Kabir Khan (Bengaluru). Six doctors, two clinics. Hibernate statistics are on, to count queries.
+ */
+@SpringBootTest(properties = &quot;spring.jpa.properties.hibernate.generate_statistics=true&quot;)
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+    @Autowired
+    DoctorRepository doctors;
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/mediqo/doctors/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker. Hibernate, lazy loading and constraints must behave exactly as in production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/mediqo/doctors/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=ClinicDoctorsChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 11 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 14 tests pass (11 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>A clinic's doctors</h2><p>Add <code>GET /clinics/{id}/doctors</code>: the clinic's doctors by name, as views. An unknown clinic is <code>404</code>, not an empty list.</p><p><b>Done when:</b> both tests in <code>ClinicDoctorsChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>A derived query can follow the link: <code>findByClinicIdOrderByName</code>.</li><li>A small <code>ClinicRepository</code> gives you <code>existsById</code> for the 404.</li></ul></details><p class="path">challenge/ClinicDoctorsChallengeTest.java</p><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: GET /clinics/{id}/doctors lists a clinic&#x27;s doctors by name, as DoctorView. A derived query can follow
+ * the link to the clinic: findByClinicId… An unknown clinic is 404, not an empty list.
+ */
+class ClinicDoctorsChallengeTest extends ApiTest {
+
+    @Test
+    void aClinicListsItsDoctors() throws Exception {
+        mvc.perform(get(&quot;/clinics/2/doctors&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$[*].name&quot;, contains(&quot;Dr John Dsouza&quot;, &quot;Dr Kabir Khan&quot;, &quot;Dr Meena Rao&quot;)))
+                .andExpect(jsonPath(&quot;$[0].clinic&quot;).value(&quot;Mediqo Indiranagar&quot;));
+    }
+
+    @Test
+    void anUnknownClinicIs404() throws Exception {
+        mvc.perform(get(&quot;/clinics/9/doctors&quot;)).andExpect(status().isNotFound());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/DoctorRepository.java</p><div class="src"><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Spring Data writes the queries from the method names: findBy + Speciality + IgnoreCase + And + City ... OrderBy Name.
+ * Adding a filter is a new method name, not a week of SQL. @EntityGraph loads each doctor&#x27;s clinic in the same query
+ * (a join), so mapping to DoctorView does not run one more query per doctor.
+ */
+interface DoctorRepository extends JpaRepository&lt;Doctor, Long&gt; {
+
+    @EntityGraph(attributePaths = &quot;clinic&quot;)
+    List&lt;Doctor&gt; findBySpecialityIgnoreCaseAndCityIgnoreCaseOrderByName(String speciality, String city);
+
+    @EntityGraph(attributePaths = &quot;clinic&quot;)
+    List&lt;Doctor&gt; findBySpecialityIgnoreCaseOrderByName(String speciality);
+
+    @EntityGraph(attributePaths = &quot;clinic&quot;)
+    List&lt;Doctor&gt; findByCityIgnoreCaseOrderByName(String city);
+
+    @EntityGraph(attributePaths = &quot;clinic&quot;)
+    List&lt;Doctor&gt; findAllByOrderByName();
+
+    @EntityGraph(attributePaths = &quot;clinic&quot;)
+    Optional&lt;Doctor&gt; findWithClinicById(Long id);
+
+    /** Follows doctor.clinic.id; the clinic is loaded by the same query. */
+    @EntityGraph(attributePaths = &quot;clinic&quot;)
+    List&lt;Doctor&gt; findByClinicIdOrderByName(Long clinicId);
+
+    /** A projection: Spring Data fills this interface from the query&#x27;s aliases. */
+    interface SpecialityCount {
+        String getSpeciality();
+
+        long getDoctors();
+    }
+
+    @Query(&quot;select d.speciality as speciality, count(d) as doctors from Doctor d group by d.speciality order by count(d) desc, d.speciality&quot;)
+    List&lt;SpecialityCount&gt; countBySpeciality();
+}</code></pre></div><p class="path">challenge/solution/ClinicRepository.java</p><div class="src"><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+interface ClinicRepository extends JpaRepository&lt;Clinic, Long&gt; {
+}</code></pre></div><p class="path">challenge/solution/DoctorController.java</p><div class="src"><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import jakarta.validation.constraints.Pattern;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+class DoctorController {
+
+    record SpecialityCount(String speciality, long doctors) {
+    }
+
+    private final DoctorDirectory directory;
+    private final DoctorRepository doctors;
+    private final ClinicRepository clinics;
+
+    DoctorController(DoctorDirectory directory, DoctorRepository doctors, ClinicRepository clinics) {
+        this.directory = directory;
+        this.doctors = doctors;
+        this.clinics = clinics;
+    }
+
+    @GetMapping(&quot;/clinics/{id}/doctors&quot;)
+    List&lt;DoctorView&gt; clinicDoctors(@PathVariable long id) {
+        if (!clinics.existsById(id)) {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No clinic &quot; + id + &quot;.&quot;);
+            p.setTitle(&quot;Clinic not found&quot;);
+            throw new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        }
+        return doctors.findByClinicIdOrderByName(id).stream().map(DoctorView::of).toList();   // the graph loaded each clinic
+    }
+
+    @GetMapping(&quot;/specialities&quot;)
+    List&lt;SpecialityCount&gt; specialities() {
+        return doctors.countBySpeciality().stream().map(c -&gt; new SpecialityCount(c.getSpeciality(), c.getDoctors())).toList();
+    }
+
+    /** Both filters optional, any letter case: /doctors?speciality=cardiology&amp;city=Pune */
+    @GetMapping(&quot;/doctors&quot;)
+    List&lt;DoctorView&gt; search(@RequestParam(required = false) @Pattern(regexp = &quot;[\\p{L} ]{2,40}&quot;, message = &quot;letters and spaces, 2 to 40&quot;) String speciality,
+                            @RequestParam(required = false) @Pattern(regexp = &quot;[\\p{L} ]{2,40}&quot;, message = &quot;letters and spaces, 2 to 40&quot;) String city) {
+        return directory.search(speciality == null ? null : speciality.strip(), city == null ? null : city.strip());
+    }
+
+    @GetMapping(&quot;/doctors/{id}&quot;)
+    DoctorView one(@PathVariable long id) {
+        return directory.one(id).orElseThrow(() -&gt; {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No doctor &quot; + id + &quot;.&quot;);
+            p.setTitle(&quot;Doctor not found&quot;);
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        });
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 25 minutes</p><h2>Doctors per speciality</h2><p>Add <code>GET /specialities</code>: each speciality and its number of doctors, most first, then by name, counted by the database.</p><p><b>Done when:</b> the test in <code>SpecialityCountChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>A JPQL <code>@Query</code> with <code>group by</code> and aliases.</li><li>An interface projection (<code>getSpeciality()</code>, <code>getDoctors()</code>) receives the aliased columns.</li></ul></details><p class="path">challenge/SpecialityCountChallengeTest.java</p><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.test.json.JsonCompareMode;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+
+/**
+ * Challenge 2: GET /specialities: each speciality with how many doctors, most first, then by name. Count in the
+ * database with a JPQL query and a projection, not by loading every doctor into Java.
+ */
+class SpecialityCountChallengeTest extends ApiTest {
+
+    @Test
+    void specialitiesWithTheirDoctorCounts() throws Exception {
+        mvc.perform(get(&quot;/specialities&quot;)).andExpect(content().json(&quot;&quot;&quot;
+                [{&quot;speciality&quot;:&quot;Cardiology&quot;,&quot;doctors&quot;:3},{&quot;speciality&quot;:&quot;Dermatology&quot;,&quot;doctors&quot;:1},
+                 {&quot;speciality&quot;:&quot;Orthopaedics&quot;,&quot;doctors&quot;:1},{&quot;speciality&quot;:&quot;Paediatrics&quot;,&quot;doctors&quot;:1}]&quot;&quot;&quot;, JsonCompareMode.STRICT));
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/DoctorRepository.java</p><div class="src"><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Spring Data writes the queries from the method names: findBy + Speciality + IgnoreCase + And + City ... OrderBy Name.
+ * Adding a filter is a new method name, not a week of SQL. @EntityGraph loads each doctor&#x27;s clinic in the same query
+ * (a join), so mapping to DoctorView does not run one more query per doctor.
+ */
+interface DoctorRepository extends JpaRepository&lt;Doctor, Long&gt; {
+
+    @EntityGraph(attributePaths = &quot;clinic&quot;)
+    List&lt;Doctor&gt; findBySpecialityIgnoreCaseAndCityIgnoreCaseOrderByName(String speciality, String city);
+
+    @EntityGraph(attributePaths = &quot;clinic&quot;)
+    List&lt;Doctor&gt; findBySpecialityIgnoreCaseOrderByName(String speciality);
+
+    @EntityGraph(attributePaths = &quot;clinic&quot;)
+    List&lt;Doctor&gt; findByCityIgnoreCaseOrderByName(String city);
+
+    @EntityGraph(attributePaths = &quot;clinic&quot;)
+    List&lt;Doctor&gt; findAllByOrderByName();
+
+    @EntityGraph(attributePaths = &quot;clinic&quot;)
+    Optional&lt;Doctor&gt; findWithClinicById(Long id);
+
+    /** Follows doctor.clinic.id; the clinic is loaded by the same query. */
+    @EntityGraph(attributePaths = &quot;clinic&quot;)
+    List&lt;Doctor&gt; findByClinicIdOrderByName(Long clinicId);
+
+    /** A projection: Spring Data fills this interface from the query&#x27;s aliases. */
+    interface SpecialityCount {
+        String getSpeciality();
+
+        long getDoctors();
+    }
+
+    @Query(&quot;select d.speciality as speciality, count(d) as doctors from Doctor d group by d.speciality order by count(d) desc, d.speciality&quot;)
+    List&lt;SpecialityCount&gt; countBySpeciality();
+}</code></pre></div><p class="path">challenge/solution/DoctorController.java</p><div class="src"><pre class="code"><code class="language-java">package com.mediqo.doctors;
+
+import jakarta.validation.constraints.Pattern;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+class DoctorController {
+
+    record SpecialityCount(String speciality, long doctors) {
+    }
+
+    private final DoctorDirectory directory;
+    private final DoctorRepository doctors;
+    private final ClinicRepository clinics;
+
+    DoctorController(DoctorDirectory directory, DoctorRepository doctors, ClinicRepository clinics) {
+        this.directory = directory;
+        this.doctors = doctors;
+        this.clinics = clinics;
+    }
+
+    @GetMapping(&quot;/clinics/{id}/doctors&quot;)
+    List&lt;DoctorView&gt; clinicDoctors(@PathVariable long id) {
+        if (!clinics.existsById(id)) {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No clinic &quot; + id + &quot;.&quot;);
+            p.setTitle(&quot;Clinic not found&quot;);
+            throw new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        }
+        return doctors.findByClinicIdOrderByName(id).stream().map(DoctorView::of).toList();   // the graph loaded each clinic
+    }
+
+    @GetMapping(&quot;/specialities&quot;)
+    List&lt;SpecialityCount&gt; specialities() {
+        return doctors.countBySpeciality().stream().map(c -&gt; new SpecialityCount(c.getSpeciality(), c.getDoctors())).toList();
+    }
+
+    /** Both filters optional, any letter case: /doctors?speciality=cardiology&amp;city=Pune */
+    @GetMapping(&quot;/doctors&quot;)
+    List&lt;DoctorView&gt; search(@RequestParam(required = false) @Pattern(regexp = &quot;[\\p{L} ]{2,40}&quot;, message = &quot;letters and spaces, 2 to 40&quot;) String speciality,
+                            @RequestParam(required = false) @Pattern(regexp = &quot;[\\p{L} ]{2,40}&quot;, message = &quot;letters and spaces, 2 to 40&quot;) String city) {
+        return directory.search(speciality == null ? null : speciality.strip(), city == null ? null : city.strip());
+    }
+
+    @GetMapping(&quot;/doctors/{id}&quot;)
+    DoctorView one(@PathVariable long id) {
+        return directory.one(id).orElseThrow(() -&gt; {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No doctor &quot; + id + &quot;.&quot;);
+            p.setTitle(&quot;Doctor not found&quot;);
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        });
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>When method names stop scaling</h2>
+<p>Product wants filters for speciality, city, language spoken, gender, fee range and availability, in any combination. Derived methods would need 64 names. Compare JPA Specifications, Querydsl, Query by Example and a hand-written SQL builder with parameters. Which keeps queries type-safe, which keeps them readable, and which makes indexes easy to plan?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, mapping</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the schema in Flyway; set Hibernate to validate it.</li>
+<li>Write the entities and the repository's derived methods.</li>
+<li>Write the trap test: the entity as JSON, in and out of a transaction.</li>
+<li>Write the view and the service that maps inside a transaction; count the queries.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Entities in the service, DTO records in the API</td><td>A small mapping per view.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Return entities, hide fields with <code>@JsonIgnore</code></td><td>New columns are public by default; lazy links still fail.</td><td><span class="pill bad">Fragile</span></td></tr><tr><td><code>open-in-view: true</code></td><td>Lazy links load during JSON writing: hidden queries, connections held for the whole response.</td><td><span class="pill bad">Hides problems</span></td></tr><tr><td><code>FetchType.EAGER</code> on the clinic</td><td>Every load of a doctor loads the clinic, wanted or not.</td><td><span class="pill warn">Rarely right</span></td></tr><tr><td>Interface projections straight from the repository</td><td>No entity at all for read-only views.</td><td><span class="pill warn">Good for reads (challenge 2)</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Table</th><th>Key and constraints</th><th>Mapped as</th></tr></thead><tbody><tr><td><code>clinics</code></td><td>PK <code>id</code></td><td><code>@Entity Clinic</code></td></tr><tr><td><code>doctors</code></td><td>PK <code>id</code>, <code>doctors_registration_unique</code>, <code>doctors_clinic_fk</code>, <code>doctors_salary_positive</code>; index on <code>upper(speciality), upper(city)</code></td><td><code>@Entity Doctor</code>, <code>@ManyToOne(fetch = LAZY)</code> to <code>Clinic</code></td></tr></tbody></table></div>
+<p class="muted">The index uses <code>upper()</code> because that is what the generated SQL compares (see Set up &amp; code); an index on <code>lower()</code>, the first version, could never have been used. Hibernate maps <code>registrationNumber</code> to <code>registration_number</code> by Spring Boot's naming strategy. <code>ddl-auto: validate</code> stops the app at startup if they ever disagree.</p>
+<pre class="code"><code class="language-sql">CREATE TABLE clinics (
+    id      BIGINT       PRIMARY KEY,
+    name    VARCHAR(80)  NOT NULL,
+    city    VARCHAR(40)  NOT NULL,
+    address VARCHAR(200) NOT NULL
+);
+
+CREATE TABLE doctors (
+    id                  BIGINT       PRIMARY KEY,
+    name                VARCHAR(80)  NOT NULL,
+    speciality          VARCHAR(40)  NOT NULL,
+    city                VARCHAR(40)  NOT NULL,
+    registration_number VARCHAR(20)  NOT NULL,   -- public: printed on prescriptions
+    personal_phone      VARCHAR(15)  NOT NULL,   -- private: for the clinic only
+    salary_paise        BIGINT       NOT NULL,   -- private
+    internal_notes      VARCHAR(500),            -- private
+    clinic_id           BIGINT       NOT NULL,
+    CONSTRAINT doctors_registration_unique UNIQUE (registration_number),
+    CONSTRAINT doctors_clinic_fk           FOREIGN KEY (clinic_id) REFERENCES clinics (id),
+    CONSTRAINT doctors_salary_positive     CHECK (salary_paise &gt; 0)
+);
+-- upper(), because Spring Data writes IgnoreCase as upper(column) = upper(?): an index on lower() would never be used.
+CREATE INDEX doctors_speciality_city ON doctors (upper(speciality), upper(city));</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Data exposure</dt><dd>A leaked column is a data breach. Review API responses as carefully as SQL: what fields leave the server?</dd>
+<dt>Query counts</dt><dd>N+1 queries are invisible in development and painful in production. Count queries in tests, as this station does, for pages that list things.</dd>
+<dt>open-in-view</dt><dd>Spring Boot enables it by default and logs a warning at startup. Turning it off early is easy; turning it off late breaks code that relied on it.</dd>
+<dt>Schema ownership</dt><dd>Flyway changes the schema; <code>ddl-auto: validate</code> only checks. Never let Hibernate create or update production tables.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>Why not return JPA entities from a REST controller?</summary><p>They expose every mapped column, including private ones, tie the API to the table, and can trigger lazy loading (extra queries or LazyInitializationException) while JSON is written. Return DTOs.</p></details><details class="qa"><summary>What is open-in-view, and why turn it off?</summary><p>It keeps the persistence session open until the response is written, so lazy links load in the view layer. That hides N+1 queries and holds a connection for the whole request. Off makes problems visible.</p></details><details class="qa"><summary>What is the N+1 problem?</summary><p>One query for a list, then one more per item to load a link. Fix it with a fetch join or an entity graph.</p></details><details class="qa"><summary>How do derived query methods work?</summary><p>Spring Data parses the method name (findBy + properties + keywords like IgnoreCase, OrderBy) and generates the query at startup; a misspelt property fails startup.</p></details><details class="qa"><summary>Entity vs DTO?</summary><p>An entity is a managed row: identity, lazy links, change tracking. A DTO is a plain value shaped for one use, such as an API response.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 11 tests pass.</td><td>You logged the SQL for a derived method.</td></tr><tr><td>JPA</td><td>Entities, repository, derived queries.</td><td>Entity graphs and query counting.</td></tr><tr><td>API design</td><td>DTOs, never entities.</td><td>Why @JsonIgnore is not enough.</td></tr><tr><td>Sessions</td><td>open-in-view off.</td><td>Exactly when a lazy link can be loaded.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This Foundations station has no flawed version to review. Use this checklist on any JPA endpoint:</p>
+<ul class="rules">
+<li>Does any controller return an <code>@Entity</code>?</li>
+<li>Is <code>open-in-view</code> off, and does the mapping happen inside a transaction?</li>
+<li>How many queries does the list endpoint run for 50 items?</li>
+<li>Does Hibernate validate the schema, or change it?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
