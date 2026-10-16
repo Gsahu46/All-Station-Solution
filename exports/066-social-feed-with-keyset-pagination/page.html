@@ -1,0 +1,1340 @@
+<title>Station 066 · Social feed with keyset pagination</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 066</span>
+    <h1>Social feed with keyset pagination</h1>
+    <p class="scenario">Page 2,000 of the feed takes 4 seconds and new posts push duplicates onto the next page.</p>
+    <p class="sim"><b>Simulation</b><span>Authors and posts are generated demo data (100,000 posts), not Chaupal's. There is no login; the feed is one public feed.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Social</li>
+      <li><b>Types</b>Database</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>065 Seller catalog pages</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · JdbcClient · keyset (seek) pagination · row-value comparison · opaque cursors · PostgreSQL 17 · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Scrolling the feed</strong><p>A Chaupal user scrolls for a long time. Each new page is "skip N posts, show 20".</p></li><li><strong>Slower and repeating</strong><p>Page 2,000 has to read and discard 40,000 posts first: four seconds. And when friends post while the user reads page 1, every post moves down: the bottom of page 1 shows up again at the top of page 2.</p></li><li><strong>The fix</strong><p>Each page says where it stopped: the last post's time and id. The next page asks for posts older than that one, which the index finds directly, whatever was posted in between.</p></li></ol>
+<p class="lesson">Page by position in the data, not by counting rows.</p>
+
+<h2>What are we building?</h2>
+<p><code>GET /feed</code> returns the newest posts and a <code>nextCursor</code>; <code>GET /feed?cursor=…</code> continues from there, at the same speed on page 2 and page 2,000.</p>
+
+<h2>An everyday analogy</h2>
+<p>Reading a long newspaper archive. Offset paging is "start from the first issue and count 40,000 pages". Keyset paging is a bookmark: "the issue after 1 October, 05:33", and you open it there.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>First page</strong>: the newest posts, one more than asked.</li>
+<li><strong>If there is that extra post</strong>, there is a next page: the cursor is the last shown post's time and id.</li>
+<li><strong>Next page</strong>: posts older than the cursor's post, in the same order, straight from the index.</li>
+<li><strong>The end</strong>: fewer posts than asked, and no cursor.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: why does the cursor need the id, and not just the time?</summary><p>Five posts can share one second. If page 1 ends at the second of those five, "older than this time" skips the other four. "Older than (this time, this id)" continues with them. The test shows the four lost posts.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No personal feed.</strong> One public feed; following people is a filter (Practice 1).</li>
+<li><strong>No ranking.</strong> Newest first only.</li>
+<li><strong>No page numbers.</strong> Keyset paging cannot jump to page 517, by design.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Offset paging</strong></td><td>"Skip the first N, give me the next 20."</td><td>Counting 40,000 envelopes to reach the 40,001st.</td><td>the old feed: <code>OFFSET</code></td></tr><tr><td><strong>Keyset (seek) paging</strong></td><td>"Give me the 20 that come after this one."</td><td>A bookmark: open the book where you stopped.</td><td><code>WHERE (created_at, id) &lt; (…)</code></td></tr><tr><td><strong>Cursor</strong></td><td>A token saying where the last page stopped.</td><td>The bookmark itself.</td><td><code>nextCursor</code></td></tr><tr><td><strong>Opaque</strong></td><td>Clients pass it back unchanged and do not read it.</td><td>A cloakroom token: you hand it back, you do not decode it.</td><td>base64url of <code>v1:1790832799000000:99998</code></td></tr><tr><td><strong>Tie-breaking</strong></td><td>A second key for rows with the same first key.</td><td>Two posts in the same second, told apart by id.</td><td><code>id</code> after <code>created_at</code></td></tr><tr><td><strong>Row-value comparison</strong></td><td>Comparing several columns at once, in order.</td><td>Compare dates; if equal, compare numbers.</td><td><code>(created_at, id) &lt; (:t, :id)</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Chaupal</strong> (a fictional social app) pages its feed with <code>OFFSET</code>. Page 2,000 takes 4 seconds, and new posts push duplicates onto the next page.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo data: 100,000 posts, five per second, from 1 October 2026 00:00 UTC.</p>
+<ol class="gwt">
+<li><b>Given</b> no cursor, <b>then</b> posts 100000 down to 99981 and a <code>nextCursor</code>.</li>
+<li><b>Given</b> that cursor, <b>then</b> the next posts with no gap and no repeat, even if posts were added meanwhile.</li>
+<li><b>Given</b> a page boundary inside one second, <b>then</b> the posts sharing that second still appear.</li>
+<li><b>Given</b> the last page, <b>then</b> <code>nextCursor</code> is <code>null</code>; a cursor past the oldest post gives an empty page.</li>
+<li><b>Given</b> a cursor this feed did not make, or a limit outside 1 to 50, <b>then</b> <code>400</code>.</li>
+<li><b>Given</b> page 2,000, <b>then</b> the database reads about one page of rows, not 40,000.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>Order by <code>(created_at, id)</code>, both descending, everywhere.</li>
+<li>The cursor holds both values; it is opaque and versioned.</li>
+<li>No count query: one extra row tells whether more follow.</li>
+<li>An index matches the order.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Measure what <code>OFFSET</code> costs.</li>
+<li>Write a keyset page with a row-value comparison.</li>
+<li>Design an opaque cursor with a tie-breaker.</li>
+<li>Know what keyset paging cannot do.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/feed?limit=20</code></td><td>The newest posts: <code>{posts: [{id, author, body, createdAt}], nextCursor}</code>.</td></tr><tr><td><code>GET</code></td><td><code>/feed?cursor=…&amp;limit=20</code></td><td>The posts after the cursor; <code>nextCursor</code> is <code>null</code> at the end.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>A page, possibly empty</td></tr><tr><td><span class="pill warn">400</span></td><td>A cursor this feed did not issue; a limit outside 1 to 50</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 16 Oct 2026. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: the newest three</h3><p><b>Why:</b> the first page and its cursor.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /feed?limit=3 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 349
+
+{
+  &quot;posts&quot;: [
+    {
+      &quot;id&quot;: 100000,
+      &quot;author&quot;: &quot;asha_writes&quot;,
+      &quot;body&quot;: &quot;Post number 100000&quot;,
+      &quot;createdAt&quot;: &quot;2026-10-01T05:33:20Z&quot;
+    },
+    {
+      &quot;id&quot;: 99999,
+      &quot;author&quot;: &quot;ravi_07&quot;,
+      &quot;body&quot;: &quot;Post number 99999&quot;,
+      &quot;createdAt&quot;: &quot;2026-10-01T05:33:19Z&quot;
+    },
+    {
+      &quot;id&quot;: 99998,
+      &quot;author&quot;: &quot;meera_k&quot;,
+      &quot;body&quot;: &quot;Post number 99998&quot;,
+      &quot;createdAt&quot;: &quot;2026-10-01T05:33:19Z&quot;
+    }
+  ],
+  &quot;nextCursor&quot;: &quot;djE6MTc5MDgzMjc5OTAwMDAwMDo5OTk5OA&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: the cursor from case 1</h3><p><b>Why:</b> straight on, with the id deciding inside a second.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /feed?limit=3&amp;cursor=djE6MTc5MDgzMjc5OTAwMDAwMDo5OTk5OA HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 345
+
+{
+  &quot;posts&quot;: [
+    {
+      &quot;id&quot;: 99997,
+      &quot;author&quot;: &quot;kabir&quot;,
+      &quot;body&quot;: &quot;Post number 99997&quot;,
+      &quot;createdAt&quot;: &quot;2026-10-01T05:33:19Z&quot;
+    },
+    {
+      &quot;id&quot;: 99996,
+      &quot;author&quot;: &quot;asha_writes&quot;,
+      &quot;body&quot;: &quot;Post number 99996&quot;,
+      &quot;createdAt&quot;: &quot;2026-10-01T05:33:19Z&quot;
+    },
+    {
+      &quot;id&quot;: 99995,
+      &quot;author&quot;: &quot;ravi_07&quot;,
+      &quot;body&quot;: &quot;Post number 99995&quot;,
+      &quot;createdAt&quot;: &quot;2026-10-01T05:33:19Z&quot;
+    }
+  ],
+  &quot;nextCursor&quot;: &quot;djE6MTc5MDgzMjc5OTAwMDAwMDo5OTk5NQ&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: a made-up cursor</h3><p><b>Why:</b> <code>400</code>, telling the client to start again.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /feed?cursor=bm90LW91cnM HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Not a cursor from this feed; start again without one&quot;,
+  &quot;instance&quot;: &quot;/feed&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: limit 500</h3><p><b>Why:</b> <code>400</code>; at most 50.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /feed?limit=500 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Validation failure&quot;,
+  &quot;instance&quot;: &quot;/feed&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section>
+<p>The cursor in case 1 decodes to <code>v1:1790832799000000:99998</code>: version, the post's time in microseconds since 1970, and its id. Clients must not build or change it; the version lets the server change its contents later.</p></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>The first page</td><td>The newest 20 and a cursor</td><td><code>theFirstPageIsTheNewestPosts</code></td></tr><tr><td>A boundary inside one second</td><td>The id continues the order</td><td><code>theCursorContinuesExactlyWhereThePageStopped</code></td></tr><tr><td>Nineteen pages in a row; the last page</td><td>Each post once; no cursor at the end</td><td><code>walkingTheLastThousandPostsShowsEachOnceAndEndsWithNoCursor</code></td></tr><tr><td>A cursor past the oldest post</td><td>Empty page</td><td><code>aCursorPastTheOldestPostIsAnEmptyPage</code></td></tr><tr><td>A foreign or old-style cursor; a bad limit</td><td><code>400</code></td><td><code>aCursorThatIsNotOursOrABadLimitIs400</code></td></tr><tr><td>Posts added while reading</td><td>Offset repeats; keyset does not</td><td><code>newPostsPushRepeatsOntoTheNextOffsetPage</code></td></tr><tr><td>Bad rows; a half-added author</td><td>Refused; rolled back</td><td><code>PostDatabaseTest</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Deep <code>OFFSET</code> paging that gets slower page by page and duplicates new posts.</p>
+<ul>
+<li><strong>Slower.</strong> <code>OFFSET 40000</code> means reading 40,000 rows in order and throwing them away. In the captured plans, the scans produced 40,020 rows for the offset page and 21 for the keyset page (including the one-row lookup of the cursor's post).</li>
+<li><strong>Repeats.</strong> Three new posts move everything down by three. Page 2 by offset starts with the last three posts of page 1; the keyset page starts after the last post the reader saw.</li>
+<li><strong>The first cursor people write.</strong> "Older than this time" skips the posts that share the last post's second. Here, four of them.</li>
+</ul>
+<p>While building, each fix was undone once: dropping the id from the cursor turned 4 tests red; not fetching the extra row 5; accepting any decoded text as a cursor 1; dropping the index 1.</p>
+</div>
+<pre class="code"><code class="language-text">                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Limit (actual rows=20 loops=1)
+   Buffers: shared hit=531
+   -&gt;  Index Only Scan Backward using posts_feed on posts (actual rows=40020 loops=1)
+         Heap Fetches: 40020
+         Buffers: shared hit=531
+ Planning:
+   Buffers: shared hit=96
+(7 rows)</code></pre><pre class="code"><code class="language-text">                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Limit (actual rows=20 loops=1)
+   Buffers: shared hit=6
+   InitPlan 1
+     -&gt;  Index Scan using posts_pkey on posts posts_1 (actual rows=1 loops=1)
+           Index Cond: (id = 60001)
+           Buffers: shared hit=3
+   -&gt;  Index Only Scan Backward using posts_feed on posts (actual rows=20 loops=1)
+         Index Cond: (ROW(created_at, id) &lt; ROW((InitPlan 1).col1, 60001))
+         Heap Fetches: 20
+         Buffers: shared hit=6
+ Planning:
+   Buffers: shared hit=100
+(12 rows)</code></pre><pre class="code"><code class="language-java">package com.chaupal.feed;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** Written first. The old OFFSET feed and a time-only cursor, against the keyset feed, on the same 100,000 posts. */
+class OffsetPagingTrapTest extends ApiTest {
+
+    static final String OFFSET_PAGE = Feed.FIRST.replace(&quot;LIMIT :n&quot;, &quot;LIMIT :n OFFSET :skip&quot;);
+
+    @AfterEach
+    void removeNewPosts() {
+        jdbc.sql(&quot;DELETE FROM posts WHERE body LIKE &#x27;Test new post%&#x27;&quot;).update();
+    }
+
+    private List&lt;Long&gt; offsetPage(int page, int size) {
+        return jdbc.sql(OFFSET_PAGE).param(&quot;n&quot;, size).param(&quot;skip&quot;, page * size).query((rs, i) -&gt; rs.getLong(&quot;id&quot;)).list();
+    }
+
+    private static List&lt;Long&gt; ids(JsonNode page) {
+        List&lt;Long&gt; ids = new ArrayList&lt;&gt;();
+        page.get(&quot;posts&quot;).forEach(p -&gt; ids.add(p.get(&quot;id&quot;).asLong()));
+        return ids;
+    }
+
+    @Test
+    void page2000ByOffsetReadsEveryPostBeforeIt() {
+        // Page 2,000 of 20: the old feed reads and throws away 40,000 posts (and their authors) to return 20.
+        long offset = rowsRead(OFFSET_PAGE, Map.of(&quot;n&quot;, 20, &quot;skip&quot;, 40_000));
+        // The same page by keyset: start after post 60,001, the last one on page 1,999.
+        Instant at = jdbc.sql(&quot;SELECT created_at FROM posts WHERE id = 60001&quot;).query(OffsetDateTime.class).single().toInstant();
+        long keyset = rowsRead(Feed.AFTER, Map.of(&quot;n&quot;, 21, &quot;createdAt&quot;, OffsetDateTime.ofInstant(at, ZoneOffset.UTC), &quot;id&quot;, 60001L));
+        assertThat(offset).isGreaterThanOrEqualTo(40_020);
+        assertThat(keyset).isLessThanOrEqualTo(100);
+    }
+
+    @Test
+    void newPostsPushRepeatsOntoTheNextOffsetPage() throws Exception {
+        List&lt;Long&gt; page1 = offsetPage(0, 20);
+        JsonNode keysetPage1 = getFeed(null, 20);
+        for (int i = 1; i &lt;= 3; i++) {
+            post(&quot;Test new post &quot; + i);   // three people post while the reader looks at page 1
+        }
+        List&lt;Long&gt; page2 = offsetPage(1, 20);
+        assertThat(page2.subList(0, 3)).isEqualTo(page1.subList(17, 20));   // the last three of page 1, again
+
+        List&lt;Long&gt; keysetPage2 = ids(getFeed(keysetPage1.get(&quot;nextCursor&quot;).asString(), 20));
+        assertThat(keysetPage2).doesNotContainAnyElementsOf(ids(keysetPage1));
+        assertThat(keysetPage2.getFirst()).isEqualTo(99980);   // straight on from 99981, new posts or not
+    }
+
+    @Test
+    void aCursorWithTheTimeAloneSkipsPostsFromTheSameSecond() throws Exception {
+        JsonNode first = getFeed(null, 7);   // ends at post 99994; posts 99990 to 99993 share its second
+        Instant last = Instant.parse(first.get(&quot;posts&quot;).get(6).get(&quot;createdAt&quot;).asString());
+        List&lt;Long&gt; timeOnly = jdbc.sql(Feed.FIRST.replace(&quot;ORDER BY&quot;, &quot;WHERE p.created_at &lt; :createdAt ORDER BY&quot;))
+                .param(&quot;createdAt&quot;, OffsetDateTime.ofInstant(last, ZoneOffset.UTC)).param(&quot;n&quot;, 7).query((rs, i) -&gt; rs.getLong(&quot;id&quot;)).list();
+        assertThat(timeOnly.getFirst()).isEqualTo(99989);   // 99990 to 99993 never shown
+        assertThat(ids(getFeed(first.get(&quot;nextCursor&quot;).asString(), 7))).startsWith(99993L, 99992L, 99991L, 99990L, 99989L);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080; the first start loads 100,000 posts
+./mvnw test                 # all 11 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Follow the cursors by hand (needs <code>jq</code>), then compare with a deep offset in <code>psql</code>:</p>
+<pre class="code"><code class="language-bash">C=$(curl -s &#x27;http://localhost:8080/feed?limit=3&#x27; | jq -r .nextCursor)
+curl -s &quot;http://localhost:8080/feed?limit=3&amp;cursor=$C&quot; | jq &#x27;.posts[].id&#x27;
+docker compose exec postgres psql -U chaupal -d chaupal \
+  -c &quot;EXPLAIN ANALYZE SELECT id FROM posts ORDER BY created_at DESC, id DESC LIMIT 20 OFFSET 90000&quot;</code></pre>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>Posts skipped at page boundaries</td><td>A cursor without the id, or a time rounded to milliseconds.</td><td>Keep both, and the full microseconds.</td></tr><tr><td>The seek query does a full sort</td><td>No index matching <code>(created_at, id)</code>, or the comparison written as two separate conditions.</td><td>One row-value comparison and a two-column index.</td></tr><tr><td><code>400 Not a cursor from this feed</code> after a release</td><td>The cursor format changed.</td><td>Keep reading the old version, or let clients start again: the message says so.</td></tr><tr><td>Different results with the time zone</td><td>Binding a local timestamp against <code>timestamptz</code>.</td><td>Bind <code>OffsetDateTime</code> in UTC, as <code>Feed</code> does.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/066-social-feed-with-keyset-pagination/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/chaupal/feed/
+│   ├── FeedController.java   ├── Cursor.java   ├── Feed.java   └── FeedApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__posts.sql, V2__demo_posts.sql
+├── src/test/java/com/chaupal/feed/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the database behind it.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">FeedController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">Cursor.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">Feed.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">V1__posts.sql</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">V2__demo_posts.sql</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">compose.yaml</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">FeedApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/chaupal/feed/FeedController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Checks the limit and decodes the cursor.</dd><dt>Why</dt><dd>A bad cursor is a <code>400</code> before any query.</dd><dt>Without it</dt><dd>A garbage cursor reaching SQL.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.feed;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+class FeedController {
+
+    private final Feed feed;
+
+    FeedController(Feed feed) {
+        this.feed = feed;
+    }
+
+    /** Newest first. Pass the response&#x27;s nextCursor to get the following page; null means the end. */
+    @GetMapping(&quot;/feed&quot;)
+    Feed.Page feed(@RequestParam(required = false) @Size(max = 100) String cursor,
+                   @RequestParam(defaultValue = &quot;20&quot;) @Min(1) @Max(50) int limit) {
+        return feed.page(cursor == null ? null : Cursor.decode(cursor), limit);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/chaupal/feed/Cursor.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Encodes and decodes the position: version, time in microseconds, id.</dd><dt>Why</dt><dd>Opaque and versioned; parsed strictly.</dd><dt>Without it</dt><dd>Clients building offsets or timestamps themselves.</dd></dl><ul><li>Microseconds, because PostgreSQL stores <code>timestamptz</code> to the microsecond: a millisecond cursor would round and skip or repeat posts.</li><li>Not signed: a client can decode it, and can only ask for a position it could reach by scrolling.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.feed;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Base64;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Where the last page stopped: the last post&#x27;s time and id. Opaque to clients (base64url of &quot;v1:micros:id&quot;), so they
+ * pass it back unchanged and the server can change its contents later. Not a secret: anyone can decode it.
+ */
+record Cursor(Instant createdAt, long id) {
+
+    private static final Pattern FORMAT = Pattern.compile(&quot;v1:(-?\\d{1,18}):(\\d{1,18})&quot;);
+
+    String encode() {
+        long micros = ChronoUnit.MICROS.between(Instant.EPOCH, createdAt);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString((&quot;v1:&quot; + micros + &quot;:&quot; + id).getBytes(StandardCharsets.US_ASCII));
+    }
+
+    static Cursor decode(String text) {
+        try {
+            Matcher m = FORMAT.matcher(new String(Base64.getUrlDecoder().decode(text), StandardCharsets.US_ASCII));
+            if (m.matches()) {
+                return new Cursor(Instant.EPOCH.plus(Long.parseLong(m.group(1)), ChronoUnit.MICROS), Long.parseLong(m.group(2)));
+            }
+        } catch (IllegalArgumentException e) {
+            // not base64: answered below like any other bad cursor
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Not a cursor from this feed; start again without one&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/chaupal/feed/Feed.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The first page and the seek, one row more than asked.</dd><dt>Why</dt><dd>The row-value comparison matches the index's order, so the page starts where the cursor points.</dd><dt>Without it</dt><dd><code>OFFSET</code>, and a count query to know about the next page.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.feed;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+
+@Service
+class Feed {
+
+    record Post(long id, String author, String body, Instant createdAt) {
+    }
+
+    record Page(List&lt;Post&gt; posts, String nextCursor) {
+    }
+
+    static final String FIRST = &quot;&quot;&quot;
+            SELECT p.id, a.handle AS author, p.body, p.created_at FROM posts p JOIN authors a ON a.id = p.author_id
+            ORDER BY p.created_at DESC, p.id DESC LIMIT :n&quot;&quot;&quot;;
+
+    /** Seek: start right after the cursor&#x27;s post, in the index&#x27;s order. No OFFSET, so no rows are read and thrown away. */
+    static final String AFTER = &quot;&quot;&quot;
+            SELECT p.id, a.handle AS author, p.body, p.created_at FROM posts p JOIN authors a ON a.id = p.author_id
+            WHERE (p.created_at, p.id) &lt; (:createdAt, :id)
+            ORDER BY p.created_at DESC, p.id DESC LIMIT :n&quot;&quot;&quot;;
+
+    private final JdbcClient jdbc;
+
+    Feed(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    Page page(Cursor after, int limit) {
+        // One row more than asked: if it exists, there is a next page, and no count is needed.
+        List&lt;Post&gt; rows = (after == null ? jdbc.sql(FIRST)
+                : jdbc.sql(AFTER).param(&quot;createdAt&quot;, OffsetDateTime.ofInstant(after.createdAt(), ZoneOffset.UTC)).param(&quot;id&quot;, after.id()))
+                .param(&quot;n&quot;, limit + 1).query(Post.class).list();
+        if (rows.size() &lt;= limit) {
+            return new Page(rows, null);
+        }
+        List&lt;Post&gt; page = rows.subList(0, limit);
+        Post last = page.getLast();
+        return new Page(page, new Cursor(last.createdAt(), last.id()).encode());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/resources/db/migration/V1__posts.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Tables, named constraints and the feed index.</dd><dt>Why</dt><dd><code>posts_feed (created_at, id)</code> read backwards is the feed.</dd><dt>Without it</dt><dd>A sort of every post for every page.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">CREATE TABLE authors (
+    id     BIGINT      PRIMARY KEY,
+    handle VARCHAR(30) NOT NULL CONSTRAINT authors_handle_unique UNIQUE
+                               CONSTRAINT authors_handle_shape CHECK (handle ~ &#x27;^[a-z0-9_]{3,30}$&#x27;)
+);
+
+CREATE TABLE posts (
+    id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    author_id  BIGINT        NOT NULL CONSTRAINT posts_author_fk REFERENCES authors (id),
+    body       VARCHAR(500)  NOT NULL CONSTRAINT posts_body_not_blank CHECK (btrim(body) &lt;&gt; &#x27;&#x27;),
+    created_at TIMESTAMPTZ   NOT NULL DEFAULT now()
+);
+-- The feed&#x27;s order, newest first: read backwards, (created_at, id) finds &quot;the posts after this one&quot; directly.
+CREATE INDEX posts_feed ON posts (created_at, id);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_posts.sql</p><div class="notes"><p>4 authors and 100,000 posts, five per second.</p></div><div class="src"><pre class="code"><code class="language-sql">INSERT INTO authors (id, handle) VALUES (1, &#x27;asha_writes&#x27;), (2, &#x27;kabir&#x27;), (3, &#x27;meera_k&#x27;), (4, &#x27;ravi_07&#x27;);
+
+-- 100,000 posts over about 5.5 hours, five per second: posts made in the same second share a timestamp,
+-- as they do when an app imports a batch or a server&#x27;s clock only has second precision.
+INSERT INTO posts (author_id, body, created_at)
+SELECT g % 4 + 1, &#x27;Post number &#x27; || g, TIMESTAMPTZ &#x27;2026-10-01 00:00:00+00&#x27; + make_interval(secs =&gt; g / 5)
+FROM generate_series(1, 100000) AS g;
+ANALYZE posts;</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Problem details on.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: chaupal-feed
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/chaupal
+    username: chaupal
+    password: chaupal</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: chaupal
+      POSTGRES_USER: chaupal
+      POSTGRES_PASSWORD: chaupal
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U chaupal -d chaupal&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/java/com/chaupal/feed/FeedApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.feed;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class FeedApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(FeedApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found (empty page)</td><td><code>FeedContractTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>OffsetPagingTrapTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>PostDatabaseTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.feed.PostDatabaseTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.feed.OffsetPagingTrapTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.feed.FeedContractTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">OffsetPagingTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">PostDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">FeedContractTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/chaupal/feed/OffsetPagingTrapTest.java</p><div class="notes"><p>Written first: the cost of offset, repeats under new posts, and the time-only cursor.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.feed;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** Written first. The old OFFSET feed and a time-only cursor, against the keyset feed, on the same 100,000 posts. */
+class OffsetPagingTrapTest extends ApiTest {
+
+    static final String OFFSET_PAGE = Feed.FIRST.replace(&quot;LIMIT :n&quot;, &quot;LIMIT :n OFFSET :skip&quot;);
+
+    @AfterEach
+    void removeNewPosts() {
+        jdbc.sql(&quot;DELETE FROM posts WHERE body LIKE &#x27;Test new post%&#x27;&quot;).update();
+    }
+
+    private List&lt;Long&gt; offsetPage(int page, int size) {
+        return jdbc.sql(OFFSET_PAGE).param(&quot;n&quot;, size).param(&quot;skip&quot;, page * size).query((rs, i) -&gt; rs.getLong(&quot;id&quot;)).list();
+    }
+
+    private static List&lt;Long&gt; ids(JsonNode page) {
+        List&lt;Long&gt; ids = new ArrayList&lt;&gt;();
+        page.get(&quot;posts&quot;).forEach(p -&gt; ids.add(p.get(&quot;id&quot;).asLong()));
+        return ids;
+    }
+
+    @Test
+    void page2000ByOffsetReadsEveryPostBeforeIt() {
+        // Page 2,000 of 20: the old feed reads and throws away 40,000 posts (and their authors) to return 20.
+        long offset = rowsRead(OFFSET_PAGE, Map.of(&quot;n&quot;, 20, &quot;skip&quot;, 40_000));
+        // The same page by keyset: start after post 60,001, the last one on page 1,999.
+        Instant at = jdbc.sql(&quot;SELECT created_at FROM posts WHERE id = 60001&quot;).query(OffsetDateTime.class).single().toInstant();
+        long keyset = rowsRead(Feed.AFTER, Map.of(&quot;n&quot;, 21, &quot;createdAt&quot;, OffsetDateTime.ofInstant(at, ZoneOffset.UTC), &quot;id&quot;, 60001L));
+        assertThat(offset).isGreaterThanOrEqualTo(40_020);
+        assertThat(keyset).isLessThanOrEqualTo(100);
+    }
+
+    @Test
+    void newPostsPushRepeatsOntoTheNextOffsetPage() throws Exception {
+        List&lt;Long&gt; page1 = offsetPage(0, 20);
+        JsonNode keysetPage1 = getFeed(null, 20);
+        for (int i = 1; i &lt;= 3; i++) {
+            post(&quot;Test new post &quot; + i);   // three people post while the reader looks at page 1
+        }
+        List&lt;Long&gt; page2 = offsetPage(1, 20);
+        assertThat(page2.subList(0, 3)).isEqualTo(page1.subList(17, 20));   // the last three of page 1, again
+
+        List&lt;Long&gt; keysetPage2 = ids(getFeed(keysetPage1.get(&quot;nextCursor&quot;).asString(), 20));
+        assertThat(keysetPage2).doesNotContainAnyElementsOf(ids(keysetPage1));
+        assertThat(keysetPage2.getFirst()).isEqualTo(99980);   // straight on from 99981, new posts or not
+    }
+
+    @Test
+    void aCursorWithTheTimeAloneSkipsPostsFromTheSameSecond() throws Exception {
+        JsonNode first = getFeed(null, 7);   // ends at post 99994; posts 99990 to 99993 share its second
+        Instant last = Instant.parse(first.get(&quot;posts&quot;).get(6).get(&quot;createdAt&quot;).asString());
+        List&lt;Long&gt; timeOnly = jdbc.sql(Feed.FIRST.replace(&quot;ORDER BY&quot;, &quot;WHERE p.created_at &lt; :createdAt ORDER BY&quot;))
+                .param(&quot;createdAt&quot;, OffsetDateTime.ofInstant(last, ZoneOffset.UTC)).param(&quot;n&quot;, 7).query((rs, i) -&gt; rs.getLong(&quot;id&quot;)).list();
+        assertThat(timeOnly.getFirst()).isEqualTo(99989);   // 99990 to 99993 never shown
+        assertThat(ids(getFeed(first.get(&quot;nextCursor&quot;).asString(), 7))).startsWith(99993L, 99992L, 99991L, 99990L, 99989L);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/chaupal/feed/PostDatabaseTest.java</p><div class="notes"><p>Named constraints, the database's timestamp, and a rolled-back author.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.feed;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessException;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The rules as PostgreSQL enforces them, with plain SQL; test rows start with &quot;Test&quot; and are removed afterwards. */
+class PostDatabaseTest extends ApiTest {
+
+    @AfterEach
+    void removeTestRows() {
+        jdbc.sql(&quot;DELETE FROM posts WHERE body LIKE &#x27;Test%&#x27;&quot;).update();
+        jdbc.sql(&quot;DELETE FROM authors WHERE id &gt;= 100&quot;).update();
+    }
+
+    @Test
+    void namedConstraintsHoldWithoutJava() {
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO posts (author_id, body) VALUES (1, &#x27;   &#x27;)&quot;).update())
+                .isInstanceOf(DataAccessException.class).hasMessageContaining(&quot;posts_body_not_blank&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO posts (author_id, body) VALUES (99, &#x27;Test orphan&#x27;)&quot;).update()).hasMessageContaining(&quot;posts_author_fk&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO authors (id, handle) VALUES (100, &#x27;Asha Writes&#x27;)&quot;).update()).hasMessageContaining(&quot;authors_handle_shape&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO authors (id, handle) VALUES (100, &#x27;kabir&#x27;)&quot;).update()).hasMessageContaining(&quot;authors_handle_unique&quot;);
+    }
+
+    @Test
+    void aNewPostIsStampedByTheDatabaseAndTopsTheFeed() throws Exception {
+        jdbc.sql(&quot;INSERT INTO posts (author_id, body) VALUES (2, &#x27;Test hello Chaupal&#x27;)&quot;).update();   // created_at = now(), after every demo post
+        assertThat(getFeed(null, 1).get(&quot;posts&quot;).get(0).get(&quot;body&quot;).asString()).isEqualTo(&quot;Test hello Chaupal&quot;);
+    }
+
+    @Test
+    void aNewAuthorWithAnOrphanPostIsNotAddedAtAll() {
+        assertThatThrownBy(() -&gt; transaction.executeWithoutResult(tx -&gt; {
+            jdbc.sql(&quot;INSERT INTO authors (id, handle) VALUES (100, &#x27;test_author&#x27;)&quot;).update();
+            jdbc.sql(&quot;INSERT INTO posts (author_id, body) VALUES (100, &#x27;Test first post&#x27;)&quot;).update();
+            jdbc.sql(&quot;INSERT INTO posts (author_id, body) VALUES (101, &#x27;Test wrong author&#x27;)&quot;).update();
+        })).hasMessageContaining(&quot;posts_author_fk&quot;);
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM authors WHERE id = 100&quot;).query(Long.class).single()).isZero();
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM posts WHERE body LIKE &#x27;Test%&#x27;&quot;).query(Long.class).single()).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/chaupal/feed/FeedContractTest.java</p><div class="notes"><p>The endpoint through HTTP, following real cursors.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.feed;
+
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+
+import java.util.HashSet;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class FeedContractTest extends ApiTest {
+
+    @Test
+    void theFirstPageIsTheNewestPosts() throws Exception {
+        mvc.perform(get(&quot;/feed&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.posts&quot;, hasSize(20)))
+                .andExpect(jsonPath(&quot;$.posts[0].id&quot;).value(100000)).andExpect(jsonPath(&quot;$.posts[0].author&quot;).value(&quot;asha_writes&quot;))
+                .andExpect(jsonPath(&quot;$.posts[0].body&quot;).value(&quot;Post number 100000&quot;)).andExpect(jsonPath(&quot;$.posts[0].createdAt&quot;).value(&quot;2026-10-01T05:33:20Z&quot;))
+                .andExpect(jsonPath(&quot;$.posts[19].id&quot;).value(99981)).andExpect(jsonPath(&quot;$.nextCursor&quot;).isString());
+    }
+
+    @Test
+    void theCursorContinuesExactlyWhereThePageStopped() throws Exception {
+        JsonNode first = getFeed(null, 7);
+        JsonNode second = getFeed(first.get(&quot;nextCursor&quot;).asString(), 7);
+        assertThat(first.get(&quot;posts&quot;).get(6).get(&quot;id&quot;).asLong()).isEqualTo(99994);
+        assertThat(second.get(&quot;posts&quot;).get(0).get(&quot;id&quot;).asLong()).isEqualTo(99993);   // same second as 99994: the id breaks the tie
+    }
+
+    @Test
+    void walkingTheLastThousandPostsShowsEachOnceAndEndsWithNoCursor() throws Exception {
+        Set&lt;Long&gt; seen = new HashSet&lt;&gt;();
+        String cursor = getFeed(null, 50).get(&quot;nextCursor&quot;).asString();
+        for (int page = 0; page &lt; 19; page++) {
+            JsonNode next = getFeed(cursor, 50);
+            next.get(&quot;posts&quot;).forEach(p -&gt; seen.add(p.get(&quot;id&quot;).asLong()));
+            cursor = next.get(&quot;nextCursor&quot;).asString();
+        }
+        assertThat(seen).hasSize(950);
+        JsonNode nearEnd = json.readTree(mvc.perform(get(&quot;/feed&quot;).param(&quot;limit&quot;, &quot;50&quot;).param(&quot;cursor&quot;, new Cursor(java.time.Instant.parse(&quot;2026-10-01T00:00:01Z&quot;), 6).encode()))
+                .andReturn().getResponse().getContentAsString());
+        assertThat(nearEnd.get(&quot;posts&quot;)).hasSize(5);   // posts 1 to 5, the oldest
+        assertThat(nearEnd.get(&quot;nextCursor&quot;).isNull()).isTrue();
+    }
+
+    @Test
+    void aCursorPastTheOldestPostIsAnEmptyPage() throws Exception {
+        mvc.perform(get(&quot;/feed&quot;).param(&quot;cursor&quot;, new Cursor(java.time.Instant.parse(&quot;2026-01-01T00:00:00Z&quot;), 1).encode())).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.posts&quot;, empty())).andExpect(jsonPath(&quot;$.nextCursor&quot;, nullValue()));
+    }
+
+    @Test
+    void aCursorThatIsNotOursOrABadLimitIs400() throws Exception {
+        mvc.perform(get(&quot;/feed&quot;).param(&quot;cursor&quot;, &quot;not-a-cursor!&quot;)).andExpect(status().isBadRequest())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Not a cursor from this feed; start again without one&quot;));
+        mvc.perform(get(&quot;/feed&quot;).param(&quot;cursor&quot;, &quot;djE6MTIzOmFiYw&quot;)).andExpect(status().isBadRequest());   // base64 of &quot;v1:123:abc&quot;
+        mvc.perform(get(&quot;/feed&quot;).param(&quot;cursor&quot;, &quot;MTIzNDU2&quot;)).andExpect(status().isBadRequest());         // base64 of &quot;123456&quot;: an old offset
+        mvc.perform(get(&quot;/feed&quot;).param(&quot;limit&quot;, &quot;0&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/feed&quot;).param(&quot;limit&quot;, &quot;51&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/chaupal/feed/ApiTest.java</p><div class="notes"><p>Shared setup, the EXPLAIN row counter and a feed helper.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.feed;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.Map;
+
+/**
+ * Shared setup: the whole app on a real PostgreSQL with the demo feed: 100,000 posts, five per second, so every
+ * timestamp is shared by five posts. Tests that add posts remove them again.
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+    @Autowired
+    TransactionTemplate transaction;
+
+    final JsonMapper json = JsonMapper.builder().build();
+
+    /** Rows every scan in the plan really produced, from EXPLAIN ANALYZE, without parallel workers. */
+    long rowsRead(String sql, Map&lt;String, Object&gt; params) {
+        return transaction.execute(status -&gt; {
+            jdbc.sql(&quot;SET LOCAL max_parallel_workers_per_gather = 0&quot;).update();
+            String plan = jdbc.sql(&quot;EXPLAIN (ANALYZE, FORMAT JSON) &quot; + sql).params(params).query(String.class).single();
+            return scanned(json.readTree(plan).get(0).get(&quot;Plan&quot;));
+        });
+    }
+
+    private static long scanned(JsonNode node) {
+        long rows = node.get(&quot;Node Type&quot;).asString().contains(&quot;Scan&quot;) ? node.get(&quot;Actual Rows&quot;).asLong() * node.get(&quot;Actual Loops&quot;).asLong() : 0;
+        if (node.has(&quot;Plans&quot;)) {
+            for (JsonNode child : node.get(&quot;Plans&quot;)) {
+                rows += scanned(child);
+            }
+        }
+        return rows;
+    }
+
+    JsonNode getFeed(String cursor, int limit) throws Exception {
+        var request = org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(&quot;/feed&quot;).param(&quot;limit&quot;, String.valueOf(limit));
+        if (cursor != null) {
+            request.param(&quot;cursor&quot;, cursor);
+        }
+        return json.readTree(mvc.perform(request).andReturn().getResponse().getContentAsString());
+    }
+
+    void post(String body) {
+        jdbc.sql(&quot;INSERT INTO posts (author_id, body, created_at) VALUES (1, ?, TIMESTAMPTZ &#x27;2026-10-02 00:00:00+00&#x27;)&quot;).param(body).update();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/chaupal/feed/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.feed;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker: row comparisons, index scans and timestamps behave as in production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/chaupal/feed/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=AuthorFeedChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 11 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 14 tests pass (11 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 25 minutes</p><h2>One author's posts</h2><p>Add <code>author=kabir</code>: that author's posts, newest first, with the same cursor. Unknown author: <code>404</code>.</p><p><b>Done when:</b> both tests in <code>AuthorFeedChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>One more condition, <code>p.author_id = :author</code>, in both queries.</li><li>For speed at scale, an index on <code>(author_id, created_at, id)</code>; not needed for the test.</li></ul></details><p class="path">challenge/AuthorFeedChallengeTest.java</p><pre class="code"><code class="language-java">package com.chaupal.feed;
+
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: GET /feed?author=kabir is one author&#x27;s posts, newest first, with the same keyset cursor. An author
+ * Chaupal does not know is 404.
+ */
+class AuthorFeedChallengeTest extends ApiTest {
+
+    @Test
+    void oneAuthorsPostsPageByPage() throws Exception {
+        JsonNode first = json.readTree(mvc.perform(get(&quot;/feed&quot;).param(&quot;author&quot;, &quot;kabir&quot;).param(&quot;limit&quot;, &quot;3&quot;)).andReturn().getResponse().getContentAsString());
+        assertThat(first.get(&quot;posts&quot;).findValuesAsString(&quot;author&quot;)).containsOnly(&quot;kabir&quot;);
+        assertThat(first.get(&quot;posts&quot;).findValues(&quot;id&quot;)).extracting(JsonNode::asLong).containsExactly(99997L, 99993L, 99989L);
+        JsonNode second = json.readTree(mvc.perform(get(&quot;/feed&quot;).param(&quot;author&quot;, &quot;kabir&quot;).param(&quot;limit&quot;, &quot;3&quot;).param(&quot;cursor&quot;, first.get(&quot;nextCursor&quot;).asString()))
+                .andReturn().getResponse().getContentAsString());
+        assertThat(second.get(&quot;posts&quot;).findValues(&quot;id&quot;)).extracting(JsonNode::asLong).containsExactly(99985L, 99981L, 99977L);
+    }
+
+    @Test
+    void anUnknownAuthorIs404() throws Exception {
+        mvc.perform(get(&quot;/feed&quot;).param(&quot;author&quot;, &quot;nobody_here&quot;)).andExpect(status().isNotFound());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/Feed.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.feed;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+
+@Service
+class Feed {
+
+    record Post(long id, String author, String body, Instant createdAt) {
+    }
+
+    record Page(List&lt;Post&gt; posts, String nextCursor, String topCursor) {
+        Page(List&lt;Post&gt; posts, String nextCursor) {
+            this(posts, nextCursor, posts.isEmpty() ? null : new Cursor(posts.getFirst().createdAt(), posts.getFirst().id()).encode());
+        }
+    }
+
+    static final String FIRST = &quot;&quot;&quot;
+            SELECT p.id, a.handle AS author, p.body, p.created_at FROM posts p JOIN authors a ON a.id = p.author_id
+            ORDER BY p.created_at DESC, p.id DESC LIMIT :n&quot;&quot;&quot;;
+
+    /** Seek: start right after the cursor&#x27;s post, in the index&#x27;s order. No OFFSET, so no rows are read and thrown away. */
+    static final String AFTER = &quot;&quot;&quot;
+            SELECT p.id, a.handle AS author, p.body, p.created_at FROM posts p JOIN authors a ON a.id = p.author_id
+            WHERE (p.created_at, p.id) &lt; (:createdAt, :id)
+            ORDER BY p.created_at DESC, p.id DESC LIMIT :n&quot;&quot;&quot;;
+
+    /** Challenge 2: the posts after the cursor in time, oldest first, so the limit keeps the ones right after it. */
+    static final String NEWER = &quot;&quot;&quot;
+            SELECT p.id, a.handle AS author, p.body, p.created_at FROM posts p JOIN authors a ON a.id = p.author_id
+            WHERE (p.created_at, p.id) &gt; (:createdAt, :id)
+            ORDER BY p.created_at, p.id LIMIT :n&quot;&quot;&quot;;
+
+    private final JdbcClient jdbc;
+
+    Feed(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    /** Challenge 1: the same seek, for one author. */
+    Page page(Cursor after, int limit, String author) {
+        if (author == null) {
+            return page(after, limit);
+        }
+        Long authorId = jdbc.sql(&quot;SELECT id FROM authors WHERE handle = ?&quot;).param(author).query(Long.class).optional()
+                .orElseThrow(() -&gt; new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;No author &quot; + author));
+        String sql = (after == null ? FIRST : AFTER).replace(&quot;ORDER BY&quot;, (after == null ? &quot;WHERE&quot; : &quot;AND&quot;) + &quot; p.author_id = :author ORDER BY&quot;);
+        var spec = jdbc.sql(sql).param(&quot;author&quot;, authorId).param(&quot;n&quot;, limit + 1);
+        if (after != null) {
+            spec = spec.param(&quot;createdAt&quot;, OffsetDateTime.ofInstant(after.createdAt(), ZoneOffset.UTC)).param(&quot;id&quot;, after.id());
+        }
+        return toPage(spec.query(Post.class).list(), limit);
+    }
+
+    /** Challenge 2. */
+    Page newer(Cursor since, int limit) {
+        List&lt;Post&gt; rows = new java.util.ArrayList&lt;&gt;(jdbc.sql(NEWER).param(&quot;createdAt&quot;, OffsetDateTime.ofInstant(since.createdAt(), ZoneOffset.UTC))
+                .param(&quot;id&quot;, since.id()).param(&quot;n&quot;, limit).query(Post.class).list());
+        java.util.Collections.reverse(rows);   // newest first, like the feed
+        return rows.isEmpty() ? new Page(rows, null, new Cursor(since.createdAt(), since.id()).encode()) : new Page(rows, null);
+    }
+
+    Page page(Cursor after, int limit) {
+        // One row more than asked: if it exists, there is a next page, and no count is needed.
+        List&lt;Post&gt; rows = (after == null ? jdbc.sql(FIRST)
+                : jdbc.sql(AFTER).param(&quot;createdAt&quot;, OffsetDateTime.ofInstant(after.createdAt(), ZoneOffset.UTC)).param(&quot;id&quot;, after.id()))
+                .param(&quot;n&quot;, limit + 1).query(Post.class).list();
+        return toPage(rows, limit);
+    }
+
+    private static Page toPage(List&lt;Post&gt; rows, int limit) {
+        if (rows.size() &lt;= limit) {
+            return new Page(rows, null);
+        }
+        List&lt;Post&gt; page = rows.subList(0, limit);
+        Post last = page.getLast();
+        return new Page(page, new Cursor(last.createdAt(), last.id()).encode());
+    }
+}</code></pre></div><p class="path">challenge/solution/FeedController.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.feed;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+class FeedController {
+
+    private final Feed feed;
+
+    FeedController(Feed feed) {
+        this.feed = feed;
+    }
+
+    /** Newest first. Pass the response&#x27;s nextCursor to get the following page; null means the end. */
+    @GetMapping(&quot;/feed&quot;)
+    Feed.Page feed(@RequestParam(required = false) @Size(max = 100) String cursor,
+                   @RequestParam(defaultValue = &quot;20&quot;) @Min(1) @Max(50) int limit,
+                   @RequestParam(required = false) @Size(max = 30) String author) {
+        return feed.page(cursor == null ? null : Cursor.decode(cursor), limit, author == null ? null : author.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /** Challenge 2: pull to refresh. */
+    @GetMapping(&quot;/feed/new&quot;)
+    Feed.Page newer(@RequestParam @Size(max = 100) String cursor, @RequestParam(defaultValue = &quot;50&quot;) @Min(1) @Max(50) int limit) {
+        return feed.newer(Cursor.decode(cursor), limit);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 30 minutes</p><h2>Pull to refresh</h2><p>Every page also returns <code>topCursor</code> (its first post). <code>GET /feed/new?cursor=…</code> returns the posts made since, newest first.</p><p><b>Done when:</b> the test in <code>PullToRefreshChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>Seek the other way: <code>(created_at, id) &gt; (:t, :id)</code>, ordered ascending so the limit keeps the posts right after the cursor; then reverse.</li><li>A record can get a second constructor that fills <code>topCursor</code> from the first post.</li></ul></details><p class="path">challenge/PullToRefreshChallengeTest.java</p><pre class="code"><code class="language-java">package com.chaupal.feed;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+
+/**
+ * Challenge 2: every page also carries &quot;topCursor&quot;, the position of its first post. GET /feed/new?cursor=&lt;topCursor&gt;
+ * returns the posts made since, newest first (at most limit), with its own topCursor, for pull-to-refresh.
+ */
+class PullToRefreshChallengeTest extends ApiTest {
+
+    @AfterEach
+    void removeNewPosts() {
+        jdbc.sql(&quot;DELETE FROM posts WHERE body LIKE &#x27;Test new post%&#x27;&quot;).update();
+    }
+
+    @Test
+    void onlyThePostsMadeSince() throws Exception {
+        JsonNode page = getFeed(null, 20);
+        for (int i = 1; i &lt;= 3; i++) {
+            post(&quot;Test new post &quot; + i);
+        }
+        JsonNode fresh = json.readTree(mvc.perform(get(&quot;/feed/new&quot;).param(&quot;cursor&quot;, page.get(&quot;topCursor&quot;).asString())).andReturn().getResponse().getContentAsString());
+        assertThat(fresh.get(&quot;posts&quot;).findValuesAsString(&quot;body&quot;)).containsExactly(&quot;Test new post 3&quot;, &quot;Test new post 2&quot;, &quot;Test new post 1&quot;);
+        JsonNode again = json.readTree(mvc.perform(get(&quot;/feed/new&quot;).param(&quot;cursor&quot;, fresh.get(&quot;topCursor&quot;).asString())).andReturn().getResponse().getContentAsString());
+        assertThat(again.get(&quot;posts&quot;)).isEmpty();
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/Feed.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.feed;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+
+@Service
+class Feed {
+
+    record Post(long id, String author, String body, Instant createdAt) {
+    }
+
+    record Page(List&lt;Post&gt; posts, String nextCursor, String topCursor) {
+        Page(List&lt;Post&gt; posts, String nextCursor) {
+            this(posts, nextCursor, posts.isEmpty() ? null : new Cursor(posts.getFirst().createdAt(), posts.getFirst().id()).encode());
+        }
+    }
+
+    static final String FIRST = &quot;&quot;&quot;
+            SELECT p.id, a.handle AS author, p.body, p.created_at FROM posts p JOIN authors a ON a.id = p.author_id
+            ORDER BY p.created_at DESC, p.id DESC LIMIT :n&quot;&quot;&quot;;
+
+    /** Seek: start right after the cursor&#x27;s post, in the index&#x27;s order. No OFFSET, so no rows are read and thrown away. */
+    static final String AFTER = &quot;&quot;&quot;
+            SELECT p.id, a.handle AS author, p.body, p.created_at FROM posts p JOIN authors a ON a.id = p.author_id
+            WHERE (p.created_at, p.id) &lt; (:createdAt, :id)
+            ORDER BY p.created_at DESC, p.id DESC LIMIT :n&quot;&quot;&quot;;
+
+    /** Challenge 2: the posts after the cursor in time, oldest first, so the limit keeps the ones right after it. */
+    static final String NEWER = &quot;&quot;&quot;
+            SELECT p.id, a.handle AS author, p.body, p.created_at FROM posts p JOIN authors a ON a.id = p.author_id
+            WHERE (p.created_at, p.id) &gt; (:createdAt, :id)
+            ORDER BY p.created_at, p.id LIMIT :n&quot;&quot;&quot;;
+
+    private final JdbcClient jdbc;
+
+    Feed(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    /** Challenge 1: the same seek, for one author. */
+    Page page(Cursor after, int limit, String author) {
+        if (author == null) {
+            return page(after, limit);
+        }
+        Long authorId = jdbc.sql(&quot;SELECT id FROM authors WHERE handle = ?&quot;).param(author).query(Long.class).optional()
+                .orElseThrow(() -&gt; new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;No author &quot; + author));
+        String sql = (after == null ? FIRST : AFTER).replace(&quot;ORDER BY&quot;, (after == null ? &quot;WHERE&quot; : &quot;AND&quot;) + &quot; p.author_id = :author ORDER BY&quot;);
+        var spec = jdbc.sql(sql).param(&quot;author&quot;, authorId).param(&quot;n&quot;, limit + 1);
+        if (after != null) {
+            spec = spec.param(&quot;createdAt&quot;, OffsetDateTime.ofInstant(after.createdAt(), ZoneOffset.UTC)).param(&quot;id&quot;, after.id());
+        }
+        return toPage(spec.query(Post.class).list(), limit);
+    }
+
+    /** Challenge 2. */
+    Page newer(Cursor since, int limit) {
+        List&lt;Post&gt; rows = new java.util.ArrayList&lt;&gt;(jdbc.sql(NEWER).param(&quot;createdAt&quot;, OffsetDateTime.ofInstant(since.createdAt(), ZoneOffset.UTC))
+                .param(&quot;id&quot;, since.id()).param(&quot;n&quot;, limit).query(Post.class).list());
+        java.util.Collections.reverse(rows);   // newest first, like the feed
+        return rows.isEmpty() ? new Page(rows, null, new Cursor(since.createdAt(), since.id()).encode()) : new Page(rows, null);
+    }
+
+    Page page(Cursor after, int limit) {
+        // One row more than asked: if it exists, there is a next page, and no count is needed.
+        List&lt;Post&gt; rows = (after == null ? jdbc.sql(FIRST)
+                : jdbc.sql(AFTER).param(&quot;createdAt&quot;, OffsetDateTime.ofInstant(after.createdAt(), ZoneOffset.UTC)).param(&quot;id&quot;, after.id()))
+                .param(&quot;n&quot;, limit + 1).query(Post.class).list();
+        return toPage(rows, limit);
+    }
+
+    private static Page toPage(List&lt;Post&gt; rows, int limit) {
+        if (rows.size() &lt;= limit) {
+            return new Page(rows, null);
+        }
+        List&lt;Post&gt; page = rows.subList(0, limit);
+        Post last = page.getLast();
+        return new Page(page, new Cursor(last.createdAt(), last.id()).encode());
+    }
+}</code></pre></div><p class="path">challenge/solution/FeedController.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.feed;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+class FeedController {
+
+    private final Feed feed;
+
+    FeedController(Feed feed) {
+        this.feed = feed;
+    }
+
+    /** Newest first. Pass the response&#x27;s nextCursor to get the following page; null means the end. */
+    @GetMapping(&quot;/feed&quot;)
+    Feed.Page feed(@RequestParam(required = false) @Size(max = 100) String cursor,
+                   @RequestParam(defaultValue = &quot;20&quot;) @Min(1) @Max(50) int limit,
+                   @RequestParam(required = false) @Size(max = 30) String author) {
+        return feed.page(cursor == null ? null : Cursor.decode(cursor), limit, author == null ? null : author.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /** Challenge 2: pull to refresh. */
+    @GetMapping(&quot;/feed/new&quot;)
+    Feed.Page newer(@RequestParam @Size(max = 100) String cursor, @RequestParam(defaultValue = &quot;50&quot;) @Min(1) @Max(50) int limit) {
+        return feed.newer(Cursor.decode(cursor), limit);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Should the cursor be signed?</h2>
+<p>Anyone can decode the cursor and write their own. Here that only lets them start at any point in a public feed. When would it matter: a feed of private posts, a cursor that also carries filters or a user id, a cursor that expires? Compare an HMAC-signed cursor, an encrypted one, and a server-side cursor id stored for a few minutes.</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, indexes</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: the cost of a deep offset, repeats under new posts, and a time-only cursor.</li>
+<li>Pick the order <code>(created_at, id)</code> and an index for it.</li>
+<li>Seek with a row-value comparison; fetch one extra row.</li>
+<li>Encode the position in an opaque, versioned cursor, parsed strictly.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Keyset on (created_at, id), opaque cursor</td><td>No page numbers, no jumping.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td><code>OFFSET</code></td><td>Slower each page; repeats and gaps under inserts.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Cursor on time only</td><td>Skips posts sharing a timestamp.</td><td><span class="pill bad">The trap, version 2</span></td></tr><tr><td>Cursor on id only</td><td>Correct only if ids follow time exactly, which imports and clock skew break.</td><td><span class="pill warn">Fragile</span></td></tr><tr><td>Two conditions instead of a row value: <code>created_at &lt; t OR (created_at = t AND id &lt; i)</code></td><td>Same result; easier to get wrong; may plan worse.</td><td><span class="pill warn">Works</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Object</th><th>What</th><th>Why</th></tr></thead><tbody><tr><td><code>posts_feed</code></td><td>B-tree <code>(created_at, id)</code></td><td>The feed order, read backwards; the seek starts inside it.</td></tr><tr><td><code>created_at</code></td><td><code>timestamptz</code>, default <code>now()</code></td><td>The database's clock, to the microsecond.</td></tr><tr><td><code>posts_author_fk</code>, <code>posts_body_not_blank</code>, <code>authors_handle_unique</code>, <code>authors_handle_shape</code></td><td>Constraints</td><td>No orphan or empty posts.</td></tr></tbody></table></div>
+<pre class="code"><code class="language-sql">CREATE TABLE authors (
+    id     BIGINT      PRIMARY KEY,
+    handle VARCHAR(30) NOT NULL CONSTRAINT authors_handle_unique UNIQUE
+                               CONSTRAINT authors_handle_shape CHECK (handle ~ &#x27;^[a-z0-9_]{3,30}$&#x27;)
+);
+
+CREATE TABLE posts (
+    id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    author_id  BIGINT        NOT NULL CONSTRAINT posts_author_fk REFERENCES authors (id),
+    body       VARCHAR(500)  NOT NULL CONSTRAINT posts_body_not_blank CHECK (btrim(body) &lt;&gt; &#x27;&#x27;),
+    created_at TIMESTAMPTZ   NOT NULL DEFAULT now()
+);
+-- The feed&#x27;s order, newest first: read backwards, (created_at, id) finds &quot;the posts after this one&quot; directly.
+CREATE INDEX posts_feed ON posts (created_at, id);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Deleted posts</dt><dd>A cursor still works if its post is deleted: it is a position, not a lookup.</dd>
+<dt>Edits</dt><dd>Ordering by a column that changes ("updated at") moves posts between pages; order by something that never changes.</dd>
+<dt>Clocks</dt><dd>With several app servers, use the database's <code>now()</code> (as here), not each server's clock.</dd>
+<dt>Caching</dt><dd>The first page changes constantly; later pages by cursor barely do, and cache well.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>Why does OFFSET get slower?</summary><p>The database must produce and discard every skipped row in order; page N costs N × page size rows.</p></details><details class="qa"><summary>What is keyset pagination?</summary><p>The next page is &quot;rows after this key&quot; in a fixed order, answered by an index seek; its cost does not grow with depth.</p></details><details class="qa"><summary>Why include the id in the cursor?</summary><p>To break ties: several rows can share a timestamp, and the cursor must name exactly one position.</p></details><details class="qa"><summary>Why make the cursor opaque?</summary><p>Clients cannot depend on its contents, so the server can change them; it also stops clients building offsets.</p></details><details class="qa"><summary>What does keyset pagination give up?</summary><p>Jumping to page N and showing &quot;page 3 of 100&quot;; it suits feeds and exports, not numbered admin lists.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 11 tests pass.</td><td>You read both saved plans.</td></tr><tr><td>Keyset</td><td>Row-value seek and a matching index.</td><td>Why microseconds matter.</td></tr><tr><td>Cursors</td><td>Opaque, with a tie-breaker.</td><td>When to sign them.</td></tr><tr><td>Trade-offs</td><td>Knows the cost of OFFSET.</td><td>Knows what keyset cannot do.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This station has no flawed version to review. Use this checklist on any feed or export:</p>
+<ul class="rules">
+<li>Does any page use <code>OFFSET</code> on a list that grows or changes?</li>
+<li>Does the cursor hold every column of the order, including a unique one?</li>
+<li>Does an index match the order, in the same column order?</li>
+<li>Is the cursor parsed strictly, and does a bad one give a <code>400</code>?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
