@@ -1,0 +1,2239 @@
+<title>Station 068 · Flexible product attributes with jsonb</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 068</span>
+    <h1>Flexible product attributes with jsonb</h1>
+    <p class="scenario">Phones need RAM and storage, shoes need size and colour; the products table has grown to 140 nullable columns.</p>
+    <p class="sim"><b>Simulation</b><span>Sellers, categories and products are demo data (60,006 products), not Kartwala's. Nothing is sold.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>E-commerce</li>
+      <li><b>Types</b>Database</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>043 Doctor directory with JPA</p>
+      <p><span class="eyebrow">Builds toward</span><br>070 Product catalog on MongoDB</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · JdbcClient · PostgreSQL 17 jsonb · containment (@>) · GIN jsonb_path_ops · rules as data · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>140 columns</strong><p>Phones need RAM and storage, shoes need size and colour, sarees need fabric. Each new category added columns that are empty for every other product.</p></li><li><strong>Everything in JSON</strong><p>The first fix put the whole product in one jsonb column. A seller typed "free" as the price, and every customer's price filter failed. Duplicate SKUs and unknown sellers got in too.</p></li><li><strong>The fix</strong><p>Columns for what every product has and the rules it needs; jsonb only for what differs per category, checked against that category's rules.</p></li></ol>
+<p class="lesson">Flexible data still needs rules. Keep the rules close to the data.</p>
+
+<h2>What are we building?</h2>
+<p><code>POST /products</code> adds a product with its category's attributes, checked; <code>GET /products?attr.ram=8GB</code> finds products by any mix of attributes, through an index.</p>
+
+<h2>An everyday analogy</h2>
+<p>A registration form: printed boxes everyone fills (name, price, seller), and a page of extra questions that depends on what you register: a phone asks for RAM, a shoe for size. The clerk checks the extra page against that type's list.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Check the printed boxes</strong>: SKU, name, price range, seller.</li>
+<li><strong>Load the category's rules</strong> and check the attributes: known names, allowed values, nothing required missing.</li>
+<li><strong>Store</strong> the fixed fields in columns, the attributes as one jsonb object.</li>
+<li><strong>Search</strong> with "the attributes contain these pairs", answered by the GIN index.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: should "brand" be a column or an attribute?</summary><p>If every product has a brand, people filter and sort by it, and brands are their own table you join to, it is a column with a foreign key. If only some categories have it and it is just shown, an attribute is fine. The test is the one in this station: does it need a constraint or a join?</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No admin screen for rules.</strong> Rules are rows; Practice 1 reads them.</li>
+<li><strong>No numeric ranges on attributes.</strong> Values are text; "RAM at least 8GB" needs typed attributes.</li>
+<li><strong>No document database.</strong> That is station 070.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Attribute</strong></td><td>A property that only some products have.</td><td>RAM for a phone, size for a shoe.</td><td><code>attributes</code></td></tr><tr><td><strong>jsonb</strong></td><td>PostgreSQL's binary JSON type: stored parsed, queryable, indexable.</td><td>A labelled box of small notes.</td><td>the <code>attributes</code> column</td></tr><tr><td><strong>Containment</strong></td><td>"The document includes all these key-value pairs."</td><td>"Has RAM 8GB and storage 256GB."</td><td><code>attributes @&gt; '{…}'</code></td></tr><tr><td><strong>GIN index</strong></td><td>An index of the keys and values inside each document.</td><td>A card index of every note in every box.</td><td><code>products_attributes</code></td></tr><tr><td><strong>Rules as data</strong></td><td>The allowed attributes of a category live in a table, not in code.</td><td>A form template per product type.</td><td><code>attribute_definitions</code></td></tr><tr><td><strong>Column</strong></td><td>A field every row has, with a type, a check and joins.</td><td>The printed boxes on every form.</td><td><code>sku</code>, <code>price_paise</code>, <code>seller_id</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Kartwala</strong> (a fictional marketplace) has a products table with 140 nullable columns, one set per category.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo data: phones need ram and storage (colour optional); shoes need size and colour (material optional).</p>
+<ol class="gwt">
+<li><b>Given</b> a phone with ram, storage and colour, <b>then</b> <code>201</code> with the attributes stored.</li>
+<li><b>Given</b> a shoe of size 13 with ram and no colour, <b>then</b> <code>422</code> naming each problem.</li>
+<li><b>Given</b> an unknown category or seller, <b>then</b> <code>422</code>; a duplicate SKU, <code>409</code>.</li>
+<li><b>Given</b> <code>attr.ram=8GB&amp;attr.storage=256GB</code>, <b>then</b> only products with both.</li>
+<li><b>Given</b> an attribute no category has (or not this category), <b>then</b> <code>400</code>.</li>
+<li><b>Given</b> any search, <b>then</b> the GIN index is used.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>Price, seller, category and SKU are columns with constraints.</li>
+<li>Attributes are a jsonb <em>object</em>, checked against the category's rules before saving.</li>
+<li>A new category or attribute is a row in <code>attribute_definitions</code>, not a release.</li>
+<li>Searches use containment, which the GIN index answers.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Store and query jsonb from Java.</li>
+<li>Index jsonb with GIN and know which operators use it.</li>
+<li>Validate per-category attributes from data.</li>
+<li>Decide what is a column and what is an attribute.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/products</code></td><td><code>{sku, name, category, sellerId, pricePaise, attributes: {name: value}}</code>; <code>201</code> with the product.</td></tr><tr><td><code>GET</code></td><td><code>/products?category=…&amp;attr.&lt;name&gt;=&lt;value&gt;</code></td><td>Products whose attributes include every pair; at most 50.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span> / <span class="pill ok">201</span></td><td>Results / created</td></tr><tr><td><span class="pill warn">400</span></td><td>A malformed body (fractional price, empty value, a bad attribute name, attributes not an object); a search with no or more than 10 filters, an unknown attribute or category, or another parameter</td></tr><tr><td><span class="pill warn">409</span></td><td>The SKU exists</td></tr><tr><td><span class="pill warn">422</span></td><td>Attributes that break the category's rules; an unknown category or seller</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 16 Oct 2026. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: a phone</h3><p><b>Why:</b> the attributes fit the phone rules; the SKU is upper-cased.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /products HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;sku&quot;: &quot;ph-pixel-12-256&quot;,
+  &quot;name&quot;: &quot;Pixel Pro&quot;,
+  &quot;category&quot;: &quot;phones&quot;,
+  &quot;sellerId&quot;: 7,
+  &quot;pricePaise&quot;: 5999900,
+  &quot;attributes&quot;: {
+    &quot;ram&quot;: &quot;12GB&quot;,
+    &quot;storage&quot;: &quot;256GB&quot;,
+    &quot;colour&quot;: &quot;Obsidian&quot;
+  }
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /products/60007
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 60007,
+  &quot;sku&quot;: &quot;PH-PIXEL-12-256&quot;,
+  &quot;name&quot;: &quot;Pixel Pro&quot;,
+  &quot;category&quot;: &quot;phones&quot;,
+  &quot;sellerId&quot;: 7,
+  &quot;pricePaise&quot;: 5999900,
+  &quot;attributes&quot;: {
+    &quot;colour&quot;: &quot;Obsidian&quot;,
+    &quot;ram&quot;: &quot;12GB&quot;,
+    &quot;storage&quot;: &quot;256GB&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 2: a shoe that breaks three rules</h3><p><b>Why:</b> every problem at once, by attribute.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /products HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;sku&quot;: &quot;sh-odd-13&quot;,
+  &quot;name&quot;: &quot;Odd Shoe&quot;,
+  &quot;category&quot;: &quot;shoes&quot;,
+  &quot;sellerId&quot;: 8,
+  &quot;pricePaise&quot;: 99900,
+  &quot;attributes&quot;: {
+    &quot;size&quot;: &quot;13&quot;,
+    &quot;ram&quot;: &quot;8GB&quot;
+  }
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;These attributes do not fit a shoes product&quot;,
+  &quot;instance&quot;: &quot;/products&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Unprocessable Content&quot;,
+  &quot;attributes&quot;: {
+    &quot;colour&quot;: &quot;is required&quot;,
+    &quot;ram&quot;: &quot;not an attribute of this category; known: [colour, material, size]&quot;,
+    &quot;size&quot;: &quot;must be one of [6, 7, 8, 9, 10, 11]&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 3: 8GB and 256GB phones</h3><p><b>Why:</b> both pairs must be contained.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /products?category=phones&amp;attr.ram=8GB&amp;attr.storage=256GB HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 7361
+
+[
+  {
+    &quot;id&quot;: 2,
+    &quot;sku&quot;: &quot;PH-NOVA-8-256&quot;,
+    &quot;name&quot;: &quot;Nova 5G&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 2199900,
+    &quot;attributes&quot;: {
+      &quot;colour&quot;: &quot;Blue&quot;,
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 8,
+    &quot;sku&quot;: &quot;GEN-2&quot;,
+    &quot;name&quot;: &quot;Generated 2&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100002,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 14,
+    &quot;sku&quot;: &quot;GEN-8&quot;,
+    &quot;name&quot;: &quot;Generated 8&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100008,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 20,
+    &quot;sku&quot;: &quot;GEN-14&quot;,
+    &quot;name&quot;: &quot;Generated 14&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100014,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 26,
+    &quot;sku&quot;: &quot;GEN-20&quot;,
+    &quot;name&quot;: &quot;Generated 20&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100020,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 32,
+    &quot;sku&quot;: &quot;GEN-26&quot;,
+    &quot;name&quot;: &quot;Generated 26&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100026,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 38,
+    &quot;sku&quot;: &quot;GEN-32&quot;,
+    &quot;name&quot;: &quot;Generated 32&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100032,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 44,
+    &quot;sku&quot;: &quot;GEN-38&quot;,
+    &quot;name&quot;: &quot;Generated 38&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100038,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 50,
+    &quot;sku&quot;: &quot;GEN-44&quot;,
+    &quot;name&quot;: &quot;Generated 44&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100044,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 56,
+    &quot;sku&quot;: &quot;GEN-50&quot;,
+    &quot;name&quot;: &quot;Generated 50&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100050,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 62,
+    &quot;sku&quot;: &quot;GEN-56&quot;,
+    &quot;name&quot;: &quot;Generated 56&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100056,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 68,
+    &quot;sku&quot;: &quot;GEN-62&quot;,
+    &quot;name&quot;: &quot;Generated 62&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100062,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 74,
+    &quot;sku&quot;: &quot;GEN-68&quot;,
+    &quot;name&quot;: &quot;Generated 68&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100068,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 80,
+    &quot;sku&quot;: &quot;GEN-74&quot;,
+    &quot;name&quot;: &quot;Generated 74&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100074,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 86,
+    &quot;sku&quot;: &quot;GEN-80&quot;,
+    &quot;name&quot;: &quot;Generated 80&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100080,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 92,
+    &quot;sku&quot;: &quot;GEN-86&quot;,
+    &quot;name&quot;: &quot;Generated 86&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100086,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 98,
+    &quot;sku&quot;: &quot;GEN-92&quot;,
+    &quot;name&quot;: &quot;Generated 92&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100092,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 104,
+    &quot;sku&quot;: &quot;GEN-98&quot;,
+    &quot;name&quot;: &quot;Generated 98&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100098,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 110,
+    &quot;sku&quot;: &quot;GEN-104&quot;,
+    &quot;name&quot;: &quot;Generated 104&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100104,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 116,
+    &quot;sku&quot;: &quot;GEN-110&quot;,
+    &quot;name&quot;: &quot;Generated 110&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100110,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 122,
+    &quot;sku&quot;: &quot;GEN-116&quot;,
+    &quot;name&quot;: &quot;Generated 116&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100116,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 128,
+    &quot;sku&quot;: &quot;GEN-122&quot;,
+    &quot;name&quot;: &quot;Generated 122&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100122,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 134,
+    &quot;sku&quot;: &quot;GEN-128&quot;,
+    &quot;name&quot;: &quot;Generated 128&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100128,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 140,
+    &quot;sku&quot;: &quot;GEN-134&quot;,
+    &quot;name&quot;: &quot;Generated 134&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100134,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 146,
+    &quot;sku&quot;: &quot;GEN-140&quot;,
+    &quot;name&quot;: &quot;Generated 140&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100140,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 152,
+    &quot;sku&quot;: &quot;GEN-146&quot;,
+    &quot;name&quot;: &quot;Generated 146&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100146,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 158,
+    &quot;sku&quot;: &quot;GEN-152&quot;,
+    &quot;name&quot;: &quot;Generated 152&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100152,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 164,
+    &quot;sku&quot;: &quot;GEN-158&quot;,
+    &quot;name&quot;: &quot;Generated 158&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100158,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 170,
+    &quot;sku&quot;: &quot;GEN-164&quot;,
+    &quot;name&quot;: &quot;Generated 164&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100164,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 176,
+    &quot;sku&quot;: &quot;GEN-170&quot;,
+    &quot;name&quot;: &quot;Generated 170&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100170,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 182,
+    &quot;sku&quot;: &quot;GEN-176&quot;,
+    &quot;name&quot;: &quot;Generated 176&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100176,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 188,
+    &quot;sku&quot;: &quot;GEN-182&quot;,
+    &quot;name&quot;: &quot;Generated 182&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100182,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 194,
+    &quot;sku&quot;: &quot;GEN-188&quot;,
+    &quot;name&quot;: &quot;Generated 188&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100188,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 200,
+    &quot;sku&quot;: &quot;GEN-194&quot;,
+    &quot;name&quot;: &quot;Generated 194&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100194,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 206,
+    &quot;sku&quot;: &quot;GEN-200&quot;,
+    &quot;name&quot;: &quot;Generated 200&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100200,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 212,
+    &quot;sku&quot;: &quot;GEN-206&quot;,
+    &quot;name&quot;: &quot;Generated 206&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100206,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 218,
+    &quot;sku&quot;: &quot;GEN-212&quot;,
+    &quot;name&quot;: &quot;Generated 212&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100212,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 224,
+    &quot;sku&quot;: &quot;GEN-218&quot;,
+    &quot;name&quot;: &quot;Generated 218&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100218,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 230,
+    &quot;sku&quot;: &quot;GEN-224&quot;,
+    &quot;name&quot;: &quot;Generated 224&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100224,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 236,
+    &quot;sku&quot;: &quot;GEN-230&quot;,
+    &quot;name&quot;: &quot;Generated 230&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100230,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 242,
+    &quot;sku&quot;: &quot;GEN-236&quot;,
+    &quot;name&quot;: &quot;Generated 236&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100236,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 248,
+    &quot;sku&quot;: &quot;GEN-242&quot;,
+    &quot;name&quot;: &quot;Generated 242&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100242,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 254,
+    &quot;sku&quot;: &quot;GEN-248&quot;,
+    &quot;name&quot;: &quot;Generated 248&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100248,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 260,
+    &quot;sku&quot;: &quot;GEN-254&quot;,
+    &quot;name&quot;: &quot;Generated 254&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100254,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 266,
+    &quot;sku&quot;: &quot;GEN-260&quot;,
+    &quot;name&quot;: &quot;Generated 260&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100260,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 272,
+    &quot;sku&quot;: &quot;GEN-266&quot;,
+    &quot;name&quot;: &quot;Generated 266&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100266,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 278,
+    &quot;sku&quot;: &quot;GEN-272&quot;,
+    &quot;name&quot;: &quot;Generated 272&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100272,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 284,
+    &quot;sku&quot;: &quot;GEN-278&quot;,
+    &quot;name&quot;: &quot;Generated 278&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100278,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 290,
+    &quot;sku&quot;: &quot;GEN-284&quot;,
+    &quot;name&quot;: &quot;Generated 284&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100284,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  },
+  {
+    &quot;id&quot;: 296,
+    &quot;sku&quot;: &quot;GEN-290&quot;,
+    &quot;name&quot;: &quot;Generated 290&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 100290,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;
+    }
+  }
+]</code></pre></div></div></section><section class="example"><h3>Case 4: size 9, leather, any category</h3><p><b>Why:</b> attributes search across categories that share names.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /products?attr.size=9&amp;attr.material=leather HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 171
+
+[
+  {
+    &quot;id&quot;: 5,
+    &quot;sku&quot;: &quot;SH-OXF-9-BRN&quot;,
+    &quot;name&quot;: &quot;Oxford Classic&quot;,
+    &quot;category&quot;: &quot;shoes&quot;,
+    &quot;sellerId&quot;: 8,
+    &quot;pricePaise&quot;: 599900,
+    &quot;attributes&quot;: {
+      &quot;colour&quot;: &quot;Brown&quot;,
+      &quot;material&quot;: &quot;leather&quot;,
+      &quot;size&quot;: &quot;9&quot;
+    }
+  }
+]</code></pre></div></div></section><section class="example"><h3>Case 5: shoes with 8GB RAM</h3><p><b>Why:</b> <code>400</code>: shoes have no ram attribute.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /products?category=shoes&amp;attr.ram=8GB HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No attribute ram for shoes&quot;,
+  &quot;instance&quot;: &quot;/products&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>A valid phone</td><td><code>201</code>, stored as sent</td><td><code>aPhoneWithItsOwnAttributesIsCreated</code></td></tr><tr><td>Unknown, not-allowed and missing attributes</td><td><code>422</code> listing each</td><td><code>attributesAreCheckedAgainstTheCategorysRules</code></td></tr><tr><td>Unknown category or seller; duplicate SKU</td><td><code>422</code>; <code>409</code></td><td><code>unknownCategorySellerOrADuplicateSku</code></td></tr><tr><td>Fractional price, empty value, bad name, an array</td><td><code>400</code></td><td><code>malformedBodiesAre400</code></td></tr><tr><td>Two filters; a cross-category filter; no match</td><td>Containment</td><td><code>searchByAnyMixOfAttributes</code></td></tr><tr><td>A filter no category has</td><td><code>400</code></td><td><code>searchingForSomethingNoCategoryHasIs400</code></td></tr><tr><td>An array as attributes; a bad rule; a half upload</td><td>Refused; rolled back</td><td><code>ProductDatabaseTest</code></td></tr><tr><td>Duplicate keys in the JSON</td><td>The last one wins</td><td><code>jsonbStoresTheDocumentNormalised</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Putting everything in jsonb, including fields that need constraints and joins.</p>
+<p>The test builds the old table: one <code>data</code> column per product, price and seller inside. Then:</p>
+<ul>
+<li><strong>Anything gets in.</strong> A second <code>PH-NOVA-8-128</code>, a price of <code>"free"</code>, seller 999, RAM <code>"lots"</code>: all accepted. There is nothing to attach a constraint to.</li>
+<li><strong>One bad row breaks everyone.</strong> <code>(data->>'price')::int &lt; 200000</code> worked, until the "free" row: then it fails for every customer with "invalid input syntax for type integer: "free"".</li>
+<li><strong>The real table refuses the same rows</strong>: <code>products_sku_unique</code>, <code>products_price_range</code>, <code>products_seller_fk</code>.</li>
+<li><strong>The index only helps the right operator.</strong> <code>attributes @&gt; '{"ram": "12GB"}'</code> uses the GIN index; <code>attributes->>'ram' = '12GB'</code> reads every row.</li>
+</ul>
+<p>While building, each fix was undone once: without the allowed-values check, the required check, the search's name check, the GIN index, or the "must be an object" CHECK, 1 test turned red each.</p>
+</div>
+<pre class="code"><code class="language-text">                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Bitmap Heap Scan on products (actual rows=1 loops=1)
+   Recheck Cond: (attributes @&gt; &#x27;{&quot;ram&quot;: &quot;12GB&quot;}&#x27;::jsonb)
+   Heap Blocks: exact=1
+   -&gt;  Bitmap Index Scan on products_attributes (actual rows=1 loops=1)
+         Index Cond: (attributes @&gt; &#x27;{&quot;ram&quot;: &quot;12GB&quot;}&#x27;::jsonb)
+(5 rows)</code></pre><pre class="code"><code class="language-text">                       QUERY PLAN                        
+---------------------------------------------------------
+ Seq Scan on products (actual rows=1 loops=1)
+   Filter: ((attributes -&gt;&gt; &#x27;ram&#x27;::text) = &#x27;12GB&#x27;::text)
+   Rows Removed by Filter: 60006
+(3 rows)</code></pre><pre class="code"><code class="language-java">package com.kartwala.attributes;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessException;
+
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * Written first. The old table kept the whole product in one jsonb column, price and seller included, on a copy of
+ * the demo catalog. Then the same mistakes against the real table.
+ */
+class EverythingInJsonbTrapTest extends ApiTest {
+
+    @BeforeEach
+    void oldTable() {
+        jdbc.sql(&quot;CREATE TABLE old_products (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, data JSONB NOT NULL)&quot;).update();
+        jdbc.sql(&quot;&quot;&quot;
+                INSERT INTO old_products (data) SELECT jsonb_build_object(&#x27;sku&#x27;, sku, &#x27;name&#x27;, name, &#x27;category&#x27;, category_code,
+                    &#x27;seller&#x27;, seller_id, &#x27;price&#x27;, price_paise) || attributes FROM products&quot;&quot;&quot;).update();
+    }
+
+    @AfterEach
+    void dropOldTable() {
+        jdbc.sql(&quot;DROP TABLE old_products&quot;).update();
+    }
+
+    @Test
+    void anythingGetsIntoTheOldTable() {
+        jdbc.sql(&quot;INSERT INTO old_products (data) VALUES (&#x27;{\&quot;sku\&quot;: \&quot;PH-NOVA-8-128\&quot;, \&quot;price\&quot;: \&quot;free\&quot;, \&quot;seller\&quot;: 999, \&quot;ram\&quot;: \&quot;lots\&quot;}&#x27;)&quot;).update();
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM old_products WHERE data-&gt;&gt;&#x27;sku&#x27; = &#x27;PH-NOVA-8-128&#x27;&quot;).query(Long.class).single()).isEqualTo(2);   // a duplicate SKU
+    }
+
+    @Test
+    void oneBadPriceBreaksEveryPriceQuery() {
+        String under2000 = &quot;SELECT count(*) FROM old_products WHERE (data-&gt;&gt;&#x27;price&#x27;)::int &lt; 200000&quot;;
+        assertThat(jdbc.sql(under2000).query(Long.class).single()).isPositive();
+        jdbc.sql(&quot;INSERT INTO old_products (data) VALUES (&#x27;{\&quot;sku\&quot;: \&quot;T-ODD\&quot;, \&quot;price\&quot;: \&quot;free\&quot;}&#x27;)&quot;).update();
+        assertThatThrownBy(() -&gt; jdbc.sql(under2000).query(Long.class).single()).rootCause()
+                .hasMessageContaining(&quot;invalid input syntax for type integer: \&quot;free\&quot;&quot;);   // every customer&#x27;s price filter now fails
+    }
+
+    @Test
+    void theRealTableRefusesTheSameRows() {
+        String insert = &quot;INSERT INTO products (sku, name, category_code, seller_id, price_paise, attributes) VALUES (?, &#x27;X&#x27;, &#x27;phones&#x27;, ?, ?, &#x27;{}&#x27;)&quot;;
+        assertThatThrownBy(() -&gt; jdbc.sql(insert).params(&quot;PH-NOVA-8-128&quot;, 7, 100000).update()).isInstanceOf(DataAccessException.class).hasMessageContaining(&quot;products_sku_unique&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(insert).params(&quot;T-FREE&quot;, 7, 0).update()).hasMessageContaining(&quot;products_price_range&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(insert).params(&quot;T-NOBODY&quot;, 999, 100000).update()).hasMessageContaining(&quot;products_seller_fk&quot;);
+    }
+
+    @Test
+    void containmentUsesTheGinIndexTheArrowOperatorDoesNot() {
+        assertThat(indexesUsed(&quot;SELECT id FROM products WHERE attributes @&gt; CAST(:wanted AS jsonb)&quot;, Map.of(&quot;wanted&quot;, &quot;{\&quot;ram\&quot;: \&quot;12GB\&quot;}&quot;)))
+                .containsExactly(&quot;products_attributes&quot;);
+        assertThat(indexesUsed(&quot;SELECT id FROM products WHERE attributes-&gt;&gt;&#x27;ram&#x27; = :ram&quot;, Map.of(&quot;ram&quot;, &quot;12GB&quot;))).isEmpty();
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 13 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>See how jsonb stores what you send:</p>
+<pre class="code"><code class="language-sql">docker compose exec postgres psql -U kartwala -d kartwala
+SELECT &#x27;{&quot;size&quot;: &quot;8&quot;, &quot;colour&quot;: &quot;Red&quot;, &quot;colour&quot;: &quot;Blue&quot;}&#x27;::jsonb;    -- keys reordered, the last duplicate wins
+SELECT &#x27;{&quot;ram&quot;: &quot;8GB&quot;, &quot;storage&quot;: &quot;128GB&quot;}&#x27;::jsonb @&gt; &#x27;{&quot;ram&quot;: &quot;8GB&quot;}&#x27;;
+SELECT attributes-&gt;&gt;&#x27;ram&#x27;, count(*) FROM products WHERE category_code = &#x27;phones&#x27; GROUP BY 1;</code></pre>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>Not allowed to mix named and traditional ? placeholders</code></td><td>The jsonb operators <code>?</code>, <code>?|</code>, <code>?&amp;</code> look like JDBC placeholders.</td><td>Use <code>jsonb_exists(…)</code> or <code>-&gt;&gt; … IS NOT NULL</code>. Found while building this station.</td></tr><tr><td><code>column "attributes" is of type jsonb but expression is of type character varying</code></td><td>A JSON string bound as text.</td><td><code>CAST(? AS jsonb)</code>, as here.</td></tr><tr><td>A search that ignores the GIN index</td><td><code>-&gt;&gt;</code> comparisons; <code>jsonb_path_ops</code> only supports <code>@&gt;</code> (and jsonpath).</td><td>Use containment, or an expression index for one hot key.</td></tr><tr><td><code>invalid input syntax for type integer</code></td><td>A cast of a jsonb value that is not a number.</td><td>Fields you compute with belong in typed columns.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/068-flexible-product-attributes-with-jsonb/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/kartwala/attributes/
+│   ├── ProductController.java   ├── ProductCatalog.java   ├── AttributeRules.java   └── AttributesApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__products.sql, V2__demo_products.sql
+├── src/test/java/com/kartwala/attributes/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the database behind it.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">ProductController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">ProductCatalog.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">AttributeRules.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">V1__products.sql</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">V2__demo_products.sql</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">compose.yaml</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">AttributesApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/kartwala/attributes/ProductController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Validates the body; turns <code>attr.*</code> parameters into the wanted pairs.</dd><dt>Why</dt><dd>Every value is checked for shape and size before the database.</dd><dt>Without it</dt><dd>A 10 MB attribute value, or an attribute name with SQL in it.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.attributes;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.net.URI;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
+
+@RestController
+class ProductController {
+
+    /** Demo limits: up to 20 attributes, values up to 40 characters, prices Rs 1 to Rs 1 lakh. */
+    record NewProduct(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,30}&quot;) String sku,
+                      @NotBlank @Size(max = 120) String name,
+                      @NotNull @Pattern(regexp = &quot;[a-z]{2,30}&quot;) String category,
+                      @NotNull Long sellerId,
+                      @NotNull @Min(100) @Max(10_000_000) Integer pricePaise,
+                      @NotNull @Size(max = 20) Map&lt;@Pattern(regexp = &quot;[a-z][a-z_]{1,29}&quot;) String, @NotBlank @Size(max = 40) String&gt; attributes) {
+    }
+
+    private final ProductCatalog catalog;
+
+    ProductController(ProductCatalog catalog) {
+        this.catalog = catalog;
+    }
+
+    @PostMapping(&quot;/products&quot;)
+    ResponseEntity&lt;ProductCatalog.Product&gt; create(@Valid @RequestBody NewProduct body) {
+        ProductCatalog.Product created = catalog.create(new ProductCatalog.NewProduct(body.sku().toUpperCase(Locale.ROOT), body.name().strip(),
+                body.category(), body.sellerId(), body.pricePaise(), body.attributes()));
+        return ResponseEntity.created(URI.create(&quot;/products/&quot; + created.id())).body(created);
+    }
+
+    /** ?category=phones&amp;attr.ram=8GB&amp;attr.storage=128GB: every attr.* pair must match. */
+    @GetMapping(&quot;/products&quot;)
+    List&lt;ProductCatalog.Product&gt; search(@RequestParam Map&lt;String, String&gt; params) {
+        Map&lt;String, String&gt; wanted = new TreeMap&lt;&gt;();
+        params.forEach((key, value) -&gt; {
+            if (key.startsWith(&quot;attr.&quot;)) {
+                wanted.put(key.substring(5), value);
+            } else if (!key.equals(&quot;category&quot;)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Unknown parameter &quot; + key);
+            }
+        });
+        if (wanted.isEmpty() || wanted.size() &gt; 10) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Give 1 to 10 attr.&lt;name&gt;=&lt;value&gt; filters&quot;);
+        }
+        return catalog.search(params.get(&quot;category&quot;), wanted);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/kartwala/attributes/ProductCatalog.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Checks attributes against the rules, inserts with <code>CAST(? AS jsonb)</code>, searches with <code>@&gt;</code>.</dd><dt>Why</dt><dd>One containment query for any number of filters, through one index.</dd><dt>Without it</dt><dd>A <code>-&gt;&gt;</code> comparison per filter, and no index.</dd></dl><ul><li>The wanted pairs are written as a JSON object by Jackson and bound as one parameter: no JSON is built by string concatenation.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.attributes;
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.server.ResponseStatusException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
+@Service
+class ProductCatalog {
+
+    record NewProduct(String sku, String name, String category, long sellerId, int pricePaise, Map&lt;String, String&gt; attributes) {
+    }
+
+    record Product(long id, String sku, String name, String category, long sellerId, int pricePaise, Map&lt;String, String&gt; attributes) {
+    }
+
+    private static final TypeReference&lt;TreeMap&lt;String, String&gt;&gt; MAP = new TypeReference&lt;&gt;() {
+    };
+    private static final String COLUMNS = &quot;id, sku, name, category_code, seller_id, price_paise, attributes::text AS attributes&quot;;
+
+    private final JdbcClient jdbc;
+    private final AttributeRules rules;
+    private final JsonMapper json;
+
+    ProductCatalog(JdbcClient jdbc, AttributeRules rules, JsonMapper json) {
+        this.jdbc = jdbc;
+        this.rules = rules;
+        this.json = json;
+    }
+
+    Product create(NewProduct p) {
+        Map&lt;String, AttributeRules.Rule&gt; categoryRules = rules.of(p.category());
+        if (categoryRules.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, &quot;No category &quot; + p.category());
+        }
+        Map&lt;String, String&gt; problems = rules.problems(categoryRules, p.attributes());
+        if (!problems.isEmpty()) {
+            ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, &quot;These attributes do not fit a &quot; + p.category() + &quot; product&quot;);
+            detail.setProperty(&quot;attributes&quot;, problems);
+            throw new ErrorResponseException(HttpStatus.UNPROCESSABLE_CONTENT, detail, null);
+        }
+        try {
+            long id = jdbc.sql(&quot;&quot;&quot;
+                            INSERT INTO products (sku, name, category_code, seller_id, price_paise, attributes)
+                            VALUES (?, ?, ?, ?, ?, CAST(? AS jsonb)) RETURNING id&quot;&quot;&quot;)
+                    .params(p.sku(), p.name(), p.category(), p.sellerId(), p.pricePaise(), json.writeValueAsString(p.attributes()))
+                    .query(Long.class).single();
+            return byId(id);
+        } catch (DuplicateKeyException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, &quot;SKU &quot; + p.sku() + &quot; already exists&quot;);
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, &quot;No seller &quot; + p.sellerId());   // the only other foreign key left
+        }
+    }
+
+    Product byId(long id) {
+        return jdbc.sql(&quot;SELECT &quot; + COLUMNS + &quot; FROM products WHERE id = ?&quot;).param(id).query((rs, i) -&gt; new Product(rs.getLong(&quot;id&quot;),
+                rs.getString(&quot;sku&quot;), rs.getString(&quot;name&quot;), rs.getString(&quot;category_code&quot;), rs.getLong(&quot;seller_id&quot;), rs.getInt(&quot;price_paise&quot;),
+                json.readValue(rs.getString(&quot;attributes&quot;), MAP))).single();
+    }
+
+    /** Containment (@&gt;): &quot;the attributes include all of these pairs&quot;, which the GIN index answers. */
+    List&lt;Product&gt; search(String category, Map&lt;String, String&gt; wanted) {
+        if (category != null &amp;&amp; rules.of(category).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;No category &quot; + category);
+        }
+        List&lt;String&gt; known = (category == null ? jdbc.sql(&quot;SELECT DISTINCT name FROM attribute_definitions&quot;)
+                : jdbc.sql(&quot;SELECT name FROM attribute_definitions WHERE category_code = ?&quot;).param(category)).query(String.class).list();
+        wanted.keySet().stream().filter(name -&gt; !known.contains(name)).findFirst().ifPresent(name -&gt; {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;No attribute &quot; + name + (category == null ? &quot;&quot; : &quot; for &quot; + category));
+        });
+        JdbcClient.StatementSpec query = jdbc.sql(&quot;SELECT &quot; + COLUMNS + &quot; FROM products WHERE attributes @&gt; CAST(:wanted AS jsonb)&quot;
+                + (category == null ? &quot;&quot; : &quot; AND category_code = :category&quot;) + &quot; ORDER BY id LIMIT 50&quot;).param(&quot;wanted&quot;, json.writeValueAsString(wanted));
+        if (category != null) {
+            query = query.param(&quot;category&quot;, category);
+        }
+        return query.query((rs, i) -&gt; new Product(rs.getLong(&quot;id&quot;), rs.getString(&quot;sku&quot;), rs.getString(&quot;name&quot;), rs.getString(&quot;category_code&quot;),
+                        rs.getLong(&quot;seller_id&quot;), rs.getInt(&quot;price_paise&quot;), json.readValue(rs.getString(&quot;attributes&quot;), MAP))).list();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/kartwala/attributes/AttributeRules.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Reads a category's rules and lists every problem with a set of attributes.</dd><dt>Why</dt><dd>Rules are rows, so a new category needs no code.</dd><dt>Without it</dt><dd>Attributes nobody can search or display consistently.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.attributes;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Component;
+
+import java.sql.Array;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
+/** The attribute rules of a category, read from attribute_definitions, and the check a new product must pass. */
+@Component
+class AttributeRules {
+
+    record Rule(String name, boolean required, List&lt;String&gt; allowed) {
+    }
+
+    private final JdbcClient jdbc;
+
+    AttributeRules(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    /** Name to rule, for one category; empty if the category does not exist. */
+    Map&lt;String, Rule&gt; of(String category) {
+        Map&lt;String, Rule&gt; rules = new LinkedHashMap&lt;&gt;();
+        jdbc.sql(&quot;SELECT name, required, allowed FROM attribute_definitions WHERE category_code = ? ORDER BY name&quot;).param(category)
+                .query((rs, i) -&gt; {
+                    Array allowed = rs.getArray(&quot;allowed&quot;);
+                    return new Rule(rs.getString(&quot;name&quot;), rs.getBoolean(&quot;required&quot;), allowed == null ? null : Arrays.asList((String[]) allowed.getArray()));
+                }).list().forEach(r -&gt; rules.put(r.name(), r));
+        return rules;
+    }
+
+    /** Every problem with these attributes, by attribute name; empty means valid. */
+    Map&lt;String, String&gt; problems(Map&lt;String, Rule&gt; rules, Map&lt;String, String&gt; attributes) {
+        Map&lt;String, String&gt; problems = new TreeMap&lt;&gt;();
+        attributes.forEach((name, value) -&gt; {
+            Rule rule = rules.get(name);
+            if (rule == null) {
+                problems.put(name, &quot;not an attribute of this category; known: &quot; + rules.keySet());
+            } else if (rule.allowed() != null &amp;&amp; !rule.allowed().contains(value)) {
+                problems.put(name, &quot;must be one of &quot; + rule.allowed());
+            }
+        });
+        List&lt;String&gt; missing = new ArrayList&lt;&gt;();
+        rules.values().stream().filter(r -&gt; r.required() &amp;&amp; !attributes.containsKey(r.name())).forEach(r -&gt; missing.add(r.name()));
+        missing.forEach(name -&gt; problems.put(name, &quot;is required&quot;));
+        return problems;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/resources/db/migration/V1__products.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Columns with constraints, jsonb with a shape check, the GIN index, and the rules table.</dd><dt>Why</dt><dd><code>jsonb_path_ops</code> is smaller and faster for <code>@&gt;</code>, the one question asked.</dd><dt>Without it</dt><dd>A table that accepts anything.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">CREATE TABLE sellers (
+    id   BIGINT       PRIMARY KEY,
+    name VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE categories (
+    code VARCHAR(30) PRIMARY KEY,
+    name VARCHAR(60) NOT NULL
+);
+
+-- What each category&#x27;s attributes may be. Read by the app to validate; data, not code, so a new category needs no release.
+CREATE TABLE attribute_definitions (
+    category_code VARCHAR(30) NOT NULL CONSTRAINT attribute_definitions_category_fk REFERENCES categories (code),
+    name          VARCHAR(30) NOT NULL CONSTRAINT attribute_definitions_name_shape CHECK (name ~ &#x27;^[a-z][a-z_]{1,29}$&#x27;),
+    required      BOOLEAN     NOT NULL,
+    allowed       TEXT[],      -- null: any text up to 40 characters
+    CONSTRAINT attribute_definitions_pk PRIMARY KEY (category_code, name)
+);
+
+-- Fields every product has, that need a rule or a join, are columns. Only what differs per category is jsonb.
+CREATE TABLE products (
+    id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    sku           VARCHAR(30)  NOT NULL CONSTRAINT products_sku_unique UNIQUE,
+    name          VARCHAR(120) NOT NULL,
+    category_code VARCHAR(30)  NOT NULL CONSTRAINT products_category_fk REFERENCES categories (code),
+    seller_id     BIGINT       NOT NULL CONSTRAINT products_seller_fk REFERENCES sellers (id),
+    price_paise   INTEGER      NOT NULL CONSTRAINT products_price_range CHECK (price_paise BETWEEN 100 AND 10000000),
+    attributes    JSONB        NOT NULL CONSTRAINT products_attributes_object CHECK (jsonb_typeof(attributes) = &#x27;object&#x27;)
+);
+-- jsonb_path_ops: a smaller GIN index that answers containment (@&gt;) only, which is the one question asked here.
+CREATE INDEX products_attributes ON products USING GIN (attributes jsonb_path_ops);
+CREATE INDEX products_category ON products (category_code);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_products.sql</p><div class="notes"><p>Rules for phones and shoes, 6 products by hand and 60,000 generated.</p></div><div class="src"><pre class="code"><code class="language-sql">INSERT INTO sellers (id, name) VALUES (7, &#x27;Sharma Electronics&#x27;), (8, &#x27;Meera Footwear&#x27;);
+INSERT INTO categories (code, name) VALUES (&#x27;phones&#x27;, &#x27;Phones&#x27;), (&#x27;shoes&#x27;, &#x27;Shoes&#x27;);
+INSERT INTO attribute_definitions (category_code, name, required, allowed) VALUES
+    (&#x27;phones&#x27;, &#x27;ram&#x27;, true, ARRAY[&#x27;4GB&#x27;, &#x27;6GB&#x27;, &#x27;8GB&#x27;, &#x27;12GB&#x27;]),
+    (&#x27;phones&#x27;, &#x27;storage&#x27;, true, ARRAY[&#x27;64GB&#x27;, &#x27;128GB&#x27;, &#x27;256GB&#x27;, &#x27;512GB&#x27;]),
+    (&#x27;phones&#x27;, &#x27;colour&#x27;, false, NULL),
+    (&#x27;shoes&#x27;, &#x27;size&#x27;, true, ARRAY[&#x27;6&#x27;, &#x27;7&#x27;, &#x27;8&#x27;, &#x27;9&#x27;, &#x27;10&#x27;, &#x27;11&#x27;]),
+    (&#x27;shoes&#x27;, &#x27;colour&#x27;, true, NULL),
+    (&#x27;shoes&#x27;, &#x27;material&#x27;, false, ARRAY[&#x27;leather&#x27;, &#x27;canvas&#x27;, &#x27;mesh&#x27;]);
+
+INSERT INTO products (sku, name, category_code, seller_id, price_paise, attributes) VALUES
+    (&#x27;PH-NOVA-8-128&#x27;, &#x27;Nova 5G&#x27;, &#x27;phones&#x27;, 7, 1899900, &#x27;{&quot;ram&quot;: &quot;8GB&quot;, &quot;storage&quot;: &quot;128GB&quot;, &quot;colour&quot;: &quot;Blue&quot;}&#x27;),
+    (&#x27;PH-NOVA-8-256&#x27;, &#x27;Nova 5G&#x27;, &#x27;phones&#x27;, 7, 2199900, &#x27;{&quot;ram&quot;: &quot;8GB&quot;, &quot;storage&quot;: &quot;256GB&quot;, &quot;colour&quot;: &quot;Blue&quot;}&#x27;),
+    (&#x27;PH-ZEN-6-128&#x27;, &#x27;Zen Lite&#x27;, &#x27;phones&#x27;, 7, 1299900, &#x27;{&quot;ram&quot;: &quot;6GB&quot;, &quot;storage&quot;: &quot;128GB&quot;}&#x27;),
+    (&#x27;SH-RUN-9-BLK&#x27;, &#x27;Road Runner&#x27;, &#x27;shoes&#x27;, 8, 349900, &#x27;{&quot;size&quot;: &quot;9&quot;, &quot;colour&quot;: &quot;Black&quot;, &quot;material&quot;: &quot;mesh&quot;}&#x27;),
+    (&#x27;SH-OXF-9-BRN&#x27;, &#x27;Oxford Classic&#x27;, &#x27;shoes&#x27;, 8, 599900, &#x27;{&quot;size&quot;: &quot;9&quot;, &quot;colour&quot;: &quot;Brown&quot;, &quot;material&quot;: &quot;leather&quot;}&#x27;),
+    (&#x27;SH-OXF-10-BRN&#x27;, &#x27;Oxford Classic&#x27;, &#x27;shoes&#x27;, 8, 599900, &#x27;{&quot;size&quot;: &quot;10&quot;, &quot;colour&quot;: &quot;Brown&quot;, &quot;material&quot;: &quot;leather&quot;}&#x27;);
+
+-- 60,000 generated products, so the plans below are the plans of a real catalog: none with 12GB of RAM, none of size 11.
+INSERT INTO products (sku, name, category_code, seller_id, price_paise, attributes)
+SELECT &#x27;GEN-&#x27; || g, &#x27;Generated &#x27; || g, CASE WHEN g % 2 = 0 THEN &#x27;phones&#x27; ELSE &#x27;shoes&#x27; END, 7 + g % 2, 100000 + g,
+       CASE WHEN g % 2 = 0
+            THEN jsonb_build_object(&#x27;ram&#x27;, (ARRAY[&#x27;4GB&#x27;, &#x27;6GB&#x27;, &#x27;8GB&#x27;])[g % 3 + 1], &#x27;storage&#x27;, (ARRAY[&#x27;64GB&#x27;, &#x27;128GB&#x27;, &#x27;256GB&#x27;])[g % 3 + 1])
+            ELSE jsonb_build_object(&#x27;size&#x27;, (ARRAY[&#x27;6&#x27;, &#x27;7&#x27;, &#x27;8&#x27;, &#x27;9&#x27;, &#x27;10&#x27;])[g % 5 + 1], &#x27;colour&#x27;, &#x27;Grey&#x27;) END
+FROM generate_series(1, 60000) AS g;
+ANALYZE products;</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Whole paise only.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: kartwala-products
+  mvc:
+    problemdetails:
+      enabled: true
+  jackson:
+    deserialization:
+      accept-float-as-int: false   # 499.99 for a paise field is a client bug: 400
+  datasource:
+    url: jdbc:postgresql://localhost:5432/kartwala
+    username: kartwala
+    password: kartwala</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: kartwala
+      POSTGRES_USER: kartwala
+      POSTGRES_PASSWORD: kartwala
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U kartwala -d kartwala&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/java/com/kartwala/attributes/AttributesApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.attributes;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class AttributesApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(AttributesApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found (empty)</td><td><code>ProductContractTest</code> (6)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>EverythingInJsonbTrapTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>ProductDatabaseTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.attributes.ProductDatabaseTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.attributes.ProductContractTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.attributes.EverythingInJsonbTrapTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">EverythingInJsonbTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">ProductDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">ProductContractTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/kartwala/attributes/EverythingInJsonbTrapTest.java</p><div class="notes"><p>Written first: the old one-column table, its failures, and which operator the index helps.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.attributes;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessException;
+
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * Written first. The old table kept the whole product in one jsonb column, price and seller included, on a copy of
+ * the demo catalog. Then the same mistakes against the real table.
+ */
+class EverythingInJsonbTrapTest extends ApiTest {
+
+    @BeforeEach
+    void oldTable() {
+        jdbc.sql(&quot;CREATE TABLE old_products (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, data JSONB NOT NULL)&quot;).update();
+        jdbc.sql(&quot;&quot;&quot;
+                INSERT INTO old_products (data) SELECT jsonb_build_object(&#x27;sku&#x27;, sku, &#x27;name&#x27;, name, &#x27;category&#x27;, category_code,
+                    &#x27;seller&#x27;, seller_id, &#x27;price&#x27;, price_paise) || attributes FROM products&quot;&quot;&quot;).update();
+    }
+
+    @AfterEach
+    void dropOldTable() {
+        jdbc.sql(&quot;DROP TABLE old_products&quot;).update();
+    }
+
+    @Test
+    void anythingGetsIntoTheOldTable() {
+        jdbc.sql(&quot;INSERT INTO old_products (data) VALUES (&#x27;{\&quot;sku\&quot;: \&quot;PH-NOVA-8-128\&quot;, \&quot;price\&quot;: \&quot;free\&quot;, \&quot;seller\&quot;: 999, \&quot;ram\&quot;: \&quot;lots\&quot;}&#x27;)&quot;).update();
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM old_products WHERE data-&gt;&gt;&#x27;sku&#x27; = &#x27;PH-NOVA-8-128&#x27;&quot;).query(Long.class).single()).isEqualTo(2);   // a duplicate SKU
+    }
+
+    @Test
+    void oneBadPriceBreaksEveryPriceQuery() {
+        String under2000 = &quot;SELECT count(*) FROM old_products WHERE (data-&gt;&gt;&#x27;price&#x27;)::int &lt; 200000&quot;;
+        assertThat(jdbc.sql(under2000).query(Long.class).single()).isPositive();
+        jdbc.sql(&quot;INSERT INTO old_products (data) VALUES (&#x27;{\&quot;sku\&quot;: \&quot;T-ODD\&quot;, \&quot;price\&quot;: \&quot;free\&quot;}&#x27;)&quot;).update();
+        assertThatThrownBy(() -&gt; jdbc.sql(under2000).query(Long.class).single()).rootCause()
+                .hasMessageContaining(&quot;invalid input syntax for type integer: \&quot;free\&quot;&quot;);   // every customer&#x27;s price filter now fails
+    }
+
+    @Test
+    void theRealTableRefusesTheSameRows() {
+        String insert = &quot;INSERT INTO products (sku, name, category_code, seller_id, price_paise, attributes) VALUES (?, &#x27;X&#x27;, &#x27;phones&#x27;, ?, ?, &#x27;{}&#x27;)&quot;;
+        assertThatThrownBy(() -&gt; jdbc.sql(insert).params(&quot;PH-NOVA-8-128&quot;, 7, 100000).update()).isInstanceOf(DataAccessException.class).hasMessageContaining(&quot;products_sku_unique&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(insert).params(&quot;T-FREE&quot;, 7, 0).update()).hasMessageContaining(&quot;products_price_range&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(insert).params(&quot;T-NOBODY&quot;, 999, 100000).update()).hasMessageContaining(&quot;products_seller_fk&quot;);
+    }
+
+    @Test
+    void containmentUsesTheGinIndexTheArrowOperatorDoesNot() {
+        assertThat(indexesUsed(&quot;SELECT id FROM products WHERE attributes @&gt; CAST(:wanted AS jsonb)&quot;, Map.of(&quot;wanted&quot;, &quot;{\&quot;ram\&quot;: \&quot;12GB\&quot;}&quot;)))
+                .containsExactly(&quot;products_attributes&quot;);
+        assertThat(indexesUsed(&quot;SELECT id FROM products WHERE attributes-&gt;&gt;&#x27;ram&#x27; = :ram&quot;, Map.of(&quot;ram&quot;, &quot;12GB&quot;))).isEmpty();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/kartwala/attributes/ProductDatabaseTest.java</p><div class="notes"><p>Named constraints, a rolled-back upload, and how jsonb normalises.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.attributes;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessException;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The rules as PostgreSQL enforces them, with plain SQL; test rows use SKUs starting with T-. */
+class ProductDatabaseTest extends ApiTest {
+
+    private void product(String sku, String category, long seller, int paise, String attributes) {
+        jdbc.sql(&quot;INSERT INTO products (sku, name, category_code, seller_id, price_paise, attributes) VALUES (?, &#x27;Test&#x27;, ?, ?, ?, CAST(? AS jsonb))&quot;)
+                .params(sku, category, seller, paise, attributes).update();
+    }
+
+    @Test
+    void namedConstraintsHoldWithoutJava() {
+        assertThatThrownBy(() -&gt; product(&quot;T-ARRAY&quot;, &quot;phones&quot;, 7, 100000, &quot;[\&quot;8GB\&quot;]&quot;)).isInstanceOf(DataAccessException.class).hasMessageContaining(&quot;products_attributes_object&quot;);
+        assertThatThrownBy(() -&gt; product(&quot;T-LAPTOP&quot;, &quot;laptops&quot;, 7, 100000, &quot;{}&quot;)).hasMessageContaining(&quot;products_category_fk&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO attribute_definitions (category_code, name, required) VALUES (&#x27;phones&#x27;, &#x27;Battery Life&#x27;, false)&quot;).update())
+                .hasMessageContaining(&quot;attribute_definitions_name_shape&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO attribute_definitions (category_code, name, required) VALUES (&#x27;phones&#x27;, &#x27;ram&#x27;, false)&quot;).update())
+                .hasMessageContaining(&quot;attribute_definitions_pk&quot;);
+    }
+
+    @Test
+    void anUploadWithOneBadRowAddsNothing() {
+        assertThatThrownBy(() -&gt; transaction.executeWithoutResult(tx -&gt; {
+            product(&quot;T-ONE&quot;, &quot;shoes&quot;, 8, 99900, &quot;{\&quot;size\&quot;: \&quot;8\&quot;, \&quot;colour\&quot;: \&quot;Red\&quot;}&quot;);
+            product(&quot;T-TWO&quot;, &quot;shoes&quot;, 8, 99900, &quot;{\&quot;size\&quot;: \&quot;9\&quot;, \&quot;colour\&quot;: \&quot;Red\&quot;}&quot;);
+            product(&quot;T-THREE&quot;, &quot;shoes&quot;, 9, 99900, &quot;{\&quot;size\&quot;: \&quot;10\&quot;, \&quot;colour\&quot;: \&quot;Red\&quot;}&quot;);
+        })).hasMessageContaining(&quot;products_seller_fk&quot;);
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM products WHERE sku LIKE &#x27;T-%&#x27;&quot;).query(Long.class).single()).isZero();
+    }
+
+    @Test
+    void jsonbStoresTheDocumentNormalised() {
+        product(&quot;T-ORDER&quot;, &quot;shoes&quot;, 8, 99900, &quot;{\&quot;size\&quot;: \&quot;8\&quot;, \&quot;colour\&quot;: \&quot;Red\&quot;, \&quot;colour\&quot;: \&quot;Blue\&quot;}&quot;);
+        // Keys sorted by length then bytes, whitespace dropped, and the last duplicate key wins: jsonb is not the text you sent.
+        assertThat(jdbc.sql(&quot;SELECT attributes::text FROM products WHERE sku = &#x27;T-ORDER&#x27;&quot;).query(String.class).single())
+                .isEqualTo(&quot;{\&quot;size\&quot;: \&quot;8\&quot;, \&quot;colour\&quot;: \&quot;Blue\&quot;}&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/kartwala/attributes/ProductContractTest.java</p><div class="notes"><p>Both endpoints through HTTP.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.attributes;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.startsWith;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class ProductContractTest extends ApiTest {
+
+    static final String PHONE = &quot;&quot;&quot;
+            {&quot;sku&quot;: &quot;t-pixel-12-256&quot;, &quot;name&quot;: &quot;Pixel Pro&quot;, &quot;category&quot;: &quot;phones&quot;, &quot;sellerId&quot;: 7, &quot;pricePaise&quot;: 5999900,
+             &quot;attributes&quot;: {&quot;ram&quot;: &quot;12GB&quot;, &quot;storage&quot;: &quot;256GB&quot;, &quot;colour&quot;: &quot;Obsidian&quot;}}&quot;&quot;&quot;;
+
+    @Test
+    void aPhoneWithItsOwnAttributesIsCreated() throws Exception {
+        create(PHONE).andExpect(status().isCreated()).andExpect(header().string(&quot;Location&quot;, startsWith(&quot;/products/&quot;)))
+                .andExpect(jsonPath(&quot;$.sku&quot;).value(&quot;T-PIXEL-12-256&quot;)).andExpect(jsonPath(&quot;$.attributes.ram&quot;).value(&quot;12GB&quot;))
+                .andExpect(jsonPath(&quot;$.attributes.colour&quot;).value(&quot;Obsidian&quot;)).andExpect(jsonPath(&quot;$.pricePaise&quot;).value(5999900));
+    }
+
+    @Test
+    void attributesAreCheckedAgainstTheCategorysRules() throws Exception {
+        create(&quot;&quot;&quot;
+                {&quot;sku&quot;: &quot;t-bad-shoe&quot;, &quot;name&quot;: &quot;Odd Shoe&quot;, &quot;category&quot;: &quot;shoes&quot;, &quot;sellerId&quot;: 8, &quot;pricePaise&quot;: 99900,
+                 &quot;attributes&quot;: {&quot;size&quot;: &quot;13&quot;, &quot;ram&quot;: &quot;8GB&quot;}}&quot;&quot;&quot;).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;These attributes do not fit a shoes product&quot;))
+                .andExpect(jsonPath(&quot;$.attributes.size&quot;).value(&quot;must be one of [6, 7, 8, 9, 10, 11]&quot;))
+                .andExpect(jsonPath(&quot;$.attributes.ram&quot;).value(&quot;not an attribute of this category; known: [colour, material, size]&quot;))
+                .andExpect(jsonPath(&quot;$.attributes.colour&quot;).value(&quot;is required&quot;));
+    }
+
+    @Test
+    void unknownCategorySellerOrADuplicateSku() throws Exception {
+        create(PHONE.replace(&quot;\&quot;phones\&quot;&quot;, &quot;\&quot;laptops\&quot;&quot;)).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;No category laptops&quot;));
+        create(PHONE.replace(&quot;\&quot;sellerId\&quot;: 7&quot;, &quot;\&quot;sellerId\&quot;: 99&quot;)).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;No seller 99&quot;));
+        create(PHONE).andExpect(status().isCreated());
+        create(PHONE).andExpect(status().isConflict());
+    }
+
+    @Test
+    void malformedBodiesAre400() throws Exception {
+        create(PHONE.replace(&quot;5999900&quot;, &quot;5999900.5&quot;)).andExpect(status().isBadRequest());
+        create(PHONE.replace(&quot;5999900&quot;, &quot;0&quot;)).andExpect(status().isBadRequest());
+        create(PHONE.replace(&quot;\&quot;Obsidian\&quot;&quot;, &quot;\&quot;\&quot;&quot;)).andExpect(status().isBadRequest());
+        create(PHONE.replace(&quot;\&quot;colour\&quot;&quot;, &quot;\&quot;Colour!\&quot;&quot;)).andExpect(status().isBadRequest());
+        create(PHONE.replace(&quot;\&quot;attributes\&quot;: {\&quot;ram\&quot;: \&quot;12GB\&quot;, \&quot;storage\&quot;: \&quot;256GB\&quot;, \&quot;colour\&quot;: \&quot;Obsidian\&quot;}&quot;, &quot;\&quot;attributes\&quot;: [\&quot;12GB\&quot;]&quot;)).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void searchByAnyMixOfAttributes() throws Exception {
+        mvc.perform(get(&quot;/products&quot;).param(&quot;category&quot;, &quot;phones&quot;).param(&quot;attr.ram&quot;, &quot;8GB&quot;).param(&quot;attr.storage&quot;, &quot;256GB&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$[0].sku&quot;).value(&quot;PH-NOVA-8-256&quot;)).andExpect(jsonPath(&quot;$[0].attributes.colour&quot;).value(&quot;Blue&quot;));
+        mvc.perform(get(&quot;/products&quot;).param(&quot;attr.size&quot;, &quot;9&quot;).param(&quot;attr.material&quot;, &quot;leather&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$[*].sku&quot;, contains(&quot;SH-OXF-9-BRN&quot;)));
+        mvc.perform(get(&quot;/products&quot;).param(&quot;category&quot;, &quot;phones&quot;).param(&quot;attr.ram&quot;, &quot;12GB&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$&quot;, empty()));
+    }
+
+    @Test
+    void searchingForSomethingNoCategoryHasIs400() throws Exception {
+        mvc.perform(get(&quot;/products&quot;).param(&quot;category&quot;, &quot;shoes&quot;).param(&quot;attr.ram&quot;, &quot;8GB&quot;)).andExpect(status().isBadRequest())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;No attribute ram for shoes&quot;));
+        mvc.perform(get(&quot;/products&quot;).param(&quot;attr.wheels&quot;, &quot;4&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/products&quot;).param(&quot;category&quot;, &quot;laptops&quot;).param(&quot;attr.ram&quot;, &quot;8GB&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/products&quot;).param(&quot;ram&quot;, &quot;8GB&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/products&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/kartwala/attributes/ApiTest.java</p><div class="notes"><p>Shared setup and the plan reader.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.attributes;
+
+import org.junit.jupiter.api.AfterEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/** Shared setup: the whole app on a real PostgreSQL with 6 hand-written and 60,000 generated products. Test SKUs start with T- and are removed. */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+    @Autowired
+    TransactionTemplate transaction;
+
+    final JsonMapper json = JsonMapper.builder().build();
+
+    @AfterEach
+    void removeTestProducts() {
+        jdbc.sql(&quot;DELETE FROM products WHERE sku LIKE &#x27;T-%&#x27;&quot;).update();
+    }
+
+    ResultActions create(String body) throws Exception {
+        return mvc.perform(post(&quot;/products&quot;).contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    /** Index names in the plan of a query, from EXPLAIN (FORMAT JSON). */
+    List&lt;String&gt; indexesUsed(String sql, Map&lt;String, Object&gt; params) {
+        String plan = jdbc.sql(&quot;EXPLAIN (FORMAT JSON) &quot; + sql).params(params).query(String.class).single();
+        List&lt;String&gt; names = new ArrayList&lt;&gt;();
+        collect(json.readTree(plan).get(0).get(&quot;Plan&quot;), names);
+        return names;
+    }
+
+    private static void collect(JsonNode node, List&lt;String&gt; names) {
+        if (node.has(&quot;Index Name&quot;)) {
+            names.add(node.get(&quot;Index Name&quot;).asString());
+        }
+        if (node.has(&quot;Plans&quot;)) {
+            node.get(&quot;Plans&quot;).forEach(child -&gt; collect(child, names));
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/kartwala/attributes/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.attributes;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker: jsonb, its operators and GIN indexes are PostgreSQL features. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/kartwala/attributes/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=AttributeFormChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 13 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 15 tests pass (13 station tests and 2 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>The seller's form</h2><p>Add <code>GET /categories/{code}/attributes</code>: the category's rules, by name, so a form can be built from data.</p><p><b>Done when:</b> the test in <code>AttributeFormChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li><code>AttributeRules.of</code> already reads them.</li><li>An empty result means the category does not exist: <code>404</code>.</li></ul></details><p class="path">challenge/AttributeFormChallengeTest.java</p><pre class="code"><code class="language-java">package com.kartwala.attributes;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: GET /categories/{code}/attributes lists a category&#x27;s attribute rules, by name, so the seller&#x27;s form can
+ * be built from data: [{name, required, allowed}], allowed null for free text. Unknown category: 404.
+ */
+class AttributeFormChallengeTest extends ApiTest {
+
+    @Test
+    void theRulesOfACategory() throws Exception {
+        mvc.perform(get(&quot;/categories/shoes/attributes&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$[*].name&quot;, contains(&quot;colour&quot;, &quot;material&quot;, &quot;size&quot;)))
+                .andExpect(jsonPath(&quot;$[*].required&quot;, contains(true, false, true)))
+                .andExpect(jsonPath(&quot;$[0].allowed&quot;).doesNotExist())
+                .andExpect(jsonPath(&quot;$[1].allowed&quot;, contains(&quot;leather&quot;, &quot;canvas&quot;, &quot;mesh&quot;)));
+        mvc.perform(get(&quot;/categories/laptops/attributes&quot;)).andExpect(status().isNotFound());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/ProductCatalog.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.attributes;
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.server.ResponseStatusException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
+@Service
+class ProductCatalog {
+
+    record NewProduct(String sku, String name, String category, long sellerId, int pricePaise, Map&lt;String, String&gt; attributes) {
+    }
+
+    record Product(long id, String sku, String name, String category, long sellerId, int pricePaise, Map&lt;String, String&gt; attributes) {
+    }
+
+    private static final TypeReference&lt;TreeMap&lt;String, String&gt;&gt; MAP = new TypeReference&lt;&gt;() {
+    };
+    private static final String COLUMNS = &quot;id, sku, name, category_code, seller_id, price_paise, attributes::text AS attributes&quot;;
+
+    private final JdbcClient jdbc;
+    private final AttributeRules rules;
+    private final JsonMapper json;
+
+    ProductCatalog(JdbcClient jdbc, AttributeRules rules, JsonMapper json) {
+        this.jdbc = jdbc;
+        this.rules = rules;
+        this.json = json;
+    }
+
+    Product create(NewProduct p) {
+        Map&lt;String, AttributeRules.Rule&gt; categoryRules = rules.of(p.category());
+        if (categoryRules.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, &quot;No category &quot; + p.category());
+        }
+        Map&lt;String, String&gt; problems = rules.problems(categoryRules, p.attributes());
+        if (!problems.isEmpty()) {
+            ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, &quot;These attributes do not fit a &quot; + p.category() + &quot; product&quot;);
+            detail.setProperty(&quot;attributes&quot;, problems);
+            throw new ErrorResponseException(HttpStatus.UNPROCESSABLE_CONTENT, detail, null);
+        }
+        try {
+            long id = jdbc.sql(&quot;&quot;&quot;
+                            INSERT INTO products (sku, name, category_code, seller_id, price_paise, attributes)
+                            VALUES (?, ?, ?, ?, ?, CAST(? AS jsonb)) RETURNING id&quot;&quot;&quot;)
+                    .params(p.sku(), p.name(), p.category(), p.sellerId(), p.pricePaise(), json.writeValueAsString(p.attributes()))
+                    .query(Long.class).single();
+            return byId(id);
+        } catch (DuplicateKeyException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, &quot;SKU &quot; + p.sku() + &quot; already exists&quot;);
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, &quot;No seller &quot; + p.sellerId());   // the only other foreign key left
+        }
+    }
+
+    Product byId(long id) {
+        return jdbc.sql(&quot;SELECT &quot; + COLUMNS + &quot; FROM products WHERE id = ?&quot;).param(id).query((rs, i) -&gt; new Product(rs.getLong(&quot;id&quot;),
+                rs.getString(&quot;sku&quot;), rs.getString(&quot;name&quot;), rs.getString(&quot;category_code&quot;), rs.getLong(&quot;seller_id&quot;), rs.getInt(&quot;price_paise&quot;),
+                json.readValue(rs.getString(&quot;attributes&quot;), MAP))).single();
+    }
+
+    /** Challenge 1: the rules, for a form. */
+    List&lt;AttributeRules.Rule&gt; rulesOf(String category) {
+        List&lt;AttributeRules.Rule&gt; list = List.copyOf(rules.of(category).values());
+        if (list.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;No category &quot; + category);
+        }
+        return list;
+    }
+
+    /** Challenge 2: GROUP BY one attribute&#x27;s value (-&gt;&gt;), filtered with the same containment as the search. */
+    Map&lt;String, Long&gt; facet(String category, String facet, Map&lt;String, String&gt; wanted) {
+        if (!rules.of(category).containsKey(facet)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;No attribute &quot; + facet + &quot; for &quot; + category);
+        }
+        Map&lt;String, Long&gt; counts = new TreeMap&lt;&gt;();
+        jdbc.sql(&quot;&quot;&quot;
+                        SELECT attributes-&gt;&gt;:facet AS value, count(*) AS n FROM products
+                        WHERE category_code = :category AND attributes @&gt; CAST(:wanted AS jsonb) AND attributes-&gt;&gt;:facet IS NOT NULL   -- not &quot;attributes ? :facet&quot;: JDBC reads that ? as a placeholder
+                        GROUP BY 1&quot;&quot;&quot;)
+                .param(&quot;facet&quot;, facet).param(&quot;category&quot;, category).param(&quot;wanted&quot;, json.writeValueAsString(wanted))
+                .query((rs, i) -&gt; counts.put(rs.getString(&quot;value&quot;), rs.getLong(&quot;n&quot;))).list();
+        return counts;
+    }
+
+    /** Containment (@&gt;): &quot;the attributes include all of these pairs&quot;, which the GIN index answers. */
+    List&lt;Product&gt; search(String category, Map&lt;String, String&gt; wanted) {
+        if (category != null &amp;&amp; rules.of(category).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;No category &quot; + category);
+        }
+        List&lt;String&gt; known = (category == null ? jdbc.sql(&quot;SELECT DISTINCT name FROM attribute_definitions&quot;)
+                : jdbc.sql(&quot;SELECT name FROM attribute_definitions WHERE category_code = ?&quot;).param(category)).query(String.class).list();
+        wanted.keySet().stream().filter(name -&gt; !known.contains(name)).findFirst().ifPresent(name -&gt; {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;No attribute &quot; + name + (category == null ? &quot;&quot; : &quot; for &quot; + category));
+        });
+        JdbcClient.StatementSpec query = jdbc.sql(&quot;SELECT &quot; + COLUMNS + &quot; FROM products WHERE attributes @&gt; CAST(:wanted AS jsonb)&quot;
+                + (category == null ? &quot;&quot; : &quot; AND category_code = :category&quot;) + &quot; ORDER BY id LIMIT 50&quot;).param(&quot;wanted&quot;, json.writeValueAsString(wanted));
+        if (category != null) {
+            query = query.param(&quot;category&quot;, category);
+        }
+        return query.query((rs, i) -&gt; new Product(rs.getLong(&quot;id&quot;), rs.getString(&quot;sku&quot;), rs.getString(&quot;name&quot;), rs.getString(&quot;category_code&quot;),
+                        rs.getLong(&quot;seller_id&quot;), rs.getInt(&quot;price_paise&quot;), json.readValue(rs.getString(&quot;attributes&quot;), MAP))).list();
+    }
+}</code></pre></div><p class="path">challenge/solution/ProductController.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.attributes;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.net.URI;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
+
+@RestController
+class ProductController {
+
+    /** Demo limits: up to 20 attributes, values up to 40 characters, prices Rs 1 to Rs 1 lakh. */
+    record NewProduct(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,30}&quot;) String sku,
+                      @NotBlank @Size(max = 120) String name,
+                      @NotNull @Pattern(regexp = &quot;[a-z]{2,30}&quot;) String category,
+                      @NotNull Long sellerId,
+                      @NotNull @Min(100) @Max(10_000_000) Integer pricePaise,
+                      @NotNull @Size(max = 20) Map&lt;@Pattern(regexp = &quot;[a-z][a-z_]{1,29}&quot;) String, @NotBlank @Size(max = 40) String&gt; attributes) {
+    }
+
+    private final ProductCatalog catalog;
+
+    ProductController(ProductCatalog catalog) {
+        this.catalog = catalog;
+    }
+
+    @PostMapping(&quot;/products&quot;)
+    ResponseEntity&lt;ProductCatalog.Product&gt; create(@Valid @RequestBody NewProduct body) {
+        ProductCatalog.Product created = catalog.create(new ProductCatalog.NewProduct(body.sku().toUpperCase(Locale.ROOT), body.name().strip(),
+                body.category(), body.sellerId(), body.pricePaise(), body.attributes()));
+        return ResponseEntity.created(URI.create(&quot;/products/&quot; + created.id())).body(created);
+    }
+
+    @GetMapping(&quot;/categories/{code}/attributes&quot;)
+    List&lt;AttributeRules.Rule&gt; rules(@PathVariable String code) {
+        return catalog.rulesOf(code);
+    }
+
+    @GetMapping(&quot;/products/facets&quot;)
+    Map&lt;String, Long&gt; facets(@RequestParam String category, @RequestParam String facet, @RequestParam Map&lt;String, String&gt; params) {
+        Map&lt;String, String&gt; wanted = new TreeMap&lt;&gt;();
+        params.forEach((key, value) -&gt; {
+            if (key.startsWith(&quot;attr.&quot;)) {
+                wanted.put(key.substring(5), value);
+            }
+        });
+        return catalog.facet(category, facet, wanted);
+    }
+
+    /** ?category=phones&amp;attr.ram=8GB&amp;attr.storage=128GB: every attr.* pair must match. */
+    @GetMapping(&quot;/products&quot;)
+    List&lt;ProductCatalog.Product&gt; search(@RequestParam Map&lt;String, String&gt; params) {
+        Map&lt;String, String&gt; wanted = new TreeMap&lt;&gt;();
+        params.forEach((key, value) -&gt; {
+            if (key.startsWith(&quot;attr.&quot;)) {
+                wanted.put(key.substring(5), value);
+            } else if (!key.equals(&quot;category&quot;)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Unknown parameter &quot; + key);
+            }
+        });
+        if (wanted.isEmpty() || wanted.size() &gt; 10) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Give 1 to 10 attr.&lt;name&gt;=&lt;value&gt; filters&quot;);
+        }
+        return catalog.search(params.get(&quot;category&quot;), wanted);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 30 minutes</p><h2>Counts per value</h2><p>Add <code>GET /products/facets?category&amp;facet=ram&amp;attr.*</code>: products per value of one attribute, among those matching the other filters.</p><p><b>Done when:</b> the test in <code>AttributeFacetChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li><code>GROUP BY attributes-&gt;&gt;:facet</code>, filtered with the same containment as the search.</li><li>Do not write <code>attributes ? :facet</code>: JDBC reads that <code>?</code> as a placeholder. Found while building this station.</li></ul></details><p class="path">challenge/AttributeFacetChallengeTest.java</p><pre class="code"><code class="language-java">package com.kartwala.attributes;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: GET /products/facets?category=phones&amp;facet=ram&amp;attr.storage=128GB counts the products per value of one
+ * attribute, among those matching the other filters: {&quot;6GB&quot;: 10001, &quot;8GB&quot;: 1}. The facet must be an attribute of the
+ * category (else 400).
+ */
+class AttributeFacetChallengeTest extends ApiTest {
+
+    @Test
+    void countsPerValue() throws Exception {
+        mvc.perform(get(&quot;/products/facets&quot;).param(&quot;category&quot;, &quot;phones&quot;).param(&quot;facet&quot;, &quot;ram&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.4GB&quot;).value(10000)).andExpect(jsonPath(&quot;$.6GB&quot;).value(10001)).andExpect(jsonPath(&quot;$.8GB&quot;).value(10002));
+        mvc.perform(get(&quot;/products/facets&quot;).param(&quot;category&quot;, &quot;phones&quot;).param(&quot;facet&quot;, &quot;ram&quot;).param(&quot;attr.storage&quot;, &quot;128GB&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.6GB&quot;).value(10001)).andExpect(jsonPath(&quot;$.8GB&quot;).value(1)).andExpect(jsonPath(&quot;$.4GB&quot;).doesNotExist());
+        mvc.perform(get(&quot;/products/facets&quot;).param(&quot;category&quot;, &quot;phones&quot;).param(&quot;facet&quot;, &quot;size&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/ProductCatalog.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.attributes;
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.server.ResponseStatusException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
+@Service
+class ProductCatalog {
+
+    record NewProduct(String sku, String name, String category, long sellerId, int pricePaise, Map&lt;String, String&gt; attributes) {
+    }
+
+    record Product(long id, String sku, String name, String category, long sellerId, int pricePaise, Map&lt;String, String&gt; attributes) {
+    }
+
+    private static final TypeReference&lt;TreeMap&lt;String, String&gt;&gt; MAP = new TypeReference&lt;&gt;() {
+    };
+    private static final String COLUMNS = &quot;id, sku, name, category_code, seller_id, price_paise, attributes::text AS attributes&quot;;
+
+    private final JdbcClient jdbc;
+    private final AttributeRules rules;
+    private final JsonMapper json;
+
+    ProductCatalog(JdbcClient jdbc, AttributeRules rules, JsonMapper json) {
+        this.jdbc = jdbc;
+        this.rules = rules;
+        this.json = json;
+    }
+
+    Product create(NewProduct p) {
+        Map&lt;String, AttributeRules.Rule&gt; categoryRules = rules.of(p.category());
+        if (categoryRules.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, &quot;No category &quot; + p.category());
+        }
+        Map&lt;String, String&gt; problems = rules.problems(categoryRules, p.attributes());
+        if (!problems.isEmpty()) {
+            ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, &quot;These attributes do not fit a &quot; + p.category() + &quot; product&quot;);
+            detail.setProperty(&quot;attributes&quot;, problems);
+            throw new ErrorResponseException(HttpStatus.UNPROCESSABLE_CONTENT, detail, null);
+        }
+        try {
+            long id = jdbc.sql(&quot;&quot;&quot;
+                            INSERT INTO products (sku, name, category_code, seller_id, price_paise, attributes)
+                            VALUES (?, ?, ?, ?, ?, CAST(? AS jsonb)) RETURNING id&quot;&quot;&quot;)
+                    .params(p.sku(), p.name(), p.category(), p.sellerId(), p.pricePaise(), json.writeValueAsString(p.attributes()))
+                    .query(Long.class).single();
+            return byId(id);
+        } catch (DuplicateKeyException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, &quot;SKU &quot; + p.sku() + &quot; already exists&quot;);
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, &quot;No seller &quot; + p.sellerId());   // the only other foreign key left
+        }
+    }
+
+    Product byId(long id) {
+        return jdbc.sql(&quot;SELECT &quot; + COLUMNS + &quot; FROM products WHERE id = ?&quot;).param(id).query((rs, i) -&gt; new Product(rs.getLong(&quot;id&quot;),
+                rs.getString(&quot;sku&quot;), rs.getString(&quot;name&quot;), rs.getString(&quot;category_code&quot;), rs.getLong(&quot;seller_id&quot;), rs.getInt(&quot;price_paise&quot;),
+                json.readValue(rs.getString(&quot;attributes&quot;), MAP))).single();
+    }
+
+    /** Challenge 1: the rules, for a form. */
+    List&lt;AttributeRules.Rule&gt; rulesOf(String category) {
+        List&lt;AttributeRules.Rule&gt; list = List.copyOf(rules.of(category).values());
+        if (list.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;No category &quot; + category);
+        }
+        return list;
+    }
+
+    /** Challenge 2: GROUP BY one attribute&#x27;s value (-&gt;&gt;), filtered with the same containment as the search. */
+    Map&lt;String, Long&gt; facet(String category, String facet, Map&lt;String, String&gt; wanted) {
+        if (!rules.of(category).containsKey(facet)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;No attribute &quot; + facet + &quot; for &quot; + category);
+        }
+        Map&lt;String, Long&gt; counts = new TreeMap&lt;&gt;();
+        jdbc.sql(&quot;&quot;&quot;
+                        SELECT attributes-&gt;&gt;:facet AS value, count(*) AS n FROM products
+                        WHERE category_code = :category AND attributes @&gt; CAST(:wanted AS jsonb) AND attributes-&gt;&gt;:facet IS NOT NULL   -- not &quot;attributes ? :facet&quot;: JDBC reads that ? as a placeholder
+                        GROUP BY 1&quot;&quot;&quot;)
+                .param(&quot;facet&quot;, facet).param(&quot;category&quot;, category).param(&quot;wanted&quot;, json.writeValueAsString(wanted))
+                .query((rs, i) -&gt; counts.put(rs.getString(&quot;value&quot;), rs.getLong(&quot;n&quot;))).list();
+        return counts;
+    }
+
+    /** Containment (@&gt;): &quot;the attributes include all of these pairs&quot;, which the GIN index answers. */
+    List&lt;Product&gt; search(String category, Map&lt;String, String&gt; wanted) {
+        if (category != null &amp;&amp; rules.of(category).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;No category &quot; + category);
+        }
+        List&lt;String&gt; known = (category == null ? jdbc.sql(&quot;SELECT DISTINCT name FROM attribute_definitions&quot;)
+                : jdbc.sql(&quot;SELECT name FROM attribute_definitions WHERE category_code = ?&quot;).param(category)).query(String.class).list();
+        wanted.keySet().stream().filter(name -&gt; !known.contains(name)).findFirst().ifPresent(name -&gt; {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;No attribute &quot; + name + (category == null ? &quot;&quot; : &quot; for &quot; + category));
+        });
+        JdbcClient.StatementSpec query = jdbc.sql(&quot;SELECT &quot; + COLUMNS + &quot; FROM products WHERE attributes @&gt; CAST(:wanted AS jsonb)&quot;
+                + (category == null ? &quot;&quot; : &quot; AND category_code = :category&quot;) + &quot; ORDER BY id LIMIT 50&quot;).param(&quot;wanted&quot;, json.writeValueAsString(wanted));
+        if (category != null) {
+            query = query.param(&quot;category&quot;, category);
+        }
+        return query.query((rs, i) -&gt; new Product(rs.getLong(&quot;id&quot;), rs.getString(&quot;sku&quot;), rs.getString(&quot;name&quot;), rs.getString(&quot;category_code&quot;),
+                        rs.getLong(&quot;seller_id&quot;), rs.getInt(&quot;price_paise&quot;), json.readValue(rs.getString(&quot;attributes&quot;), MAP))).list();
+    }
+}</code></pre></div><p class="path">challenge/solution/ProductController.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.attributes;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.net.URI;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
+
+@RestController
+class ProductController {
+
+    /** Demo limits: up to 20 attributes, values up to 40 characters, prices Rs 1 to Rs 1 lakh. */
+    record NewProduct(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,30}&quot;) String sku,
+                      @NotBlank @Size(max = 120) String name,
+                      @NotNull @Pattern(regexp = &quot;[a-z]{2,30}&quot;) String category,
+                      @NotNull Long sellerId,
+                      @NotNull @Min(100) @Max(10_000_000) Integer pricePaise,
+                      @NotNull @Size(max = 20) Map&lt;@Pattern(regexp = &quot;[a-z][a-z_]{1,29}&quot;) String, @NotBlank @Size(max = 40) String&gt; attributes) {
+    }
+
+    private final ProductCatalog catalog;
+
+    ProductController(ProductCatalog catalog) {
+        this.catalog = catalog;
+    }
+
+    @PostMapping(&quot;/products&quot;)
+    ResponseEntity&lt;ProductCatalog.Product&gt; create(@Valid @RequestBody NewProduct body) {
+        ProductCatalog.Product created = catalog.create(new ProductCatalog.NewProduct(body.sku().toUpperCase(Locale.ROOT), body.name().strip(),
+                body.category(), body.sellerId(), body.pricePaise(), body.attributes()));
+        return ResponseEntity.created(URI.create(&quot;/products/&quot; + created.id())).body(created);
+    }
+
+    @GetMapping(&quot;/categories/{code}/attributes&quot;)
+    List&lt;AttributeRules.Rule&gt; rules(@PathVariable String code) {
+        return catalog.rulesOf(code);
+    }
+
+    @GetMapping(&quot;/products/facets&quot;)
+    Map&lt;String, Long&gt; facets(@RequestParam String category, @RequestParam String facet, @RequestParam Map&lt;String, String&gt; params) {
+        Map&lt;String, String&gt; wanted = new TreeMap&lt;&gt;();
+        params.forEach((key, value) -&gt; {
+            if (key.startsWith(&quot;attr.&quot;)) {
+                wanted.put(key.substring(5), value);
+            }
+        });
+        return catalog.facet(category, facet, wanted);
+    }
+
+    /** ?category=phones&amp;attr.ram=8GB&amp;attr.storage=128GB: every attr.* pair must match. */
+    @GetMapping(&quot;/products&quot;)
+    List&lt;ProductCatalog.Product&gt; search(@RequestParam Map&lt;String, String&gt; params) {
+        Map&lt;String, String&gt; wanted = new TreeMap&lt;&gt;();
+        params.forEach((key, value) -&gt; {
+            if (key.startsWith(&quot;attr.&quot;)) {
+                wanted.put(key.substring(5), value);
+            } else if (!key.equals(&quot;category&quot;)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Unknown parameter &quot; + key);
+            }
+        });
+        if (wanted.isEmpty() || wanted.size() &gt; 10) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Give 1 to 10 attr.&lt;name&gt;=&lt;value&gt; filters&quot;);
+        }
+        return catalog.search(params.get(&quot;category&quot;), wanted);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Promote an attribute to a column</h2>
+<p>Product wants "brand" on every product, filterable and sortable, with a brand page that lists the brand's products and a logo from a <code>brands</code> table. Write the migration that moves <code>attributes-&gt;&gt;'brand'</code> into a <code>brand_id</code> column: adding it, backfilling in batches, cleaning values that match no brand, adding the foreign key <code>NOT VALID</code> then validating it, and removing the key from the jsonb. What does the API look like during the change?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, indexes</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: the all-jsonb table and what goes wrong with it.</li>
+<li>Split fields: columns for what every product has and needs rules or joins, jsonb for the rest.</li>
+<li>Put each category's rules in a table, and check attributes against them before saving.</li>
+<li>Search by containment, with a GIN index built for it.</li>
+</ol>
+<h2>Column or attribute?</h2>
+<div class="scroll"><table class=""><thead><tr><th>Question</th><th>Yes → column</th><th>No → attribute</th></tr></thead><tbody><tr><td>Does every product have it?</td><td>price, seller, SKU</td><td>RAM, size</td></tr><tr><td>Does it need a constraint?</td><td>price range, unique SKU</td><td>free text like colour</td></tr><tr><td>Is it joined to another table?</td><td>seller, category</td><td>storage size</td></tr><tr><td>Is it summed, sorted or compared as a number?</td><td>price</td><td>a size shown as text</td></tr></tbody></table></div>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Columns for common fields + jsonb attributes + rules table</td><td>Validation in the app; text values.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>One wide table with a column per attribute</td><td>Hundreds of nullable columns; a migration per category.</td><td><span class="pill bad">The starting point</span></td></tr><tr><td>Everything in jsonb</td><td>No constraints, no joins, fragile casts.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Entity-attribute-value rows (product_id, name, value)</td><td>Flexible; every filter is a self-join; no types.</td><td><span class="pill warn">Hard to query</span></td></tr><tr><td>A table per category</td><td>Typed and constrained; cross-category search is a UNION.</td><td><span class="pill warn">Few, stable categories</span></td></tr><tr><td>A document database</td><td>Flexible documents; joins and transactions are harder.</td><td><span class="pill warn">Station 070</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Object</th><th>What</th><th>Why</th></tr></thead><tbody><tr><td><code>products_sku_unique</code>, <code>products_price_range</code>, <code>products_seller_fk</code>, <code>products_category_fk</code></td><td>Constraints on columns</td><td>The rules the old table could not hold.</td></tr><tr><td><code>products_attributes_object</code></td><td>CHECK <code>jsonb_typeof(attributes) = 'object'</code></td><td>No arrays or strings where an object belongs.</td></tr><tr><td><code>products_attributes</code></td><td>GIN <code>(attributes jsonb_path_ops)</code></td><td>Containment searches.</td></tr><tr><td><code>attribute_definitions</code></td><td>PK (category, name), name shape CHECK</td><td>The rules, as data.</td></tr></tbody></table></div>
+<pre class="code"><code class="language-sql">CREATE TABLE sellers (
+    id   BIGINT       PRIMARY KEY,
+    name VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE categories (
+    code VARCHAR(30) PRIMARY KEY,
+    name VARCHAR(60) NOT NULL
+);
+
+-- What each category&#x27;s attributes may be. Read by the app to validate; data, not code, so a new category needs no release.
+CREATE TABLE attribute_definitions (
+    category_code VARCHAR(30) NOT NULL CONSTRAINT attribute_definitions_category_fk REFERENCES categories (code),
+    name          VARCHAR(30) NOT NULL CONSTRAINT attribute_definitions_name_shape CHECK (name ~ &#x27;^[a-z][a-z_]{1,29}$&#x27;),
+    required      BOOLEAN     NOT NULL,
+    allowed       TEXT[],      -- null: any text up to 40 characters
+    CONSTRAINT attribute_definitions_pk PRIMARY KEY (category_code, name)
+);
+
+-- Fields every product has, that need a rule or a join, are columns. Only what differs per category is jsonb.
+CREATE TABLE products (
+    id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    sku           VARCHAR(30)  NOT NULL CONSTRAINT products_sku_unique UNIQUE,
+    name          VARCHAR(120) NOT NULL,
+    category_code VARCHAR(30)  NOT NULL CONSTRAINT products_category_fk REFERENCES categories (code),
+    seller_id     BIGINT       NOT NULL CONSTRAINT products_seller_fk REFERENCES sellers (id),
+    price_paise   INTEGER      NOT NULL CONSTRAINT products_price_range CHECK (price_paise BETWEEN 100 AND 10000000),
+    attributes    JSONB        NOT NULL CONSTRAINT products_attributes_object CHECK (jsonb_typeof(attributes) = &#x27;object&#x27;)
+);
+-- jsonb_path_ops: a smaller GIN index that answers containment (@&gt;) only, which is the one question asked here.
+CREATE INDEX products_attributes ON products USING GIN (attributes jsonb_path_ops);
+CREATE INDEX products_category ON products (category_code);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Changing rules</dt><dd>A new required attribute applies to new products only; existing rows do not change. Decide whether to backfill, or to require it only on edit.</dd>
+<dt>Typos in values</dt><dd>Free-text attributes drift ("Blue", "blue", "Navy"). Use allowed lists wherever people filter.</dd>
+<dt>Index size</dt><dd>A GIN index covers every key and value; watch its size and update cost on large, write-heavy tables.</dd>
+<dt>Wide documents</dt><dd>jsonb values over about 2 kB are compressed and stored out of line (TOAST); keep attributes small.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>json or jsonb?</summary><p>jsonb: stored parsed, so it can be indexed and queried efficiently; json keeps the exact text, including key order and duplicates.</p></details><details class="qa"><summary>Which jsonb queries can a GIN index answer?</summary><p>With jsonb_ops: containment (@&gt;), key existence (?, ?|, ?&amp;) and jsonpath; with jsonb_path_ops: containment and jsonpath only, with a smaller index.</p></details><details class="qa"><summary>When should a field be a column instead of jsonb?</summary><p>When every row has it, it needs a constraint, it is joined, or it is computed with; jsonb cannot carry those rules.</p></details><details class="qa"><summary>How do you validate jsonb?</summary><p>In the app, against rules (here a table per category); in the database, at least its shape with CHECK constraints.</p></details><details class="qa"><summary>What is the risk of casting a jsonb value in a query?</summary><p>One row with an unexpected value makes the cast fail and the whole query fail for every user.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 13 tests pass.</td><td>You read both saved plans.</td></tr><tr><td>jsonb</td><td>Stored, searched with @>.</td><td>Knows what jsonb_path_ops gives up.</td></tr><tr><td>Rules</td><td>Attributes checked per category.</td><td>Rules as data, not code.</td></tr><tr><td>Design</td><td>Price, seller, SKU as columns.</td><td>Can plan promoting an attribute.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This station has no flawed version to review. Use this checklist on any jsonb column:</p>
+<ul class="rules">
+<li>Is anything in the jsonb that needs a constraint, a join or arithmetic?</li>
+<li>Is the document checked before it is saved, and its shape checked by the database?</li>
+<li>Do searches use operators the index supports?</li>
+<li>Is any JSON built by string concatenation?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
