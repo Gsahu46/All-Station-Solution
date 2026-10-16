@@ -1,0 +1,1707 @@
+<title>Station 061 · Restaurant list without N+1 queries</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 061</span>
+    <h1>Restaurant list without N+1 queries</h1>
+    <p class="scenario">The home screen runs 1 + 50 + 50 queries for 50 restaurants with their cuisines and ratings.</p>
+    <p class="sim"><b>Simulation</b><span>Cities, restaurants, cuisines and ratings are demo data, not Tiffino's. Nothing is ordered or delivered.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Food delivery</li>
+      <li><b>Types</b>Database</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>047 Invoices and their line items</p>
+      <p><span class="eyebrow">Builds toward</span><br>114 Reviewing a pull request · 119 Finding the slow travel search · 137 GraphQL for the streaming home screen</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring Data JPA · Hibernate 7.4 · @EntityGraph · DTO projections · Hibernate statistics · PostgreSQL 17 · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>The home screen</strong><p>Tiffino shows 50 restaurants of a city, each with its cuisines and its star rating.</p></li><li><strong>The slow part</strong><p>The code loaded 50 restaurants, then for each one asked for its cuisines and its reviews: 101 queries for one screen. Each is fast; 101 of them on every app launch is not.</p></li><li><strong>The fix</strong><p>Three queries, whatever the page size: the page, the cuisines of those restaurants, and the ratings already averaged by the database.</p></li></ol>
+<p class="lesson">Count the queries. The number should not grow with the page.</p>
+
+<h2>What are we building?</h2>
+<p><code>GET /restaurants?city=pune</code> returns a page of restaurants with their cuisines and ratings, in three queries.</p>
+
+<h2>An everyday analogy</h2>
+<p>A waiter taking an order for a table of 50. The slow way: walk to the kitchen for the first plate, come back, walk again for the second. The fast way: one trip with a trolley for all the plates, one for all the drinks.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Find the page</strong>: the ids of up to 50 restaurants in the city, in name order.</li>
+<li><strong>Load those restaurants</strong> with their cuisines, in one join.</li>
+<li><strong>Ask for the ratings</strong>: average and count per restaurant, computed by the database in one query.</li>
+<li><strong>Put the cards together</strong> in the page's order.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: the page size goes from 20 to 50. How many queries does the new screen send? And the old one?</summary><p>The new one: still 3. The old one: from 41 (1 + 20 + 20) to 101 (1 + 50 + 50). The test checks the new one at sizes 5, 20 and 50.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No ordering or delivery.</strong> Restaurants are read only.</li>
+<li><strong>No caching.</strong> Fewer queries first; a cache is another station.</li>
+<li><strong>No search or ranking.</strong> Name order; Practice 2 adds rating order.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Query</strong></td><td>One question sent to the database.</td><td>One trip to the storeroom.</td><td>counted by Hibernate statistics in the tests</td></tr><tr><td><strong>Lazy loading</strong></td><td>A related collection is fetched only when the code first touches it.</td><td>The menu card stays in the drawer until someone asks for it.</td><td><code>Restaurant.cuisines</code></td></tr><tr><td><strong>N+1</strong></td><td>One query for the list, then one more for each item in it.</td><td>Fifty trips to the storeroom, one per box, instead of one trolley.</td><td>the old home screen: 1 + 50 + 50</td></tr><tr><td><strong>Entity graph</strong></td><td>Tells JPA which associations to load together with the entity.</td><td>"Bring the menu card with the restaurant."</td><td><code>@EntityGraph(attributePaths = "cuisines")</code></td></tr><tr><td><strong>DTO projection</strong></td><td>The query builds a small result object directly, without loading entities.</td><td>Asking for the total, not every receipt.</td><td><code>RatingSummary</code></td></tr><tr><td><strong>Fetch join</strong></td><td><code>JOIN FETCH</code> in JPQL: load the association in the same query.</td><td>Like the entity graph, but an inner join unless you write <code>LEFT</code>.</td><td>the trap's first fix</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Tiffino</strong> (a fictional food delivery app) opens on a list of restaurants. For 50 restaurants with their cuisines and ratings, the server ran 1 + 50 + 50 queries on every launch.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo data: Mumbai has 3 restaurants written out by hand, Pune has 60 generated ones, Nagpur none.</p>
+<ol class="gwt">
+<li><b>Given</b> <code>city=mumbai</code>, <b>then</b> Anand Stall, Bombay Canteen and Cafe Madras, in name order, each with its cuisines sorted and its rating rounded to one decimal.</li>
+<li><b>Given</b> a restaurant with no reviews, <b>then</b> <code>average</code> is <code>null</code> and <code>count</code> is 0.</li>
+<li><b>Given</b> any page of up to 50, <b>then</b> 3 queries.</li>
+<li><b>Given</b> <code>city=nagpur</code> or a page past the end, <b>then</b> <code>200</code> with no restaurants; a city Tiffino does not serve, <code>404</code>.</li>
+<li><b>Given</b> no city, a page size of 0 or over 50, or a negative page, <b>then</b> <code>400</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>A fixed number of queries per page, proved by counting them in a test.</li>
+<li>Paging happens in the database (<code>LIMIT</code>/<code>OFFSET</code>), never in memory.</li>
+<li>A restaurant with no cuisines or no reviews still appears.</li>
+<li>City codes are lower-cased with <code>Locale.ROOT</code>.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Spot an N+1 in code and prove it with a query count.</li>
+<li>Fix it with <code>@EntityGraph</code> or <code>JOIN FETCH</code>, and know the difference.</li>
+<li>Use a DTO projection for aggregates.</li>
+<li>Page safely when a collection is loaded too.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/restaurants?city=…&amp;page=0&amp;size=20</code></td><td>A page of the city's restaurants: <code>{city, page, size, restaurants: [{id, name, cuisines, rating: {average, count}}]}</code>.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>A page, possibly empty</td></tr><tr><td><span class="pill warn">400</span></td><td>No city, a city outside <code>[A-Za-z-]{3,30}</code>, page below 0 or above 1000, size below 1 or above 50 (demo limits)</td></tr><tr><td><span class="pill warn">404</span></td><td>A city Tiffino does not serve</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 16 Oct 2026. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: Mumbai</h3><p><b>Why:</b> every number here can be checked against the demo data; Anand Stall has no reviews yet.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /restaurants?city=mumbai HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 361
+
+{
+  &quot;city&quot;: &quot;mumbai&quot;,
+  &quot;page&quot;: 0,
+  &quot;size&quot;: 20,
+  &quot;restaurants&quot;: [
+    {
+      &quot;id&quot;: 2,
+      &quot;name&quot;: &quot;Anand Stall&quot;,
+      &quot;cuisines&quot;: [
+        &quot;Street Food&quot;
+      ],
+      &quot;rating&quot;: {
+        &quot;average&quot;: null,
+        &quot;count&quot;: 0
+      }
+    },
+    {
+      &quot;id&quot;: 1,
+      &quot;name&quot;: &quot;Bombay Canteen&quot;,
+      &quot;cuisines&quot;: [
+        &quot;Maharashtrian&quot;,
+        &quot;North Indian&quot;
+      ],
+      &quot;rating&quot;: {
+        &quot;average&quot;: 4.3,
+        &quot;count&quot;: 3
+      }
+    },
+    {
+      &quot;id&quot;: 3,
+      &quot;name&quot;: &quot;Cafe Madras&quot;,
+      &quot;cuisines&quot;: [
+        &quot;Desserts&quot;,
+        &quot;South Indian&quot;
+      ],
+      &quot;rating&quot;: {
+        &quot;average&quot;: 4.0,
+        &quot;count&quot;: 2
+      }
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 2: the first five in Pune</h3><p><b>Why:</b> a page, in name order.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /restaurants?city=pune&amp;size=5 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 592
+
+{
+  &quot;city&quot;: &quot;pune&quot;,
+  &quot;page&quot;: 0,
+  &quot;size&quot;: 5,
+  &quot;restaurants&quot;: [
+    {
+      &quot;id&quot;: 4,
+      &quot;name&quot;: &quot;Pune Kitchen 01&quot;,
+      &quot;cuisines&quot;: [
+        &quot;Desserts&quot;,
+        &quot;North Indian&quot;
+      ],
+      &quot;rating&quot;: {
+        &quot;average&quot;: 2.5,
+        &quot;count&quot;: 4
+      }
+    },
+    {
+      &quot;id&quot;: 5,
+      &quot;name&quot;: &quot;Pune Kitchen 02&quot;,
+      &quot;cuisines&quot;: [
+        &quot;South Indian&quot;,
+        &quot;Street Food&quot;
+      ],
+      &quot;rating&quot;: {
+        &quot;average&quot;: null,
+        &quot;count&quot;: 0
+      }
+    },
+    {
+      &quot;id&quot;: 6,
+      &quot;name&quot;: &quot;Pune Kitchen 03&quot;,
+      &quot;cuisines&quot;: [
+        &quot;Chinese&quot;,
+        &quot;North Indian&quot;
+      ],
+      &quot;rating&quot;: {
+        &quot;average&quot;: 3.0,
+        &quot;count&quot;: 1
+      }
+    },
+    {
+      &quot;id&quot;: 7,
+      &quot;name&quot;: &quot;Pune Kitchen 04&quot;,
+      &quot;cuisines&quot;: [
+        &quot;Maharashtrian&quot;,
+        &quot;South Indian&quot;
+      ],
+      &quot;rating&quot;: {
+        &quot;average&quot;: 4.5,
+        &quot;count&quot;: 2
+      }
+    },
+    {
+      &quot;id&quot;: 8,
+      &quot;name&quot;: &quot;Pune Kitchen 05&quot;,
+      &quot;cuisines&quot;: [
+        &quot;Chinese&quot;,
+        &quot;Desserts&quot;
+      ],
+      &quot;rating&quot;: {
+        &quot;average&quot;: 2.7,
+        &quot;count&quot;: 3
+      }
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 3: Nagpur, typed with a capital</h3><p><b>Why:</b> a city Tiffino serves with no restaurants yet: an empty page, not a <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /restaurants?city=Nagpur HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 53
+
+{
+  &quot;city&quot;: &quot;nagpur&quot;,
+  &quot;page&quot;: 0,
+  &quot;size&quot;: 20,
+  &quot;restaurants&quot;: []
+}</code></pre></div></div></section><section class="example"><h3>Case 4: Jaipur</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /restaurants?city=jaipur HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Tiffino does not deliver in jaipur yet&quot;,
+  &quot;instance&quot;: &quot;/restaurants&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Not Found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: size 500</h3><p><b>Why:</b> <code>400</code>; a page is at most 50.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /restaurants?city=pune&amp;size=500 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Validation failure&quot;,
+  &quot;instance&quot;: &quot;/restaurants&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section>
+<h2>The SQL behind one page of 50</h2>
+<p class="muted">From <code>docs/capture.sh</code>: a second copy of the app with Hibernate's SQL log switched on, one request (<code>docs/captures/sql.txt</code>). 3 statements.</p>
+<pre class="code"><code class="language-sql">select r1_0.id from restaurants r1_0 where r1_0.city_code=? order by r1_0.name,r1_0.id fetch first ? rows only
+
+select r1_0.id,r1_0.city_code,c1_0.restaurant_id,c1_1.id,c1_1.name,r1_0.name from restaurants r1_0 left join restaurant_cuisines c1_0 on r1_0.id=c1_0.restaurant_id left join cuisines c1_1 on c1_1.id=c1_0.cuisine_id where r1_0.id in (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+
+select r1_0.restaurant_id,avg(r1_0.rating),count(r1_0.id) from reviews r1_0 where r1_0.restaurant_id in (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) group by r1_0.restaurant_id</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>A restaurant with no reviews</td><td><code>average: null</code>, <code>count: 0</code></td><td><code>mumbaiListsItsRestaurantsWithCuisinesAndRatings</code></td></tr><tr><td>A restaurant with no cuisines</td><td>Still listed</td><td><code>aFetchJoinPageLeavesOutRestaurantsWithNoCuisines</code></td></tr><tr><td>Pages of 5, 20 and 50</td><td>3 queries each</td><td><code>theNewScreenSendsThreeQueriesForAnyPageSize</code></td></tr><tr><td>Page 2 of Pune</td><td>Continues where page 1 stopped</td><td><code>puneComesInPages</code></td></tr><tr><td><code>MUMBAI</code></td><td>Same as <code>mumbai</code></td><td><code>theCityIsMatchedInAnyCase</code></td></tr><tr><td>Nagpur; past the last page; Jaipur</td><td>Empty; empty; <code>404</code></td><td><code>aCityWithNoRestaurantsOrAPagePastTheEndIsEmpty</code>, <code>aCityTiffinoDoesNotServeIs404</code></td></tr><tr><td>Bad parameters</td><td><code>400</code></td><td><code>badParametersAre400</code></td></tr><tr><td>Bad rows written directly; a half-added restaurant</td><td>Refused; rolled back</td><td><code>RestaurantDatabaseTest</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Lazy loading inside a loop: 1 + N queries per page.</p>
+<p>The old screen is kept in the tests as <code>OldHomeScreen</code>. Its results are right; the test proves the new screen gives exactly the same cards. Only the query count differs: 101 against 3.</p>
+<p>The first fix people reach for is <code>JOIN FETCH</code> with the same page. Two things to know:</p>
+<ul>
+<li><strong>Paging.</strong> Hibernate 5 loaded <em>every</em> matching row and cut the page in memory, with the warning HHH000104. Hibernate 7.4, used here, puts the page in a subquery instead: the test counts 1 query. Check your version's SQL before trusting either.</li>
+<li><strong>Inner join.</strong> <code>JOIN FETCH</code> drops rows with nothing to join. A new restaurant with no cuisines yet vanishes from the page. The entity graph uses a left join, so the new screen still lists it.</li>
+</ul>
+<p>While building, each fix was undone once: no entity graph turned 1 test red (the query count); an inner <code>JOIN FETCH</code> 1; losing the page order 2; no rounding 2; no <code>404</code> and no lower-casing 1 each.</p>
+</div>
+<pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** Written first: the old home screen counted, then the fix counted, on the same page of 50 Pune restaurants. */
+class NPlusOneTrapTest extends ApiTest {
+
+    @Autowired
+    OldHomeScreen oldHomeScreen;
+    @Autowired
+    HomeScreen homeScreen;
+
+    @Test
+    void theOldScreenSendsOnePlusFiftyPlusFiftyQueries() {
+        Counted&lt;List&lt;HomeScreen.Card&gt;&gt; old = counting(() -&gt; oldHomeScreen.list(&quot;pune&quot;, 0, 50));
+        assertThat(old.result()).hasSize(50);
+        assertThat(old.queries()).isEqualTo(1 + 50 + 50);
+    }
+
+    @Test
+    void theNewScreenSendsThreeQueriesForAnyPageSize() {
+        for (int size : new int[]{5, 20, 50}) {
+            Counted&lt;HomeScreen.Listing&gt; page = counting(() -&gt; homeScreen.list(&quot;pune&quot;, 0, size));
+            assertThat(page.result().restaurants()).hasSize(size);
+            assertThat(page.queries()).as(&quot;page size %d&quot;, size).isEqualTo(3);
+        }
+    }
+
+    @Test
+    void bothGiveTheSameCards() {
+        assertThat(homeScreen.list(&quot;pune&quot;, 0, 50).restaurants()).isEqualTo(oldHomeScreen.list(&quot;pune&quot;, 0, 50));
+        assertThat(homeScreen.list(&quot;mumbai&quot;, 0, 20).restaurants()).isEqualTo(oldHomeScreen.list(&quot;mumbai&quot;, 0, 20));
+    }
+
+    @Test
+    void aFetchJoinPageLeavesOutRestaurantsWithNoCuisines() {
+        jdbc.sql(&quot;INSERT INTO cities (code, name) VALUES (&#x27;testville&#x27;, &#x27;Testville&#x27;)&quot;).update();
+        try {
+            jdbc.sql(&quot;INSERT INTO restaurants (city_code, name) VALUES (&#x27;testville&#x27;, &#x27;Aamchi Thali&#x27;), (&#x27;testville&#x27;, &#x27;Zunka Bhakar&#x27;)&quot;).update();
+            jdbc.sql(&quot;INSERT INTO restaurant_cuisines SELECT id, 4 FROM restaurants WHERE name = &#x27;Zunka Bhakar&#x27;&quot;).update();   // Aamchi Thali has none yet
+            Counted&lt;List&lt;String&gt;&gt; fetchJoin = counting(() -&gt; oldHomeScreen.fetchJoinPage(&quot;testville&quot;, 0, 20));
+            assertThat(fetchJoin.queries()).isEqualTo(1);   // Hibernate 7.4 applies the page in SQL, in a subquery
+            assertThat(fetchJoin.result()).containsExactly(&quot;Zunka Bhakar&quot;);
+            assertThat(homeScreen.list(&quot;testville&quot;, 0, 20).restaurants()).extracting(HomeScreen.Card::name).containsExactly(&quot;Aamchi Thali&quot;, &quot;Zunka Bhakar&quot;);
+        } finally {
+            jdbc.sql(&quot;DELETE FROM restaurants WHERE city_code = &#x27;testville&#x27;&quot;).update();
+            jdbc.sql(&quot;DELETE FROM cities WHERE code = &#x27;testville&#x27;&quot;).update();
+        }
+    }
+}</code></pre><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
+
+/** The home screen as it was, kept in the tests only: correct results, one query per restaurant per association. */
+@Component
+class OldHomeScreen {
+
+    private final OldRestaurants restaurants;
+    private final OldReviews reviews;
+
+    OldHomeScreen(OldRestaurants restaurants, OldReviews reviews) {
+        this.restaurants = restaurants;
+        this.reviews = reviews;
+    }
+
+    @Transactional(readOnly = true)
+    List&lt;HomeScreen.Card&gt; list(String city, int page, int size) {
+        return restaurants.findByCityCodeOrderByNameAscIdAsc(city, PageRequest.of(page, size)).stream().map(r -&gt; {
+            List&lt;String&gt; cuisines = r.getCuisines().stream().map(Cuisine::getName).sorted().toList();   // +1 query: the lazy set loads
+            List&lt;Review&gt; all = reviews.findByRestaurantId(r.getId());                                  // +1 query: every review row
+            HomeScreen.Rating rating = all.isEmpty() ? new HomeScreen.Rating(null, 0)
+                    : new HomeScreen.Rating(BigDecimal.valueOf(all.stream().mapToInt(Review::getRating).average().orElseThrow()).setScale(1, RoundingMode.HALF_UP), all.size());
+            return new HomeScreen.Card(r.getId(), r.getName(), cuisines, rating);
+        }).toList();
+    }
+
+    @Transactional(readOnly = true)
+    List&lt;String&gt; fetchJoinPage(String city, int page, int size) {
+        return restaurants.findWithCuisines(city, PageRequest.of(page, size)).stream().map(Restaurant::getName).toList();
+    }
+}</code></pre><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.Repository;
+
+import java.util.List;
+
+/** The old queries, kept in the tests only. */
+interface OldRestaurants extends Repository&lt;Restaurant, Long&gt; {
+
+    List&lt;Restaurant&gt; findByCityCodeOrderByNameAscIdAsc(String cityCode, Pageable page);
+
+    /** The first fix someone tries: fetch the cuisines in the same query, and keep paging. JOIN FETCH is an inner join. */
+    @Query(&quot;select r from Restaurant r join fetch r.cuisines where r.cityCode = :city order by r.name, r.id&quot;)
+    List&lt;Restaurant&gt; findWithCuisines(String city, Pageable page);
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 13 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Watch the SQL yourself: start the app with Hibernate's SQL log on, call the endpoint once, and count the lines.</p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run -Dspring-boot.run.arguments=--logging.level.org.hibernate.SQL=debug
+curl &#x27;http://localhost:8080/restaurants?city=pune&amp;size=50&#x27;</code></pre>
+<p>The capture above did exactly this. Then remove <code>@EntityGraph</code> from <code>findByIdIn</code> and count again.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>No qualifying bean of type '…OldHomeScreen$OldRestaurants'</code></td><td>Spring Data ignores repository interfaces nested inside a class.</td><td>Make each repository a top-level interface. Found while building this station.</td></tr><tr><td><code>LazyInitializationException</code></td><td>A lazy collection touched after the transaction ended (open-in-view is off).</td><td>Load it in the service: an entity graph or a fetch join.</td></tr><tr><td><code>HHH000104: firstResult/maxResults specified with collection fetch; applying in memory</code></td><td>Older Hibernate paging a fetch join in memory.</td><td>Page the ids first, as here, then load the page.</td></tr><tr><td>A restaurant missing from the page</td><td>An inner <code>JOIN FETCH</code> on an empty collection.</td><td><code>LEFT JOIN FETCH</code>, or an entity graph.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/061-restaurant-list-without-n-plus-1-queries/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/tiffino/restaurants/
+│   ├── RestaurantController.java   ├── HomeScreen.java
+│   ├── RestaurantRepository.java   ├── ReviewRepository.java   ├── RatingSummary.java
+│   ├── Restaurant.java   ├── Review.java   ├── Cuisine.java   ├── City.java   ├── CityRepository.java
+│   └── RestaurantsApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__restaurants.sql, V2__demo_restaurants.sql
+├── src/test/java/com/tiffino/restaurants/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the database behind it.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">RestaurantController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">HomeScreen.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">RestaurantRepository.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">ReviewRepository.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">RatingSummary.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">Restaurant.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">Review.java</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">Cuisine.java</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">City.java</button><button class="file-btn" role="tab" id="code-9-b" aria-controls="code-9" aria-selected="false" data-group="code">CityRepository.java</button><button class="file-btn" role="tab" id="code-10-b" aria-controls="code-10" aria-selected="false" data-group="code">V1__restaurants.sql</button><button class="file-btn" role="tab" id="code-11-b" aria-controls="code-11" aria-selected="false" data-group="code">V2__demo_restaurants.sql</button><button class="file-btn" role="tab" id="code-12-b" aria-controls="code-12" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-13-b" aria-controls="code-13" aria-selected="false" data-group="code">compose.yaml</button><button class="file-btn" role="tab" id="code-14-b" aria-controls="code-14" aria-selected="false" data-group="code">RestaurantsApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/tiffino/restaurants/RestaurantController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Checks the parameters and lower-cases the city.</dd><dt>Why</dt><dd>Page size and number are limited before any query.</dd><dt>Without it</dt><dd><code>size=100000</code> loading a whole city.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Locale;
+
+@RestController
+class RestaurantController {
+
+    private final HomeScreen homeScreen;
+
+    RestaurantController(HomeScreen homeScreen) {
+        this.homeScreen = homeScreen;
+    }
+
+    /** Demo limits: up to 50 restaurants a page, up to page 1000. */
+    @GetMapping(&quot;/restaurants&quot;)
+    HomeScreen.Listing list(@RequestParam @Pattern(regexp = &quot;[A-Za-z-]{3,30}&quot;) String city,
+                            @RequestParam(defaultValue = &quot;0&quot;) @Min(0) @Max(1000) int page,
+                            @RequestParam(defaultValue = &quot;20&quot;) @Min(1) @Max(50) int size) {
+        return homeScreen.list(city.toLowerCase(Locale.ROOT), page, size);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/tiffino/restaurants/HomeScreen.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The three queries, then the cards in page order.</dd><dt>Why</dt><dd>The number of queries stays the same for any page size.</dd><dt>Without it</dt><dd>One query per restaurant per association.</dd></dl><ul><li>The city is looked up only when the page is empty, so the usual path stays at three.</li><li><code>findByIdIn</code> returns rows in any order; the cards follow the ids of query 1.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+/** The home screen&#x27;s restaurant list in three queries, however many restaurants a page holds. */
+@Service
+class HomeScreen {
+
+    record Rating(BigDecimal average, long count) {
+    }
+
+    record Card(long id, String name, List&lt;String&gt; cuisines, Rating rating) {
+    }
+
+    record Listing(String city, int page, int size, List&lt;Card&gt; restaurants) {
+    }
+
+    private final RestaurantRepository restaurants;
+    private final ReviewRepository reviews;
+    private final CityRepository cities;
+
+    HomeScreen(RestaurantRepository restaurants, ReviewRepository reviews, CityRepository cities) {
+        this.restaurants = restaurants;
+        this.reviews = reviews;
+        this.cities = cities;
+    }
+
+    @Transactional(readOnly = true)
+    Listing list(String city, int page, int size) {
+        List&lt;Long&gt; ids = restaurants.findPageOfIds(city, PageRequest.of(page, size));
+        if (ids.isEmpty()) {
+            // Only an empty page needs to know whether the city exists: the usual path stays at three queries.
+            if (!cities.existsById(city)) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;Tiffino does not deliver in &quot; + city + &quot; yet&quot;);
+            }
+            return new Listing(city, page, size, List.of());
+        }
+        Map&lt;Long, Restaurant&gt; byId = restaurants.findByIdIn(ids).stream().collect(Collectors.toMap(Restaurant::getId, Function.identity()));
+        Map&lt;Long, RatingSummary&gt; ratings = reviews.summariesFor(ids).stream().collect(Collectors.toMap(RatingSummary::restaurantId, Function.identity()));
+        List&lt;Card&gt; cards = ids.stream().map(id -&gt; card(byId.get(id), ratings.get(id))).toList();   // back in page order
+        return new Listing(city, page, size, cards);
+    }
+
+    private static Card card(Restaurant r, RatingSummary rating) {
+        List&lt;String&gt; cuisines = r.getCuisines().stream().map(Cuisine::getName).sorted().toList();
+        Rating summary = rating == null ? new Rating(null, 0)
+                : new Rating(BigDecimal.valueOf(rating.average()).setScale(1, RoundingMode.HALF_UP), rating.count());
+        return new Card(r.getId(), r.getName(), cuisines, summary);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/tiffino/restaurants/RestaurantRepository.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Query 1 (a page of ids) and query 2 (those restaurants with cuisines).</dd><dt>Why</dt><dd>Paging ids only lets the database apply <code>LIMIT</code>; the entity graph loads cuisines with a left join.</dd><dt>Without it</dt><dd>A lazy load per restaurant, or a fetch join that hides restaurants without cuisines.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.Collection;
+import java.util.List;
+
+interface RestaurantRepository extends JpaRepository&lt;Restaurant, Long&gt; {
+
+    /** Query 1: one page of ids. No collection is joined, so the database applies LIMIT and OFFSET. */
+    @Query(&quot;select r.id from Restaurant r where r.cityCode = :city order by r.name, r.id&quot;)
+    List&lt;Long&gt; findPageOfIds(String city, Pageable page);
+
+    /** Query 2: those restaurants with their cuisines, in one join. */
+    @EntityGraph(attributePaths = &quot;cuisines&quot;)
+    List&lt;Restaurant&gt; findByIdIn(Collection&lt;Long&gt; ids);
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/tiffino/restaurants/ReviewRepository.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Query 3: average and count per restaurant, as <code>RatingSummary</code> objects.</dd><dt>Why</dt><dd>The database averages; no review row reaches Java.</dd><dt>Without it</dt><dd>Loading every review to average them in a loop.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.Collection;
+import java.util.List;
+
+interface ReviewRepository extends JpaRepository&lt;Review, Long&gt; {
+
+    /** Query 3: average and count for every restaurant on the page, grouped by the database. */
+    @Query(&quot;&quot;&quot;
+            select new com.tiffino.restaurants.RatingSummary(r.restaurant.id, avg(r.rating), count(r))
+            from Review r where r.restaurant.id in :ids group by r.restaurant.id&quot;&quot;&quot;)
+    List&lt;RatingSummary&gt; summariesFor(Collection&lt;Long&gt; ids);
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/tiffino/restaurants/RatingSummary.java</p><div class="notes"><p>The projection: built by <code>select new …</code>.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+/** A DTO projection: JPQL builds it straight from the aggregate, no Review entity is loaded. */
+record RatingSummary(Long restaurantId, Double average, Long count) {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/tiffino/restaurants/Restaurant.java</p><div class="notes"><p>A restaurant; its cuisines are lazy, the JPA default for collections.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.Table;
+
+import java.util.HashSet;
+import java.util.Set;
+
+@Entity
+@Table(name = &quot;restaurants&quot;)
+class Restaurant {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    @Column(name = &quot;city_code&quot;)
+    private String cityCode;
+    private String name;
+
+    /** Lazy, the JPA default for collections: loaded only when asked for, which is how the N+1 starts. */
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = &quot;restaurant_cuisines&quot;, joinColumns = @JoinColumn(name = &quot;restaurant_id&quot;), inverseJoinColumns = @JoinColumn(name = &quot;cuisine_id&quot;))
+    private Set&lt;Cuisine&gt; cuisines = new HashSet&lt;&gt;();
+
+    protected Restaurant() {
+    }
+
+    Long getId() {
+        return id;
+    }
+
+    String getName() {
+        return name;
+    }
+
+    Set&lt;Cuisine&gt; getCuisines() {
+        return cuisines;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/tiffino/restaurants/Review.java</p><div class="notes"><p>One rating, 1 to 5.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = &quot;reviews&quot;)
+class Review {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = &quot;restaurant_id&quot;)
+    private Restaurant restaurant;
+    private short rating;
+
+    protected Review() {
+    }
+
+    short getRating() {
+        return rating;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/java/com/tiffino/restaurants/Cuisine.java</p><div class="notes"><p>A cuisine.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = &quot;cuisines&quot;)
+class Cuisine {
+
+    @Id
+    private Long id;
+    private String name;
+
+    protected Cuisine() {
+    }
+
+    String getName() {
+        return name;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">src/main/java/com/tiffino/restaurants/City.java</p><div class="notes"><p>A city Tiffino serves.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = &quot;cities&quot;)
+class City {
+
+    @Id
+    private String code;
+    private String name;
+
+    protected City() {
+    }
+
+    String getCode() {
+        return code;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-9" aria-labelledby="code-9-b" hidden><p class="path">src/main/java/com/tiffino/restaurants/CityRepository.java</p><div class="notes"><p>"Does this city exist", for empty pages only.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+interface CityRepository extends JpaRepository&lt;City, String&gt; {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-10" aria-labelledby="code-10-b" hidden><p class="path">src/main/resources/db/migration/V1__restaurants.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The tables, named constraints and the page index.</dd><dt>Why</dt><dd><code>restaurants_city_name</code> matches the page query's filter and order.</dd><dt>Without it</dt><dd>A sort of the whole city on every page.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">CREATE TABLE cities (
+    code VARCHAR(30)  PRIMARY KEY CONSTRAINT cities_code_shape CHECK (code ~ &#x27;^[a-z-]{3,30}$&#x27;),
+    name VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE cuisines (
+    id   BIGINT       PRIMARY KEY,
+    name VARCHAR(50)  NOT NULL CONSTRAINT cuisines_name_unique UNIQUE
+);
+
+CREATE TABLE restaurants (
+    id        BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    city_code VARCHAR(30)  NOT NULL CONSTRAINT restaurants_city_fk REFERENCES cities (code),
+    name      VARCHAR(100) NOT NULL,
+    CONSTRAINT restaurants_name_per_city UNIQUE (city_code, name)
+);
+-- The home screen&#x27;s query: restaurants of one city in name order.
+CREATE INDEX restaurants_city_name ON restaurants (city_code, name, id);
+
+CREATE TABLE restaurant_cuisines (
+    restaurant_id BIGINT NOT NULL CONSTRAINT restaurant_cuisines_restaurant_fk REFERENCES restaurants (id) ON DELETE CASCADE,
+    cuisine_id    BIGINT NOT NULL CONSTRAINT restaurant_cuisines_cuisine_fk REFERENCES cuisines (id),
+    CONSTRAINT restaurant_cuisines_pk PRIMARY KEY (restaurant_id, cuisine_id)
+);
+
+CREATE TABLE reviews (
+    id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    restaurant_id BIGINT   NOT NULL CONSTRAINT reviews_restaurant_fk REFERENCES restaurants (id) ON DELETE CASCADE,
+    rating        SMALLINT NOT NULL CONSTRAINT reviews_rating_range CHECK (rating BETWEEN 1 AND 5)
+);
+CREATE INDEX reviews_restaurant ON reviews (restaurant_id);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-11" aria-labelledby="code-11-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_restaurants.sql</p><div class="notes"><p>3 Mumbai restaurants by hand, 60 in Pune generated, none in Nagpur.</p></div><div class="src"><pre class="code"><code class="language-sql">INSERT INTO cities (code, name) VALUES (&#x27;pune&#x27;, &#x27;Pune&#x27;), (&#x27;mumbai&#x27;, &#x27;Mumbai&#x27;), (&#x27;nagpur&#x27;, &#x27;Nagpur&#x27;);
+INSERT INTO cuisines (id, name) VALUES (1, &#x27;North Indian&#x27;), (2, &#x27;South Indian&#x27;), (3, &#x27;Chinese&#x27;), (4, &#x27;Maharashtrian&#x27;), (5, &#x27;Desserts&#x27;), (6, &#x27;Street Food&#x27;);
+
+-- Mumbai: three restaurants written out, so every number on the page can be checked by hand.
+INSERT INTO restaurants (city_code, name) VALUES (&#x27;mumbai&#x27;, &#x27;Bombay Canteen&#x27;), (&#x27;mumbai&#x27;, &#x27;Anand Stall&#x27;), (&#x27;mumbai&#x27;, &#x27;Cafe Madras&#x27;);
+INSERT INTO restaurant_cuisines (restaurant_id, cuisine_id) VALUES (1, 1), (1, 4), (2, 6), (3, 2), (3, 5);
+INSERT INTO reviews (restaurant_id, rating) VALUES (1, 5), (1, 4), (1, 4), (3, 3), (3, 5);   -- Anand Stall has no reviews yet
+
+-- Pune: 60 restaurants, each with 2 cuisines and 0 to 4 reviews; the home screen shows 50 of them.
+INSERT INTO restaurants (city_code, name) SELECT &#x27;pune&#x27;, &#x27;Pune Kitchen &#x27; || lpad(i::text, 2, &#x27;0&#x27;) FROM generate_series(1, 60) AS i;
+INSERT INTO restaurant_cuisines (restaurant_id, cuisine_id)
+    SELECT r.id, c FROM restaurants r, LATERAL (VALUES (r.id % 6 + 1), ((r.id + 2) % 6 + 1)) AS v(c) WHERE r.city_code = &#x27;pune&#x27;;
+INSERT INTO reviews (restaurant_id, rating)
+    SELECT r.id, (r.id + k) % 5 + 1 FROM restaurants r, generate_series(1, (r.id % 5)::int) AS k WHERE r.city_code = &#x27;pune&#x27;;</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-12" aria-labelledby="code-12-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>open-in-view off: a lazy association cannot load quietly while the response is written.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: tiffino-restaurants
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/tiffino
+    username: tiffino
+    password: tiffino
+  jpa:
+    # Lazy associations load inside the service only; a view never triggers a query.
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # Flyway owns the schema; Hibernate only checks the entities match it</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-13" aria-labelledby="code-13-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: tiffino
+      POSTGRES_USER: tiffino
+      POSTGRES_PASSWORD: tiffino
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U tiffino -d tiffino&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-14" aria-labelledby="code-14-b" hidden><p class="path">src/main/java/com/tiffino/restaurants/RestaurantsApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class RestaurantsApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(RestaurantsApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>RestaurantContractTest</code> (6)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>NPlusOneTrapTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>RestaurantDatabaseTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>How the queries are counted</h2>
+<p>The tests switch on Hibernate statistics (<code>hibernate.generate_statistics=true</code>, tests only) and read <code>getPrepareStatementCount()</code> around each call: every SQL statement Hibernate sends, including lazy loads.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, Hibernate 7.4, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 -- in com.tiffino.restaurants.RestaurantContractTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.tiffino.restaurants.NPlusOneTrapTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.tiffino.restaurants.RestaurantDatabaseTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">NPlusOneTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">RestaurantDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">RestaurantContractTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">OldHomeScreen.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">OldRestaurants.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">OldReviews.java</button><button class="file-btn" role="tab" id="tests-6-b" aria-controls="tests-6" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-7-b" aria-controls="tests-7" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/tiffino/restaurants/NPlusOneTrapTest.java</p><div class="notes"><p>Written first: 101 queries old, 3 new, the same cards, and the fetch-join page.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** Written first: the old home screen counted, then the fix counted, on the same page of 50 Pune restaurants. */
+class NPlusOneTrapTest extends ApiTest {
+
+    @Autowired
+    OldHomeScreen oldHomeScreen;
+    @Autowired
+    HomeScreen homeScreen;
+
+    @Test
+    void theOldScreenSendsOnePlusFiftyPlusFiftyQueries() {
+        Counted&lt;List&lt;HomeScreen.Card&gt;&gt; old = counting(() -&gt; oldHomeScreen.list(&quot;pune&quot;, 0, 50));
+        assertThat(old.result()).hasSize(50);
+        assertThat(old.queries()).isEqualTo(1 + 50 + 50);
+    }
+
+    @Test
+    void theNewScreenSendsThreeQueriesForAnyPageSize() {
+        for (int size : new int[]{5, 20, 50}) {
+            Counted&lt;HomeScreen.Listing&gt; page = counting(() -&gt; homeScreen.list(&quot;pune&quot;, 0, size));
+            assertThat(page.result().restaurants()).hasSize(size);
+            assertThat(page.queries()).as(&quot;page size %d&quot;, size).isEqualTo(3);
+        }
+    }
+
+    @Test
+    void bothGiveTheSameCards() {
+        assertThat(homeScreen.list(&quot;pune&quot;, 0, 50).restaurants()).isEqualTo(oldHomeScreen.list(&quot;pune&quot;, 0, 50));
+        assertThat(homeScreen.list(&quot;mumbai&quot;, 0, 20).restaurants()).isEqualTo(oldHomeScreen.list(&quot;mumbai&quot;, 0, 20));
+    }
+
+    @Test
+    void aFetchJoinPageLeavesOutRestaurantsWithNoCuisines() {
+        jdbc.sql(&quot;INSERT INTO cities (code, name) VALUES (&#x27;testville&#x27;, &#x27;Testville&#x27;)&quot;).update();
+        try {
+            jdbc.sql(&quot;INSERT INTO restaurants (city_code, name) VALUES (&#x27;testville&#x27;, &#x27;Aamchi Thali&#x27;), (&#x27;testville&#x27;, &#x27;Zunka Bhakar&#x27;)&quot;).update();
+            jdbc.sql(&quot;INSERT INTO restaurant_cuisines SELECT id, 4 FROM restaurants WHERE name = &#x27;Zunka Bhakar&#x27;&quot;).update();   // Aamchi Thali has none yet
+            Counted&lt;List&lt;String&gt;&gt; fetchJoin = counting(() -&gt; oldHomeScreen.fetchJoinPage(&quot;testville&quot;, 0, 20));
+            assertThat(fetchJoin.queries()).isEqualTo(1);   // Hibernate 7.4 applies the page in SQL, in a subquery
+            assertThat(fetchJoin.result()).containsExactly(&quot;Zunka Bhakar&quot;);
+            assertThat(homeScreen.list(&quot;testville&quot;, 0, 20).restaurants()).extracting(HomeScreen.Card::name).containsExactly(&quot;Aamchi Thali&quot;, &quot;Zunka Bhakar&quot;);
+        } finally {
+            jdbc.sql(&quot;DELETE FROM restaurants WHERE city_code = &#x27;testville&#x27;&quot;).update();
+            jdbc.sql(&quot;DELETE FROM cities WHERE code = &#x27;testville&#x27;&quot;).update();
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/tiffino/restaurants/RestaurantDatabaseTest.java</p><div class="notes"><p>Named constraints with plain SQL, a rolled-back restaurant, and cascades, in a test city removed afterwards.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The rules as PostgreSQL enforces them, with plain SQL, in a city of its own that is removed afterwards. */
+class RestaurantDatabaseTest extends ApiTest {
+
+    @Autowired
+    TransactionTemplate transaction;
+
+    @BeforeEach
+    void testCity() {
+        jdbc.sql(&quot;INSERT INTO cities (code, name) VALUES (&#x27;testville&#x27;, &#x27;Testville&#x27;)&quot;).update();
+    }
+
+    @AfterEach
+    void removeTestCity() {
+        jdbc.sql(&quot;DELETE FROM restaurants WHERE city_code = &#x27;testville&#x27;&quot;).update();   // cascades to its cuisines and reviews
+        jdbc.sql(&quot;DELETE FROM cities WHERE code = &#x27;testville&#x27;&quot;).update();
+    }
+
+    private long restaurant(String name) {
+        return jdbc.sql(&quot;INSERT INTO restaurants (city_code, name) VALUES (&#x27;testville&#x27;, ?) RETURNING id&quot;).param(name).query(Long.class).single();
+    }
+
+    @Test
+    void namedConstraintsHoldWithoutJava() {
+        long id = restaurant(&quot;Test Dhaba&quot;);
+        jdbc.sql(&quot;INSERT INTO restaurant_cuisines VALUES (?, 1)&quot;).param(id).update();
+        assertThatThrownBy(() -&gt; restaurant(&quot;Test Dhaba&quot;)).isInstanceOf(DataAccessException.class).hasMessageContaining(&quot;restaurants_name_per_city&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO restaurant_cuisines VALUES (?, 1)&quot;).param(id).update()).hasMessageContaining(&quot;restaurant_cuisines_pk&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO restaurant_cuisines VALUES (?, 99)&quot;).param(id).update()).hasMessageContaining(&quot;restaurant_cuisines_cuisine_fk&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO reviews (restaurant_id, rating) VALUES (?, 6)&quot;).param(id).update()).hasMessageContaining(&quot;reviews_rating_range&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO restaurants (city_code, name) VALUES (&#x27;jaipur&#x27;, &#x27;X&#x27;)&quot;).update()).hasMessageContaining(&quot;restaurants_city_fk&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO cities (code, name) VALUES (&#x27;Jaipur&#x27;, &#x27;Jaipur&#x27;)&quot;).update()).hasMessageContaining(&quot;cities_code_shape&quot;);
+    }
+
+    @Test
+    void aRestaurantWithABadCuisineIsNotAddedAtAll() {
+        assertThatThrownBy(() -&gt; transaction.executeWithoutResult(status -&gt; {
+            long id = restaurant(&quot;Half Added&quot;);
+            jdbc.sql(&quot;INSERT INTO restaurant_cuisines VALUES (?, 1)&quot;).param(id).update();
+            jdbc.sql(&quot;INSERT INTO restaurant_cuisines VALUES (?, 99)&quot;).param(id).update();
+        })).hasMessageContaining(&quot;restaurant_cuisines_cuisine_fk&quot;);
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM restaurants WHERE name = &#x27;Half Added&#x27;&quot;).query(Long.class).single()).isZero();
+    }
+
+    @Test
+    void removingARestaurantRemovesItsCuisinesAndReviews() {
+        long id = restaurant(&quot;Closing Down&quot;);
+        jdbc.sql(&quot;INSERT INTO restaurant_cuisines VALUES (?, 2)&quot;).param(id).update();
+        jdbc.sql(&quot;INSERT INTO reviews (restaurant_id, rating) VALUES (?, 4)&quot;).param(id).update();
+        jdbc.sql(&quot;DELETE FROM restaurants WHERE id = ?&quot;).param(id).update();
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM restaurant_cuisines WHERE restaurant_id = ?&quot;).param(id).query(Long.class).single()).isZero();
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM reviews WHERE restaurant_id = ?&quot;).param(id).query(Long.class).single()).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/tiffino/restaurants/RestaurantContractTest.java</p><div class="notes"><p>The endpoint through HTTP.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class RestaurantContractTest extends ApiTest {
+
+    @Test
+    void mumbaiListsItsRestaurantsWithCuisinesAndRatings() throws Exception {
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;mumbai&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.city&quot;).value(&quot;mumbai&quot;)).andExpect(jsonPath(&quot;$.page&quot;).value(0)).andExpect(jsonPath(&quot;$.size&quot;).value(20))
+                .andExpect(jsonPath(&quot;$.restaurants[*].name&quot;, contains(&quot;Anand Stall&quot;, &quot;Bombay Canteen&quot;, &quot;Cafe Madras&quot;)))
+                .andExpect(jsonPath(&quot;$.restaurants[0].cuisines&quot;, contains(&quot;Street Food&quot;)))
+                .andExpect(jsonPath(&quot;$.restaurants[0].rating.average&quot;, nullValue())).andExpect(jsonPath(&quot;$.restaurants[0].rating.count&quot;).value(0))
+                .andExpect(jsonPath(&quot;$.restaurants[1].cuisines&quot;, contains(&quot;Maharashtrian&quot;, &quot;North Indian&quot;)))
+                .andExpect(jsonPath(&quot;$.restaurants[1].rating.average&quot;).value(4.3)).andExpect(jsonPath(&quot;$.restaurants[1].rating.count&quot;).value(3))
+                .andExpect(jsonPath(&quot;$.restaurants[2].cuisines&quot;, contains(&quot;Desserts&quot;, &quot;South Indian&quot;)))
+                .andExpect(jsonPath(&quot;$.restaurants[2].rating.average&quot;).value(4.0)).andExpect(jsonPath(&quot;$.restaurants[2].rating.count&quot;).value(2));
+    }
+
+    @Test
+    void theCityIsMatchedInAnyCase() throws Exception {
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;MUMBAI&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.city&quot;).value(&quot;mumbai&quot;)).andExpect(jsonPath(&quot;$.restaurants&quot;, hasSize(3)));
+    }
+
+    @Test
+    void puneComesInPages() throws Exception {
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;pune&quot;).param(&quot;size&quot;, &quot;50&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.restaurants&quot;, hasSize(50))).andExpect(jsonPath(&quot;$.restaurants[0].name&quot;).value(&quot;Pune Kitchen 01&quot;))
+                .andExpect(jsonPath(&quot;$.restaurants[49].name&quot;).value(&quot;Pune Kitchen 50&quot;));
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;pune&quot;).param(&quot;size&quot;, &quot;50&quot;).param(&quot;page&quot;, &quot;1&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.restaurants&quot;, hasSize(10))).andExpect(jsonPath(&quot;$.restaurants[0].name&quot;).value(&quot;Pune Kitchen 51&quot;));
+    }
+
+    @Test
+    void aCityWithNoRestaurantsOrAPagePastTheEndIsEmpty() throws Exception {
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;nagpur&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.restaurants&quot;, empty()));
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;mumbai&quot;).param(&quot;page&quot;, &quot;5&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.restaurants&quot;, empty()));
+    }
+
+    @Test
+    void aCityTiffinoDoesNotServeIs404() throws Exception {
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;jaipur&quot;)).andExpect(status().isNotFound())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Tiffino does not deliver in jaipur yet&quot;));
+    }
+
+    @Test
+    void badParametersAre400() throws Exception {
+        mvc.perform(get(&quot;/restaurants&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;pu&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;pune&#x27;--&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;pune&quot;).param(&quot;size&quot;, &quot;0&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;pune&quot;).param(&quot;size&quot;, &quot;51&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;pune&quot;).param(&quot;page&quot;, &quot;-1&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;pune&quot;).param(&quot;page&quot;, &quot;two&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/tiffino/restaurants/OldHomeScreen.java</p><div class="notes"><p>The old screen, kept in the tests only.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
+
+/** The home screen as it was, kept in the tests only: correct results, one query per restaurant per association. */
+@Component
+class OldHomeScreen {
+
+    private final OldRestaurants restaurants;
+    private final OldReviews reviews;
+
+    OldHomeScreen(OldRestaurants restaurants, OldReviews reviews) {
+        this.restaurants = restaurants;
+        this.reviews = reviews;
+    }
+
+    @Transactional(readOnly = true)
+    List&lt;HomeScreen.Card&gt; list(String city, int page, int size) {
+        return restaurants.findByCityCodeOrderByNameAscIdAsc(city, PageRequest.of(page, size)).stream().map(r -&gt; {
+            List&lt;String&gt; cuisines = r.getCuisines().stream().map(Cuisine::getName).sorted().toList();   // +1 query: the lazy set loads
+            List&lt;Review&gt; all = reviews.findByRestaurantId(r.getId());                                  // +1 query: every review row
+            HomeScreen.Rating rating = all.isEmpty() ? new HomeScreen.Rating(null, 0)
+                    : new HomeScreen.Rating(BigDecimal.valueOf(all.stream().mapToInt(Review::getRating).average().orElseThrow()).setScale(1, RoundingMode.HALF_UP), all.size());
+            return new HomeScreen.Card(r.getId(), r.getName(), cuisines, rating);
+        }).toList();
+    }
+
+    @Transactional(readOnly = true)
+    List&lt;String&gt; fetchJoinPage(String city, int page, int size) {
+        return restaurants.findWithCuisines(city, PageRequest.of(page, size)).stream().map(Restaurant::getName).toList();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/tiffino/restaurants/OldRestaurants.java</p><div class="notes"><p>The old queries, including the fetch-join page.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.Repository;
+
+import java.util.List;
+
+/** The old queries, kept in the tests only. */
+interface OldRestaurants extends Repository&lt;Restaurant, Long&gt; {
+
+    List&lt;Restaurant&gt; findByCityCodeOrderByNameAscIdAsc(String cityCode, Pageable page);
+
+    /** The first fix someone tries: fetch the cuisines in the same query, and keep paging. JOIN FETCH is an inner join. */
+    @Query(&quot;select r from Restaurant r join fetch r.cuisines where r.cityCode = :city order by r.name, r.id&quot;)
+    List&lt;Restaurant&gt; findWithCuisines(String city, Pageable page);
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/tiffino/restaurants/OldReviews.java</p><div class="notes"><p>The old per-restaurant review query.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.springframework.data.repository.Repository;
+
+import java.util.List;
+
+/** The old per-restaurant review query, kept in the tests only. */
+interface OldReviews extends Repository&lt;Review, Long&gt; {
+
+    List&lt;Review&gt; findByRestaurantId(Long restaurantId);
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-6" aria-labelledby="tests-6-b" hidden><p class="path">src/test/java/com/tiffino/restaurants/ApiTest.java</p><div class="notes"><p>Shared setup and the query counter.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.function.Supplier;
+
+/**
+ * Shared setup: the whole app on a real PostgreSQL with the demo data (3 Mumbai restaurants, 60 in Pune, none in
+ * Nagpur). Hibernate statistics are switched on for tests only, to count the SQL statements each call sends.
+ */
+@SpringBootTest(properties = &quot;spring.jpa.properties.hibernate.generate_statistics=true&quot;)
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+    @Autowired
+    EntityManagerFactory entityManagerFactory;
+
+    record Counted&lt;T&gt;(T result, long queries) {
+    }
+
+    /** Runs the call and counts the JDBC statements Hibernate prepared for it. */
+    &lt;T&gt; Counted&lt;T&gt; counting(Supplier&lt;T&gt; call) {
+        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        statistics.clear();
+        T result = call.get();
+        return new Counted&lt;&gt;(result, statistics.getPrepareStatementCount());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-7" aria-labelledby="tests-7-b" hidden><p class="path">src/test/java/com/tiffino/restaurants/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker: the queries counted here are the queries production would run. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/tiffino/restaurants/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=CuisineFilterChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 13 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 17 tests pass (13 station tests and 4 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 25 minutes</p><h2>Filter by cuisine</h2><p>Add <code>cuisine=…</code>: only restaurants serving it (any case), each card still with <em>all</em> its cuisines, still three queries.</p><p><b>Done when:</b> both tests in <code>CuisineFilterChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Only query 1 changes. Filter with <code>exists (select 1 … join x.cuisines c where … lower(c.name) = lower(:cuisine))</code>.</li><li>A join on cuisines in query 2 instead would cut the other cuisines off the card.</li></ul></details><p class="path">challenge/CuisineFilterChallengeTest.java</p><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: GET /restaurants?city=mumbai&amp;cuisine=south indian lists only restaurants serving that cuisine (any
+ * case), each card still showing all of its cuisines, and still in three queries.
+ */
+class CuisineFilterChallengeTest extends ApiTest {
+
+    @Test
+    void onlyRestaurantsServingTheCuisine() throws Exception {
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;mumbai&quot;).param(&quot;cuisine&quot;, &quot;south indian&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.restaurants[*].name&quot;, contains(&quot;Cafe Madras&quot;)))
+                .andExpect(jsonPath(&quot;$.restaurants[0].cuisines&quot;, contains(&quot;Desserts&quot;, &quot;South Indian&quot;)));
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;mumbai&quot;).param(&quot;cuisine&quot;, &quot;Chinese&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.restaurants&quot;, empty()));
+    }
+
+    @Test
+    void stillThreeQueries() {
+        Counted&lt;Long&gt; counted = counting(() -&gt; {
+            try {
+                mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;pune&quot;).param(&quot;cuisine&quot;, &quot;Chinese&quot;).param(&quot;size&quot;, &quot;50&quot;)).andExpect(status().isOk());
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+            return 0L;
+        });
+        assertThat(counted.queries()).isEqualTo(3);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/RestaurantRepository.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.Collection;
+import java.util.List;
+
+interface RestaurantRepository extends JpaRepository&lt;Restaurant, Long&gt; {
+
+    /** Query 1: one page of ids. No collection is joined, so the database applies LIMIT and OFFSET. */
+    @Query(&quot;select r.id from Restaurant r where r.cityCode = :city order by r.name, r.id&quot;)
+    List&lt;Long&gt; findPageOfIds(String city, Pageable page);
+
+    /** Challenge 1: the same page, only restaurants serving the cuisine (matched in any case). */
+    @Query(&quot;&quot;&quot;
+            select r.id from Restaurant r where r.cityCode = :city
+            and exists (select 1 from Restaurant x join x.cuisines c where x = r and lower(c.name) = lower(:cuisine))
+            order by r.name, r.id&quot;&quot;&quot;)
+    List&lt;Long&gt; findPageOfIdsServing(String city, String cuisine, Pageable page);
+
+    /** Challenge 2: best average first; no reviews last; ties by name, then id, so pages never overlap. */
+    @Query(&quot;&quot;&quot;
+            select r.id from Restaurant r left join Review v on v.restaurant = r where r.cityCode = :city
+            group by r.id, r.name order by avg(v.rating) desc nulls last, r.name, r.id&quot;&quot;&quot;)
+    List&lt;Long&gt; findPageOfIdsByRating(String city, Pageable page);
+
+    /** Query 2: those restaurants with their cuisines, in one join. */
+    @EntityGraph(attributePaths = &quot;cuisines&quot;)
+    List&lt;Restaurant&gt; findByIdIn(Collection&lt;Long&gt; ids);
+}</code></pre></div><p class="path">challenge/solution/HomeScreen.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+/** The home screen&#x27;s restaurant list in three queries, however many restaurants a page holds. */
+@Service
+class HomeScreen {
+
+    record Rating(BigDecimal average, long count) {
+    }
+
+    record Card(long id, String name, List&lt;String&gt; cuisines, Rating rating) {
+    }
+
+    record Listing(String city, int page, int size, List&lt;Card&gt; restaurants) {
+    }
+
+    private final RestaurantRepository restaurants;
+    private final ReviewRepository reviews;
+    private final CityRepository cities;
+
+    HomeScreen(RestaurantRepository restaurants, ReviewRepository reviews, CityRepository cities) {
+        this.restaurants = restaurants;
+        this.reviews = reviews;
+        this.cities = cities;
+    }
+
+    Listing list(String city, int page, int size) {
+        return list(city, null, false, page, size);
+    }
+
+    /** Challenges 1 and 2: only query 1 changes; queries 2 and 3 stay the same. */
+    @Transactional(readOnly = true)
+    Listing list(String city, String cuisine, boolean byRating, int page, int size) {
+        PageRequest pageRequest = PageRequest.of(page, size);
+        List&lt;Long&gt; ids = byRating ? restaurants.findPageOfIdsByRating(city, pageRequest)
+                : cuisine != null ? restaurants.findPageOfIdsServing(city, cuisine, pageRequest)
+                : restaurants.findPageOfIds(city, pageRequest);
+        if (ids.isEmpty()) {
+            // Only an empty page needs to know whether the city exists: the usual path stays at three queries.
+            if (!cities.existsById(city)) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;Tiffino does not deliver in &quot; + city + &quot; yet&quot;);
+            }
+            return new Listing(city, page, size, List.of());
+        }
+        Map&lt;Long, Restaurant&gt; byId = restaurants.findByIdIn(ids).stream().collect(Collectors.toMap(Restaurant::getId, Function.identity()));
+        Map&lt;Long, RatingSummary&gt; ratings = reviews.summariesFor(ids).stream().collect(Collectors.toMap(RatingSummary::restaurantId, Function.identity()));
+        List&lt;Card&gt; cards = ids.stream().map(id -&gt; card(byId.get(id), ratings.get(id))).toList();   // back in page order
+        return new Listing(city, page, size, cards);
+    }
+
+    private static Card card(Restaurant r, RatingSummary rating) {
+        List&lt;String&gt; cuisines = r.getCuisines().stream().map(Cuisine::getName).sorted().toList();
+        Rating summary = rating == null ? new Rating(null, 0)
+                : new Rating(BigDecimal.valueOf(rating.average()).setScale(1, RoundingMode.HALF_UP), rating.count());
+        return new Card(r.getId(), r.getName(), cuisines, summary);
+    }
+}</code></pre></div><p class="path">challenge/solution/RestaurantController.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Locale;
+
+@RestController
+class RestaurantController {
+
+    private final HomeScreen homeScreen;
+
+    RestaurantController(HomeScreen homeScreen) {
+        this.homeScreen = homeScreen;
+    }
+
+    /** Demo limits: up to 50 restaurants a page, up to page 1000. */
+    @GetMapping(&quot;/restaurants&quot;)
+    HomeScreen.Listing list(@RequestParam @Pattern(regexp = &quot;[A-Za-z-]{3,30}&quot;) String city,
+                            @RequestParam(defaultValue = &quot;0&quot;) @Min(0) @Max(1000) int page,
+                            @RequestParam(defaultValue = &quot;20&quot;) @Min(1) @Max(50) int size,
+                            @RequestParam(required = false) @Size(max = 50) String cuisine,
+                            @RequestParam(defaultValue = &quot;name&quot;) @Pattern(regexp = &quot;name|rating&quot;) String sort) {
+        return homeScreen.list(city.toLowerCase(Locale.ROOT), cuisine, sort.equals(&quot;rating&quot;), page, size);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 30 minutes</p><h2>Top rated first</h2><p>Add <code>sort=rating</code>: best average first, unrated last, ties by name. Any other sort value is <code>400</code>, never SQL.</p><p><b>Done when:</b> both tests in <code>TopRatedChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Order in query 1, so page 2 continues page 1: <code>left join Review v … group by r.id, r.name order by avg(v.rating) desc nulls last, r.name, r.id</code>.</li><li>Validate <code>sort</code> against a whitelist with <code>@Pattern(regexp = "name|rating")</code>.</li></ul></details><p class="path">challenge/TopRatedChallengeTest.java</p><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: sort=rating orders the city by average rating, best first; restaurants with no reviews come last, ties
+ * by name. The ordering happens in the page query, so page 2 continues page 1. Default sort stays by name; any other
+ * sort value is 400. Still three queries.
+ */
+class TopRatedChallengeTest extends ApiTest {
+
+    @Test
+    void bestRatedFirstAndUnratedLast() throws Exception {
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;mumbai&quot;).param(&quot;sort&quot;, &quot;rating&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.restaurants[*].name&quot;, contains(&quot;Bombay Canteen&quot;, &quot;Cafe Madras&quot;, &quot;Anand Stall&quot;)));
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;mumbai&quot;).param(&quot;sort&quot;, &quot;rating&quot;).param(&quot;size&quot;, &quot;1&quot;).param(&quot;page&quot;, &quot;1&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.restaurants[*].name&quot;, contains(&quot;Cafe Madras&quot;)));
+        mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;mumbai&quot;).param(&quot;sort&quot;, &quot;name; drop table reviews&quot;)).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void stillThreeQueries() {
+        Counted&lt;Long&gt; counted = counting(() -&gt; {
+            try {
+                mvc.perform(get(&quot;/restaurants&quot;).param(&quot;city&quot;, &quot;pune&quot;).param(&quot;sort&quot;, &quot;rating&quot;).param(&quot;size&quot;, &quot;50&quot;)).andExpect(status().isOk());
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+            return 0L;
+        });
+        assertThat(counted.queries()).isEqualTo(3);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/RestaurantRepository.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.Collection;
+import java.util.List;
+
+interface RestaurantRepository extends JpaRepository&lt;Restaurant, Long&gt; {
+
+    /** Query 1: one page of ids. No collection is joined, so the database applies LIMIT and OFFSET. */
+    @Query(&quot;select r.id from Restaurant r where r.cityCode = :city order by r.name, r.id&quot;)
+    List&lt;Long&gt; findPageOfIds(String city, Pageable page);
+
+    /** Challenge 1: the same page, only restaurants serving the cuisine (matched in any case). */
+    @Query(&quot;&quot;&quot;
+            select r.id from Restaurant r where r.cityCode = :city
+            and exists (select 1 from Restaurant x join x.cuisines c where x = r and lower(c.name) = lower(:cuisine))
+            order by r.name, r.id&quot;&quot;&quot;)
+    List&lt;Long&gt; findPageOfIdsServing(String city, String cuisine, Pageable page);
+
+    /** Challenge 2: best average first; no reviews last; ties by name, then id, so pages never overlap. */
+    @Query(&quot;&quot;&quot;
+            select r.id from Restaurant r left join Review v on v.restaurant = r where r.cityCode = :city
+            group by r.id, r.name order by avg(v.rating) desc nulls last, r.name, r.id&quot;&quot;&quot;)
+    List&lt;Long&gt; findPageOfIdsByRating(String city, Pageable page);
+
+    /** Query 2: those restaurants with their cuisines, in one join. */
+    @EntityGraph(attributePaths = &quot;cuisines&quot;)
+    List&lt;Restaurant&gt; findByIdIn(Collection&lt;Long&gt; ids);
+}</code></pre></div><p class="path">challenge/solution/HomeScreen.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+/** The home screen&#x27;s restaurant list in three queries, however many restaurants a page holds. */
+@Service
+class HomeScreen {
+
+    record Rating(BigDecimal average, long count) {
+    }
+
+    record Card(long id, String name, List&lt;String&gt; cuisines, Rating rating) {
+    }
+
+    record Listing(String city, int page, int size, List&lt;Card&gt; restaurants) {
+    }
+
+    private final RestaurantRepository restaurants;
+    private final ReviewRepository reviews;
+    private final CityRepository cities;
+
+    HomeScreen(RestaurantRepository restaurants, ReviewRepository reviews, CityRepository cities) {
+        this.restaurants = restaurants;
+        this.reviews = reviews;
+        this.cities = cities;
+    }
+
+    Listing list(String city, int page, int size) {
+        return list(city, null, false, page, size);
+    }
+
+    /** Challenges 1 and 2: only query 1 changes; queries 2 and 3 stay the same. */
+    @Transactional(readOnly = true)
+    Listing list(String city, String cuisine, boolean byRating, int page, int size) {
+        PageRequest pageRequest = PageRequest.of(page, size);
+        List&lt;Long&gt; ids = byRating ? restaurants.findPageOfIdsByRating(city, pageRequest)
+                : cuisine != null ? restaurants.findPageOfIdsServing(city, cuisine, pageRequest)
+                : restaurants.findPageOfIds(city, pageRequest);
+        if (ids.isEmpty()) {
+            // Only an empty page needs to know whether the city exists: the usual path stays at three queries.
+            if (!cities.existsById(city)) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;Tiffino does not deliver in &quot; + city + &quot; yet&quot;);
+            }
+            return new Listing(city, page, size, List.of());
+        }
+        Map&lt;Long, Restaurant&gt; byId = restaurants.findByIdIn(ids).stream().collect(Collectors.toMap(Restaurant::getId, Function.identity()));
+        Map&lt;Long, RatingSummary&gt; ratings = reviews.summariesFor(ids).stream().collect(Collectors.toMap(RatingSummary::restaurantId, Function.identity()));
+        List&lt;Card&gt; cards = ids.stream().map(id -&gt; card(byId.get(id), ratings.get(id))).toList();   // back in page order
+        return new Listing(city, page, size, cards);
+    }
+
+    private static Card card(Restaurant r, RatingSummary rating) {
+        List&lt;String&gt; cuisines = r.getCuisines().stream().map(Cuisine::getName).sorted().toList();
+        Rating summary = rating == null ? new Rating(null, 0)
+                : new Rating(BigDecimal.valueOf(rating.average()).setScale(1, RoundingMode.HALF_UP), rating.count());
+        return new Card(r.getId(), r.getName(), cuisines, summary);
+    }
+}</code></pre></div><p class="path">challenge/solution/RestaurantController.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.restaurants;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Locale;
+
+@RestController
+class RestaurantController {
+
+    private final HomeScreen homeScreen;
+
+    RestaurantController(HomeScreen homeScreen) {
+        this.homeScreen = homeScreen;
+    }
+
+    /** Demo limits: up to 50 restaurants a page, up to page 1000. */
+    @GetMapping(&quot;/restaurants&quot;)
+    HomeScreen.Listing list(@RequestParam @Pattern(regexp = &quot;[A-Za-z-]{3,30}&quot;) String city,
+                            @RequestParam(defaultValue = &quot;0&quot;) @Min(0) @Max(1000) int page,
+                            @RequestParam(defaultValue = &quot;20&quot;) @Min(1) @Max(50) int size,
+                            @RequestParam(required = false) @Size(max = 50) String cuisine,
+                            @RequestParam(defaultValue = &quot;name&quot;) @Pattern(regexp = &quot;name|rating&quot;) String sort) {
+        return homeScreen.list(city.toLowerCase(Locale.ROOT), cuisine, sort.equals(&quot;rating&quot;), page, size);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>@BatchSize, or a cache?</h2>
+<p>Hibernate's <code>@BatchSize(size = 50)</code> on <code>cuisines</code> turns 50 lazy loads into one <code>… where restaurant_id in (…)</code> query, with no change to the service. A cache of ratings would remove query 3. For each: how many queries for a page of 50, what goes stale and when, and what a new developer must know so the N+1 does not come back somewhere else.</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, mapping</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Count the old screen's queries in a test: 101.</li>
+<li>Page ids only, so the database applies the limit.</li>
+<li>Load those restaurants with cuisines through an entity graph.</li>
+<li>Ask the database for ratings as a projection, then assemble in page order and compare with the old cards.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>Queries for 50</th><th>Verdict</th></tr></thead><tbody><tr><td>Page of ids + entity graph + rating projection</td><td>3</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Lazy loads in a loop</td><td>101</td><td><span class="pill bad">The trap</span></td></tr><tr><td><code>JOIN FETCH</code> with a page</td><td>1 + ratings, in Hibernate 7.4</td><td><span class="pill warn">Inner join drops rows; Hibernate 5 paged in memory</span></td></tr><tr><td><code>@BatchSize</code> on the collection</td><td>1 + 1 + ratings</td><td><span class="pill warn">Good default; hides where queries happen</span></td></tr><tr><td>One native SQL query with <code>array_agg</code></td><td>1</td><td><span class="pill warn">Fastest; no entities, PostgreSQL-only</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Table</th><th>Constraints</th><th>Why</th></tr></thead><tbody><tr><td><code>cities</code></td><td><code>cities_code_shape</code></td><td>Lower-case codes only, as the API sends them.</td></tr><tr><td><code>restaurants</code></td><td><code>restaurants_city_fk</code>, <code>restaurants_name_per_city</code>; index <code>(city_code, name, id)</code></td><td>The index serves the page query's filter and order.</td></tr><tr><td><code>restaurant_cuisines</code></td><td><code>restaurant_cuisines_pk</code>, two foreign keys</td><td>A cuisine once per restaurant.</td></tr><tr><td><code>reviews</code></td><td><code>reviews_rating_range</code> (1 to 5), <code>reviews_restaurant_fk</code>; index on <code>restaurant_id</code></td><td>The rating query groups by restaurant.</td></tr></tbody></table></div>
+<pre class="code"><code class="language-sql">CREATE TABLE cities (
+    code VARCHAR(30)  PRIMARY KEY CONSTRAINT cities_code_shape CHECK (code ~ &#x27;^[a-z-]{3,30}$&#x27;),
+    name VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE cuisines (
+    id   BIGINT       PRIMARY KEY,
+    name VARCHAR(50)  NOT NULL CONSTRAINT cuisines_name_unique UNIQUE
+);
+
+CREATE TABLE restaurants (
+    id        BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    city_code VARCHAR(30)  NOT NULL CONSTRAINT restaurants_city_fk REFERENCES cities (code),
+    name      VARCHAR(100) NOT NULL,
+    CONSTRAINT restaurants_name_per_city UNIQUE (city_code, name)
+);
+-- The home screen&#x27;s query: restaurants of one city in name order.
+CREATE INDEX restaurants_city_name ON restaurants (city_code, name, id);
+
+CREATE TABLE restaurant_cuisines (
+    restaurant_id BIGINT NOT NULL CONSTRAINT restaurant_cuisines_restaurant_fk REFERENCES restaurants (id) ON DELETE CASCADE,
+    cuisine_id    BIGINT NOT NULL CONSTRAINT restaurant_cuisines_cuisine_fk REFERENCES cuisines (id),
+    CONSTRAINT restaurant_cuisines_pk PRIMARY KEY (restaurant_id, cuisine_id)
+);
+
+CREATE TABLE reviews (
+    id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    restaurant_id BIGINT   NOT NULL CONSTRAINT reviews_restaurant_fk REFERENCES restaurants (id) ON DELETE CASCADE,
+    rating        SMALLINT NOT NULL CONSTRAINT reviews_rating_range CHECK (rating BETWEEN 1 AND 5)
+);
+CREATE INDEX reviews_restaurant ON reviews (restaurant_id);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Find N+1 before users do</dt><dd>A query-count assertion in the test of every list endpoint is cheap and catches the next lazy association someone adds.</dd>
+<dt>Logs</dt><dd>SQL logging is for a developer machine: it is slow and can log customer data. In production, watch query counts and times with metrics or <code>pg_stat_statements</code>.</dd>
+<dt>Deep pages</dt><dd><code>OFFSET</code> gets slower page by page; station 066 replaces it with keyset paging.</dd>
+<dt>Ratings at scale</dt><dd>Averaging every review on every launch is fine for thousands of reviews; for millions, keep a running count and sum per restaurant.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>What is the N+1 query problem?</summary><p>One query loads a list; then code touches a lazy association on each item, sending one more query per item. The total grows with the list.</p></details><details class="qa"><summary>How do you prove you fixed it?</summary><p>Count the statements in a test (Hibernate statistics, a datasource proxy) and assert the number stays the same for different page sizes.</p></details><details class="qa"><summary>@EntityGraph or JOIN FETCH?</summary><p>Both load an association in the same query. An entity graph is declared on a repository method and uses a left join; JOIN FETCH is written in JPQL and is an inner join unless you write LEFT.</p></details><details class="qa"><summary>Why page ids first?</summary><p>A fetch join multiplies rows (one per cuisine), so a SQL limit would cut a restaurant&#x27;s cuisines. Older Hibernate therefore paged in memory; paging ids keeps the limit in the database on any version.</p></details><details class="qa"><summary>What is a DTO projection?</summary><p>A query that builds plain objects (select new … or an interface) instead of entities: no dirty checking, no lazy associations, only the columns needed.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 13 tests pass.</td><td>You counted the queries with the entity graph removed.</td></tr><tr><td>JPA fetching</td><td>An entity graph instead of lazy loops.</td><td>Why JOIN FETCH dropped a restaurant.</td></tr><tr><td>Paging</td><td>The limit runs in SQL.</td><td>What older Hibernate did with a fetch join and a page.</td></tr><tr><td>Projections</td><td>Ratings averaged by the database.</td><td>When a native query is worth it.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This station has no flawed version to review. Use this checklist on any list endpoint:</p>
+<ul class="rules">
+<li>Which associations does the response touch, and how is each one loaded?</li>
+<li>Is there a test that counts the queries for two different page sizes?</li>
+<li>Is the page limit applied in SQL? Read the SQL, not the code.</li>
+<li>Can a row with an empty collection disappear from the result?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
