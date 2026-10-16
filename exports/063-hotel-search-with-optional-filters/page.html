@@ -1,0 +1,1675 @@
+<title>Station 063 · Hotel search with optional filters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 063</span>
+    <h1>Hotel search with optional filters</h1>
+    <p class="scenario">Twelve optional filters built by string concatenation produced SQL injection and wrong results.</p>
+    <p class="sim"><b>Simulation</b><span>Hotels, prices and amenities are demo data, not Ghoomo's. Nothing is booked.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Travel</li>
+      <li><b>Types</b>Database</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>043 Doctor directory with JPA · 062 Shipment search by phone number</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring Data JPA Specifications · Criteria API · bound parameters · sort whitelist · PostgreSQL 17 · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Twelve filters</strong><p>City, price, stars, amenities, sort and more, each optional. The old code added a piece of SQL text for each one the user set.</p></li><li><strong>Two kinds of bug</strong><p>A city of <code>goa' OR '1'='1</code> returned every hotel in India; a sort parameter could run an <code>UPDATE</code>. And "Wi-Fi and breakfast" listed hotels with only Wi-Fi, some of them twice.</p></li><li><strong>The fix</strong><p>Each filter is a Specification with its value bound as a parameter; amenities are "exists" checks; sort is chosen from a fixed list.</p></li></ol>
+<p class="lesson">User input is a value, never SQL. Where a value cannot be bound (a column to sort by), choose from a list.</p>
+
+<h2>What are we building?</h2>
+<p><code>GET /hotels</code> with any mix of city, price range, stars, amenities and sort, returning a page of hotels.</p>
+
+<h2>An everyday analogy</h2>
+<p>A travel agent with a printed form: tick boxes and fill blanks. Whatever you write in the "city" blank, the agent only ever looks it up as a city. The old system let customers write on the agent's instructions instead.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Check each parameter</strong>: shape, range, known amenity, sort on the list.</li>
+<li><strong>Collect one Specification per filter set</strong>; skip the ones not given.</li>
+<li><strong>Run them together</strong>: one query with bound parameters (Spring Data adds a count query only when it cannot tell the total from the page itself).</li>
+<li><strong>Return the page</strong> with each hotel once.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: why can't the sort column be a bound parameter like the city?</summary><p>A parameter is a value. <code>ORDER BY ?</code> would sort by a constant, the same for every row. Column names are part of the SQL text, so the only safe way is to map allowed words (<code>price</code>, <code>-stars</code>) to columns you chose yourself.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No booking or availability.</strong> That is station 044's calendar.</li>
+<li><strong>No text search.</strong> Practice 1 adds a name filter; full-text is station 064.</li>
+<li><strong>No ranking.</strong> Sorts are plain columns.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Optional filter</strong></td><td>A condition applied only when the user sets it.</td><td>"Pool: yes" ticked or not.</td><td>every query parameter</td></tr><tr><td><strong>SQL injection</strong></td><td>User text that becomes part of the SQL itself and changes what it does.</td><td>A form where writing "and also give me the safe key" in the name box works.</td><td>the old search</td></tr><tr><td><strong>Bound parameter</strong></td><td>A value sent separately from the SQL text, so it can only ever be a value.</td><td>Filling a blank on a printed form; you cannot change the form.</td><td>every <code>?</code> in the SQL capture</td></tr><tr><td><strong>Specification</strong></td><td>Spring Data JPA's small, combinable piece of a WHERE clause, built with the Criteria API.</td><td>One rule card per filter, clipped together.</td><td><code>HotelSpecs</code></td></tr><tr><td><strong>Whitelist</strong></td><td>Only values on a fixed list are accepted.</td><td>A menu: you order what is on it.</td><td><code>HotelSearch.SORTS</code></td></tr><tr><td><strong>EXISTS subquery</strong></td><td>"There is at least one matching row", without joining rows in.</td><td>"Has a pool?" yes or no, not one line per pool.</td><td><code>hasAmenity</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Ghoomo</strong> (a fictional travel site) built its hotel search by string concatenation. It was open to SQL injection and gave wrong results for amenities.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo data: six hotels in Goa, three in Jaipur, five amenities.</p>
+<ol class="gwt">
+<li><b>Given</b> no filters, <b>then</b> all 9, cheapest first.</li>
+<li><b>Given</b> Goa, Wi-Fi and pool, at most Rs 5,000, <b>then</b> Calangute Sands and Candolim Palms.</li>
+<li><b>Given</b> Wi-Fi and breakfast, <b>then</b> only hotels with both, each once.</li>
+<li><b>Given</b> a sort not on the list, an unknown amenity, stars outside 1 to 5, or minPrice above maxPrice, <b>then</b> <code>400</code>.</li>
+<li><b>Given</b> SQL in any parameter, <b>then</b> <code>400</code> or no match, and nothing in the database changes.</li>
+<li><b>Given</b> no match, <b>then</b> <code>200</code> with <code>total: 0</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>No user input is ever part of the SQL text.</li>
+<li>Sort fields come from a whitelist; the API's names (<code>price</code>) are not the entity's (<code>pricePerNightPaise</code>).</li>
+<li>Every sort ends with the id, so equal values keep one order across pages.</li>
+<li>Prices are paise inside the system; the query string takes whole rupees.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Show SQL injection in a concatenated query, and why bound parameters stop it.</li>
+<li>Build optional filters with JPA Specifications.</li>
+<li>Filter on a collection with EXISTS, not a join.</li>
+<li>Whitelist sort fields.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>Parameter</th><th>Form</th><th>Notes</th></tr></thead><tbody><tr><td><code>city</code></td><td><code>goa</code></td><td>3 to 30 letters or hyphens; any case</td></tr><tr><td><code>minPrice</code>, <code>maxPrice</code></td><td>whole rupees per night</td><td>0 to 1,00,000 (demo limit); converted to paise</td></tr><tr><td><code>stars</code></td><td><code>4,5</code></td><td>any of these ratings, 1 to 5</td></tr><tr><td><code>amenities</code></td><td><code>wifi,pool</code></td><td>up to 5; the hotel must have all of them</td></tr><tr><td><code>sort</code></td><td><code>price</code> (default), <code>-price</code>, <code>stars</code>, <code>-stars</code>, <code>name</code></td><td>anything else is <code>400</code></td></tr><tr><td><code>page</code>, <code>size</code></td><td>0 to 100; 1 to 50, default 20</td><td></td></tr></tbody></table></div>
+<p>Response: <code>{total, page, sort, hotels: [{id, name, city, stars, pricePerNightPaise, amenities}]}</code>.</p>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>A page, possibly empty</td></tr><tr><td><span class="pill warn">400</span></td><td>Any parameter outside the rules above, an unknown amenity, a sort not on the list, minPrice above maxPrice</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 16 Oct 2026. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: Goa, Wi-Fi and pool, up to Rs 5,000</h3><p><b>Why:</b> three filters; each hotel once, with all its amenities.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /hotels?city=goa&amp;amenities=wifi,pool&amp;maxPrice=5000 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 283
+
+{
+  &quot;total&quot;: 2,
+  &quot;page&quot;: 0,
+  &quot;sort&quot;: &quot;price&quot;,
+  &quot;hotels&quot;: [
+    {
+      &quot;id&quot;: 1,
+      &quot;name&quot;: &quot;Calangute Sands&quot;,
+      &quot;city&quot;: &quot;goa&quot;,
+      &quot;stars&quot;: 3,
+      &quot;pricePerNightPaise&quot;: 350000,
+      &quot;amenities&quot;: [
+        &quot;breakfast&quot;,
+        &quot;pool&quot;,
+        &quot;wifi&quot;
+      ]
+    },
+    {
+      &quot;id&quot;: 4,
+      &quot;name&quot;: &quot;Candolim Palms&quot;,
+      &quot;city&quot;: &quot;goa&quot;,
+      &quot;stars&quot;: 4,
+      &quot;pricePerNightPaise&quot;: 480000,
+      &quot;amenities&quot;: [
+        &quot;pool&quot;,
+        &quot;wifi&quot;
+      ]
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 2: Jaipur, 4 or 5 stars, dearest first</h3><p><b>Why:</b> a list filter and a descending sort.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /hotels?city=jaipur&amp;stars=4,5&amp;sort=-price HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 290
+
+{
+  &quot;total&quot;: 2,
+  &quot;page&quot;: 0,
+  &quot;sort&quot;: &quot;-price&quot;,
+  &quot;hotels&quot;: [
+    {
+      &quot;id&quot;: 9,
+      &quot;name&quot;: &quot;Rambagh Court&quot;,
+      &quot;city&quot;: &quot;jaipur&quot;,
+      &quot;stars&quot;: 5,
+      &quot;pricePerNightPaise&quot;: 2100000,
+      &quot;amenities&quot;: [
+        &quot;pool&quot;,
+        &quot;spa&quot;,
+        &quot;wifi&quot;
+      ]
+    },
+    {
+      &quot;id&quot;: 7,
+      &quot;name&quot;: &quot;Pink City Haveli&quot;,
+      &quot;city&quot;: &quot;jaipur&quot;,
+      &quot;stars&quot;: 4,
+      &quot;pricePerNightPaise&quot;: 550000,
+      &quot;amenities&quot;: [
+        &quot;breakfast&quot;,
+        &quot;wifi&quot;
+      ]
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 3: <code>sort=name; DELETE FROM hotel_amenities</code></h3><p><b>Why:</b> not on the list: <code>400</code>, and nothing runs.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /hotels HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Sort by one of [-price, -stars, name, price, stars]&quot;,
+  &quot;instance&quot;: &quot;/hotels&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: Wi-Fi and sauna</h3><p><b>Why:</b> <code>400</code> naming the unknown one, instead of silently ignoring it.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /hotels?amenities=wifi,sauna HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Unknown amenities [sauna]&quot;,
+  &quot;instance&quot;: &quot;/hotels&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: Shimla</h3><p><b>Why:</b> no match: <code>total: 0</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /hotels?city=shimla HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 47
+
+{
+  &quot;total&quot;: 0,
+  &quot;page&quot;: 0,
+  &quot;sort&quot;: &quot;price&quot;,
+  &quot;hotels&quot;: []
+}</code></pre></div></div></section>
+<h2>The SQL behind case 1</h2>
+<p class="muted">From <code>docs/capture.sh</code>: a second copy of the app with Hibernate's SQL log on, one request (<code>docs/captures/sql.txt</code>). Every value is a <code>?</code>; the city, price and amenity codes are sent separately.</p>
+<pre class="code"><code class="language-sql">select a1_0.code,a1_0.name from amenities a1_0 where a1_0.code in (?,?)
+
+select h1_0.id,a1_0.hotel_id,a1_1.code,a1_1.name,h1_0.city,h1_0.name,h1_0.price_per_night_paise,h1_0.stars from (select h1_0.id,h1_0.city,h1_0.name,h1_0.price_per_night_paise,h1_0.stars from hotels h1_0 where h1_0.city=? and h1_0.price_per_night_paise&lt;=? and exists(select h2_0.id from hotels h2_0 join hotel_amenities a2_0 on h2_0.id=a2_0.hotel_id where h2_0.id=h1_0.id and a2_0.amenity_code=?) and exists(select h3_0.id from hotels h3_0 join hotel_amenities a3_0 on h3_0.id=a3_0.hotel_id where h3_0.id=h1_0.id and a3_0.amenity_code=?) order by h1_0.price_per_night_paise,h1_0.id offset ? rows fetch first ? rows only) h1_0(id,city,name,price_per_night_paise,stars) left join hotel_amenities a1_0 on h1_0.id=a1_0.hotel_id left join amenities a1_1 on a1_1.code=a1_0.amenity_code order by h1_0.price_per_night_paise,h1_0.id</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>No filters</td><td>All 9, cheapest first</td><td><code>noFiltersListsEveryHotelCheapestFirst</code></td></tr><tr><td><code>Goa</code>, <code>POOL</code></td><td>Matched in any case</td><td><code>goaWithWifiAndPoolUnderRs5000</code></td></tr><tr><td>Two amenities</td><td>Hotels with both, each once</td><td><code>everyAmenityMustMatchAndEachHotelAppearsOnce</code></td></tr><tr><td>A list of stars, a price range, a sort</td><td>Combined</td><td><code>starsPriceRangeAndSort</code></td></tr><tr><td>Page 2 of size 2</td><td>The next two in sort order</td><td><code>pagesFollowTheSortWithoutGapsOrRepeats</code></td></tr><tr><td>Unknown sort or amenity, bad numbers, a quote in the city</td><td><code>400</code></td><td><code>anythingOutsideTheRulesIs400</code></td></tr><tr><td>A sort carrying a <code>DELETE</code></td><td><code>400</code>, no row removed</td><td><code>aSortThatLooksLikeSqlIsRefusedAndRunsNothing</code></td></tr><tr><td>Bad rows written directly</td><td>Refused by named constraints</td><td><code>HotelDatabaseTest</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Concatenating optional filters and sort fields into SQL.</p>
+<p>The old search is kept in the tests as <code>OldHotelSearch</code>, run against the same data:</p>
+<ul>
+<li><strong>A quote in the city.</strong> <code>goa' OR '1'='1</code> closes the string and adds a condition that is always true: 9 hotels instead of 6. The new search binds the same text as a value: no city has that name, 0 hotels.</li>
+<li><strong>A second statement in the sort.</strong> <code>h.name; UPDATE hotels SET price_per_night_paise = 50000 --</code> ran the <code>UPDATE</code> on every hotel; the <code>--</code> turned the appended <code>LIMIT 20</code> into a comment. The caller only saw an error, "Multiple ResultSets were returned by the query." The test runs it in a transaction and rolls it back.</li>
+<li><strong>Amenities by join.</strong> <code>JOIN hotel_amenities … IN ('wifi', 'breakfast')</code> returns a row per matching amenity (Calangute Sands twice) and hotels with either one (Baga Beach Inn, Wi-Fi only). The new search asks "exists" once per amenity.</li>
+</ul>
+<p>Passing the user's sort straight to <code>Sort.by(…)</code> was tried too: Spring Data refused <code>name; DELETE …</code> itself ("must only contain property references"), but as a <code>500</code>, and <code>price</code> failed as a <code>500</code> because the field is <code>pricePerNightPaise</code>. The whitelist answers both with a <code>400</code> that lists the choices.</p>
+<p>While building, each fix was undone once: amenities as "any of" turned 3 tests red; the sort straight to <code>Sort.by</code> 2; rupees used as paise 2; no lower-casing, no min/max check and no amenity check 1 each. Removing the entity graph turned nothing red: no test here counts queries (station 061 does).</p>
+</div>
+<pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.List;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
+
+/** Written first. The old string-built search against the same data, then the Specification search given the same input. */
+class ConcatenatedSqlTrapTest extends ApiTest {
+
+    @Autowired
+    OldHotelSearch old;
+    @Autowired
+    HotelSearch search;
+    @Autowired
+    TransactionTemplate transaction;
+
+    private HotelSearch.Filters city(String city) {
+        return new HotelSearch.Filters(city, null, null, List.of(), Set.of());
+    }
+
+    @Test
+    void aQuoteInTheCityTurnsTheFilterOff() {
+        assertThat(old.search(&quot;goa&quot;, null, List.of(), &quot;h.name&quot;)).hasSize(6);
+        assertThat(old.search(&quot;goa&#x27; OR &#x27;1&#x27;=&#x27;1&quot;, null, List.of(), &quot;h.name&quot;)).hasSize(9);   // Jaipur too: the filter became always true
+        assertThat(search.search(city(&quot;goa&#x27; OR &#x27;1&#x27;=&#x27;1&quot;), &quot;price&quot;, 0, 20).total()).isZero();   // bound as a value: no city has that name
+    }
+
+    @Test
+    void theSortParameterCanRunAnotherStatement() {
+        transaction.executeWithoutResult(tx -&gt; {
+            Throwable thrown = catchThrowable(() -&gt; old.search(&quot;goa&quot;, null, List.of(), &quot;h.name; UPDATE hotels SET price_per_night_paise = 50000 --&quot;));
+            assertThat(jdbc.sql(&quot;SELECT count(*) FROM hotels WHERE price_per_night_paise = 50000&quot;).query(Long.class).single())
+                    .as(&quot;the UPDATE ran (%s)&quot;, thrown).isEqualTo(9);
+            tx.setRollbackOnly();   // undo it: this test must not leave every hotel at Rs 500
+        });
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM hotels WHERE price_per_night_paise = 50000&quot;).query(Long.class).single()).isZero();
+    }
+
+    @Test
+    void joiningAmenitiesGaveDuplicatesAndAnyInsteadOfAll() {
+        List&lt;String&gt; oldResult = old.search(null, null, List.of(&quot;wifi&quot;, &quot;breakfast&quot;), &quot;h.name&quot;);
+        assertThat(oldResult).containsSubsequence(&quot;Calangute Sands&quot;, &quot;Calangute Sands&quot;);   // once per matching amenity
+        assertThat(oldResult).contains(&quot;Baga Beach Inn&quot;);                                  // wifi only: &quot;any of&quot;, not &quot;all of&quot;
+        assertThat(search.search(new HotelSearch.Filters(null, null, null, List.of(), Set.of(&quot;wifi&quot;, &quot;breakfast&quot;)), &quot;name&quot;, 0, 20).hotels())
+                .extracting(HotelSearch.Card::name).containsExactly(&quot;Calangute Sands&quot;, &quot;Fort Aguada Resort&quot;, &quot;Panjim Heritage&quot;, &quot;Pink City Haveli&quot;);
+    }
+}</code></pre><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+/** The search as it was, kept in the tests only: optional filters glued into one SQL string. */
+@Component
+class OldHotelSearch {
+
+    private final JdbcTemplate jdbc;
+
+    OldHotelSearch(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    List&lt;String&gt; search(String city, Long minPrice, List&lt;String&gt; amenities, String sort) {
+        String sql = &quot;SELECT h.name FROM hotels h&quot;;
+        if (!amenities.isEmpty()) {
+            sql += &quot; JOIN hotel_amenities a ON a.hotel_id = h.id&quot;;
+        }
+        sql += &quot; WHERE 1=1&quot;;
+        if (city != null) {
+            sql += &quot; AND h.city = &#x27;&quot; + city + &quot;&#x27;&quot;;
+        }
+        if (minPrice != null) {
+            sql += &quot; AND h.price_per_night_paise &gt;= &quot; + minPrice * 100;
+        }
+        if (!amenities.isEmpty()) {
+            sql += &quot; AND a.amenity_code IN (&#x27;&quot; + String.join(&quot;&#x27;, &#x27;&quot;, amenities) + &quot;&#x27;)&quot;;
+        }
+        sql += &quot; ORDER BY &quot; + sort + &quot; LIMIT 20&quot;;
+        return jdbc.queryForList(sql, String.class);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 14 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Send the attack yourself; <code>-G --data-urlencode</code> encodes the spaces and quotes for you:</p>
+<pre class="code"><code class="language-bash">curl -G &#x27;http://localhost:8080/hotels&#x27; --data-urlencode &quot;city=goa&#x27; OR &#x27;1&#x27;=&#x27;1&quot;
+curl -G &#x27;http://localhost:8080/hotels&#x27; --data-urlencode &quot;sort=name; DELETE FROM hotel_amenities&quot;</code></pre>
+<p>Both are <code>400</code>. Then open <code>OldHotelSearch</code> in the tests and see why the same text was dangerous there.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>No property 'price' found for type 'Hotel'</code></td><td>An API sort name passed straight to <code>Sort.by</code>.</td><td>Map API names to fields in a whitelist.</td></tr><tr><td><code>Sort expression '…' must only contain property references</code></td><td>Spring Data refusing an unsafe sort string.</td><td>Never pass user text to <code>Sort</code>; it is a 500, not a 400.</td></tr><tr><td><code>Multiple ResultSets were returned by the query.</code></td><td>A second statement ran inside a concatenated query.</td><td>Treat it as an attack in progress; use bound parameters.</td></tr><tr><td>The same hotel twice</td><td>A join on a collection used as a filter.</td><td><code>EXISTS</code> subqueries, as in <code>hasAmenity</code>.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/063-hotel-search-with-optional-filters/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/ghoomo/hotels/
+│   ├── HotelController.java   ├── HotelSearch.java   ├── HotelSpecs.java   ├── HotelRepository.java
+│   ├── Hotel.java   ├── Amenity.java   ├── AmenityRepository.java   └── HotelsApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__hotels.sql, V2__demo_hotels.sql
+├── src/test/java/com/ghoomo/hotels/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the database behind it.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">HotelController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">HotelSearch.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">HotelSpecs.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">HotelRepository.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">Hotel.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">Amenity.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">AmenityRepository.java</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">V1__hotels.sql</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">V2__demo_hotels.sql</button><button class="file-btn" role="tab" id="code-9-b" aria-controls="code-9" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-10-b" aria-controls="code-10" aria-selected="false" data-group="code">compose.yaml</button><button class="file-btn" role="tab" id="code-11-b" aria-controls="code-11" aria-selected="false" data-group="code">HotelsApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/ghoomo/hotels/HotelController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Validates every parameter, lower-cases city and amenities, turns rupees into paise.</dd><dt>Why</dt><dd>Bad input is a <code>400</code> before any query.</dd><dt>Without it</dt><dd>Typos becoming silent "no filter"s.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.TreeSet;
+
+@RestController
+class HotelController {
+
+    private final HotelSearch search;
+
+    HotelController(HotelSearch search) {
+        this.search = search;
+    }
+
+    /** Prices are whole rupees in the query string (minPrice=3000), paise everywhere else. Demo limits on every value. */
+    @GetMapping(&quot;/hotels&quot;)
+    HotelSearch.Results hotels(@RequestParam(required = false) @Pattern(regexp = &quot;[A-Za-z-]{3,30}&quot;) String city,
+                               @RequestParam(required = false) @Min(0) @Max(100_000) Long minPrice,
+                               @RequestParam(required = false) @Min(0) @Max(100_000) Long maxPrice,
+                               @RequestParam(defaultValue = &quot;&quot;) List&lt;@Min(1) @Max(5) Integer&gt; stars,
+                               @RequestParam(defaultValue = &quot;&quot;) @Size(max = 5) List&lt;@Pattern(regexp = &quot;[A-Za-z]{2,20}&quot;) String&gt; amenities,
+                               @RequestParam(defaultValue = &quot;price&quot;) String sort,
+                               @RequestParam(defaultValue = &quot;0&quot;) @Min(0) @Max(100) int page,
+                               @RequestParam(defaultValue = &quot;20&quot;) @Min(1) @Max(50) int size) {
+        if (minPrice != null &amp;&amp; maxPrice != null &amp;&amp; minPrice &gt; maxPrice) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;minPrice is above maxPrice&quot;);
+        }
+        Set&lt;String&gt; codes = new TreeSet&lt;&gt;();
+        amenities.forEach(a -&gt; codes.add(a.toLowerCase(Locale.ROOT)));
+        HotelSearch.Filters filters = new HotelSearch.Filters(city == null ? null : city.toLowerCase(Locale.ROOT),
+                minPrice == null ? null : minPrice * 100, maxPrice == null ? null : maxPrice * 100, stars, codes);
+        return search.search(filters, sort, page, size);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/ghoomo/hotels/HotelSearch.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Checks sort and amenities, collects one Specification per filter, runs the page.</dd><dt>Why</dt><dd>Only set filters become conditions; the sort comes from <code>SORTS</code>.</dd><dt>Without it</dt><dd>Text built from input, and a sort on any column a caller names.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+
+@Service
+class HotelSearch {
+
+    /** Each filter is optional: null (or empty) means &quot;not filtered&quot;. Prices in paise. */
+    record Filters(String city, Long minPaise, Long maxPaise, List&lt;Integer&gt; stars, Set&lt;String&gt; amenities) {
+    }
+
+    record Card(long id, String name, String city, int stars, long pricePerNightPaise, List&lt;String&gt; amenities) {
+    }
+
+    record Results(long total, int page, String sort, List&lt;Card&gt; hotels) {
+    }
+
+    /** The whitelist: the only sorts there are. The id last, so equal prices keep one order across pages. */
+    static final Map&lt;String, Sort&gt; SORTS = Map.of(
+            &quot;price&quot;, Sort.by(&quot;pricePerNightPaise&quot;, &quot;id&quot;),
+            &quot;-price&quot;, Sort.by(Sort.Order.desc(&quot;pricePerNightPaise&quot;), Sort.Order.asc(&quot;id&quot;)),
+            &quot;stars&quot;, Sort.by(Sort.Order.asc(&quot;stars&quot;), Sort.Order.asc(&quot;pricePerNightPaise&quot;), Sort.Order.asc(&quot;id&quot;)),
+            &quot;-stars&quot;, Sort.by(Sort.Order.desc(&quot;stars&quot;), Sort.Order.asc(&quot;pricePerNightPaise&quot;), Sort.Order.asc(&quot;id&quot;)),
+            &quot;name&quot;, Sort.by(&quot;name&quot;, &quot;id&quot;));
+
+    private final HotelRepository hotels;
+    private final AmenityRepository amenities;
+
+    HotelSearch(HotelRepository hotels, AmenityRepository amenities) {
+        this.hotels = hotels;
+        this.amenities = amenities;
+    }
+
+    @Transactional(readOnly = true)
+    Results search(Filters f, String sort, int page, int size) {
+        Sort order = SORTS.get(sort);
+        if (order == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Sort by one of &quot; + new TreeSet&lt;&gt;(SORTS.keySet()));
+        }
+        Set&lt;String&gt; unknown = new TreeSet&lt;&gt;(f.amenities());
+        amenities.findAllById(f.amenities()).forEach(a -&gt; unknown.remove(a.getCode()));
+        if (!unknown.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Unknown amenities &quot; + unknown);
+        }
+        List&lt;Specification&lt;Hotel&gt;&gt; specs = new ArrayList&lt;&gt;();
+        if (f.city() != null) specs.add(HotelSpecs.inCity(f.city()));
+        if (f.minPaise() != null) specs.add(HotelSpecs.priceAtLeast(f.minPaise()));
+        if (f.maxPaise() != null) specs.add(HotelSpecs.priceAtMost(f.maxPaise()));
+        if (!f.stars().isEmpty()) specs.add(HotelSpecs.starsIn(f.stars()));
+        f.amenities().forEach(code -&gt; specs.add(HotelSpecs.hasAmenity(code)));
+
+        Page&lt;Hotel&gt; found = hotels.findAll(Specification.allOf(specs), PageRequest.of(page, size, order));
+        List&lt;Card&gt; cards = found.stream().map(h -&gt; new Card(h.getId(), h.getName(), h.getCity(), h.getStars(), h.getPricePerNightPaise(),
+                h.getAmenities().stream().map(Amenity::getCode).sorted().toList())).toList();
+        return new Results(found.getTotalElements(), page, sort, cards);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/ghoomo/hotels/HotelSpecs.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>One Specification per filter.</dd><dt>Why</dt><dd>Each is tiny, combinable and bound; amenities use <code>EXISTS</code>.</dd><dt>Without it</dt><dd>Joined amenities: duplicates and "any of".</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
+import org.springframework.data.jpa.domain.Specification;
+
+import java.util.Collection;
+
+/** One small, testable Specification per filter. Each value becomes a bound parameter in the SQL. */
+final class HotelSpecs {
+
+    private HotelSpecs() {
+    }
+
+    static Specification&lt;Hotel&gt; inCity(String city) {
+        return (root, query, cb) -&gt; cb.equal(root.get(&quot;city&quot;), city);
+    }
+
+    static Specification&lt;Hotel&gt; priceAtLeast(long paise) {
+        return (root, query, cb) -&gt; cb.greaterThanOrEqualTo(root.get(&quot;pricePerNightPaise&quot;), paise);
+    }
+
+    static Specification&lt;Hotel&gt; priceAtMost(long paise) {
+        return (root, query, cb) -&gt; cb.lessThanOrEqualTo(root.get(&quot;pricePerNightPaise&quot;), paise);
+    }
+
+    static Specification&lt;Hotel&gt; starsIn(Collection&lt;Integer&gt; stars) {
+        return (root, query, cb) -&gt; root.get(&quot;stars&quot;).in(stars.stream().map(Integer::shortValue).toList());
+    }
+
+    /** &quot;Has this amenity&quot;, as EXISTS: one row per hotel, however many amenities it has. */
+    static Specification&lt;Hotel&gt; hasAmenity(String code) {
+        return (root, query, cb) -&gt; {
+            Subquery&lt;Long&gt; sub = query.subquery(Long.class);
+            Root&lt;Hotel&gt; other = sub.from(Hotel.class);
+            Join&lt;Hotel, Amenity&gt; amenity = other.join(&quot;amenities&quot;);
+            sub.select(other.get(&quot;id&quot;)).where(cb.equal(other.get(&quot;id&quot;), root.get(&quot;id&quot;)), cb.equal(amenity.get(&quot;code&quot;), code));
+            return cb.exists(sub);
+        };
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/ghoomo/hotels/HotelRepository.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd><code>JpaSpecificationExecutor</code>, with the amenities loaded in the same query.</dd><dt>Why</dt><dd><code>findAll(spec, pageable)</code> runs the page and a count.</dd><dt>Without it</dt><dd>A lazy load of amenities per hotel.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+
+interface HotelRepository extends JpaRepository&lt;Hotel, Long&gt;, JpaSpecificationExecutor&lt;Hotel&gt; {
+
+    /** Every filter arrives as a Specification: criteria with bound parameters, never text glued into SQL. */
+    @Override
+    @EntityGraph(attributePaths = &quot;amenities&quot;)
+    Page&lt;Hotel&gt; findAll(Specification&lt;Hotel&gt; spec, Pageable pageable);
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/ghoomo/hotels/Hotel.java</p><div class="notes"><p>A hotel, with its amenities.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.Table;
+
+import java.util.HashSet;
+import java.util.Set;
+
+@Entity
+@Table(name = &quot;hotels&quot;)
+class Hotel {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String name;
+    private String city;
+    private short stars;
+    @Column(name = &quot;price_per_night_paise&quot;)
+    private long pricePerNightPaise;
+
+    @ManyToMany
+    @JoinTable(name = &quot;hotel_amenities&quot;, joinColumns = @JoinColumn(name = &quot;hotel_id&quot;), inverseJoinColumns = @JoinColumn(name = &quot;amenity_code&quot;))
+    private Set&lt;Amenity&gt; amenities = new HashSet&lt;&gt;();
+
+    protected Hotel() {
+    }
+
+    Long getId() {
+        return id;
+    }
+
+    String getName() {
+        return name;
+    }
+
+    String getCity() {
+        return city;
+    }
+
+    short getStars() {
+        return stars;
+    }
+
+    long getPricePerNightPaise() {
+        return pricePerNightPaise;
+    }
+
+    Set&lt;Amenity&gt; getAmenities() {
+        return amenities;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/ghoomo/hotels/Amenity.java</p><div class="notes"><p>An amenity code.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = &quot;amenities&quot;)
+class Amenity {
+
+    @Id
+    private String code;
+    private String name;
+
+    protected Amenity() {
+    }
+
+    String getCode() {
+        return code;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/ghoomo/hotels/AmenityRepository.java</p><div class="notes"><p>Known amenities, to refuse unknown ones.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+interface AmenityRepository extends JpaRepository&lt;Amenity, String&gt; {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/resources/db/migration/V1__hotels.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Tables, named constraints and two indexes.</dd><dt>Why</dt><dd><code>hotel_amenities_amenity</code> serves the EXISTS check.</dd><dt>Without it</dt><dd>Hotels with impossible stars or prices from any writer.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">CREATE TABLE amenities (
+    code VARCHAR(20) PRIMARY KEY CONSTRAINT amenities_code_shape CHECK (code ~ &#x27;^[a-z]{2,20}$&#x27;),
+    name VARCHAR(50) NOT NULL
+);
+
+CREATE TABLE hotels (
+    id                    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name                  VARCHAR(100) NOT NULL,
+    city                  VARCHAR(30)  NOT NULL CONSTRAINT hotels_city_shape CHECK (city ~ &#x27;^[a-z-]{3,30}$&#x27;),
+    stars                 SMALLINT     NOT NULL CONSTRAINT hotels_stars_range CHECK (stars BETWEEN 1 AND 5),
+    price_per_night_paise BIGINT       NOT NULL CONSTRAINT hotels_price_range CHECK (price_per_night_paise BETWEEN 50000 AND 10000000),
+    CONSTRAINT hotels_name_per_city UNIQUE (city, name)
+);
+CREATE INDEX hotels_city_price ON hotels (city, price_per_night_paise);
+
+CREATE TABLE hotel_amenities (
+    hotel_id     BIGINT      NOT NULL CONSTRAINT hotel_amenities_hotel_fk REFERENCES hotels (id) ON DELETE CASCADE,
+    amenity_code VARCHAR(20) NOT NULL CONSTRAINT hotel_amenities_amenity_fk REFERENCES amenities (code),
+    CONSTRAINT hotel_amenities_pk PRIMARY KEY (hotel_id, amenity_code)
+);
+CREATE INDEX hotel_amenities_amenity ON hotel_amenities (amenity_code, hotel_id);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_hotels.sql</p><div class="notes"><p>Nine hotels and their amenities.</p></div><div class="src"><pre class="code"><code class="language-sql">INSERT INTO amenities (code, name) VALUES
+    (&#x27;wifi&#x27;, &#x27;Free Wi-Fi&#x27;), (&#x27;pool&#x27;, &#x27;Swimming pool&#x27;), (&#x27;breakfast&#x27;, &#x27;Breakfast included&#x27;), (&#x27;parking&#x27;, &#x27;Parking&#x27;), (&#x27;spa&#x27;, &#x27;Spa&#x27;);
+
+-- Prices per night in paise: 3,50,000 paise is Rs 3,500.
+INSERT INTO hotels (name, city, stars, price_per_night_paise) VALUES
+    (&#x27;Calangute Sands&#x27;, &#x27;goa&#x27;, 3, 350000),      -- 1
+    (&#x27;Baga Beach Inn&#x27;, &#x27;goa&#x27;, 2, 180000),       -- 2
+    (&#x27;Panjim Heritage&#x27;, &#x27;goa&#x27;, 4, 620000),      -- 3
+    (&#x27;Candolim Palms&#x27;, &#x27;goa&#x27;, 4, 480000),       -- 4
+    (&#x27;Fort Aguada Resort&#x27;, &#x27;goa&#x27;, 5, 1450000),  -- 5
+    (&#x27;Anjuna Hostel&#x27;, &#x27;goa&#x27;, 1, 90000),         -- 6
+    (&#x27;Pink City Haveli&#x27;, &#x27;jaipur&#x27;, 4, 550000),  -- 7
+    (&#x27;Amber View&#x27;, &#x27;jaipur&#x27;, 3, 320000),        -- 8
+    (&#x27;Rambagh Court&#x27;, &#x27;jaipur&#x27;, 5, 2100000);    -- 9
+
+INSERT INTO hotel_amenities (hotel_id, amenity_code) VALUES
+    (1, &#x27;wifi&#x27;), (1, &#x27;pool&#x27;), (1, &#x27;breakfast&#x27;),
+    (2, &#x27;wifi&#x27;),
+    (3, &#x27;wifi&#x27;), (3, &#x27;breakfast&#x27;), (3, &#x27;parking&#x27;),
+    (4, &#x27;wifi&#x27;), (4, &#x27;pool&#x27;),
+    (5, &#x27;wifi&#x27;), (5, &#x27;pool&#x27;), (5, &#x27;breakfast&#x27;), (5, &#x27;parking&#x27;), (5, &#x27;spa&#x27;),
+    (7, &#x27;wifi&#x27;), (7, &#x27;breakfast&#x27;),
+    (8, &#x27;parking&#x27;),
+    (9, &#x27;wifi&#x27;), (9, &#x27;pool&#x27;), (9, &#x27;spa&#x27;);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-9" aria-labelledby="code-9-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>open-in-view off, schema validation.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: ghoomo-hotels
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ghoomo
+    username: ghoomo
+    password: ghoomo
+  jpa:
+    # Lazy associations load inside the service only; a view never triggers a query.
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # Flyway owns the schema; Hibernate only checks the entities match it</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-10" aria-labelledby="code-10-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ghoomo
+      POSTGRES_USER: ghoomo
+      POSTGRES_PASSWORD: ghoomo
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U ghoomo -d ghoomo&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-11" aria-labelledby="code-11-b" hidden><p class="path">src/main/java/com/ghoomo/hotels/HotelsApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class HotelsApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(HotelsApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found (empty)</td><td><code>HotelContractTest</code> (8)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>ConcatenatedSqlTrapTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>HotelDatabaseTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, Hibernate 7.4, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.ghoomo.hotels.ConcatenatedSqlTrapTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.ghoomo.hotels.HotelDatabaseTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0 -- in com.ghoomo.hotels.HotelContractTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">ConcatenatedSqlTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">HotelDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">HotelContractTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">OldHotelSearch.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/ghoomo/hotels/ConcatenatedSqlTrapTest.java</p><div class="notes"><p>Written first: two injections and the amenity join, old against new.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.List;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
+
+/** Written first. The old string-built search against the same data, then the Specification search given the same input. */
+class ConcatenatedSqlTrapTest extends ApiTest {
+
+    @Autowired
+    OldHotelSearch old;
+    @Autowired
+    HotelSearch search;
+    @Autowired
+    TransactionTemplate transaction;
+
+    private HotelSearch.Filters city(String city) {
+        return new HotelSearch.Filters(city, null, null, List.of(), Set.of());
+    }
+
+    @Test
+    void aQuoteInTheCityTurnsTheFilterOff() {
+        assertThat(old.search(&quot;goa&quot;, null, List.of(), &quot;h.name&quot;)).hasSize(6);
+        assertThat(old.search(&quot;goa&#x27; OR &#x27;1&#x27;=&#x27;1&quot;, null, List.of(), &quot;h.name&quot;)).hasSize(9);   // Jaipur too: the filter became always true
+        assertThat(search.search(city(&quot;goa&#x27; OR &#x27;1&#x27;=&#x27;1&quot;), &quot;price&quot;, 0, 20).total()).isZero();   // bound as a value: no city has that name
+    }
+
+    @Test
+    void theSortParameterCanRunAnotherStatement() {
+        transaction.executeWithoutResult(tx -&gt; {
+            Throwable thrown = catchThrowable(() -&gt; old.search(&quot;goa&quot;, null, List.of(), &quot;h.name; UPDATE hotels SET price_per_night_paise = 50000 --&quot;));
+            assertThat(jdbc.sql(&quot;SELECT count(*) FROM hotels WHERE price_per_night_paise = 50000&quot;).query(Long.class).single())
+                    .as(&quot;the UPDATE ran (%s)&quot;, thrown).isEqualTo(9);
+            tx.setRollbackOnly();   // undo it: this test must not leave every hotel at Rs 500
+        });
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM hotels WHERE price_per_night_paise = 50000&quot;).query(Long.class).single()).isZero();
+    }
+
+    @Test
+    void joiningAmenitiesGaveDuplicatesAndAnyInsteadOfAll() {
+        List&lt;String&gt; oldResult = old.search(null, null, List.of(&quot;wifi&quot;, &quot;breakfast&quot;), &quot;h.name&quot;);
+        assertThat(oldResult).containsSubsequence(&quot;Calangute Sands&quot;, &quot;Calangute Sands&quot;);   // once per matching amenity
+        assertThat(oldResult).contains(&quot;Baga Beach Inn&quot;);                                  // wifi only: &quot;any of&quot;, not &quot;all of&quot;
+        assertThat(search.search(new HotelSearch.Filters(null, null, null, List.of(), Set.of(&quot;wifi&quot;, &quot;breakfast&quot;)), &quot;name&quot;, 0, 20).hotels())
+                .extracting(HotelSearch.Card::name).containsExactly(&quot;Calangute Sands&quot;, &quot;Fort Aguada Resort&quot;, &quot;Panjim Heritage&quot;, &quot;Pink City Haveli&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/ghoomo/hotels/HotelDatabaseTest.java</p><div class="notes"><p>Named constraints, a rolled-back hotel, and the cascade.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The rules as PostgreSQL enforces them, with plain SQL; test hotels are in &quot;testville&quot; and removed afterwards. */
+class HotelDatabaseTest extends ApiTest {
+
+    @Autowired
+    TransactionTemplate transaction;
+
+    @AfterEach
+    void removeTestHotels() {
+        jdbc.sql(&quot;DELETE FROM hotels WHERE city = &#x27;testville&#x27;&quot;).update();
+    }
+
+    private long hotel(String name, String city, int stars, long paise) {
+        return jdbc.sql(&quot;INSERT INTO hotels (name, city, stars, price_per_night_paise) VALUES (?, ?, ?, ?) RETURNING id&quot;)
+                .params(name, city, stars, paise).query(Long.class).single();
+    }
+
+    @Test
+    void namedConstraintsHoldWithoutJava() {
+        long id = hotel(&quot;Test Inn&quot;, &quot;testville&quot;, 3, 300000);
+        assertThatThrownBy(() -&gt; hotel(&quot;Test Inn&quot;, &quot;testville&quot;, 4, 400000)).isInstanceOf(DataAccessException.class).hasMessageContaining(&quot;hotels_name_per_city&quot;);
+        assertThatThrownBy(() -&gt; hotel(&quot;Six Stars&quot;, &quot;testville&quot;, 6, 400000)).hasMessageContaining(&quot;hotels_stars_range&quot;);
+        assertThatThrownBy(() -&gt; hotel(&quot;Free Stay&quot;, &quot;testville&quot;, 3, 0)).hasMessageContaining(&quot;hotels_price_range&quot;);
+        assertThatThrownBy(() -&gt; hotel(&quot;Shouting&quot;, &quot;TESTVILLE&quot;, 3, 300000)).hasMessageContaining(&quot;hotels_city_shape&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO hotel_amenities VALUES (?, &#x27;sauna&#x27;)&quot;).param(id).update()).hasMessageContaining(&quot;hotel_amenities_amenity_fk&quot;);
+        jdbc.sql(&quot;INSERT INTO hotel_amenities VALUES (?, &#x27;wifi&#x27;)&quot;).param(id).update();
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO hotel_amenities VALUES (?, &#x27;wifi&#x27;)&quot;).param(id).update()).hasMessageContaining(&quot;hotel_amenities_pk&quot;);
+    }
+
+    @Test
+    void aHotelWithAnUnknownAmenityIsNotAddedAtAll() {
+        assertThatThrownBy(() -&gt; transaction.executeWithoutResult(tx -&gt; {
+            long id = hotel(&quot;Half Listed&quot;, &quot;testville&quot;, 3, 300000);
+            jdbc.sql(&quot;INSERT INTO hotel_amenities VALUES (?, &#x27;wifi&#x27;)&quot;).param(id).update();
+            jdbc.sql(&quot;INSERT INTO hotel_amenities VALUES (?, &#x27;sauna&#x27;)&quot;).param(id).update();
+        })).hasMessageContaining(&quot;hotel_amenities_amenity_fk&quot;);
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM hotels WHERE name = &#x27;Half Listed&#x27;&quot;).query(Long.class).single()).isZero();
+    }
+
+    @Test
+    void removingAHotelRemovesItsAmenities() {
+        long id = hotel(&quot;Closing Inn&quot;, &quot;testville&quot;, 2, 150000);
+        jdbc.sql(&quot;INSERT INTO hotel_amenities VALUES (?, &#x27;parking&#x27;)&quot;).param(id).update();
+        jdbc.sql(&quot;DELETE FROM hotels WHERE id = ?&quot;).param(id).update();
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM hotel_amenities WHERE hotel_id = ?&quot;).param(id).query(Long.class).single()).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/ghoomo/hotels/HotelContractTest.java</p><div class="notes"><p>The endpoint through HTTP.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class HotelContractTest extends ApiTest {
+
+    @Test
+    void noFiltersListsEveryHotelCheapestFirst() throws Exception {
+        mvc.perform(get(&quot;/hotels&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.total&quot;).value(9)).andExpect(jsonPath(&quot;$.sort&quot;).value(&quot;price&quot;))
+                .andExpect(jsonPath(&quot;$.hotels[0].name&quot;).value(&quot;Anjuna Hostel&quot;)).andExpect(jsonPath(&quot;$.hotels[0].pricePerNightPaise&quot;).value(90000))
+                .andExpect(jsonPath(&quot;$.hotels[8].name&quot;).value(&quot;Rambagh Court&quot;));
+    }
+
+    @Test
+    void goaWithWifiAndPoolUnderRs5000() throws Exception {
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;city&quot;, &quot;Goa&quot;).param(&quot;amenities&quot;, &quot;wifi,POOL&quot;).param(&quot;maxPrice&quot;, &quot;5000&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.total&quot;).value(2))
+                .andExpect(jsonPath(&quot;$.hotels[*].name&quot;, contains(&quot;Calangute Sands&quot;, &quot;Candolim Palms&quot;)))
+                .andExpect(jsonPath(&quot;$.hotels[0].amenities&quot;, contains(&quot;breakfast&quot;, &quot;pool&quot;, &quot;wifi&quot;)));
+    }
+
+    @Test
+    void everyAmenityMustMatchAndEachHotelAppearsOnce() throws Exception {
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;amenities&quot;, &quot;wifi,breakfast&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.hotels[*].name&quot;, contains(&quot;Calangute Sands&quot;, &quot;Pink City Haveli&quot;, &quot;Panjim Heritage&quot;, &quot;Fort Aguada Resort&quot;)));
+    }
+
+    @Test
+    void starsPriceRangeAndSort() throws Exception {
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;city&quot;, &quot;jaipur&quot;).param(&quot;stars&quot;, &quot;4,5&quot;).param(&quot;sort&quot;, &quot;-price&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.hotels[*].name&quot;, contains(&quot;Rambagh Court&quot;, &quot;Pink City Haveli&quot;)));
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;minPrice&quot;, &quot;3000&quot;).param(&quot;maxPrice&quot;, &quot;5000&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.hotels[*].name&quot;, contains(&quot;Amber View&quot;, &quot;Calangute Sands&quot;, &quot;Candolim Palms&quot;)));
+    }
+
+    @Test
+    void pagesFollowTheSortWithoutGapsOrRepeats() throws Exception {
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;sort&quot;, &quot;-stars&quot;).param(&quot;size&quot;, &quot;2&quot;).param(&quot;page&quot;, &quot;1&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.total&quot;).value(9))
+                .andExpect(jsonPath(&quot;$.hotels[*].name&quot;, contains(&quot;Candolim Palms&quot;, &quot;Pink City Haveli&quot;)));
+    }
+
+    @Test
+    void noMatchIsAnEmptyPage() throws Exception {
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;city&quot;, &quot;shimla&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.total&quot;).value(0)).andExpect(jsonPath(&quot;$.hotels&quot;, empty()));
+    }
+
+    @Test
+    void anythingOutsideTheRulesIs400() throws Exception {
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;sort&quot;, &quot;price_per_night_paise&quot;)).andExpect(status().isBadRequest())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Sort by one of [-price, -stars, name, price, stars]&quot;));
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;amenities&quot;, &quot;wifi,sauna&quot;)).andExpect(status().isBadRequest())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Unknown amenities [sauna]&quot;));
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;minPrice&quot;, &quot;6000&quot;).param(&quot;maxPrice&quot;, &quot;5000&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;stars&quot;, &quot;6&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;city&quot;, &quot;goa&#x27; OR &#x27;1&#x27;=&#x27;1&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;minPrice&quot;, &quot;cheap&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;size&quot;, &quot;0&quot;)).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void aSortThatLooksLikeSqlIsRefusedAndRunsNothing() throws Exception {
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;sort&quot;, &quot;name; DELETE FROM hotel_amenities&quot;)).andExpect(status().isBadRequest());
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM hotel_amenities&quot;).query(Long.class).single()).isEqualTo(20);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/ghoomo/hotels/OldHotelSearch.java</p><div class="notes"><p>The concatenated search, kept in the tests only.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+/** The search as it was, kept in the tests only: optional filters glued into one SQL string. */
+@Component
+class OldHotelSearch {
+
+    private final JdbcTemplate jdbc;
+
+    OldHotelSearch(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    List&lt;String&gt; search(String city, Long minPrice, List&lt;String&gt; amenities, String sort) {
+        String sql = &quot;SELECT h.name FROM hotels h&quot;;
+        if (!amenities.isEmpty()) {
+            sql += &quot; JOIN hotel_amenities a ON a.hotel_id = h.id&quot;;
+        }
+        sql += &quot; WHERE 1=1&quot;;
+        if (city != null) {
+            sql += &quot; AND h.city = &#x27;&quot; + city + &quot;&#x27;&quot;;
+        }
+        if (minPrice != null) {
+            sql += &quot; AND h.price_per_night_paise &gt;= &quot; + minPrice * 100;
+        }
+        if (!amenities.isEmpty()) {
+            sql += &quot; AND a.amenity_code IN (&#x27;&quot; + String.join(&quot;&#x27;, &#x27;&quot;, amenities) + &quot;&#x27;)&quot;;
+        }
+        sql += &quot; ORDER BY &quot; + sort + &quot; LIMIT 20&quot;;
+        return jdbc.queryForList(sql, String.class);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/ghoomo/hotels/ApiTest.java</p><div class="notes"><p>Shared setup.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+
+/** Shared setup: the whole app on a real PostgreSQL with the demo data: six hotels in Goa, three in Jaipur. */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/ghoomo/hotels/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker: the SQL that filters, sorts and refuses is the real one. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/ghoomo/hotels/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=NameSearchChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 14 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 17 tests pass (14 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 25 minutes</p><h2>Search by name</h2><p>Add <code>q=…</code>: hotels whose name contains the text, any case, with the other filters. <code>%</code>, <code>_</code> and quotes are just characters.</p><p><b>Done when:</b> both tests in <code>NameSearchChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>A bound value is safe from injection, but inside <code>LIKE</code> it is still a <em>pattern</em>: escape <code>\</code>, <code>%</code> and <code>_</code>, and pass the escape character to <code>cb.like</code>.</li><li>Keep the old five-value <code>Filters</code> constructor working: a record can have a second constructor.</li></ul></details><p class="path">challenge/NameSearchChallengeTest.java</p><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: q=palm finds hotels whose name contains the text, in any case, combined with the other filters.
+ * The text is a value, never a pattern: &quot;%&quot; and &quot;_&quot; match only themselves, and a quote is just a quote.
+ */
+class NameSearchChallengeTest extends ApiTest {
+
+    @Test
+    void partOfTheNameInAnyCase() throws Exception {
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;q&quot;, &quot;PALM&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.hotels[*].name&quot;, contains(&quot;Candolim Palms&quot;)));
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;q&quot;, &quot;a&quot;).param(&quot;city&quot;, &quot;jaipur&quot;).param(&quot;sort&quot;, &quot;name&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.hotels[*].name&quot;, contains(&quot;Amber View&quot;, &quot;Pink City Haveli&quot;, &quot;Rambagh Court&quot;)));
+    }
+
+    @Test
+    void wildcardsAndQuotesAreJustText() throws Exception {
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;q&quot;, &quot;%&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.hotels&quot;, empty()));
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;q&quot;, &quot;_&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.hotels&quot;, empty()));
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;q&quot;, &quot;&#x27; OR &#x27;1&#x27;=&#x27;1&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.hotels&quot;, empty()));
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/HotelSpecs.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
+import org.springframework.data.jpa.domain.Specification;
+
+import java.util.Collection;
+import java.util.Locale;
+
+/** One small, testable Specification per filter. Each value becomes a bound parameter in the SQL. */
+final class HotelSpecs {
+
+    private HotelSpecs() {
+    }
+
+    static Specification&lt;Hotel&gt; inCity(String city) {
+        return (root, query, cb) -&gt; cb.equal(root.get(&quot;city&quot;), city);
+    }
+
+    static Specification&lt;Hotel&gt; priceAtLeast(long paise) {
+        return (root, query, cb) -&gt; cb.greaterThanOrEqualTo(root.get(&quot;pricePerNightPaise&quot;), paise);
+    }
+
+    static Specification&lt;Hotel&gt; priceAtMost(long paise) {
+        return (root, query, cb) -&gt; cb.lessThanOrEqualTo(root.get(&quot;pricePerNightPaise&quot;), paise);
+    }
+
+    static Specification&lt;Hotel&gt; starsIn(Collection&lt;Integer&gt; stars) {
+        return (root, query, cb) -&gt; root.get(&quot;stars&quot;).in(stars.stream().map(Integer::shortValue).toList());
+    }
+
+    /** Challenge 1: the text is escaped, so % and _ are literal characters and the whole value stays a bound parameter. */
+    static Specification&lt;Hotel&gt; nameContains(String text) {
+        String escaped = text.toLowerCase(Locale.ROOT).replace(&quot;\\&quot;, &quot;\\\\&quot;).replace(&quot;%&quot;, &quot;\\%&quot;).replace(&quot;_&quot;, &quot;\\_&quot;);
+        return (root, query, cb) -&gt; cb.like(cb.lower(root.get(&quot;name&quot;)), &quot;%&quot; + escaped + &quot;%&quot;, &#x27;\\&#x27;);
+    }
+
+    /** &quot;Has this amenity&quot;, as EXISTS: one row per hotel, however many amenities it has. */
+    static Specification&lt;Hotel&gt; hasAmenity(String code) {
+        return (root, query, cb) -&gt; {
+            Subquery&lt;Long&gt; sub = query.subquery(Long.class);
+            Root&lt;Hotel&gt; other = sub.from(Hotel.class);
+            Join&lt;Hotel, Amenity&gt; amenity = other.join(&quot;amenities&quot;);
+            sub.select(other.get(&quot;id&quot;)).where(cb.equal(other.get(&quot;id&quot;), root.get(&quot;id&quot;)), cb.equal(amenity.get(&quot;code&quot;), code));
+            return cb.exists(sub);
+        };
+    }
+}</code></pre></div><p class="path">challenge/solution/HotelSearch.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Tuple;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Root;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+
+@Service
+class HotelSearch {
+
+    /** Each filter is optional: null (or empty) means &quot;not filtered&quot;. Prices in paise. */
+    record Filters(String city, Long minPaise, Long maxPaise, List&lt;Integer&gt; stars, Set&lt;String&gt; amenities, String q) {
+        Filters(String city, Long minPaise, Long maxPaise, List&lt;Integer&gt; stars, Set&lt;String&gt; amenities) {
+            this(city, minPaise, maxPaise, stars, amenities, null);
+        }
+    }
+
+    record Card(long id, String name, String city, int stars, long pricePerNightPaise, List&lt;String&gt; amenities) {
+    }
+
+    record Results(long total, int page, String sort, List&lt;Card&gt; hotels, Map&lt;Integer, Long&gt; starsFacet) {
+    }
+
+    /** The whitelist: the only sorts there are. The id last, so equal prices keep one order across pages. */
+    static final Map&lt;String, Sort&gt; SORTS = Map.of(
+            &quot;price&quot;, Sort.by(&quot;pricePerNightPaise&quot;, &quot;id&quot;),
+            &quot;-price&quot;, Sort.by(Sort.Order.desc(&quot;pricePerNightPaise&quot;), Sort.Order.asc(&quot;id&quot;)),
+            &quot;stars&quot;, Sort.by(Sort.Order.asc(&quot;stars&quot;), Sort.Order.asc(&quot;pricePerNightPaise&quot;), Sort.Order.asc(&quot;id&quot;)),
+            &quot;-stars&quot;, Sort.by(Sort.Order.desc(&quot;stars&quot;), Sort.Order.asc(&quot;pricePerNightPaise&quot;), Sort.Order.asc(&quot;id&quot;)),
+            &quot;name&quot;, Sort.by(&quot;name&quot;, &quot;id&quot;));
+
+    private final HotelRepository hotels;
+    private final AmenityRepository amenities;
+    private final EntityManager entities;
+
+    HotelSearch(HotelRepository hotels, AmenityRepository amenities, EntityManager entities) {
+        this.hotels = hotels;
+        this.amenities = amenities;
+        this.entities = entities;
+    }
+
+    @Transactional(readOnly = true)
+    Results search(Filters f, String sort, int page, int size) {
+        Sort order = SORTS.get(sort);
+        if (order == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Sort by one of &quot; + new TreeSet&lt;&gt;(SORTS.keySet()));
+        }
+        Set&lt;String&gt; unknown = new TreeSet&lt;&gt;(f.amenities());
+        amenities.findAllById(f.amenities()).forEach(a -&gt; unknown.remove(a.getCode()));
+        if (!unknown.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Unknown amenities &quot; + unknown);
+        }
+        List&lt;Specification&lt;Hotel&gt;&gt; specs = new ArrayList&lt;&gt;();
+        if (f.city() != null) specs.add(HotelSpecs.inCity(f.city()));
+        if (f.minPaise() != null) specs.add(HotelSpecs.priceAtLeast(f.minPaise()));
+        if (f.maxPaise() != null) specs.add(HotelSpecs.priceAtMost(f.maxPaise()));
+        if (f.q() != null &amp;&amp; !f.q().isBlank()) specs.add(HotelSpecs.nameContains(f.q()));
+        f.amenities().forEach(code -&gt; specs.add(HotelSpecs.hasAmenity(code)));
+        Map&lt;Integer, Long&gt; facet = starsFacet(Specification.allOf(specs));   // every filter except stars
+        if (!f.stars().isEmpty()) specs.add(HotelSpecs.starsIn(f.stars()));
+
+        Page&lt;Hotel&gt; found = hotels.findAll(Specification.allOf(specs), PageRequest.of(page, size, order));
+        List&lt;Card&gt; cards = found.stream().map(h -&gt; new Card(h.getId(), h.getName(), h.getCity(), h.getStars(), h.getPricePerNightPaise(),
+                h.getAmenities().stream().map(Amenity::getCode).sorted().toList())).toList();
+        return new Results(found.getTotalElements(), page, sort, cards, facet);
+    }
+
+    /** Challenge 2: the same Specification, used in a GROUP BY query built with the Criteria API. */
+    private Map&lt;Integer, Long&gt; starsFacet(Specification&lt;Hotel&gt; spec) {
+        CriteriaBuilder cb = entities.getCriteriaBuilder();
+        CriteriaQuery&lt;Tuple&gt; query = cb.createTupleQuery();
+        Root&lt;Hotel&gt; root = query.from(Hotel.class);
+        query.multiselect(root.get(&quot;stars&quot;), cb.count(root)).where(spec.toPredicate(root, query, cb)).groupBy(root.get(&quot;stars&quot;));
+        Map&lt;Integer, Long&gt; counts = new TreeMap&lt;&gt;();
+        entities.createQuery(query).getResultList().forEach(t -&gt; counts.put(((Short) t.get(0)).intValue(), (Long) t.get(1)));
+        return counts;
+    }
+}</code></pre></div><p class="path">challenge/solution/HotelController.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.TreeSet;
+
+@RestController
+class HotelController {
+
+    private final HotelSearch search;
+
+    HotelController(HotelSearch search) {
+        this.search = search;
+    }
+
+    /** Prices are whole rupees in the query string (minPrice=3000), paise everywhere else. Demo limits on every value. */
+    @GetMapping(&quot;/hotels&quot;)
+    HotelSearch.Results hotels(@RequestParam(required = false) @Pattern(regexp = &quot;[A-Za-z-]{3,30}&quot;) String city,
+                               @RequestParam(required = false) @Min(0) @Max(100_000) Long minPrice,
+                               @RequestParam(required = false) @Min(0) @Max(100_000) Long maxPrice,
+                               @RequestParam(defaultValue = &quot;&quot;) List&lt;@Min(1) @Max(5) Integer&gt; stars,
+                               @RequestParam(defaultValue = &quot;&quot;) @Size(max = 5) List&lt;@Pattern(regexp = &quot;[A-Za-z]{2,20}&quot;) String&gt; amenities,
+                               @RequestParam(defaultValue = &quot;price&quot;) String sort,
+                               @RequestParam(defaultValue = &quot;0&quot;) @Min(0) @Max(100) int page,
+                               @RequestParam(defaultValue = &quot;20&quot;) @Min(1) @Max(50) int size,
+                               @RequestParam(required = false) @Size(max = 50) String q) {
+        if (minPrice != null &amp;&amp; maxPrice != null &amp;&amp; minPrice &gt; maxPrice) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;minPrice is above maxPrice&quot;);
+        }
+        Set&lt;String&gt; codes = new TreeSet&lt;&gt;();
+        amenities.forEach(a -&gt; codes.add(a.toLowerCase(Locale.ROOT)));
+        HotelSearch.Filters filters = new HotelSearch.Filters(city == null ? null : city.toLowerCase(Locale.ROOT),
+                minPrice == null ? null : minPrice * 100, maxPrice == null ? null : maxPrice * 100, stars, codes, q);
+        return search.search(filters, sort, page, size);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 35 minutes</p><h2>Counts per star rating</h2><p>Add <code>starsFacet</code> to every result: hotels per star rating with all filters except stars, for the "4 stars (2)" boxes.</p><p><b>Done when:</b> the test in <code>StarsFacetChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>Build the list of Specifications without stars, count with it, then add stars and search.</li><li>A Specification is just <code>toPredicate(root, query, cb)</code>: use it in your own Criteria query with <code>groupBy</code>.</li></ul></details><p class="path">challenge/StarsFacetChallengeTest.java</p><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: every result carries &quot;starsFacet&quot;: how many hotels each star rating would give with all the other
+ * filters applied, but not the stars filter itself, so the page can show &quot;4 stars (2)&quot; next to each box.
+ */
+class StarsFacetChallengeTest extends ApiTest {
+
+    @Test
+    void countsIgnoreOnlyTheStarsFilter() throws Exception {
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;city&quot;, &quot;goa&quot;).param(&quot;stars&quot;, &quot;4&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.total&quot;).value(2))
+                .andExpect(jsonPath(&quot;$.starsFacet.1&quot;).value(1)).andExpect(jsonPath(&quot;$.starsFacet.2&quot;).value(1)).andExpect(jsonPath(&quot;$.starsFacet.3&quot;).value(1))
+                .andExpect(jsonPath(&quot;$.starsFacet.4&quot;).value(2)).andExpect(jsonPath(&quot;$.starsFacet.5&quot;).value(1));
+        mvc.perform(get(&quot;/hotels&quot;).param(&quot;amenities&quot;, &quot;pool&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.starsFacet.3&quot;).value(1)).andExpect(jsonPath(&quot;$.starsFacet.4&quot;).value(1)).andExpect(jsonPath(&quot;$.starsFacet.5&quot;).value(2))
+                .andExpect(jsonPath(&quot;$.starsFacet.1&quot;).doesNotExist());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/HotelSearch.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Tuple;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Root;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+
+@Service
+class HotelSearch {
+
+    /** Each filter is optional: null (or empty) means &quot;not filtered&quot;. Prices in paise. */
+    record Filters(String city, Long minPaise, Long maxPaise, List&lt;Integer&gt; stars, Set&lt;String&gt; amenities, String q) {
+        Filters(String city, Long minPaise, Long maxPaise, List&lt;Integer&gt; stars, Set&lt;String&gt; amenities) {
+            this(city, minPaise, maxPaise, stars, amenities, null);
+        }
+    }
+
+    record Card(long id, String name, String city, int stars, long pricePerNightPaise, List&lt;String&gt; amenities) {
+    }
+
+    record Results(long total, int page, String sort, List&lt;Card&gt; hotels, Map&lt;Integer, Long&gt; starsFacet) {
+    }
+
+    /** The whitelist: the only sorts there are. The id last, so equal prices keep one order across pages. */
+    static final Map&lt;String, Sort&gt; SORTS = Map.of(
+            &quot;price&quot;, Sort.by(&quot;pricePerNightPaise&quot;, &quot;id&quot;),
+            &quot;-price&quot;, Sort.by(Sort.Order.desc(&quot;pricePerNightPaise&quot;), Sort.Order.asc(&quot;id&quot;)),
+            &quot;stars&quot;, Sort.by(Sort.Order.asc(&quot;stars&quot;), Sort.Order.asc(&quot;pricePerNightPaise&quot;), Sort.Order.asc(&quot;id&quot;)),
+            &quot;-stars&quot;, Sort.by(Sort.Order.desc(&quot;stars&quot;), Sort.Order.asc(&quot;pricePerNightPaise&quot;), Sort.Order.asc(&quot;id&quot;)),
+            &quot;name&quot;, Sort.by(&quot;name&quot;, &quot;id&quot;));
+
+    private final HotelRepository hotels;
+    private final AmenityRepository amenities;
+    private final EntityManager entities;
+
+    HotelSearch(HotelRepository hotels, AmenityRepository amenities, EntityManager entities) {
+        this.hotels = hotels;
+        this.amenities = amenities;
+        this.entities = entities;
+    }
+
+    @Transactional(readOnly = true)
+    Results search(Filters f, String sort, int page, int size) {
+        Sort order = SORTS.get(sort);
+        if (order == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Sort by one of &quot; + new TreeSet&lt;&gt;(SORTS.keySet()));
+        }
+        Set&lt;String&gt; unknown = new TreeSet&lt;&gt;(f.amenities());
+        amenities.findAllById(f.amenities()).forEach(a -&gt; unknown.remove(a.getCode()));
+        if (!unknown.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Unknown amenities &quot; + unknown);
+        }
+        List&lt;Specification&lt;Hotel&gt;&gt; specs = new ArrayList&lt;&gt;();
+        if (f.city() != null) specs.add(HotelSpecs.inCity(f.city()));
+        if (f.minPaise() != null) specs.add(HotelSpecs.priceAtLeast(f.minPaise()));
+        if (f.maxPaise() != null) specs.add(HotelSpecs.priceAtMost(f.maxPaise()));
+        if (f.q() != null &amp;&amp; !f.q().isBlank()) specs.add(HotelSpecs.nameContains(f.q()));
+        f.amenities().forEach(code -&gt; specs.add(HotelSpecs.hasAmenity(code)));
+        Map&lt;Integer, Long&gt; facet = starsFacet(Specification.allOf(specs));   // every filter except stars
+        if (!f.stars().isEmpty()) specs.add(HotelSpecs.starsIn(f.stars()));
+
+        Page&lt;Hotel&gt; found = hotels.findAll(Specification.allOf(specs), PageRequest.of(page, size, order));
+        List&lt;Card&gt; cards = found.stream().map(h -&gt; new Card(h.getId(), h.getName(), h.getCity(), h.getStars(), h.getPricePerNightPaise(),
+                h.getAmenities().stream().map(Amenity::getCode).sorted().toList())).toList();
+        return new Results(found.getTotalElements(), page, sort, cards, facet);
+    }
+
+    /** Challenge 2: the same Specification, used in a GROUP BY query built with the Criteria API. */
+    private Map&lt;Integer, Long&gt; starsFacet(Specification&lt;Hotel&gt; spec) {
+        CriteriaBuilder cb = entities.getCriteriaBuilder();
+        CriteriaQuery&lt;Tuple&gt; query = cb.createTupleQuery();
+        Root&lt;Hotel&gt; root = query.from(Hotel.class);
+        query.multiselect(root.get(&quot;stars&quot;), cb.count(root)).where(spec.toPredicate(root, query, cb)).groupBy(root.get(&quot;stars&quot;));
+        Map&lt;Integer, Long&gt; counts = new TreeMap&lt;&gt;();
+        entities.createQuery(query).getResultList().forEach(t -&gt; counts.put(((Short) t.get(0)).intValue(), (Long) t.get(1)));
+        return counts;
+    }
+}</code></pre></div><p class="path">challenge/solution/HotelSpecs.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
+import org.springframework.data.jpa.domain.Specification;
+
+import java.util.Collection;
+import java.util.Locale;
+
+/** One small, testable Specification per filter. Each value becomes a bound parameter in the SQL. */
+final class HotelSpecs {
+
+    private HotelSpecs() {
+    }
+
+    static Specification&lt;Hotel&gt; inCity(String city) {
+        return (root, query, cb) -&gt; cb.equal(root.get(&quot;city&quot;), city);
+    }
+
+    static Specification&lt;Hotel&gt; priceAtLeast(long paise) {
+        return (root, query, cb) -&gt; cb.greaterThanOrEqualTo(root.get(&quot;pricePerNightPaise&quot;), paise);
+    }
+
+    static Specification&lt;Hotel&gt; priceAtMost(long paise) {
+        return (root, query, cb) -&gt; cb.lessThanOrEqualTo(root.get(&quot;pricePerNightPaise&quot;), paise);
+    }
+
+    static Specification&lt;Hotel&gt; starsIn(Collection&lt;Integer&gt; stars) {
+        return (root, query, cb) -&gt; root.get(&quot;stars&quot;).in(stars.stream().map(Integer::shortValue).toList());
+    }
+
+    /** Challenge 1: the text is escaped, so % and _ are literal characters and the whole value stays a bound parameter. */
+    static Specification&lt;Hotel&gt; nameContains(String text) {
+        String escaped = text.toLowerCase(Locale.ROOT).replace(&quot;\\&quot;, &quot;\\\\&quot;).replace(&quot;%&quot;, &quot;\\%&quot;).replace(&quot;_&quot;, &quot;\\_&quot;);
+        return (root, query, cb) -&gt; cb.like(cb.lower(root.get(&quot;name&quot;)), &quot;%&quot; + escaped + &quot;%&quot;, &#x27;\\&#x27;);
+    }
+
+    /** &quot;Has this amenity&quot;, as EXISTS: one row per hotel, however many amenities it has. */
+    static Specification&lt;Hotel&gt; hasAmenity(String code) {
+        return (root, query, cb) -&gt; {
+            Subquery&lt;Long&gt; sub = query.subquery(Long.class);
+            Root&lt;Hotel&gt; other = sub.from(Hotel.class);
+            Join&lt;Hotel, Amenity&gt; amenity = other.join(&quot;amenities&quot;);
+            sub.select(other.get(&quot;id&quot;)).where(cb.equal(other.get(&quot;id&quot;), root.get(&quot;id&quot;)), cb.equal(amenity.get(&quot;code&quot;), code));
+            return cb.exists(sub);
+        };
+    }
+}</code></pre></div><p class="path">challenge/solution/HotelController.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.hotels;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.TreeSet;
+
+@RestController
+class HotelController {
+
+    private final HotelSearch search;
+
+    HotelController(HotelSearch search) {
+        this.search = search;
+    }
+
+    /** Prices are whole rupees in the query string (minPrice=3000), paise everywhere else. Demo limits on every value. */
+    @GetMapping(&quot;/hotels&quot;)
+    HotelSearch.Results hotels(@RequestParam(required = false) @Pattern(regexp = &quot;[A-Za-z-]{3,30}&quot;) String city,
+                               @RequestParam(required = false) @Min(0) @Max(100_000) Long minPrice,
+                               @RequestParam(required = false) @Min(0) @Max(100_000) Long maxPrice,
+                               @RequestParam(defaultValue = &quot;&quot;) List&lt;@Min(1) @Max(5) Integer&gt; stars,
+                               @RequestParam(defaultValue = &quot;&quot;) @Size(max = 5) List&lt;@Pattern(regexp = &quot;[A-Za-z]{2,20}&quot;) String&gt; amenities,
+                               @RequestParam(defaultValue = &quot;price&quot;) String sort,
+                               @RequestParam(defaultValue = &quot;0&quot;) @Min(0) @Max(100) int page,
+                               @RequestParam(defaultValue = &quot;20&quot;) @Min(1) @Max(50) int size,
+                               @RequestParam(required = false) @Size(max = 50) String q) {
+        if (minPrice != null &amp;&amp; maxPrice != null &amp;&amp; minPrice &gt; maxPrice) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;minPrice is above maxPrice&quot;);
+        }
+        Set&lt;String&gt; codes = new TreeSet&lt;&gt;();
+        amenities.forEach(a -&gt; codes.add(a.toLowerCase(Locale.ROOT)));
+        HotelSearch.Filters filters = new HotelSearch.Filters(city == null ? null : city.toLowerCase(Locale.ROOT),
+                minPrice == null ? null : minPrice * 100, maxPrice == null ? null : maxPrice * 100, stars, codes, q);
+        return search.search(filters, sort, page, size);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>When Specifications are not enough</h2>
+<p>Product wants "near the beach", typo-tolerant names, "popular first" and facets on every filter, on 2 lakh hotels. Which of these can PostgreSQL do well (indexes, full-text, PostGIS), and at what point does a search engine (OpenSearch, Elasticsearch) earn its cost: a second copy of the data, kept in sync, that can be minutes behind?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, indexes</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test with the old search: both injections and the amenity join.</li>
+<li>One Specification per filter, each with its value bound.</li>
+<li>Amenities as EXISTS; sorts from a whitelist ending in the id.</li>
+<li>Validate everything at the controller; check unknown amenities against the table.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Specifications + bound values + sort whitelist</td><td>A class of small methods.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Concatenated SQL</td><td>Injection; quoting bugs; joins that duplicate.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Concatenated SQL with escaping</td><td>Every value escaped correctly, forever; the sort is still open.</td><td><span class="pill bad">Fragile</span></td></tr><tr><td>One JPQL query with <code>(:city IS NULL OR h.city = :city)</code></td><td>Safe; one plan for all combinations, often a poor one.</td><td><span class="pill warn">Small cases only</span></td></tr><tr><td>Querydsl or jOOQ</td><td>A code generator and a dependency; type-safe.</td><td><span class="pill warn">Good at scale</span></td></tr><tr><td>A search engine</td><td>A second store to keep in sync.</td><td><span class="pill warn">For text and relevance</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Table</th><th>Constraints</th><th>Why</th></tr></thead><tbody><tr><td><code>hotels</code></td><td><code>hotels_city_shape</code>, <code>hotels_stars_range</code>, <code>hotels_price_range</code> (demo: Rs 500 to Rs 1 lakh), <code>hotels_name_per_city</code>; index <code>(city, price_per_night_paise)</code></td><td>The common search: a city by price.</td></tr><tr><td><code>amenities</code></td><td><code>amenities_code_shape</code></td><td>Lower-case codes.</td></tr><tr><td><code>hotel_amenities</code></td><td><code>hotel_amenities_pk</code>, two foreign keys; index <code>(amenity_code, hotel_id)</code></td><td>The EXISTS check per amenity.</td></tr></tbody></table></div>
+<pre class="code"><code class="language-sql">CREATE TABLE amenities (
+    code VARCHAR(20) PRIMARY KEY CONSTRAINT amenities_code_shape CHECK (code ~ &#x27;^[a-z]{2,20}$&#x27;),
+    name VARCHAR(50) NOT NULL
+);
+
+CREATE TABLE hotels (
+    id                    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name                  VARCHAR(100) NOT NULL,
+    city                  VARCHAR(30)  NOT NULL CONSTRAINT hotels_city_shape CHECK (city ~ &#x27;^[a-z-]{3,30}$&#x27;),
+    stars                 SMALLINT     NOT NULL CONSTRAINT hotels_stars_range CHECK (stars BETWEEN 1 AND 5),
+    price_per_night_paise BIGINT       NOT NULL CONSTRAINT hotels_price_range CHECK (price_per_night_paise BETWEEN 50000 AND 10000000),
+    CONSTRAINT hotels_name_per_city UNIQUE (city, name)
+);
+CREATE INDEX hotels_city_price ON hotels (city, price_per_night_paise);
+
+CREATE TABLE hotel_amenities (
+    hotel_id     BIGINT      NOT NULL CONSTRAINT hotel_amenities_hotel_fk REFERENCES hotels (id) ON DELETE CASCADE,
+    amenity_code VARCHAR(20) NOT NULL CONSTRAINT hotel_amenities_amenity_fk REFERENCES amenities (code),
+    CONSTRAINT hotel_amenities_pk PRIMARY KEY (hotel_id, amenity_code)
+);
+CREATE INDEX hotel_amenities_amenity ON hotel_amenities (amenity_code, hotel_id);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Least privilege</dt><dd>The app's database user needs <code>SELECT</code> on these tables, not <code>UPDATE</code> or <code>DELETE</code>. The injected <code>UPDATE</code> in the trap would then have failed.</dd>
+<dt>Multiple statements</dt><dd>The injection worked because the PostgreSQL driver ran two statements sent as one string through a plain <code>Statement</code>. Prepared statements never do.</dd>
+<dt>Filter combinations</dt><dd>Twelve optional filters are 4,096 combinations. Index the common ones (city plus price); watch slow queries for the rest.</dd>
+<dt>Logs</dt><dd>Log the parameters of a search, not a SQL string with them inside: one is data, the other is a template for the next attack.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>What is SQL injection?</summary><p>User input that becomes part of the SQL text, so it can change the query: add conditions, run other statements, read other tables.</p></details><details class="qa"><summary>Why do bound parameters prevent it?</summary><p>The SQL text is fixed and sent first; values travel separately and are only ever used as values, never parsed as SQL.</p></details><details class="qa"><summary>How do you sort by a user-chosen column safely?</summary><p>Map a fixed set of API names to columns you chose; refuse everything else. A column name cannot be a parameter.</p></details><details class="qa"><summary>What is a JPA Specification?</summary><p>A function (root, query, criteriaBuilder) → Predicate. Small ones combine with and/or into a query, each value bound.</p></details><details class="qa"><summary>Why EXISTS instead of a join for &quot;has amenity&quot;?</summary><p>A join returns a row per matching amenity, duplicating hotels; EXISTS asks one yes/no question per hotel.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 14 tests pass.</td><td>You ran both injections against the old search.</td></tr><tr><td>Security</td><td>No input in SQL text; a sort whitelist.</td><td>Least privilege for the app's database user.</td></tr><tr><td>JPA</td><td>One Specification per filter.</td><td>Reusing them for counts (Practice 2).</td></tr><tr><td>Results</td><td>Each hotel once; all amenities required.</td><td>Why the join duplicated.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This station has no flawed version to review. Use this checklist on any search endpoint:</p>
+<ul class="rules">
+<li>Is any request value concatenated into SQL, JPQL or a <code>Sort</code>?</li>
+<li>Is the sort chosen from a fixed list, ending in a unique column?</li>
+<li>Can a filter on a collection return the same row twice?</li>
+<li>Is <code>LIKE</code> input escaped?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
