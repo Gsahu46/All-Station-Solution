@@ -1,0 +1,1652 @@
+<title>Station 058 · Welcome emails with Spring application events</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 058</span>
+    <h1>Welcome emails with Spring application events</h1>
+    <p class="scenario">Sign-up calls email, CRM and analytics directly; when the CRM is slow, sign-up is slow, and failed sign-ups still sent emails.</p>
+    <p class="sim"><b>Simulation</b><span>No email is sent and no CRM is called: the welcome email is recorded in an in-memory mailbox, and the CRM records the contact after a configurable delay. Sign-ups and invites are demo data, not Taskloom's.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>SaaS</li>
+      <li><b>Types</b>Database · Messaging</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>057 Audit trail that survives a rollback</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · ApplicationEventPublisher · @TransactionalEventListener(AFTER_COMMIT) · @Async on virtual threads · HtmlUtils · JdbcClient · PostgreSQL 17 · Flyway · Testcontainers · Awaitility</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Sign-up did everything</strong><p>Taskloom's sign-up sent the welcome email, told the CRM and the analytics system, then answered. When the CRM was slow, sign-up was slow.</p></li><li><strong>Events, too early</strong><p>The team switched to events, with plain listeners. They run inside publishEvent, before the commit. Sign-ups rolled back later, for a full team invite, had already been welcomed by email.</p></li><li><strong>The fix</strong><p>Listeners that run after commit, on other threads; one welcome email per sign-up however often the event arrives; retries, then a dead-letter state; and a name escaped before it goes into HTML.</p></li></ol>
+<p class="lesson">Side effects belong after the commit, and off the request's path.</p>
+
+<h2>What are we building?</h2>
+<p><code>POST /signups</code> saves a sign-up (optionally joining a team through an invite) and answers at once. After it commits, two things happen on their own: a welcome email and a CRM record. <code>GET /signups/{id}</code> shows where the welcome email is.</p>
+
+<h2>An everyday analogy</h2>
+<p>A hotel front desk. The receptionist checks you in and hands over the key. Only then does someone else send the welcome note and update the loyalty system. If check-in is cancelled halfway, nobody sends the note; if the loyalty system is slow, you still get your key.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>The service saves</strong> the sign-up and publishes <code>SignedUp</code>; nothing happens yet.</li>
+<li><strong>It may still fail</strong> (a full invite): then everything rolls back, and the event is dropped.</li>
+<li><strong>On commit</strong>, Spring hands the event to the after-commit listeners, each on its own thread.</li>
+<li><strong>The email listener</strong> claims the email once, sends it, retries if the provider fails, and gives up to DEAD after three attempts.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: the email listener runs after commit. Why must it still guard against duplicates?</summary><p>Events can arrive twice: a retry by a person, a re-published event, a second instance. Without the claim row, each one sends an email. With it, the database lets exactly one through.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No real email or CRM.</strong> Both are simulated.</li>
+<li><strong>No outbox.</strong> Events live in memory: a crash between commit and listener loses the email (see Production).</li>
+<li><strong>No login.</strong> Sign-up is the start.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Application event</strong></td><td>A message one part of the app publishes and others listen to.</td><td>A shop's bell that rings when a customer enters.</td><td><code>SignedUp</code></td></tr><tr><td><strong>Plain listener</strong></td><td>Runs at once, inside the publishing call, before the transaction ends.</td><td>Greeting the customer before they have paid.</td><td><code>@EventListener</code></td></tr><tr><td><strong>After-commit listener</strong></td><td>Runs only once the transaction has committed.</td><td>Sending the thank-you note after payment clears.</td><td><code>@TransactionalEventListener</code></td></tr><tr><td><strong>Async</strong></td><td>Runs on another thread, so the caller does not wait.</td><td>Posting a letter instead of delivering it yourself.</td><td><code>@Async</code></td></tr><tr><td><strong>Retry and dead letter</strong></td><td>Try again a few times; then set the message aside for a person.</td><td>Returned post kept at the counter.</td><td><code>DEAD</code> status</td></tr><tr><td><strong>Escaping</strong></td><td>Turning special characters into plain text so they cannot act as code.</td><td>Writing "&lt;b&gt;" instead of making text bold.</td><td><code>HtmlUtils.htmlEscape</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Taskloom</strong> (a fictional SaaS) welcomed people whose sign-up had failed, and made every sign-up wait for its slowest partner system.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> Asha signs up, <b>then</b> <code>201</code> with welcomeEmail PENDING, then one UTF-8 HTML welcome email, then SENT.</li>
+<li><b>Given</b> Ravi signs up with a full invite, <b>then</b> <code>409</code>, no sign-up, and no email, ever.</li>
+<li><b>Given</b> the CRM hangs, <b>then</b> the sign-up still answers in under 2 seconds and the email still goes.</li>
+<li><b>Given</b> the same event five times at once, <b>then</b> one email.</li>
+<li><b>Given</b> the provider fails twice, <b>then</b> the third attempt sends it; failing every time, the email is DEAD after 3 attempts, with the error.</li>
+<li><b>Given</b> a name like <code>Zoë &lt;b&gt;&amp; co&lt;/b&gt;</code> or one with a line break, <b>then</b> it is text in the body and one line in the subject.</li>
+<li><b>Given</b> a malformed body, <code>400</code>; a taken email, <code>409</code>; an unknown invite, <code>422</code>; an unknown sign-up, <code>404</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>Side effects run after commit, never for a rolled-back sign-up.</li>
+<li>Slow partners never slow the sign-up.</li>
+<li>One welcome email per sign-up, guarded by the database.</li>
+<li>Bounded retries, then a visible dead-letter state.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Publish and listen to application events.</li>
+<li>Choose between <code>@EventListener</code> and <code>@TransactionalEventListener</code>.</li>
+<li>Run listeners asynchronously, and test asynchronous code.</li>
+<li>Make a side effect idempotent, retried, and dead-lettered; and write safe HTML email.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/signups</code></td><td>Sign up: <code>email</code>, <code>name</code>, optional <code>inviteCode</code> to join a team.</td></tr><tr><td><code>GET</code></td><td><code>/signups/{id}</code></td><td>The sign-up and its <code>welcomeEmail</code>: PENDING, SENDING, SENT or DEAD.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">201</span></td><td>Signed up (the email follows after commit)</td></tr><tr><td><span class="pill ok">200</span></td><td>The sign-up</td></tr><tr><td><span class="pill warn">400</span></td><td>Malformed email, blank name, malformed invite code</td></tr><tr><td><span class="pill warn">404</span></td><td>No such sign-up</td></tr><tr><td><span class="pill warn">409</span></td><td>Email already signed up; invite has no seats left (nothing kept)</td></tr><tr><td><span class="pill warn">422</span></td><td>Unknown invite (nothing kept)</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 16 Oct 2026, in this order, against one fresh database (invite DESIGN-26 with seats, OPS-FULL without). JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: Asha signs up</h3><p><b>Why:</b> <code>201</code> at once; the email is still PENDING.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /signups HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;email&quot;: &quot;asha@x.com&quot;,
+  &quot;name&quot;: &quot;Asha Verma&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /signups/1
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 1,
+  &quot;email&quot;: &quot;asha@x.com&quot;,
+  &quot;name&quot;: &quot;Asha Verma&quot;,
+  &quot;welcomeEmail&quot;: &quot;PENDING&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: a second later</h3><p><b>Why:</b> the after-commit listener has sent it: SENT.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /signups/1 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 71
+
+{
+  &quot;id&quot;: 1,
+  &quot;email&quot;: &quot;asha@x.com&quot;,
+  &quot;name&quot;: &quot;Asha Verma&quot;,
+  &quot;welcomeEmail&quot;: &quot;SENT&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: Ravi, invite OPS-FULL</h3><p><b>Why:</b> the sign-up was saved and the event published, then the invite failed: rolled back, <code>409</code>, no email.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /signups HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;email&quot;: &quot;ravi@x.com&quot;,
+  &quot;name&quot;: &quot;Ravi Menon&quot;,
+  &quot;inviteCode&quot;: &quot;OPS-FULL&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 409 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Invite OPS-FULL has no seats left.&quot;,
+  &quot;instance&quot;: &quot;/signups&quot;,
+  &quot;status&quot;: 409,
+  &quot;title&quot;: &quot;Invite full&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: Meera, invite DESIGN-26</h3><p><b>Why:</b> a seat taken, <code>201</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /signups HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;email&quot;: &quot;meera@x.com&quot;,
+  &quot;name&quot;: &quot;Meera Nair&quot;,
+  &quot;inviteCode&quot;: &quot;DESIGN-26&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /signups/3
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 3,
+  &quot;email&quot;: &quot;meera@x.com&quot;,
+  &quot;name&quot;: &quot;Meera Nair&quot;,
+  &quot;welcomeEmail&quot;: &quot;PENDING&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: Asha@x.com again</h3><p><b>Why:</b> <code>409</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /signups HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;email&quot;: &quot;Asha@x.com&quot;,
+  &quot;name&quot;: &quot;Asha Verma&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 409 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;asha@x.com has already signed up.&quot;,
+  &quot;instance&quot;: &quot;/signups&quot;,
+  &quot;status&quot;: 409,
+  &quot;title&quot;: &quot;Already signed up&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: asha.x.com</h3><p><b>Why:</b> <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /signups HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;email&quot;: &quot;asha.x.com&quot;,
+  &quot;name&quot;: &quot;Asha Verma&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Invalid request content.&quot;,
+  &quot;instance&quot;: &quot;/signups&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: sign-up 99</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /signups/99 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No sign-up 99.&quot;,
+  &quot;instance&quot;: &quot;/signups/99&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Sign-up not found&quot;
+}</code></pre></div></div></section>
+<h2>What happened after each commit</h2>
+<p class="muted">From the running app's log (<code>docs/captures/app-log.txt</code>) and the <code>sent_emails</code> table (<code>docs/captures/emails.txt</code>), after the requests above: two welcome emails, for Asha and Meera; none for Ravi, whose sign-up does not exist.</p>
+<pre class="code"><code class="language-text">Welcome email for sign-up 1 sent on attempt 1 (simulated: recorded in the mailbox)
+Welcome email for sign-up 3 sent on attempt 1 (simulated: recorded in the mailbox)</code></pre><pre class="code"><code class="language-text"> id |    email    | status | attempts 
+----+-------------+--------+----------
+  1 | asha@x.com  | SENT   |        1
+  3 | meera@x.com | SENT   |        1
+(2 rows)</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>A sign-up</td><td><code>201</code> PENDING, then one email, then SENT</td><td><code>aSignupIsAnsweredAtOnceAndWelcomedAfter</code></td></tr><tr><td>HTML and line breaks in the name</td><td>Escaped in the body; one line in the subject</td><td><code>theNameIsTextInTheEmailNotHtmlOrHeaders</code></td></tr><tr><td>An invite with seats</td><td>Seat taken, email sent</td><td><code>anInviteWithSeatsJoinsTheTeam</code></td></tr><tr><td>Full or unknown invite; taken email</td><td><code>409</code>, <code>422</code>, <code>409</code>; no email for any</td><td><code>aFullOrUnknownInviteOrATakenEmailIsRefusedAndNotWelcomed</code></td></tr><tr><td>Malformed; unknown</td><td><code>400</code>; <code>404</code></td><td><code>malformedSignupsAre400</code>, <code>unknownSignupsAre404</code></td></tr><tr><td>A hanging CRM</td><td>Sign-up and email unaffected</td><td><code>theSignupAndTheEmailDoNotWaitForTheCrm</code></td></tr><tr><td>The same event five times at once</td><td>One email</td><td><code>theSameEventDeliveredFiveTimesAtOnceSendsOneEmail</code></td></tr><tr><td>Provider fails twice</td><td>Retried; sent on attempt 3</td><td><code>aProviderThatFailsTwiceIsRetriedAndTheEmailGoesOnce</code></td></tr><tr><td>Provider never recovers</td><td>DEAD after 3; a late duplicate does not resend</td><td><code>aProviderThatNeverRecoversLeavesTheEmailDeadForAPerson</code></td></tr><tr><td>Bad rows written directly; a rolled-back invite</td><td>Refused by named constraints; nothing kept</td><td><code>SignupDatabaseTest</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Sending email in a plain listener before commit; failed sign-ups still get mail.</p>
+<p>The old flow is kept in the tests as <code>OldSignupFlow</code>, with the same steps as today and a plain <code>@EventListener</code> that sends the welcome email. Ravi signs up with a full invite: the exception rolls the sign-up back, there is no account, and the mailbox holds one "Welcome to Taskloom" addressed to him. Through today's API the same request leaves no sign-up and, checked for half a second, no email.</p>
+<p>While building, each part was undone once. A synchronous plain listener, the old shape, turned 2 tests red: the trap and the full-invite contract test. An <code>@Async</code> plain listener turned a different one red. It ran on another thread before the commit, when PostgreSQL could not yet see the new sign-up, so its claim failed on <code>sent_emails_signup_fk</code> and a valid sign-up got no email. A CRM listener without <code>@Async</code> turned 1 red (the hanging-CRM test). Without the claim, 2; with one attempt instead of three, 2; without escaping, 1.</p>
+</div>
+<pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Import;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The first test written for this station: Ravi signs up with a full team invite, the old way and the new way. */
+@Import({OldSignupFlow.class, OldSignupFlow.OldWelcomeListener.class})
+class EmailBeforeCommitTrapTest extends ApiTest {
+
+    @Autowired
+    OldSignupFlow old;
+
+    long signups() {
+        return jdbc.sql(&quot;SELECT count(*) FROM signups&quot;).query(Long.class).single();
+    }
+
+    @Test
+    void aPlainListenerSendsBeforeTheRollback() {
+        assertThatThrownBy(() -&gt; old.signUp(&quot;ravi@x.com&quot;, &quot;Ravi Menon&quot;, &quot;OPS-FULL&quot;)).hasMessage(&quot;invite full&quot;);
+        assertThat(signups()).isZero();                                                // no account...
+        assertThat(mailbox.all()).extracting(MailGateway.Message::to).containsExactly(&quot;ravi@x.com&quot;);   // ...but &quot;welcome!&quot;
+    }
+
+    @Test
+    void anAfterCommitListenerSendsNothingForARolledBackSignup() throws Exception {
+        signUp(&quot;ravi@x.com&quot;, &quot;Ravi Menon&quot;, &quot;OPS-FULL&quot;).andExpect(status().isConflict());
+        assertThat(signups()).isZero();
+        neverAnyMail();
+    }
+}</code></pre><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.event.EventListener;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * The sign-up as it shipped, kept only in tests (registered as beans by the trap test). Same steps as today; the
+ * difference is the listener: a plain @EventListener runs at once, inside publishEvent, before the transaction ends.
+ */
+class OldSignupFlow {
+
+    record OldSignedUp(long signupId, String email, String name) {
+    }
+
+    private final JdbcClient jdbc;
+    private final ApplicationEventPublisher events;
+
+    OldSignupFlow(JdbcClient jdbc, ApplicationEventPublisher events) {
+        this.jdbc = jdbc;
+        this.events = events;
+    }
+
+    @Transactional
+    public void signUp(String email, String name, String invite) {
+        long id = jdbc.sql(&quot;INSERT INTO signups (email, name) VALUES (?, ?) RETURNING id&quot;).params(email, name).query(Long.class).single();
+        events.publishEvent(new OldSignedUp(id, email, name));   // the email goes out right here
+        if (jdbc.sql(&quot;UPDATE invites SET seats_used = seats_used + 1 WHERE code = ? AND seats_used &lt; seats_total&quot;).param(invite).update() == 0) {
+            throw new IllegalStateException(&quot;invite full&quot;);      // ...and the sign-up rolls back after it
+        }
+    }
+
+    static class OldWelcomeListener {
+
+        private final MailGateway mail;
+
+        OldWelcomeListener(MailGateway mail) {
+            this.mail = mail;
+        }
+
+        @EventListener
+        public void send(OldSignedUp e) {
+            mail.send(WelcomeEmail.to(e.email(), e.name()));
+        }
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 14 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Virtual threads need JDK 21 or later.</p>
+<h2>Try it yourself</h2>
+<p>Make the CRM slow and feel that sign-up does not care:</p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run -Dspring-boot.run.arguments=--taskloom.crm.delay-ms=3000
+curl -w &quot;\n%{time_total}s\n&quot; -X POST localhost:8080/signups -H &quot;Content-Type: application/json&quot; -d &#x27;{&quot;email&quot;:&quot;you@x.com&quot;,&quot;name&quot;:&quot;You&quot;}&#x27;</code></pre>
+<p>The answer comes back long before the CRM's three seconds. Then remove <code>@Async</code> from <code>registerInCrm</code> and try again.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>Emails for sign-ups that failed</td><td>A plain <code>@EventListener</code>: it runs before the commit.</td><td><code>@TransactionalEventListener(phase = AFTER_COMMIT)</code>.</td></tr><tr><td>An after-commit listener never runs</td><td>The event was published outside a transaction.</td><td>Publish inside one, or set <code>fallbackExecution = true</code> on purpose.</td></tr><tr><td>Sign-up slow when a partner is slow</td><td>The listener runs on the request's thread.</td><td><code>@Async</code> and <code>@EnableAsync</code>.</td></tr><tr><td>Two welcome emails</td><td>The event arrived twice and nothing claimed it.</td><td>Claim the email in the database first.</td></tr><tr><td>A foreign key error in an async listener</td><td>It ran before the commit and the new row was not visible yet.</td><td>After-commit, not a plain listener.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/058-welcome-emails-with-spring-application-events/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/taskloom/welcome/
+│   ├── SignupController.java   ├── SignupService.java   ├── SignedUp.java   ├── Listeners.java
+│   ├── WelcomeMailer.java   ├── WelcomeEmail.java   ├── MailGateway.java   ├── Mailbox.java
+│   ├── CrmClient.java   └── WelcomeApplication.java
+├── src/main/resources/
+│   ├── application.yaml   └── db/migration/V1__signups_invites_emails.sql, V2__demo_invites.sql
+├── src/test/java/com/taskloom/welcome/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then what happens after the commit.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">SignupController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">SignupService.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">Listeners.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">WelcomeMailer.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">WelcomeEmail.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">Mailbox.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">MailGateway.java</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">CrmClient.java</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">SignedUp.java</button><button class="file-btn" role="tab" id="code-9-b" aria-controls="code-9" aria-selected="false" data-group="code">V1__signups_invites_emails.sql</button><button class="file-btn" role="tab" id="code-10-b" aria-controls="code-10" aria-selected="false" data-group="code">V2__demo_invites.sql</button><button class="file-btn" role="tab" id="code-11-b" aria-controls="code-11" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-12-b" aria-controls="code-12" aria-selected="false" data-group="code">WelcomeApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/taskloom/welcome/SignupController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Validates and normalises the sign-up; reads it back with its email status.</dd><dt>Why</dt><dd>HTTP only.</dd><dt>Without it</dt><dd>Side effects started from the controller.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.util.Locale;
+
+@RestController
+class SignupController {
+
+    record NewSignup(@NotBlank @Email @Size(max = 254) String email, @NotBlank @Size(max = 80) String name,
+                     @Pattern(regexp = &quot;[A-Za-z0-9-]{4,20}&quot;) String inviteCode) {
+    }
+
+    private final SignupService signups;
+
+    SignupController(SignupService signups) {
+        this.signups = signups;
+    }
+
+    /** Answers as soon as the sign-up is committed; the welcome email and the CRM follow on their own. */
+    @PostMapping(&quot;/signups&quot;)
+    ResponseEntity&lt;SignupService.Signup&gt; signUp(@Valid @RequestBody NewSignup body) {
+        SignupService.Signup s = signups.signUp(body.email().strip().toLowerCase(Locale.ROOT), body.name().strip(),
+                body.inviteCode() == null ? null : body.inviteCode().toUpperCase(Locale.ROOT));
+        return ResponseEntity.created(URI.create(&quot;/signups/&quot; + s.id())).body(s);
+    }
+
+    /** welcomeEmail: PENDING, SENDING, SENT or DEAD (given up after the last retry). */
+    @GetMapping(&quot;/signups/{id}&quot;)
+    SignupService.Signup get(@PathVariable long id) {
+        return signups.find(id).orElseThrow(() -&gt; SignupService.problem(HttpStatus.NOT_FOUND, &quot;Sign-up not found&quot;, &quot;No sign-up &quot; + id + &quot;.&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/taskloom/welcome/SignupService.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Saves the sign-up, publishes <code>SignedUp</code>, joins the team.</dd><dt>Why</dt><dd>Knows no email, CRM or analytics.</dd><dt>Without it</dt><dd>A sign-up that waits for partners.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.ErrorResponseException;
+
+import java.util.Optional;
+
+/**
+ * Sign-up knows nothing about email, the CRM or analytics: it saves the sign-up, says so with an event, and
+ * finishes. Whatever listens decides what happens next.
+ */
+@Service
+class SignupService {
+
+    record Signup(long id, String email, String name, String welcomeEmail) {
+    }
+
+    private final JdbcClient jdbc;
+    private final ApplicationEventPublisher events;
+
+    SignupService(JdbcClient jdbc, ApplicationEventPublisher events) {
+        this.jdbc = jdbc;
+        this.events = events;
+    }
+
+    @Transactional
+    Signup signUp(String email, String name, String inviteCode) {
+        long id;
+        try {
+            id = jdbc.sql(&quot;INSERT INTO signups (email, name) VALUES (?, ?) RETURNING id&quot;).params(email, name).query(Long.class).single();
+        } catch (DuplicateKeyException e) {
+            throw problem(HttpStatus.CONFLICT, &quot;Already signed up&quot;, email + &quot; has already signed up.&quot;);
+        }
+        events.publishEvent(new SignedUp(id, email, name));   // nothing happens yet for after-commit listeners
+        if (inviteCode != null) {
+            joinTeam(id, inviteCode);   // can still fail, and roll everything back, after the event was published
+        }
+        return new Signup(id, email, name, &quot;PENDING&quot;);
+    }
+
+    private void joinTeam(long signupId, String code) {
+        int seated = jdbc.sql(&quot;UPDATE invites SET seats_used = seats_used + 1 WHERE code = ? AND seats_used &lt; seats_total&quot;).param(code).update();
+        if (seated == 0) {
+            boolean exists = jdbc.sql(&quot;SELECT count(*) FROM invites WHERE code = ?&quot;).param(code).query(Long.class).single() &gt; 0;
+            throw exists ? problem(HttpStatus.CONFLICT, &quot;Invite full&quot;, &quot;Invite &quot; + code + &quot; has no seats left.&quot;)
+                    : problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Unknown invite&quot;, &quot;No invite &quot; + code + &quot;.&quot;);
+        }
+        jdbc.sql(&quot;UPDATE signups SET invite_code = ? WHERE id = ?&quot;).params(code, signupId).update();
+    }
+
+    Optional&lt;Signup&gt; find(long id) {
+        return jdbc.sql(&quot;&quot;&quot;
+                SELECT s.id, s.email, s.name, coalesce(e.status, &#x27;PENDING&#x27;) AS welcome_email
+                FROM signups s LEFT JOIN sent_emails e ON e.signup_id = s.id AND e.kind = &#x27;WELCOME&#x27; WHERE s.id = ?&quot;&quot;&quot;)
+                .param(id).query(Signup.class).optional();
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/taskloom/welcome/Listeners.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The welcome email and the CRM, each <code>@Async</code> and after commit.</dd><dt>Why</dt><dd>Rolled-back sign-ups cause nothing; slow partners slow nothing.</dd><dt>Without it</dt><dd>Mail for sign-ups that do not exist.</dd></dl><ul><li><code>@TransactionalEventListener(phase = AFTER_COMMIT)</code> holds the event until the commit, and drops it on rollback.</li><li><code>@Async</code> hands it to Spring's executor (virtual threads here).</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
+
+/**
+ * The two things a sign-up causes. Both run only AFTER the sign-up&#x27;s transaction commits (a rolled-back sign-up
+ * causes nothing), and both on another thread (a slow CRM does not slow the sign-up). Limit: the event lives in
+ * memory, so a crash between commit and listener loses it; a transactional outbox closes that gap.
+ */
+@Component
+class Listeners {
+
+    private final WelcomeMailer mailer;
+    private final CrmClient crm;
+
+    Listeners(WelcomeMailer mailer, CrmClient crm) {
+        this.mailer = mailer;
+        this.crm = crm;
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void sendWelcomeEmail(SignedUp e) {
+        mailer.sendOnce(e);
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void registerInCrm(SignedUp e) {
+        crm.register(e.signupId(), e.email(), e.name());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/taskloom/welcome/WelcomeMailer.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Claims, sends, retries, dead-letters.</dd><dt>Why</dt><dd>The database decides that one email goes out.</dd><dt>Without it</dt><dd>Duplicates and silent losses.</dd></dl><ul><li>The claim is <code>INSERT ... ON CONFLICT DO NOTHING</code>: zero rows means someone already has it.</li><li>Waits grow with each attempt; after the last, DEAD with the error.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Component;
+
+/**
+ * Sends one welcome email per sign-up, even if the event arrives twice: it claims the email in the sent_emails table
+ * first. A failing provider is retried with growing waits; after the last attempt the email is marked DEAD (the
+ * dead-letter state) for a person to look at, instead of being retried forever or lost.
+ */
+@Component
+class WelcomeMailer {
+
+    private static final Logger log = LoggerFactory.getLogger(WelcomeMailer.class);
+
+    private final JdbcClient jdbc;
+    private final MailGateway mail;
+    private final int attempts;
+    private final long backoffMs;
+
+    WelcomeMailer(JdbcClient jdbc, MailGateway mail, @Value(&quot;${taskloom.mail.attempts}&quot;) int attempts, @Value(&quot;${taskloom.mail.backoff-ms}&quot;) long backoffMs) {
+        this.jdbc = jdbc;
+        this.mail = mail;
+        this.attempts = attempts;
+        this.backoffMs = backoffMs;
+    }
+
+    void sendOnce(SignedUp e) {
+        int claimed = jdbc.sql(&quot;INSERT INTO sent_emails (signup_id, kind, status) VALUES (?, &#x27;WELCOME&#x27;, &#x27;SENDING&#x27;) ON CONFLICT DO NOTHING&quot;).param(e.signupId()).update();
+        if (claimed == 0) {
+            log.info(&quot;Welcome email for sign-up {} already claimed: duplicate event ignored&quot;, e.signupId());
+            return;
+        }
+        MailGateway.Message message = WelcomeEmail.to(e.email(), e.name());
+        for (int attempt = 1; attempt &lt;= attempts; attempt++) {
+            try {
+                mail.send(message);
+                jdbc.sql(&quot;UPDATE sent_emails SET status = &#x27;SENT&#x27;, attempts = ? WHERE signup_id = ? AND kind = &#x27;WELCOME&#x27;&quot;).params(attempt, e.signupId()).update();
+                log.info(&quot;Welcome email for sign-up {} sent on attempt {} (simulated: recorded in the mailbox)&quot;, e.signupId(), attempt);
+                return;
+            } catch (RuntimeException failure) {
+                String error = String.valueOf(failure.getMessage());
+                jdbc.sql(&quot;UPDATE sent_emails SET attempts = ?, last_error = ? WHERE signup_id = ? AND kind = &#x27;WELCOME&#x27;&quot;)
+                        .params(attempt, error.length() &gt; 200 ? error.substring(0, 200) : error, e.signupId()).update();
+                log.warn(&quot;Welcome email for sign-up {} failed, attempt {} of {}: {}&quot;, e.signupId(), attempt, attempts, error);
+                if (attempt &lt; attempts) {
+                    pause(backoffMs * attempt);
+                }
+            }
+        }
+        jdbc.sql(&quot;UPDATE sent_emails SET status = &#x27;DEAD&#x27; WHERE signup_id = ? AND kind = &#x27;WELCOME&#x27;&quot;).param(e.signupId()).update();
+    }
+
+    private static void pause(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/taskloom/welcome/WelcomeEmail.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The HTML template, UTF-8.</dd><dt>Why</dt><dd>User input escaped in the body, line breaks removed from the subject.</dd><dt>Without it</dt><dd>HTML or header injection through a name.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.springframework.web.util.HtmlUtils;
+
+/**
+ * The welcome email. The name is the user&#x27;s own input: it is HTML-escaped in the body (a name like
+ * &quot;&lt;script&gt;&quot; stays text) and stripped of line breaks in the subject (a header must stay one line).
+ */
+final class WelcomeEmail {
+
+    private static final String TEMPLATE = &quot;&quot;&quot;
+            &lt;!DOCTYPE html&gt;
+            &lt;html lang=&quot;en&quot;&gt;&lt;head&gt;&lt;meta charset=&quot;UTF-8&quot;&gt;&lt;title&gt;Welcome to Taskloom&lt;/title&gt;&lt;/head&gt;
+            &lt;body&gt;&lt;p&gt;Hi %s,&lt;/p&gt;&lt;p&gt;Welcome to Taskloom. Your first board is ready.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;&quot;&quot;&quot;;
+
+    private WelcomeEmail() {
+    }
+
+    static MailGateway.Message to(String email, String name) {
+        String subject = &quot;Welcome to Taskloom, &quot; + name.replaceAll(&quot;[\\r\\n]+&quot;, &quot; &quot;);
+        return new MailGateway.Message(email, subject, &quot;text/html; charset=UTF-8&quot;, TEMPLATE.formatted(HtmlUtils.htmlEscape(name, &quot;UTF-8&quot;)));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/taskloom/welcome/Mailbox.java</p><div class="notes"><p>The simulated provider: records each message.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+/** Simulated email provider: &quot;sending&quot; records the message here. No email leaves the app. shortcut: in memory. */
+@Component
+class Mailbox implements MailGateway {
+
+    private final List&lt;Message&gt; sent = new CopyOnWriteArrayList&lt;&gt;();
+
+    @Override
+    public void send(Message message) {
+        sent.add(message);
+    }
+
+    List&lt;Message&gt; all() {
+        return List.copyOf(sent);
+    }
+
+    void clear() {
+        sent.clear();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/taskloom/welcome/MailGateway.java</p><div class="notes"><p>The one-method interface the mailer depends on.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+/** Where email goes. One implementation here, the simulated mailbox; a real one would call an email provider. */
+interface MailGateway {
+
+    record Message(String to, String subject, String contentType, String html) {
+    }
+
+    void send(Message message);
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/java/com/taskloom/welcome/CrmClient.java</p><div class="notes"><p>The simulated CRM, with a configurable delay.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+/** Simulated CRM: records the contact after a configurable delay, the way a slow provider would answer. */
+@Component
+class CrmClient {
+
+    private final long delayMs;
+    private final List&lt;Long&gt; registered = new CopyOnWriteArrayList&lt;&gt;();
+
+    CrmClient(@Value(&quot;${taskloom.crm.delay-ms}&quot;) long delayMs) {
+        this.delayMs = delayMs;
+    }
+
+    public void register(long signupId, String email, String name) {
+        try {
+            Thread.sleep(delayMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        registered.add(signupId);
+    }
+
+    List&lt;Long&gt; registered() {
+        return List.copyOf(registered);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">src/main/java/com/taskloom/welcome/SignedUp.java</p><div class="notes"><p>The event.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+/** Published inside the sign-up transaction. What it causes is up to the listeners, and when: before or after commit. */
+record SignedUp(long signupId, String email, String name) {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-9" aria-labelledby="code-9-b" hidden><p class="path">src/main/resources/db/migration/V1__signups_invites_emails.sql</p><div class="notes"><p>Sign-ups, invites and the email claim table, with named constraints.</p></div><div class="src"><pre class="code"><code class="language-sql">-- Taskloom sign-ups, team invites, and one row per email the system has taken on.
+CREATE TABLE invites (
+    code        VARCHAR(20) PRIMARY KEY,
+    team_name   VARCHAR(80) NOT NULL,
+    seats_used  INT         NOT NULL DEFAULT 0,
+    seats_total INT         NOT NULL,
+    CONSTRAINT invites_seats_within_total CHECK (seats_used BETWEEN 0 AND seats_total)
+);
+
+CREATE TABLE signups (
+    id          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    email       VARCHAR(254) NOT NULL,
+    name        VARCHAR(80)  NOT NULL,
+    invite_code VARCHAR(20),
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT signups_invite_fk FOREIGN KEY (invite_code) REFERENCES invites (code)
+);
+CREATE UNIQUE INDEX signups_email_unique ON signups (lower(email));
+
+-- The claim, the outcome and the dead-letter state of each email in one row. The primary key is the guard against
+-- sending the same email twice.
+CREATE TABLE sent_emails (
+    signup_id  BIGINT       NOT NULL,
+    kind       VARCHAR(20)  NOT NULL,
+    status     VARCHAR(10)  NOT NULL,
+    attempts   INT          NOT NULL DEFAULT 0,
+    last_error VARCHAR(200),
+    CONSTRAINT sent_emails_once PRIMARY KEY (signup_id, kind),
+    CONSTRAINT sent_emails_signup_fk FOREIGN KEY (signup_id) REFERENCES signups (id),
+    CONSTRAINT sent_emails_status_known CHECK (status IN (&#x27;SENDING&#x27;, &#x27;SENT&#x27;, &#x27;DEAD&#x27;)),
+    CONSTRAINT sent_emails_attempts_range CHECK (attempts BETWEEN 0 AND 10),
+    CONSTRAINT sent_emails_dead_has_error CHECK (status &lt;&gt; &#x27;DEAD&#x27; OR last_error IS NOT NULL)
+);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-10" aria-labelledby="code-10-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_invites.sql</p><div class="notes"><p>One invite with seats, one full.</p></div><div class="src"><pre class="code"><code class="language-sql">-- Demo team invites (invented): one with seats, one already full.
+INSERT INTO invites (code, team_name, seats_used, seats_total) VALUES
+    (&#x27;DESIGN-26&#x27;, &#x27;Design team&#x27;, 0, 5),
+    (&#x27;OPS-FULL&#x27;, &#x27;Operations&#x27;, 3, 3);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-11" aria-labelledby="code-11-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Virtual threads for <code>@Async</code>; retry attempts and waits; the CRM's delay.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: taskloom-welcome
+  mvc:
+    problemdetails:
+      enabled: true
+  threads:
+    virtual:
+      enabled: true   # @Async listeners run on virtual threads
+  datasource:
+    url: jdbc:postgresql://localhost:5432/taskloom
+    username: taskloom
+    password: taskloom
+taskloom:
+  mail:
+    attempts: 3          # then the email goes to the dead-letter state
+    backoff-ms: 200      # wait 200 ms, then 400 ms, between attempts
+  crm:
+    delay-ms: 0          # the simulated CRM&#x27;s response time; the capture sets it to show a slow CRM</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-12" aria-labelledby="code-12-b" hidden><p class="path">src/main/java/com/taskloom/welcome/WelcomeApplication.java</p><div class="notes"><p>Entry point; <code>@EnableAsync</code>.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableAsync;
+
+@SpringBootApplication
+@EnableAsync   // @Async listeners run on Spring&#x27;s task executor, not on the request&#x27;s thread
+public class WelcomeApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(WelcomeApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>SignupContractTest</code> (6)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>EmailBeforeCommitTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>SignupDatabaseTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Messaging</td><td>Duplicate-delivery, retry and dead-letter tests</td><td><code>WelcomeEmailMessagingTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>This station's concepts</td><td>Async listeners: a hanging CRM</td><td><code>SlowCrmTest</code> (1)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Testing asynchronous code</h2>
+<p>Async results arrive later, so the tests wait for them with Awaitility, up to 5 seconds, instead of sleeping a fixed time. "Never" is checked by watching for half a second that nothing arrives. The hanging CRM is a Mockito mock that blocks on a latch, released by the test.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0 -- in com.taskloom.welcome.SlowCrmTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 -- in com.taskloom.welcome.SignupContractTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.taskloom.welcome.EmailBeforeCommitTrapTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.taskloom.welcome.WelcomeEmailMessagingTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.taskloom.welcome.SignupDatabaseTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">EmailBeforeCommitTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">SignupContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">WelcomeEmailMessagingTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">SlowCrmTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">SignupDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">OldSignupFlow.java</button><button class="file-btn" role="tab" id="tests-6-b" aria-controls="tests-6" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/taskloom/welcome/EmailBeforeCommitTrapTest.java</p><div class="notes"><p>Written first: the old plain listener and today's after-commit one, for the same failed sign-up.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Import;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The first test written for this station: Ravi signs up with a full team invite, the old way and the new way. */
+@Import({OldSignupFlow.class, OldSignupFlow.OldWelcomeListener.class})
+class EmailBeforeCommitTrapTest extends ApiTest {
+
+    @Autowired
+    OldSignupFlow old;
+
+    long signups() {
+        return jdbc.sql(&quot;SELECT count(*) FROM signups&quot;).query(Long.class).single();
+    }
+
+    @Test
+    void aPlainListenerSendsBeforeTheRollback() {
+        assertThatThrownBy(() -&gt; old.signUp(&quot;ravi@x.com&quot;, &quot;Ravi Menon&quot;, &quot;OPS-FULL&quot;)).hasMessage(&quot;invite full&quot;);
+        assertThat(signups()).isZero();                                                // no account...
+        assertThat(mailbox.all()).extracting(MailGateway.Message::to).containsExactly(&quot;ravi@x.com&quot;);   // ...but &quot;welcome!&quot;
+    }
+
+    @Test
+    void anAfterCommitListenerSendsNothingForARolledBackSignup() throws Exception {
+        signUp(&quot;ravi@x.com&quot;, &quot;Ravi Menon&quot;, &quot;OPS-FULL&quot;).andExpect(status().isConflict());
+        assertThat(signups()).isZero();
+        neverAnyMail();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/taskloom/welcome/SignupContractTest.java</p><div class="notes"><p>Sign-ups, invites, the email that follows, escaping, and every refusal.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The HTTP contract: sign up, with or without an invite, and the welcome email that follows; valid, invalid, not found. */
+class SignupContractTest extends ApiTest {
+
+    @Test
+    void aSignupIsAnsweredAtOnceAndWelcomedAfter() throws Exception {
+        String url = signUp(&quot;Asha@X.com&quot;, &quot;Asha Verma&quot;, null).andExpect(status().isCreated())
+                .andExpect(content().json(&quot;{\&quot;id\&quot;:1,\&quot;email\&quot;:\&quot;asha@x.com\&quot;,\&quot;name\&quot;:\&quot;Asha Verma\&quot;,\&quot;welcomeEmail\&quot;:\&quot;PENDING\&quot;}&quot;))
+                .andReturn().getResponse().getHeader(&quot;Location&quot;);
+        eventually(() -&gt; assertThat(mailbox.all()).hasSize(1));
+        MailGateway.Message m = mailbox.all().getFirst();
+        assertThat(m.to()).isEqualTo(&quot;asha@x.com&quot;);
+        assertThat(m.subject()).isEqualTo(&quot;Welcome to Taskloom, Asha Verma&quot;);
+        assertThat(m.contentType()).isEqualTo(&quot;text/html; charset=UTF-8&quot;);
+        eventually(() -&gt; assertThat(welcomeStatus(1)).isEqualTo(&quot;SENT&quot;));
+        mvc.perform(get(url)).andExpect(jsonPath(&quot;$.welcomeEmail&quot;).value(&quot;SENT&quot;));
+    }
+
+    @Test
+    void theNameIsTextInTheEmailNotHtmlOrHeaders() throws Exception {
+        signUp(&quot;zoe@x.com&quot;, &quot;Zoë &lt;b&gt;&amp; co&lt;/b&gt;&quot;, null).andExpect(status().isCreated());
+        eventually(() -&gt; assertThat(mailbox.all()).hasSize(1));
+        assertThat(mailbox.all().getFirst().html()).contains(&quot;Hi Zoë &amp;lt;b&amp;gt;&amp;amp; co&amp;lt;/b&amp;gt;,&quot;).doesNotContain(&quot;&lt;b&gt;&quot;);
+        mailbox.clear();
+        signUp(&quot;bcc@x.com&quot;, &quot;Eve\\r\\nBcc: everyone@x.com&quot;, null).andExpect(status().isCreated());
+        eventually(() -&gt; assertThat(mailbox.all()).hasSize(1));
+        assertThat(mailbox.all().getFirst().subject()).isEqualTo(&quot;Welcome to Taskloom, Eve Bcc: everyone@x.com&quot;).doesNotContain(&quot;\n&quot;, &quot;\r&quot;);
+    }
+
+    @Test
+    void anInviteWithSeatsJoinsTheTeam() throws Exception {
+        signUp(&quot;meera@x.com&quot;, &quot;Meera Nair&quot;, &quot;design-26&quot;).andExpect(status().isCreated());
+        assertThat(jdbc.sql(&quot;SELECT seats_used FROM invites WHERE code = &#x27;DESIGN-26&#x27;&quot;).query(Integer.class).single()).isEqualTo(1);
+        eventually(() -&gt; assertThat(mailbox.all()).hasSize(1));
+    }
+
+    @Test
+    void aFullOrUnknownInviteOrATakenEmailIsRefusedAndNotWelcomed() throws Exception {
+        signUp(&quot;ravi@x.com&quot;, &quot;Ravi Menon&quot;, &quot;OPS-FULL&quot;).andExpect(status().isConflict()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Invite full&quot;));
+        signUp(&quot;ravi@x.com&quot;, &quot;Ravi Menon&quot;, &quot;NOPE-99&quot;).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Unknown invite&quot;));
+        signUp(&quot;asha@x.com&quot;, &quot;Asha Verma&quot;, null).andExpect(status().isCreated());
+        eventually(() -&gt; assertThat(mailbox.all()).hasSize(1));
+        signUp(&quot;ASHA@x.com&quot;, &quot;Asha again&quot;, null).andExpect(status().isConflict()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Already signed up&quot;));
+        Thread.sleep(300);
+        assertThat(mailbox.all()).hasSize(1);   // one welcome, for the one real sign-up
+    }
+
+    @Test
+    void malformedSignupsAre400() throws Exception {
+        signUp(&quot;not-an-email&quot;, &quot;Asha&quot;, null).andExpect(status().isBadRequest());
+        signUp(&quot;asha@x.com&quot;, &quot; &quot;, null).andExpect(status().isBadRequest());
+        signUp(&quot;asha@x.com&quot;, &quot;Asha&quot;, &quot;ab&quot;).andExpect(status().isBadRequest());
+        mvc.perform(post(&quot;/signups&quot;).contentType(MediaType.APPLICATION_JSON).content(&quot;{\&quot;name\&quot;:\&quot;Asha\&quot;}&quot;)).andExpect(status().isBadRequest());
+        neverAnyMail();
+    }
+
+    @Test
+    void unknownSignupsAre404() throws Exception {
+        mvc.perform(get(&quot;/signups/99&quot;)).andExpect(status().isNotFound()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;No sign-up 99.&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/taskloom/welcome/WelcomeEmailMessagingTest.java</p><div class="notes"><p>Duplicate events, a provider that recovers, and one that never does.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.doThrow;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+
+/** Delivery of the welcome email: the same event twice, a provider that fails and recovers, and one that never does. */
+class WelcomeEmailMessagingTest extends ApiTest {
+
+    @MockitoSpyBean
+    Mailbox provider;
+    @Autowired
+    WelcomeMailer mailer;
+
+    SignedUp aSignup() {
+        long id = jdbc.sql(&quot;INSERT INTO signups (email, name) VALUES (&#x27;asha@x.com&#x27;, &#x27;Asha Verma&#x27;) RETURNING id&quot;).query(Long.class).single();
+        return new SignedUp(id, &quot;asha@x.com&quot;, &quot;Asha Verma&quot;);
+    }
+
+    String row(long id) {
+        return jdbc.sql(&quot;SELECT status || &#x27; &#x27; || attempts || coalesce(&#x27; &#x27; || last_error, &#x27;&#x27;) FROM sent_emails WHERE signup_id = ?&quot;).param(id).query(String.class).single();
+    }
+
+    @Test
+    void theSameEventDeliveredFiveTimesAtOnceSendsOneEmail() throws Exception {
+        SignedUp e = aSignup();
+        together(5, () -&gt; {
+            mailer.sendOnce(e);
+            return null;
+        });
+        assertThat(mailbox.all()).hasSize(1);
+        assertThat(row(e.signupId())).isEqualTo(&quot;SENT 1&quot;);
+    }
+
+    @Test
+    void aProviderThatFailsTwiceIsRetriedAndTheEmailGoesOnce() {
+        doThrow(new IllegalStateException(&quot;421 try again later&quot;)).doThrow(new IllegalStateException(&quot;421 try again later&quot;))
+                .doCallRealMethod().when(provider).send(any());
+        SignedUp e = aSignup();
+        mailer.sendOnce(e);
+        assertThat(mailbox.all()).hasSize(1);
+        assertThat(row(e.signupId())).isEqualTo(&quot;SENT 3 421 try again later&quot;);
+    }
+
+    @Test
+    void aProviderThatNeverRecoversLeavesTheEmailDeadForAPerson() throws Exception {
+        doThrow(new IllegalStateException(&quot;550 mailbox unavailable&quot;)).when(provider).send(any());
+        SignedUp e = aSignup();
+        mailer.sendOnce(e);
+        assertThat(mailbox.all()).isEmpty();
+        assertThat(row(e.signupId())).isEqualTo(&quot;DEAD 3 550 mailbox unavailable&quot;);
+        mvc.perform(get(&quot;/signups/{id}&quot;, e.signupId())).andExpect(jsonPath(&quot;$.welcomeEmail&quot;).value(&quot;DEAD&quot;));
+
+        doCallRealMethod().when(provider).send(any());
+        mailer.sendOnce(e);   // a late duplicate of the same event does not resend a dead-lettered email
+        assertThat(mailbox.all()).isEmpty();
+        assertThat(List.of(row(e.signupId()))).containsExactly(&quot;DEAD 3 550 mailbox unavailable&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/taskloom/welcome/SlowCrmTest.java</p><div class="notes"><p>A CRM that hangs, mocked with a latch.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
+import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** A CRM that hangs: the sign-up must not wait for it, and the welcome email must not wait for it either. */
+class SlowCrmTest extends ApiTest {
+
+    @MockitoBean
+    CrmClient crm;
+
+    @Test
+    void theSignupAndTheEmailDoNotWaitForTheCrm() throws Exception {
+        CountDownLatch crmAnswers = new CountDownLatch(1);
+        doAnswer(call -&gt; {
+            crmAnswers.await(3, TimeUnit.SECONDS);   // the CRM hangs until the test lets it go (at most 3 s)
+            return null;
+        }).when(crm).register(anyLong(), anyString(), anyString());
+
+        long start = System.nanoTime();
+        signUp(&quot;asha@x.com&quot;, &quot;Asha Verma&quot;, null).andExpect(status().isCreated());
+        assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofSeconds(2));   // answered while the CRM hangs
+        eventually(() -&gt; assertThat(mailbox.all()).hasSize(1));                     // and welcomed while it hangs
+        verify(crm, timeout(2000)).register(1L, &quot;asha@x.com&quot;, &quot;Asha Verma&quot;);
+        crmAnswers.countDown();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/taskloom/welcome/SignupDatabaseTest.java</p><div class="notes"><p>Named constraints and a rolled-back sign-up.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The tables&#x27; rules with Java bypassed, and a sign-up rolled back whole. */
+class SignupDatabaseTest extends ApiTest {
+
+    @Test
+    void namedConstraintsHoldWithoutJava() {
+        jdbc.sql(&quot;INSERT INTO signups (email, name) VALUES (&#x27;asha@x.com&#x27;, &#x27;Asha&#x27;)&quot;).update();
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO signups (email, name) VALUES (&#x27;ASHA@x.com&#x27;, &#x27;Asha&#x27;)&quot;).update()).hasMessageContaining(&quot;signups_email_unique&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;UPDATE invites SET seats_used = 4 WHERE code = &#x27;OPS-FULL&#x27;&quot;).update()).hasMessageContaining(&quot;invites_seats_within_total&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO signups (email, name, invite_code) VALUES (&#x27;b@x.com&#x27;, &#x27;B&#x27;, &#x27;NOPE&#x27;)&quot;).update()).hasMessageContaining(&quot;signups_invite_fk&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO sent_emails (signup_id, kind, status) VALUES (99, &#x27;WELCOME&#x27;, &#x27;SENT&#x27;)&quot;).update()).hasMessageContaining(&quot;sent_emails_signup_fk&quot;);
+        long id = jdbc.sql(&quot;SELECT id FROM signups&quot;).query(Long.class).single();
+        jdbc.sql(&quot;INSERT INTO sent_emails (signup_id, kind, status) VALUES (?, &#x27;WELCOME&#x27;, &#x27;SENT&#x27;)&quot;).param(id).update();
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO sent_emails (signup_id, kind, status) VALUES (?, &#x27;WELCOME&#x27;, &#x27;SENT&#x27;)&quot;).param(id).update()).hasMessageContaining(&quot;sent_emails_once&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;UPDATE sent_emails SET status = &#x27;DEAD&#x27;&quot;).update()).hasMessageContaining(&quot;sent_emails_dead_has_error&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;UPDATE sent_emails SET status = &#x27;LOST&#x27;&quot;).update()).hasMessageContaining(&quot;sent_emails_status_known&quot;);
+    }
+
+    @Test
+    void aFullInviteRollsBackTheSignupItself() throws Exception {
+        signUp(&quot;ravi@x.com&quot;, &quot;Ravi Menon&quot;, &quot;OPS-FULL&quot;).andExpect(status().isConflict());
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM signups&quot;).query(Long.class).single()).isZero();
+        assertThat(jdbc.sql(&quot;SELECT seats_used FROM invites WHERE code = &#x27;OPS-FULL&#x27;&quot;).query(Integer.class).single()).isEqualTo(3);
+        signUp(&quot;ravi@x.com&quot;, &quot;Ravi Menon&quot;, null).andExpect(status().isCreated());   // the email is free again
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/taskloom/welcome/OldSignupFlow.java</p><div class="notes"><p>The old flow and its plain listener, kept only in tests.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.event.EventListener;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * The sign-up as it shipped, kept only in tests (registered as beans by the trap test). Same steps as today; the
+ * difference is the listener: a plain @EventListener runs at once, inside publishEvent, before the transaction ends.
+ */
+class OldSignupFlow {
+
+    record OldSignedUp(long signupId, String email, String name) {
+    }
+
+    private final JdbcClient jdbc;
+    private final ApplicationEventPublisher events;
+
+    OldSignupFlow(JdbcClient jdbc, ApplicationEventPublisher events) {
+        this.jdbc = jdbc;
+        this.events = events;
+    }
+
+    @Transactional
+    public void signUp(String email, String name, String invite) {
+        long id = jdbc.sql(&quot;INSERT INTO signups (email, name) VALUES (?, ?) RETURNING id&quot;).params(email, name).query(Long.class).single();
+        events.publishEvent(new OldSignedUp(id, email, name));   // the email goes out right here
+        if (jdbc.sql(&quot;UPDATE invites SET seats_used = seats_used + 1 WHERE code = ? AND seats_used &lt; seats_total&quot;).param(invite).update() == 0) {
+            throw new IllegalStateException(&quot;invite full&quot;);      // ...and the sign-up rolls back after it
+        }
+    }
+
+    static class OldWelcomeListener {
+
+        private final MailGateway mail;
+
+        OldWelcomeListener(MailGateway mail) {
+            this.mail = mail;
+        }
+
+        @EventListener
+        public void send(OldSignedUp e) {
+            mail.send(WelcomeEmail.to(e.email(), e.name()));
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-6" aria-labelledby="tests-6-b" hidden><p class="path">src/test/java/com/taskloom/welcome/ApiTest.java</p><div class="notes"><p>Shared setup, Awaitility helpers, parallel calls.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import static org.awaitility.Awaitility.await;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/**
+ * Shared setup: the app on a real PostgreSQL, retries 1 ms apart. Before each test: no sign-ups or emails, an empty
+ * mailbox, invite DESIGN-26 with 5 free seats and OPS-FULL with none.
+ */
+@SpringBootTest(properties = &quot;taskloom.mail.backoff-ms=1&quot;)
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+    @Autowired
+    Mailbox mailbox;
+
+    @BeforeEach
+    void freshStart() {
+        jdbc.sql(&quot;TRUNCATE sent_emails, signups RESTART IDENTITY&quot;).update();
+        jdbc.sql(&quot;UPDATE invites SET seats_used = CASE code WHEN &#x27;OPS-FULL&#x27; THEN 3 ELSE 0 END&quot;).update();
+        mailbox.clear();
+    }
+
+    ResultActions signUp(String email, String name, String invite) throws Exception {
+        String body = invite == null ? &quot;{\&quot;email\&quot;:\&quot;%s\&quot;,\&quot;name\&quot;:\&quot;%s\&quot;}&quot;.formatted(email, name)
+                : &quot;{\&quot;email\&quot;:\&quot;%s\&quot;,\&quot;name\&quot;:\&quot;%s\&quot;,\&quot;inviteCode\&quot;:\&quot;%s\&quot;}&quot;.formatted(email, name, invite);
+        return mvc.perform(post(&quot;/signups&quot;).contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    String welcomeStatus(long signupId) {
+        return jdbc.sql(&quot;SELECT coalesce((SELECT status FROM sent_emails WHERE signup_id = ?), &#x27;PENDING&#x27;)&quot;).param(signupId).query(String.class).single();
+    }
+
+    /** Waits for the asynchronous listener; fails after 5 seconds. */
+    static void eventually(Runnable assertion) {
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(assertion::run);
+    }
+
+    /** Checks that nothing arrives for half a second: used where an email must never be sent. */
+    void neverAnyMail() {
+        await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(2)).until(() -&gt; mailbox.all().isEmpty());
+    }
+
+    /** Runs n copies of the task on virtual threads, all released together by one latch. */
+    static &lt;T&gt; List&lt;T&gt; together(int n, Callable&lt;T&gt; task) throws Exception {
+        CountDownLatch start = new CountDownLatch(1);
+        List&lt;Future&lt;T&gt;&gt; futures = new ArrayList&lt;&gt;();
+        try (ExecutorService threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; n; i++) {
+                futures.add(threads.submit(() -&gt; {
+                    start.await();
+                    return task.call();
+                }));
+            }
+            start.countDown();
+        }
+        List&lt;T&gt; results = new ArrayList&lt;&gt;();
+        for (Future&lt;T&gt; f : futures) {
+            results.add(f.get());
+        }
+        return results;
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/taskloom/welcome/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=AnalyticsChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 14 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in (Java files and one migration), all 16 tests pass (14 station tests and 2 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>An analytics listener</h2><p>Record every committed sign-up in a new <code>analytics_events</code> table, from a third after-commit listener, without changing <code>SignupService</code>.</p><p><b>Done when:</b> the test in <code>AnalyticsChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>A new method in <code>Listeners</code>, and a migration.</li><li>The rolled-back sign-up in the test must leave no row.</li></ul></details><p class="path">challenge/AnalyticsChallengeTest.java</p><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: a third after-commit listener records every committed sign-up in analytics_events (a new migration),
+ * without a line changed in SignupService. A rolled-back sign-up records nothing.
+ */
+class AnalyticsChallengeTest extends ApiTest {
+
+    long analytics() {
+        return jdbc.sql(&quot;SELECT count(*) FROM analytics_events WHERE name = &#x27;signed_up&#x27;&quot;).query(Long.class).single();
+    }
+
+    @Test
+    void onlyCommittedSignupsAreCounted() throws Exception {
+        jdbc.sql(&quot;DELETE FROM analytics_events&quot;).update();
+        signUp(&quot;asha@x.com&quot;, &quot;Asha Verma&quot;, null).andExpect(status().isCreated());
+        signUp(&quot;ravi@x.com&quot;, &quot;Ravi Menon&quot;, &quot;OPS-FULL&quot;).andExpect(status().isConflict());
+        eventually(() -&gt; assertThat(analytics()).isEqualTo(1));
+        Thread.sleep(300);
+        assertThat(analytics()).isEqualTo(1);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/V3__analytics_events.sql</p><div class="src"><pre class="code"><code class="language-sql">-- Challenge 1: product analytics, fed by an after-commit listener.
+CREATE TABLE analytics_events (
+    id        BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    name      VARCHAR(40) NOT NULL,
+    signup_id BIGINT      NOT NULL,
+    at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT analytics_events_name_known CHECK (name IN (&#x27;signed_up&#x27;))
+);</code></pre></div><p class="path">challenge/solution/Listeners.java</p><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
+
+/**
+ * The two things a sign-up causes. Both run only AFTER the sign-up&#x27;s transaction commits (a rolled-back sign-up
+ * causes nothing), and both on another thread (a slow CRM does not slow the sign-up). Limit: the event lives in
+ * memory, so a crash between commit and listener loses it; a transactional outbox closes that gap.
+ */
+@Component
+class Listeners {
+
+    private final WelcomeMailer mailer;
+    private final CrmClient crm;
+    private final JdbcClient jdbc;
+
+    Listeners(WelcomeMailer mailer, CrmClient crm, JdbcClient jdbc) {
+        this.mailer = mailer;
+        this.crm = crm;
+        this.jdbc = jdbc;
+    }
+
+    /** A new reaction to sign-ups is a new listener: SignupService does not change. */
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void countForAnalytics(SignedUp e) {
+        jdbc.sql(&quot;INSERT INTO analytics_events (name, signup_id) VALUES (&#x27;signed_up&#x27;, ?)&quot;).param(e.signupId()).update();
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void sendWelcomeEmail(SignedUp e) {
+        mailer.sendOnce(e);
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void registerInCrm(SignedUp e) {
+        crm.register(e.signupId(), e.email(), e.name());
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 25 minutes</p><h2>Send a dead email again</h2><p>Add <code>POST /signups/{id}/welcome-email/retry</code>: a DEAD email goes back to SENDING and is retried as before. Not DEAD: <code>409</code>; unknown: <code>404</code>.</p><p><b>Done when:</b> the test in <code>ResendChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>Move DEAD to SENDING with a conditional UPDATE: zero rows means it was not dead.</li><li>Reuse the delivery loop; only the claim differs.</li></ul></details><p class="path">challenge/ResendChallengeTest.java</p><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.doThrow;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: POST /signups/{id}/welcome-email/retry takes a DEAD email out of the dead-letter state and tries again,
+ * with the same retries, answering the sign-up with its new status. Not DEAD: 409. Unknown sign-up: 404.
+ */
+class ResendChallengeTest extends ApiTest {
+
+    @MockitoSpyBean
+    Mailbox provider;
+
+    @Test
+    void aPersonCanSendADeadEmailAgain() throws Exception {
+        doThrow(new IllegalStateException(&quot;550 mailbox unavailable&quot;)).when(provider).send(any());
+        signUp(&quot;asha@x.com&quot;, &quot;Asha Verma&quot;, null).andExpect(status().isCreated());
+        eventually(() -&gt; assertThat(welcomeStatus(1)).isEqualTo(&quot;DEAD&quot;));
+
+        doCallRealMethod().when(provider).send(any());   // the provider is back
+        mvc.perform(post(&quot;/signups/1/welcome-email/retry&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.welcomeEmail&quot;).value(&quot;SENT&quot;));
+        assertThat(mailbox.all()).hasSize(1);
+        mvc.perform(post(&quot;/signups/1/welcome-email/retry&quot;)).andExpect(status().isConflict());
+        mvc.perform(post(&quot;/signups/99/welcome-email/retry&quot;)).andExpect(status().isNotFound());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/WelcomeMailer.java</p><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Component;
+
+/**
+ * Sends one welcome email per sign-up, even if the event arrives twice: it claims the email in the sent_emails table
+ * first. A failing provider is retried with growing waits; after the last attempt the email is marked DEAD (the
+ * dead-letter state) for a person to look at, instead of being retried forever or lost.
+ */
+@Component
+class WelcomeMailer {
+
+    private static final Logger log = LoggerFactory.getLogger(WelcomeMailer.class);
+
+    private final JdbcClient jdbc;
+    private final MailGateway mail;
+    private final int attempts;
+    private final long backoffMs;
+
+    WelcomeMailer(JdbcClient jdbc, MailGateway mail, @Value(&quot;${taskloom.mail.attempts}&quot;) int attempts, @Value(&quot;${taskloom.mail.backoff-ms}&quot;) long backoffMs) {
+        this.jdbc = jdbc;
+        this.mail = mail;
+        this.attempts = attempts;
+        this.backoffMs = backoffMs;
+    }
+
+    void sendOnce(SignedUp e) {
+        int claimed = jdbc.sql(&quot;INSERT INTO sent_emails (signup_id, kind, status) VALUES (?, &#x27;WELCOME&#x27;, &#x27;SENDING&#x27;) ON CONFLICT DO NOTHING&quot;).param(e.signupId()).update();
+        if (claimed == 0) {
+            log.info(&quot;Welcome email for sign-up {} already claimed: duplicate event ignored&quot;, e.signupId());
+            return;
+        }
+        deliver(e);
+    }
+
+    /** A person&#x27;s decision to try a dead-lettered email again: back to SENDING, then the same retries. */
+    boolean retryDead(SignedUp e) {
+        int revived = jdbc.sql(&quot;UPDATE sent_emails SET status = &#x27;SENDING&#x27;, attempts = 0 WHERE signup_id = ? AND kind = &#x27;WELCOME&#x27; AND status = &#x27;DEAD&#x27;&quot;)
+                .param(e.signupId()).update();
+        if (revived == 0) {
+            return false;
+        }
+        deliver(e);
+        return true;
+    }
+
+    private void deliver(SignedUp e) {
+        MailGateway.Message message = WelcomeEmail.to(e.email(), e.name());
+        for (int attempt = 1; attempt &lt;= attempts; attempt++) {
+            try {
+                mail.send(message);
+                jdbc.sql(&quot;UPDATE sent_emails SET status = &#x27;SENT&#x27;, attempts = ? WHERE signup_id = ? AND kind = &#x27;WELCOME&#x27;&quot;).params(attempt, e.signupId()).update();
+                log.info(&quot;Welcome email for sign-up {} sent on attempt {} (simulated: recorded in the mailbox)&quot;, e.signupId(), attempt);
+                return;
+            } catch (RuntimeException failure) {
+                String error = String.valueOf(failure.getMessage());
+                jdbc.sql(&quot;UPDATE sent_emails SET attempts = ?, last_error = ? WHERE signup_id = ? AND kind = &#x27;WELCOME&#x27;&quot;)
+                        .params(attempt, error.length() &gt; 200 ? error.substring(0, 200) : error, e.signupId()).update();
+                log.warn(&quot;Welcome email for sign-up {} failed, attempt {} of {}: {}&quot;, e.signupId(), attempt, attempts, error);
+                if (attempt &lt; attempts) {
+                    pause(backoffMs * attempt);
+                }
+            }
+        }
+        jdbc.sql(&quot;UPDATE sent_emails SET status = &#x27;DEAD&#x27; WHERE signup_id = ? AND kind = &#x27;WELCOME&#x27;&quot;).param(e.signupId()).update();
+    }
+
+    private static void pause(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}</code></pre></div><p class="path">challenge/solution/SignupController.java</p><div class="src"><pre class="code"><code class="language-java">package com.taskloom.welcome;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.util.Locale;
+
+@RestController
+class SignupController {
+
+    record NewSignup(@NotBlank @Email @Size(max = 254) String email, @NotBlank @Size(max = 80) String name,
+                     @Pattern(regexp = &quot;[A-Za-z0-9-]{4,20}&quot;) String inviteCode) {
+    }
+
+    private final SignupService signups;
+
+    SignupController(SignupService signups, WelcomeMailer mailer) {
+        this.signups = signups;
+        this.mailer = mailer;
+    }
+
+    /** Answers as soon as the sign-up is committed; the welcome email and the CRM follow on their own. */
+    @PostMapping(&quot;/signups&quot;)
+    ResponseEntity&lt;SignupService.Signup&gt; signUp(@Valid @RequestBody NewSignup body) {
+        SignupService.Signup s = signups.signUp(body.email().strip().toLowerCase(Locale.ROOT), body.name().strip(),
+                body.inviteCode() == null ? null : body.inviteCode().toUpperCase(Locale.ROOT));
+        return ResponseEntity.created(URI.create(&quot;/signups/&quot; + s.id())).body(s);
+    }
+
+    private final WelcomeMailer mailer;
+
+    @PostMapping(&quot;/signups/{id}/welcome-email/retry&quot;)
+    SignupService.Signup retryWelcome(@PathVariable long id) {
+        SignupService.Signup s = signups.find(id).orElseThrow(() -&gt; SignupService.problem(HttpStatus.NOT_FOUND, &quot;Sign-up not found&quot;, &quot;No sign-up &quot; + id + &quot;.&quot;));
+        if (!mailer.retryDead(new SignedUp(s.id(), s.email(), s.name()))) {
+            throw SignupService.problem(HttpStatus.CONFLICT, &quot;Not dead-lettered&quot;, &quot;The welcome email of sign-up &quot; + id + &quot; is &quot; + s.welcomeEmail() + &quot;.&quot;);
+        }
+        return signups.find(id).orElseThrow();
+    }
+
+    /** welcomeEmail: PENDING, SENDING, SENT or DEAD (given up after the last retry). */
+    @GetMapping(&quot;/signups/{id}&quot;)
+    SignupService.Signup get(@PathVariable long id) {
+        return signups.find(id).orElseThrow(() -&gt; SignupService.problem(HttpStatus.NOT_FOUND, &quot;Sign-up not found&quot;, &quot;No sign-up &quot; + id + &quot;.&quot;));
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Events in memory, or an outbox?</h2>
+<p>If the app restarts a millisecond after a sign-up commits, the in-memory event is gone and the welcome email never goes. Sketch a transactional outbox: a table written in the sign-up's transaction, and a poller that sends. What does it cost, and which of this station's tests would change?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, mapping</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test with the old plain listener as a real bean.</li>
+<li>Publish one event from the service; move each side effect into its own after-commit, async listener.</li>
+<li>Make the email idempotent with a claim row; add bounded retries and a dead-letter state.</li>
+<li>Escape user input in the template; test asynchronous outcomes by waiting for them.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>After-commit, async listeners with a claim row</td><td>Events in memory: lost if the app dies after commit.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Plain <code>@EventListener</code></td><td>Runs before commit: mail for failed sign-ups.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Calling email and CRM directly in the service</td><td>Every partner's speed and failure becomes the sign-up's.</td><td><span class="pill bad">The old code</span></td></tr><tr><td>Transactional outbox + poller</td><td>A table and a job; nothing lost on a crash.</td><td><span class="pill warn">The next step</span></td></tr><tr><td>A message broker (Kafka, RabbitMQ)</td><td>Durable and shareable across services; another system to run.</td><td><span class="pill warn">Across services</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Table</th><th>Constraints</th></tr></thead><tbody><tr><td><code>signups</code></td><td><code>signups_email_unique</code> (on <code>lower(email)</code>), <code>signups_invite_fk</code></td></tr><tr><td><code>invites</code></td><td><code>invites_seats_within_total</code></td></tr><tr><td><code>sent_emails</code></td><td><code>sent_emails_once</code> (primary key: one per sign-up and kind), <code>sent_emails_signup_fk</code>, <code>sent_emails_status_known</code>, <code>sent_emails_attempts_range</code>, <code>sent_emails_dead_has_error</code></td></tr></tbody></table></div>
+<pre class="code"><code class="language-sql">-- Taskloom sign-ups, team invites, and one row per email the system has taken on.
+CREATE TABLE invites (
+    code        VARCHAR(20) PRIMARY KEY,
+    team_name   VARCHAR(80) NOT NULL,
+    seats_used  INT         NOT NULL DEFAULT 0,
+    seats_total INT         NOT NULL,
+    CONSTRAINT invites_seats_within_total CHECK (seats_used BETWEEN 0 AND seats_total)
+);
+
+CREATE TABLE signups (
+    id          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    email       VARCHAR(254) NOT NULL,
+    name        VARCHAR(80)  NOT NULL,
+    invite_code VARCHAR(20),
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT signups_invite_fk FOREIGN KEY (invite_code) REFERENCES invites (code)
+);
+CREATE UNIQUE INDEX signups_email_unique ON signups (lower(email));
+
+-- The claim, the outcome and the dead-letter state of each email in one row. The primary key is the guard against
+-- sending the same email twice.
+CREATE TABLE sent_emails (
+    signup_id  BIGINT       NOT NULL,
+    kind       VARCHAR(20)  NOT NULL,
+    status     VARCHAR(10)  NOT NULL,
+    attempts   INT          NOT NULL DEFAULT 0,
+    last_error VARCHAR(200),
+    CONSTRAINT sent_emails_once PRIMARY KEY (signup_id, kind),
+    CONSTRAINT sent_emails_signup_fk FOREIGN KEY (signup_id) REFERENCES signups (id),
+    CONSTRAINT sent_emails_status_known CHECK (status IN (&#x27;SENDING&#x27;, &#x27;SENT&#x27;, &#x27;DEAD&#x27;)),
+    CONSTRAINT sent_emails_attempts_range CHECK (attempts BETWEEN 0 AND 10),
+    CONSTRAINT sent_emails_dead_has_error CHECK (status &lt;&gt; &#x27;DEAD&#x27; OR last_error IS NOT NULL)
+);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>The crash window</dt><dd>Between commit and listener the event lives only in memory. A restart there loses the email. A nightly query for sign-ups with no <code>sent_emails</code> row finds them; an outbox removes the window.</dd>
+<dt>Watch the dead letters</dt><dd>DEAD emails need a person. Alert when their count grows, and give support a way to send again (challenge 2).</dd>
+<dt>Shutdown</dt><dd>Async tasks still running at shutdown are cut off. Spring's executor can wait for them (<code>spring.task.execution.shutdown.await-termination</code>).</dd>
+<dt>Email deliverability</dt><dd>A real provider needs a verified sending domain (SPF, DKIM, DMARC) and a plain-text part next to the HTML.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>@EventListener vs @TransactionalEventListener?</summary><p>@EventListener runs immediately, inside publishEvent, in the publisher&#x27;s transaction. @TransactionalEventListener waits for a transaction phase, by default AFTER_COMMIT, and is skipped if the transaction rolls back.</p></details><details class="qa"><summary>Why make the listener @Async?</summary><p>So its work, and any slowness or failure in it, does not delay the request. The trade-off: errors no longer reach the caller, so they must be recorded somewhere.</p></details><details class="qa"><summary>How do you stop duplicate emails?</summary><p>Claim the email in the database before sending: a unique key on (sign-up, kind) and INSERT ... ON CONFLICT DO NOTHING. Only the caller that inserted the row sends.</p></details><details class="qa"><summary>What is a dead letter?</summary><p>A message that failed every allowed attempt, set aside with its error for a person, instead of being retried forever or dropped.</p></details><details class="qa"><summary>Why escape a name in an email?</summary><p>It is user input placed into HTML. Unescaped, &quot;&lt;script&gt;&quot; or &quot;&lt;a href&gt;&quot; becomes markup in the email; a line break in a subject header can add headers.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 14 tests pass.</td><td>You swapped in a plain listener and explained both failures.</td></tr><tr><td>Events</td><td>After-commit and async.</td><td>You know the crash window and the outbox.</td></tr><tr><td>Delivery</td><td>Once, retried, dead-lettered.</td><td>Support can resend a dead email.</td></tr><tr><td>Email</td><td>Escaped, UTF-8.</td><td>Subject header injection covered.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This Foundations station has no flawed version to review. Use this checklist on any side effect:</p>
+<ul class="rules">
+<li>Can it happen for a transaction that later rolls back?</li>
+<li>Does the request wait for it?</li>
+<li>What happens if it runs twice, or fails every time?</li>
+<li>Is user input escaped for where it ends up (HTML, headers, SQL)?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
