@@ -1,0 +1,56 @@
+package com.basketo.inventory;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * Writes a warehouse's stock snapshot with one MySQL upsert per chunk: no SELECT first, so there is no gap between
+ * "not there" and "insert" for another sync to fall into.
+ */
+@Service
+class StockSync {
+
+    record Item(String sku, int quantity) {
+    }
+
+    record Synced(long warehouseId, int syncedItems, long skusInWarehouse) {
+    }
+
+    /** Rows per statement. Each row is 3 parameters; 500 rows stays far below MySQL's 65,535 placeholders. */
+    static final int CHUNK = 500;
+
+    private final JdbcClient jdbc;
+
+    StockSync(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    @Transactional
+    Synced sync(long warehouseId, List<Item> items) {
+        // The foreign key already checks the warehouse; no need for an extra query.
+        for (int from = 0; from < items.size(); from += CHUNK) {
+            upsert(warehouseId, items.subList(from, Math.min(from + CHUNK, items.size())));
+        }
+        long skus = jdbc.sql("SELECT count(*) FROM stock_levels WHERE warehouse_id = ?").param(warehouseId).query(Long.class).single();
+        return new Synced(warehouseId, items.size(), skus);
+    }
+
+    private void upsert(long warehouseId, List<Item> chunk) {
+        // A delivery adds to what is on the shelf.
+        String sql = "INSERT INTO stock_levels (warehouse_id, sku, quantity) VALUES "
+                + String.join(", ", Collections.nCopies(chunk.size(), "(?, ?, ?)"))
+                + " AS incoming ON DUPLICATE KEY UPDATE quantity = stock_levels.quantity + incoming.quantity";
+        List<Object> params = new ArrayList<>(chunk.size() * 3);
+        for (Item item : chunk) {
+            params.add(warehouseId);
+            params.add(item.sku());
+            params.add(item.quantity());
+        }
+        jdbc.sql(sql).params(params).update();
+    }
+}

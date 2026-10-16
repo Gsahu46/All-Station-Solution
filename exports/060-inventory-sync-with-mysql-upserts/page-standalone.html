@@ -1,0 +1,1848 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 060 · Inventory sync with MySQL upserts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 060</span>
+    <h1>Inventory sync with MySQL upserts</h1>
+    <p class="scenario">A nightly stock sync inserts duplicates on MySQL and deadlocks when two warehouses sync together.</p>
+    <p class="sim"><b>Simulation</b><span>Warehouses, SKUs and counts are demo data, not Basketo's. A sync writes stock rows; no warehouse system, scanner or order flow is involved.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Retail</li>
+      <li><b>Types</b>Database · Concurrency</li>
+      <li><b>Reviewer view</b>Yes</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>053 Sign-up emails on MySQL and PostgreSQL</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · JdbcClient · MySQL 8.4 InnoDB · INSERT … ON DUPLICATE KEY UPDATE · deadlock retry · virtual threads · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>The nightly job</strong><p>Each warehouse sends its counts. For every SKU the job looks for its row: if there is none, it inserts one; otherwise it updates it.</p></li><li><strong>Duplicates</strong><p>The job timed out and was retried while the first run was still going. Both runs looked, both found nothing, both inserted: RICE-5KG twice, and the website summed them.</p></li><li><strong>Deadlocks</strong><p>A unique key and <code>SELECT … FOR UPDATE</code> stopped the duplicates. Then Bhiwandi and Hoskote synced new SKUs at the same time, and one of them failed every night with "Deadlock found".</p></li></ol>
+<p class="lesson">Do not look and then write. Ask the database to write, and let its unique key decide.</p>
+
+<h2>What are we building?</h2>
+<p><code>PUT /warehouses/{id}/stock</code> takes a warehouse's counts and stores them: new SKUs get a row, known SKUs get the new count. Sending the same counts twice changes nothing.</p>
+
+<h2>An everyday analogy</h2>
+<p>A shop register with one printed line per product. The old way: read the register, then walk off to write. Two clerks can both see no RICE line and both add one. The new way: hand the register "RICE: 35", and the register itself either fills the line or adds it, one clerk at a time.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Check the body</strong>: 1 to 1000 SKUs, each once, counts 0 to 1,000,000. SKUs are upper-cased.</li>
+<li><strong>Lock the warehouse</strong>: a second sync of the same warehouse waits for the first.</li>
+<li><strong>Upsert</strong> 500 rows per statement: insert, or on the unique key, update the count.</li>
+<li><strong>Commit</strong> all of it, or none. If InnoDB still picks this sync as a deadlock victim, run it again.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: Bhiwandi has RICE-5KG 40 and ATTA-10KG 12. It sends only RICE-5KG 35. What is stored?</summary><p>RICE-5KG 35 (the count, not 40 + 35) and ATTA-10KG still 12. A snapshot only speaks for the SKUs it lists; Practice challenge 2 adds a "full" mode that zeroes the rest.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No orders or reservations.</strong> Counts only; selling against them is a later station.</li>
+<li><strong>No warehouse system.</strong> The sync is a plain HTTP call with demo data.</li>
+<li><strong>No PostgreSQL code.</strong> The PostgreSQL version is compared on paper (Design, Practice 3).</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>SKU</strong></td><td>Stock keeping unit: one product in one pack size.</td><td>Rice, 5 kg bag.</td><td><code>RICE-5KG</code></td></tr><tr><td><strong>Snapshot</strong></td><td>What a warehouse counted, for the SKUs it sends.</td><td>A stock-take sheet.</td><td>the <code>PUT</code> body</td></tr><tr><td><strong>Upsert</strong></td><td>Insert the row, or update it if it is already there, in one statement.</td><td>"Write 35 on the RICE line; add the line if there is none."</td><td><code>ON DUPLICATE KEY UPDATE</code></td></tr><tr><td><strong>Unique key</strong></td><td>The database refuses a second row with the same values.</td><td>One line per product on the sheet.</td><td><code>stock_levels_warehouse_sku</code></td></tr><tr><td><strong>Gap lock</strong></td><td>InnoDB locks the space where a row would go, not just rows that exist.</td><td>Reserving the empty shelf, not a box on it.</td><td>taken by <code>SELECT … FOR UPDATE</code> on a missing row</td></tr><tr><td><strong>Deadlock</strong></td><td>Two transactions each wait for the other; InnoDB stops one (error 1213).</td><td>Two trolleys in one aisle, each waiting for the other to back out.</td><td>retried up to 3 times</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Basketo</strong> (a fictional grocery delivery company) syncs stock from its warehouses every night. The sync inserted duplicate rows on MySQL, and after a first fix, deadlocked when two warehouses synced together.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> a snapshot of new SKUs, <b>then</b> <code>200</code> and one row per SKU.</li>
+<li><b>Given</b> a later snapshot with some of them, <b>then</b> those rows carry the new counts, and the others are unchanged.</li>
+<li><b>Given</b> the same snapshot twice, <b>then</b> the same rows, never a duplicate.</li>
+<li><b>Given</b> ten syncs of two warehouses at once on the same new SKUs, <b>then</b> all <code>200</code>, and exactly one row per SKU per warehouse.</li>
+<li><b>Given</b> ten different snapshots of one warehouse at once, <b>then</b> every row ends up from the same snapshot.</li>
+<li><b>Given</b> the same SKU twice in one body (in any case), <b>then</b> <code>422</code>; an unknown warehouse <code>404</code>; a malformed body <code>400</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>One row per warehouse and SKU, guaranteed by a named unique key, not by a lookup.</li>
+<li>A snapshot is one transaction: a bad row anywhere leaves nothing behind.</li>
+<li>SKUs are normalised with <code>Locale.ROOT</code>; counts are whole units.</li>
+<li>A deadlock victim is run again (at most 3 attempts), and every one is logged.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Write a multi-row <code>INSERT … ON DUPLICATE KEY UPDATE</code> with a row alias.</li>
+<li>Explain why select-then-insert duplicates rows, and why <code>FOR UPDATE</code> on a missing row deadlocks.</li>
+<li>Batch large writes in chunks, inside one transaction.</li>
+<li>Know where MySQL's upsert and PostgreSQL's <code>ON CONFLICT</code> differ.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its MySQL, never typed by hand.</p></aside>
+<h2>Endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>PUT</code></td><td><code>/warehouses/{id}/stock</code></td><td><code>{"items": [{"sku", "quantity"}, …]}</code>: store these counts. Answers <code>{warehouseId, syncedItems, skusInWarehouse}</code>.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>The snapshot is stored</td></tr><tr><td><span class="pill warn">400</span></td><td>No items or more than 1000, a SKU outside <code>[A-Za-z0-9-]{3,30}</code>, a count below 0, above 1,000,000 or not whole, a missing field</td></tr><tr><td><span class="pill warn">404</span></td><td>No such warehouse</td></tr><tr><td><span class="pill warn">422</span></td><td>The same SKU twice in one snapshot</td></tr><tr><td><span class="pill bad">503</span></td><td>Three deadlocks in a row; the snapshot was rolled back, send it again</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 16 Oct 2026, in this order, against the demo warehouses (1 Bhiwandi, 2 Hoskote). JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: Bhiwandi's first snapshot</h3><p><b>Why:</b> three new rows; <code>dal-1kg</code> is stored as <code>DAL-1KG</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">PUT /warehouses/1/stock HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;items&quot;: [
+    {
+      &quot;sku&quot;: &quot;RICE-5KG&quot;,
+      &quot;quantity&quot;: 40
+    },
+    {
+      &quot;sku&quot;: &quot;ATTA-10KG&quot;,
+      &quot;quantity&quot;: 12
+    },
+    {
+      &quot;sku&quot;: &quot;dal-1kg&quot;,
+      &quot;quantity&quot;: 25
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 53
+
+{
+  &quot;warehouseId&quot;: 1,
+  &quot;syncedItems&quot;: 3,
+  &quot;skusInWarehouse&quot;: 3
+}</code></pre></div></div></section><section class="example"><h3>Case 2: RICE-5KG recounted</h3><p><b>Why:</b> the row is updated to 35, still three SKUs.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">PUT /warehouses/1/stock HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;items&quot;: [
+    {
+      &quot;sku&quot;: &quot;RICE-5KG&quot;,
+      &quot;quantity&quot;: 35
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 53
+
+{
+  &quot;warehouseId&quot;: 1,
+  &quot;syncedItems&quot;: 1,
+  &quot;skusInWarehouse&quot;: 3
+}</code></pre></div></div></section><section class="example"><h3>Case 3: OIL-1L and oil-1l in one body</h3><p><b>Why:</b> the same SKU after upper-casing; which count is right is the sender's call: <code>422</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">PUT /warehouses/1/stock HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;items&quot;: [
+    {
+      &quot;sku&quot;: &quot;OIL-1L&quot;,
+      &quot;quantity&quot;: 5
+    },
+    {
+      &quot;sku&quot;: &quot;oil-1l&quot;,
+      &quot;quantity&quot;: 8
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;SKU OIL-1L appears twice; which count is right?&quot;,
+  &quot;instance&quot;: &quot;/warehouses/1/stock&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Unprocessable Content&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: warehouse 99</h3><p><b>Why:</b> <code>404</code>, checked before any write.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">PUT /warehouses/99/stock HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;items&quot;: [
+    {
+      &quot;sku&quot;: &quot;RICE-5KG&quot;,
+      &quot;quantity&quot;: 1
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No warehouse 99&quot;,
+  &quot;instance&quot;: &quot;/warehouses/99/stock&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Not Found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: a count of 2.5</h3><p><b>Why:</b> <code>400</code>: whole units only.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">PUT /warehouses/1/stock HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;items&quot;: [
+    {
+      &quot;sku&quot;: &quot;RICE-5KG&quot;,
+      &quot;quantity&quot;: 2.5
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Failed to read request&quot;,
+  &quot;instance&quot;: &quot;/warehouses/1/stock&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section>
+<h2>The rows afterwards</h2>
+<pre class="code"><code class="language-text">+--------------+-----------+----------+
+| warehouse_id | sku       | quantity |
++--------------+-----------+----------+
+|            1 | ATTA-10KG |       12 |
+|            1 | DAL-1KG   |       25 |
+|            1 | RICE-5KG  |       35 |
++--------------+-----------+----------+</code></pre>
+<h2>Both warehouses at once</h2>
+<p class="muted">From <code>docs/capture.sh</code>: 10 parallel curl requests, five per warehouse, each with the same 200 new SKUs (<code>docs/captures/rush.txt</code>). The last number is how many deadlocks the app logged and retried.</p>
+<pre class="code"><code class="language-text">10 syncs at once (5 per warehouse), 200 new SKUs each: HTTP status counts
+     10 200
+
+Rows per warehouse afterwards
++--------------+------+---------------+
+| warehouse_id | skus | distinct_skus |
++--------------+------+---------------+
+|            1 |  200 |           200 |
+|            2 |  200 |           200 |
++--------------+------+---------------+
+
+Deadlocks the app retried (its own log lines)
+0</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>A snapshot, then a smaller one</td><td>Counts set, unlisted SKUs left alone</td><td><code>aSnapshotSetsTheCountsAndTheNextOneOverwritesThem</code></td></tr><tr><td>The same snapshot twice</td><td>Same rows</td><td><code>theSameSnapshotTwiceLeavesTheSameRows</code></td></tr><tr><td>1000 SKUs</td><td>Two statements of 500, one transaction</td><td><code>aThousandSkusGoInTwoChunks</code></td></tr><tr><td>A Turkish default locale</td><td><code>milk-1l</code> is still <code>MILK-1L</code></td><td><code>skusAreUpperCasedTheSameWayInEveryLocale</code></td></tr><tr><td>A SKU twice; an unknown warehouse; bad bodies</td><td><code>422</code>; <code>404</code>; <code>400</code></td><td><code>StockContractTest</code></td></tr><tr><td>A deadlock; three in a row</td><td>Run again; <code>503</code></td><td><code>aDeadlockVictimIsRunAgain</code>, <code>threeDeadlocksInARowAre503</code></td></tr><tr><td>A bad row in the second chunk</td><td>The first 500 rows roll back too</td><td><code>aBadRowInTheSecondChunkRollsBackTheFirst</code></td></tr><tr><td>Duplicate, negative, lower-case or orphan rows written directly</td><td>Refused by named constraints</td><td><code>namedConstraintsHoldWithoutJava</code></td></tr><tr><td>Ten syncs of two warehouses, five rounds</td><td>All <code>200</code>, 200 rows each</td><td><code>twoWarehousesSyncingTheSameNewSkusNeverFail</code></td></tr><tr><td>Ten different snapshots of one warehouse, half in reverse order</td><td>One whole snapshot wins</td><td><code>parallelSnapshotsOfOneWarehouseLeaveOneWholeSnapshot</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Select, then insert: under concurrency it duplicates rows, and with <code>FOR UPDATE</code> it deadlocks on gap locks.</p>
+<p>The test replays both old versions step by step on two plain JDBC connections, so every statement and lock is visible:</p>
+<ul>
+<li><strong>Version 1, no unique key.</strong> Both connections look for RICE-5KG, both find nothing, both insert: two rows.</li>
+<li><strong>Version 2, unique key and <code>FOR UPDATE</code>.</strong> Warehouse 1 looks for RICE-5KG, warehouse 2 for ATTA-10KG; neither exists, so each locks the <em>gap</em> where its row would go. On an empty range it is the same gap, and gap locks do not block each other. Then both insert into that gap, each waits for the other's gap lock, and MySQL kills one with error 1213. Every time, for SKUs that never touch.</li>
+<li><strong>The upsert.</strong> No look first: both warehouses get their row, and the retried job updates instead of inserting.</li>
+</ul>
+<p>While building, each fix was undone once:</p>
+<ul>
+<li>Adding the count instead of setting it turned 5 tests red.</li>
+<li>No retry: 3 red, one of them the two-warehouse test hitting a real deadlock.</li>
+<li>No transaction: 2 red. No duplicate check, no warehouse check, <code>toUpperCase()</code> without <code>Locale.ROOT</code>: 1 each.</li>
+<li>No warehouse lock was green in 1 of 3 runs: the retry absorbed more than 20 deadlocks. See Design for why the lock stays.</li>
+</ul>
+</div>
+<pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Written first. The old nightly sync, step by step on two real MySQL connections (two warehouses&#x27; sync jobs), in the
+ * order that broke it. Plain JDBC, so every statement and every lock is visible.
+ */
+class SelectThenInsertTrapTest extends ApiTest {
+
+    @Autowired
+    DataSource dataSource;
+
+    @AfterEach
+    void dropOldTables() {
+        jdbc.sql(&quot;DROP TABLE IF EXISTS old_stock_v1, old_stock_v2&quot;).update();
+    }
+
+    private static void insert(Connection c, String table, long warehouse, String sku, int quantity) throws SQLException {
+        try (PreparedStatement insert = c.prepareStatement(&quot;INSERT INTO &quot; + table + &quot; (warehouse_id, sku, quantity) VALUES (?, ?, ?)&quot;)) {
+            insert.setLong(1, warehouse);
+            insert.setString(2, sku);
+            insert.setInt(3, quantity);
+            insert.executeUpdate();
+        }
+    }
+
+    private static boolean nothingFound(Connection c, String table, long warehouse, String sku) throws SQLException {
+        try (PreparedStatement select = c.prepareStatement(&quot;SELECT id FROM &quot; + table + &quot; WHERE warehouse_id = ? AND sku = ? FOR UPDATE&quot;)) {
+            select.setLong(1, warehouse);
+            select.setString(2, sku);
+            try (ResultSet rs = select.executeQuery()) {
+                return !rs.next();
+            }
+        }
+    }
+
+    @Test
+    void version1WithoutAUniqueKeyInsertsTheSkuTwice() throws Exception {
+        jdbc.sql(&quot;CREATE TABLE old_stock_v1 (id BIGINT AUTO_INCREMENT PRIMARY KEY, warehouse_id BIGINT NOT NULL, sku VARCHAR(30) NOT NULL, quantity INT NOT NULL)&quot;).update();
+        try (Connection a = dataSource.getConnection(); Connection b = dataSource.getConnection()) {
+            // The sync job retried on a timeout while the first run was still going: both look before either inserts.
+            assertThat(countOf(a, &quot;old_stock_v1&quot;, 1, &quot;RICE-5KG&quot;)).isZero();
+            assertThat(countOf(b, &quot;old_stock_v1&quot;, 1, &quot;RICE-5KG&quot;)).isZero();
+            insert(a, &quot;old_stock_v1&quot;, 1, &quot;RICE-5KG&quot;, 40);
+            insert(b, &quot;old_stock_v1&quot;, 1, &quot;RICE-5KG&quot;, 40);
+        }
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM old_stock_v1 WHERE sku = &#x27;RICE-5KG&#x27;&quot;).query(Long.class).single()).isEqualTo(2);
+    }
+
+    private static long countOf(Connection c, String table, long warehouse, String sku) throws SQLException {
+        try (PreparedStatement select = c.prepareStatement(&quot;SELECT count(*) FROM &quot; + table + &quot; WHERE warehouse_id = ? AND sku = ?&quot;)) {
+            select.setLong(1, warehouse);
+            select.setString(2, sku);
+            try (ResultSet rs = select.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
+        }
+    }
+
+    @Test
+    void version2WithForUpdateDeadlocksTwoWarehouses() throws Exception {
+        jdbc.sql(&quot;&quot;&quot;
+                CREATE TABLE old_stock_v2 (id BIGINT AUTO_INCREMENT PRIMARY KEY, warehouse_id BIGINT NOT NULL, sku VARCHAR(30) NOT NULL,
+                    quantity INT NOT NULL, CONSTRAINT old_stock_v2_warehouse_sku UNIQUE (warehouse_id, sku))&quot;&quot;&quot;).update();
+        try (Connection a = dataSource.getConnection(); Connection b = dataSource.getConnection()) {
+            a.setAutoCommit(false);
+            b.setAutoCommit(false);
+            // Two different warehouses, two different new SKUs: they never touch the same row.
+            assertThat(nothingFound(a, &quot;old_stock_v2&quot;, 1, &quot;RICE-5KG&quot;)).isTrue();   // locks the gap where the row would go
+            assertThat(nothingFound(b, &quot;old_stock_v2&quot;, 2, &quot;ATTA-10KG&quot;)).isTrue();  // the same gap: gap locks do not block each other
+            List&lt;String&gt; outcomes = together(2, i -&gt; i == 0
+                    ? commitAfter(a, () -&gt; insert(a, &quot;old_stock_v2&quot;, 1, &quot;RICE-5KG&quot;, 40))     // waits for b&#x27;s gap lock
+                    : commitAfter(b, () -&gt; insert(b, &quot;old_stock_v2&quot;, 2, &quot;ATTA-10KG&quot;, 12)));  // waits for a&#x27;s: a cycle
+            assertThat(outcomes).containsExactlyInAnyOrder(&quot;committed&quot;, &quot;1213 Deadlock found when trying to get lock; try restarting transaction&quot;);
+        }
+    }
+
+    @Test
+    void theUpsertGivesBothWarehousesTheirRowWithoutLookingFirst() throws Exception {
+        String upsert = &quot;INSERT INTO stock_levels (warehouse_id, sku, quantity) VALUES (?, ?, ?) AS incoming ON DUPLICATE KEY UPDATE quantity = incoming.quantity&quot;;
+        try (Connection a = dataSource.getConnection(); Connection b = dataSource.getConnection()) {
+            a.setAutoCommit(false);
+            b.setAutoCommit(false);
+            List&lt;String&gt; outcomes = together(2, i -&gt; i == 0
+                    ? commitAfter(a, () -&gt; upsertOne(a, upsert, 1, &quot;RICE-5KG&quot;, 40))
+                    : commitAfter(b, () -&gt; upsertOne(b, upsert, 2, &quot;ATTA-10KG&quot;, 12)));
+            assertThat(outcomes).containsOnly(&quot;committed&quot;);
+            // And the retried job from version 1: the second run finds the key taken and updates instead.
+            upsertOne(a, upsert, 1, &quot;RICE-5KG&quot;, 40);
+            a.commit();
+        }
+        assertThat(rows(1)).isEqualTo(1);
+        assertThat(rows(2)).isEqualTo(1);
+    }
+
+    private static void upsertOne(Connection c, String sql, long warehouse, String sku, int quantity) throws SQLException {
+        try (PreparedStatement upsert = c.prepareStatement(sql)) {
+            upsert.setLong(1, warehouse);
+            upsert.setString(2, sku);
+            upsert.setInt(3, quantity);
+            upsert.executeUpdate();
+        }
+    }
+
+    interface Step {
+        void run() throws SQLException;
+    }
+
+    private static String commitAfter(Connection c, Step step) throws SQLException {
+        try {
+            step.run();
+            c.commit();
+            return &quot;committed&quot;;
+        } catch (SQLException e) {
+            c.rollback();
+            return e.getErrorCode() + &quot; &quot; + e.getMessage();
+        }
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # MySQL 8.4 on localhost:3306
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 18 tests; starts its own MySQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Ask MySQL how many rows an upsert "affected" (from <code>docs/captures/row-count.txt</code>):</p>
+<pre class="code"><code class="language-text">+----------+
+| inserted |
++----------+
+|        1 |
++----------+
++---------+
+| updated |
++---------+
+|       2 |
++---------+
++-----------+
+| unchanged |
++-----------+
+|         0 |
++-----------+</code></pre>
+<p>1 for an insert, 2 for an update, and 0 when nothing changed. From Java, Connector/J asks MySQL for <em>found</em> rows, so the unchanged case comes back as 1 (<code>mySqlCountsAnUpsertedRowTwice</code>). Never use the count to mean "how many SKUs".</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>Deadlock found when trying to get lock; try restarting transaction</code></td><td>InnoDB chose this sync as a deadlock victim (error 1213); all of it was rolled back.</td><td>Expected now and then; the app runs it again and logs it. Many per night means many writers on the same rows.</td></tr><tr><td><code>Duplicate entry '1-RICE-5KG' for key 'stock_levels.stock_levels_warehouse_sku'</code></td><td>A plain <code>INSERT</code> of a SKU the warehouse already has.</td><td>Use the upsert; the unique key is what makes it an update.</td></tr><tr><td><code>Check constraint 'stock_levels_sku_shape' is violated.</code></td><td>A SKU that was not upper-cased reached the database, for example by a script.</td><td>Upper-case with <code>Locale.ROOT</code> before writing.</td></tr><tr><td><code>'VALUES function' is deprecated</code> warning</td><td><code>… UPDATE quantity = VALUES(quantity)</code>.</td><td>Use a row alias: <code>VALUES (…) AS incoming … quantity = incoming.quantity</code>.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/060-inventory-sync-with-mysql-upserts/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/basketo/inventory/
+│   ├── StockController.java   ├── StockSync.java   └── InventoryApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__warehouses_and_stock.sql, V2__demo_warehouses.sql
+├── src/test/java/com/basketo/inventory/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the database behind it.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">StockController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">StockSync.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">V1__warehouses_and_stock.sql</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">V2__demo_warehouses.sql</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">compose.yaml</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">InventoryApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/basketo/inventory/StockController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Validates the snapshot, upper-cases SKUs, refuses duplicates, and runs the sync again after a deadlock.</dd><dt>Why</dt><dd>A clear <code>422</code> for a SKU sent twice, and no deadlock reaching the warehouse job as a <code>500</code>.</dd><dt>Without it</dt><dd>"Which of 5 and 8 is the count?" answered silently by whichever row came last.</dd></dl><ul><li>The retry wraps the whole transaction: after a deadlock InnoDB has rolled it all back, so the only safe retry is from the start.</li><li><code>PessimisticLockingFailureException</code> is what Spring makes of MySQL 1213 (and of a lock wait timeout).</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
+@RestController
+class StockController {
+
+    /** Demo limits: up to 1,000 SKUs per call, up to 1,000,000 units each. */
+    record Line(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,30}&quot;) String sku, @NotNull @Min(0) @Max(1_000_000) Integer quantity) {
+    }
+
+    record Snapshot(@NotNull @Size(min = 1, max = 1000) List&lt;@NotNull @Valid Line&gt; items) {
+    }
+
+    private static final Logger log = LoggerFactory.getLogger(StockController.class);
+
+    private final StockSync sync;
+
+    StockController(StockSync sync) {
+        this.sync = sync;
+    }
+
+    /** PUT: the body is the warehouse&#x27;s count for these SKUs. Sending it twice leaves the same rows. */
+    @PutMapping(&quot;/warehouses/{id}/stock&quot;)
+    StockSync.Synced put(@PathVariable long id, @Valid @RequestBody Snapshot body) {
+        List&lt;StockSync.Item&gt; items = body.items().stream()
+                .map(l -&gt; new StockSync.Item(l.sku().toUpperCase(Locale.ROOT), l.quantity())).toList();
+        Set&lt;String&gt; seen = new HashSet&lt;&gt;();
+        for (StockSync.Item item : items) {
+            if (!seen.add(item.sku())) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, &quot;SKU &quot; + item.sku() + &quot; appears twice; which count is right?&quot;);
+            }
+        }
+        // InnoDB may still pick a sync as a deadlock victim (error 1213); the whole snapshot rolled back, so run it again.
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return sync.sync(id, items);
+            } catch (PessimisticLockingFailureException e) {
+                log.warn(&quot;Stock sync of warehouse {} deadlocked (attempt {}): {}&quot;, id, attempt, e.getMostSpecificCause().getMessage());
+                if (attempt == 3) {
+                    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, &quot;Stock sync kept deadlocking; try again&quot;, e);
+                }
+            }
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/basketo/inventory/StockSync.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Locks the warehouse row, then upserts in chunks of 500, all in one transaction.</dd><dt>Why</dt><dd>One statement per 500 rows, no look-up first, and one sync per warehouse at a time.</dd><dt>Without it</dt><dd>Select-then-insert's duplicates and deadlocks, or a half-written snapshot.</dd></dl><ul><li><code>AS incoming … quantity = incoming.quantity</code> is the MySQL 8.0.19+ form; <code>VALUES(quantity)</code> still works but is deprecated.</li><li>The <code>404</code> check and the lock are one query.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * Writes a warehouse&#x27;s stock snapshot with one MySQL upsert per chunk: no SELECT first, so there is no gap between
+ * &quot;not there&quot; and &quot;insert&quot; for another sync to fall into.
+ */
+@Service
+class StockSync {
+
+    record Item(String sku, int quantity) {
+    }
+
+    record Synced(long warehouseId, int syncedItems, long skusInWarehouse) {
+    }
+
+    /** Rows per statement. Each row is 3 parameters; 500 rows stays far below MySQL&#x27;s 65,535 placeholders. */
+    static final int CHUNK = 500;
+
+    private final JdbcClient jdbc;
+
+    StockSync(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    @Transactional
+    Synced sync(long warehouseId, List&lt;Item&gt; items) {
+        // One sync per warehouse at a time: a second one waits here, on one row, until the first commits. Without it,
+        // parallel syncs of one warehouse deadlocked often inside InnoDB; the retry in StockController covers the rare rest.
+        if (jdbc.sql(&quot;SELECT id FROM warehouses WHERE id = ? FOR UPDATE&quot;).param(warehouseId).query(Long.class).optional().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;No warehouse &quot; + warehouseId);
+        }
+        for (int from = 0; from &lt; items.size(); from += CHUNK) {
+            upsert(warehouseId, items.subList(from, Math.min(from + CHUNK, items.size())));
+        }
+        long skus = jdbc.sql(&quot;SELECT count(*) FROM stock_levels WHERE warehouse_id = ?&quot;).param(warehouseId).query(Long.class).single();
+        return new Synced(warehouseId, items.size(), skus);
+    }
+
+    private void upsert(long warehouseId, List&lt;Item&gt; chunk) {
+        // MySQL 8.0.19+ row alias; VALUES(quantity) in the update is deprecated.
+        String sql = &quot;INSERT INTO stock_levels (warehouse_id, sku, quantity) VALUES &quot;
+                + String.join(&quot;, &quot;, Collections.nCopies(chunk.size(), &quot;(?, ?, ?)&quot;))
+                + &quot; AS incoming ON DUPLICATE KEY UPDATE quantity = incoming.quantity&quot;;
+        List&lt;Object&gt; params = new ArrayList&lt;&gt;(chunk.size() * 3);
+        for (Item item : chunk) {
+            params.add(warehouseId);
+            params.add(item.sku());
+            params.add(item.quantity());
+        }
+        jdbc.sql(sql).params(params).update();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/resources/db/migration/V1__warehouses_and_stock.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Warehouses and stock rows, with four named constraints.</dd><dt>Why</dt><dd><code>ON DUPLICATE KEY UPDATE</code> only fires on a unique key; without <code>stock_levels_warehouse_sku</code> it silently inserts.</dd><dt>Without it</dt><dd>Duplicates from any writer that is not this app.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">CREATE TABLE warehouses (
+    id   BIGINT       NOT NULL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE stock_levels (
+    id           BIGINT      NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    warehouse_id BIGINT      NOT NULL,
+    sku          VARCHAR(30) NOT NULL,
+    quantity     INT         NOT NULL,
+    updated_at   TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    -- The rule the old sync only checked in Java: one row per SKU per warehouse. ON DUPLICATE KEY UPDATE needs it.
+    CONSTRAINT stock_levels_warehouse_sku UNIQUE (warehouse_id, sku),
+    CONSTRAINT stock_levels_warehouse_fk FOREIGN KEY (warehouse_id) REFERENCES warehouses (id),
+    CONSTRAINT stock_levels_quantity_range CHECK (quantity BETWEEN 0 AND 1000000),
+    CONSTRAINT stock_levels_sku_shape CHECK (REGEXP_LIKE(sku, &#x27;^[A-Z0-9-]{3,30}$&#x27;, &#x27;c&#x27;))
+);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_warehouses.sql</p><div class="notes"><p>Bhiwandi (1) and Hoskote (2).</p></div><div class="src"><pre class="code"><code class="language-sql">INSERT INTO warehouses (id, name) VALUES (1, &#x27;Basketo Bhiwandi&#x27;), (2, &#x27;Basketo Hoskote&#x27;);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Problem details on, whole numbers only.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: basketo-inventory
+  mvc:
+    problemdetails:
+      enabled: true
+  jackson:
+    deserialization:
+      accept-float-as-int: false   # 2.5 boxes is a client bug: 400, not 2
+  datasource:
+    url: jdbc:mysql://localhost:3306/basketo
+    username: basketo
+    password: basketo</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>MySQL 8.4 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: basketo
+      MYSQL_USER: basketo
+      MYSQL_PASSWORD: basketo
+      MYSQL_ROOT_PASSWORD: basketo-root
+    ports:
+      - &quot;3306:3306&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;mysqladmin ping -h 127.0.0.1 -ubasketo -pbasketo --silent&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 60</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/basketo/inventory/InventoryApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class InventoryApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(InventoryApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>StockContractTest</code> (9)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>SelectThenInsertTrapTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>StockDatabaseTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Concurrency</td><td>A real concurrency test that proves the invariant holds</td><td><code>StockConcurrencyTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, MySQL 8.4 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.basketo.inventory.StockConcurrencyTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.basketo.inventory.SelectThenInsertTrapTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0 -- in com.basketo.inventory.StockContractTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.basketo.inventory.StockDatabaseTest
+[INFO] Tests run: 18, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">SelectThenInsertTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">StockConcurrencyTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">StockDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">StockContractTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">MySqlTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/basketo/inventory/SelectThenInsertTrapTest.java</p><div class="notes"><p>Written first: both old versions on two plain JDBC connections, then the upsert.</p></div><div class="src"><pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Written first. The old nightly sync, step by step on two real MySQL connections (two warehouses&#x27; sync jobs), in the
+ * order that broke it. Plain JDBC, so every statement and every lock is visible.
+ */
+class SelectThenInsertTrapTest extends ApiTest {
+
+    @Autowired
+    DataSource dataSource;
+
+    @AfterEach
+    void dropOldTables() {
+        jdbc.sql(&quot;DROP TABLE IF EXISTS old_stock_v1, old_stock_v2&quot;).update();
+    }
+
+    private static void insert(Connection c, String table, long warehouse, String sku, int quantity) throws SQLException {
+        try (PreparedStatement insert = c.prepareStatement(&quot;INSERT INTO &quot; + table + &quot; (warehouse_id, sku, quantity) VALUES (?, ?, ?)&quot;)) {
+            insert.setLong(1, warehouse);
+            insert.setString(2, sku);
+            insert.setInt(3, quantity);
+            insert.executeUpdate();
+        }
+    }
+
+    private static boolean nothingFound(Connection c, String table, long warehouse, String sku) throws SQLException {
+        try (PreparedStatement select = c.prepareStatement(&quot;SELECT id FROM &quot; + table + &quot; WHERE warehouse_id = ? AND sku = ? FOR UPDATE&quot;)) {
+            select.setLong(1, warehouse);
+            select.setString(2, sku);
+            try (ResultSet rs = select.executeQuery()) {
+                return !rs.next();
+            }
+        }
+    }
+
+    @Test
+    void version1WithoutAUniqueKeyInsertsTheSkuTwice() throws Exception {
+        jdbc.sql(&quot;CREATE TABLE old_stock_v1 (id BIGINT AUTO_INCREMENT PRIMARY KEY, warehouse_id BIGINT NOT NULL, sku VARCHAR(30) NOT NULL, quantity INT NOT NULL)&quot;).update();
+        try (Connection a = dataSource.getConnection(); Connection b = dataSource.getConnection()) {
+            // The sync job retried on a timeout while the first run was still going: both look before either inserts.
+            assertThat(countOf(a, &quot;old_stock_v1&quot;, 1, &quot;RICE-5KG&quot;)).isZero();
+            assertThat(countOf(b, &quot;old_stock_v1&quot;, 1, &quot;RICE-5KG&quot;)).isZero();
+            insert(a, &quot;old_stock_v1&quot;, 1, &quot;RICE-5KG&quot;, 40);
+            insert(b, &quot;old_stock_v1&quot;, 1, &quot;RICE-5KG&quot;, 40);
+        }
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM old_stock_v1 WHERE sku = &#x27;RICE-5KG&#x27;&quot;).query(Long.class).single()).isEqualTo(2);
+    }
+
+    private static long countOf(Connection c, String table, long warehouse, String sku) throws SQLException {
+        try (PreparedStatement select = c.prepareStatement(&quot;SELECT count(*) FROM &quot; + table + &quot; WHERE warehouse_id = ? AND sku = ?&quot;)) {
+            select.setLong(1, warehouse);
+            select.setString(2, sku);
+            try (ResultSet rs = select.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
+        }
+    }
+
+    @Test
+    void version2WithForUpdateDeadlocksTwoWarehouses() throws Exception {
+        jdbc.sql(&quot;&quot;&quot;
+                CREATE TABLE old_stock_v2 (id BIGINT AUTO_INCREMENT PRIMARY KEY, warehouse_id BIGINT NOT NULL, sku VARCHAR(30) NOT NULL,
+                    quantity INT NOT NULL, CONSTRAINT old_stock_v2_warehouse_sku UNIQUE (warehouse_id, sku))&quot;&quot;&quot;).update();
+        try (Connection a = dataSource.getConnection(); Connection b = dataSource.getConnection()) {
+            a.setAutoCommit(false);
+            b.setAutoCommit(false);
+            // Two different warehouses, two different new SKUs: they never touch the same row.
+            assertThat(nothingFound(a, &quot;old_stock_v2&quot;, 1, &quot;RICE-5KG&quot;)).isTrue();   // locks the gap where the row would go
+            assertThat(nothingFound(b, &quot;old_stock_v2&quot;, 2, &quot;ATTA-10KG&quot;)).isTrue();  // the same gap: gap locks do not block each other
+            List&lt;String&gt; outcomes = together(2, i -&gt; i == 0
+                    ? commitAfter(a, () -&gt; insert(a, &quot;old_stock_v2&quot;, 1, &quot;RICE-5KG&quot;, 40))     // waits for b&#x27;s gap lock
+                    : commitAfter(b, () -&gt; insert(b, &quot;old_stock_v2&quot;, 2, &quot;ATTA-10KG&quot;, 12)));  // waits for a&#x27;s: a cycle
+            assertThat(outcomes).containsExactlyInAnyOrder(&quot;committed&quot;, &quot;1213 Deadlock found when trying to get lock; try restarting transaction&quot;);
+        }
+    }
+
+    @Test
+    void theUpsertGivesBothWarehousesTheirRowWithoutLookingFirst() throws Exception {
+        String upsert = &quot;INSERT INTO stock_levels (warehouse_id, sku, quantity) VALUES (?, ?, ?) AS incoming ON DUPLICATE KEY UPDATE quantity = incoming.quantity&quot;;
+        try (Connection a = dataSource.getConnection(); Connection b = dataSource.getConnection()) {
+            a.setAutoCommit(false);
+            b.setAutoCommit(false);
+            List&lt;String&gt; outcomes = together(2, i -&gt; i == 0
+                    ? commitAfter(a, () -&gt; upsertOne(a, upsert, 1, &quot;RICE-5KG&quot;, 40))
+                    : commitAfter(b, () -&gt; upsertOne(b, upsert, 2, &quot;ATTA-10KG&quot;, 12)));
+            assertThat(outcomes).containsOnly(&quot;committed&quot;);
+            // And the retried job from version 1: the second run finds the key taken and updates instead.
+            upsertOne(a, upsert, 1, &quot;RICE-5KG&quot;, 40);
+            a.commit();
+        }
+        assertThat(rows(1)).isEqualTo(1);
+        assertThat(rows(2)).isEqualTo(1);
+    }
+
+    private static void upsertOne(Connection c, String sql, long warehouse, String sku, int quantity) throws SQLException {
+        try (PreparedStatement upsert = c.prepareStatement(sql)) {
+            upsert.setLong(1, warehouse);
+            upsert.setString(2, sku);
+            upsert.setInt(3, quantity);
+            upsert.executeUpdate();
+        }
+    }
+
+    interface Step {
+        void run() throws SQLException;
+    }
+
+    private static String commitAfter(Connection c, Step step) throws SQLException {
+        try {
+            step.run();
+            c.commit();
+            return &quot;committed&quot;;
+        } catch (SQLException e) {
+            c.rollback();
+            return e.getErrorCode() + &quot; &quot; + e.getMessage();
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/basketo/inventory/StockConcurrencyTest.java</p><div class="notes"><p>Ten syncs at a time, released by one latch: two warehouses on the same new SKUs, and one warehouse with ten different snapshots.</p></div><div class="src"><pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** Real parallel syncs on virtual threads, released by one latch, against real MySQL locks. */
+class StockConcurrencyTest extends ApiTest {
+
+    @Test
+    void twoWarehousesSyncingTheSameNewSkusNeverFail() throws Exception {
+        for (int round = 1; round &lt;= 5; round++) {
+            noStock();
+            List&lt;Integer&gt; statuses = together(10, i -&gt; sync(1 + i % 2, items(200, i)).andReturn().getResponse().getStatus());
+            assertThat(statuses).as(&quot;round %d&quot;, round).containsOnly(200);
+            assertThat(rows(1)).isEqualTo(200);
+            assertThat(rows(2)).isEqualTo(200);
+        }
+    }
+
+    @Test
+    void parallelSnapshotsOfOneWarehouseLeaveOneWholeSnapshot() throws Exception {
+        // Odd jobs send their SKUs in reverse order: the sync must not lock in the order it was given.
+        List&lt;Integer&gt; statuses = together(10, i -&gt; sync(1, i % 2 == 0 ? items(700, 11 + i) : reversed(items(700, 11 + i))).andReturn().getResponse().getStatus());
+        assertThat(statuses).containsOnly(200);
+        List&lt;Integer&gt; quantities = jdbc.sql(&quot;SELECT DISTINCT quantity FROM stock_levels WHERE warehouse_id = 1&quot;).query(Integer.class).list();
+        assertThat(rows(1)).isEqualTo(700);
+        assertThat(quantities).hasSize(1);   // every row from the same snapshot, never a mix of two counts
+        assertThat(quantities.getFirst()).isBetween(11, 20);   // one of the counts sent, not a sum
+    }
+
+    private static String reversed(String jsonArray) {
+        List&lt;String&gt; objects = Arrays.asList(jsonArray.substring(2, jsonArray.length() - 2).split(&quot;\\},\\{&quot;));
+        Collections.reverse(objects);
+        return &quot;[{&quot; + String.join(&quot;},{&quot;, objects) + &quot;}]&quot;;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/basketo/inventory/StockDatabaseTest.java</p><div class="notes"><p>Named constraints with plain SQL, a rollback across chunks, an in-place update, and MySQL's affected-row count.</p></div><div class="src"><pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The rules as MySQL enforces them, written with plain SQL so no Java check runs. */
+class StockDatabaseTest extends ApiTest {
+
+    @Autowired
+    StockSync stockSync;
+
+    private void insert(long warehouse, String sku, int quantity) {
+        jdbc.sql(&quot;INSERT INTO stock_levels (warehouse_id, sku, quantity) VALUES (?, ?, ?)&quot;).params(warehouse, sku, quantity).update();
+    }
+
+    @Test
+    void namedConstraintsHoldWithoutJava() {
+        insert(1, &quot;RICE-5KG&quot;, 40);
+        assertThatThrownBy(() -&gt; insert(1, &quot;RICE-5KG&quot;, 41)).isInstanceOf(DataAccessException.class).hasMessageContaining(&quot;stock_levels_warehouse_sku&quot;);
+        assertThatThrownBy(() -&gt; insert(1, &quot;OIL-1L&quot;, -1)).isInstanceOf(DataAccessException.class).hasMessageContaining(&quot;stock_levels_quantity_range&quot;);
+        assertThatThrownBy(() -&gt; insert(1, &quot;oil-1l&quot;, 1)).isInstanceOf(DataAccessException.class).hasMessageContaining(&quot;stock_levels_sku_shape&quot;);
+        assertThatThrownBy(() -&gt; insert(99, &quot;OIL-1L&quot;, 1)).isInstanceOf(DataAccessException.class).hasMessageContaining(&quot;stock_levels_warehouse_fk&quot;);
+        insert(2, &quot;RICE-5KG&quot;, 7);   // the same SKU in another warehouse is another row
+        assertThat(rows(1) + rows(2)).isEqualTo(2);
+    }
+
+    @Test
+    void aBadRowInTheSecondChunkRollsBackTheFirst() {
+        List&lt;StockSync.Item&gt; items = new ArrayList&lt;&gt;();
+        for (int i = 1; i &lt;= 600; i++) {
+            items.add(new StockSync.Item(&quot;SKU-%05d&quot;.formatted(i), 5));
+        }
+        items.add(new StockSync.Item(&quot;SKU-99999&quot;, -3));   // sorted last: row 601, in the second chunk; only the database refuses it
+        assertThatThrownBy(() -&gt; stockSync.sync(1, items)).hasMessageContaining(&quot;stock_levels_quantity_range&quot;);
+        assertThat(rows(1)).isZero();   // the 500 rows of the first chunk went back too
+    }
+
+    @Test
+    void anUpsertUpdatesTheRowInPlace() {
+        insert(1, &quot;RICE-5KG&quot;, 40);
+        long id = jdbc.sql(&quot;SELECT id FROM stock_levels WHERE sku = &#x27;RICE-5KG&#x27;&quot;).query(Long.class).single();
+        stockSync.sync(1, List.of(new StockSync.Item(&quot;RICE-5KG&quot;, 12)));
+        assertThat(jdbc.sql(&quot;SELECT id FROM stock_levels WHERE sku = &#x27;RICE-5KG&#x27;&quot;).query(Long.class).single()).isEqualTo(id);
+        assertThat(quantity(1, &quot;RICE-5KG&quot;)).isEqualTo(12);
+    }
+
+    @Test
+    void mySqlCountsAnUpsertedRowTwice() {
+        String upsert = &quot;INSERT INTO stock_levels (warehouse_id, sku, quantity) VALUES (1, &#x27;RICE-5KG&#x27;, ?) AS incoming ON DUPLICATE KEY UPDATE quantity = incoming.quantity&quot;;
+        assertThat(jdbc.sql(upsert).param(40).update()).isEqualTo(1);   // inserted
+        assertThat(jdbc.sql(upsert).param(35).update()).isEqualTo(2);   // updated: MySQL reports 2 affected rows
+        assertThat(jdbc.sql(upsert).param(35).update()).isEqualTo(1);   // unchanged: Connector/J asks for &quot;found&quot; rows, so 1, not 0
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/basketo/inventory/StockContractTest.java</p><div class="notes"><p>The endpoint through HTTP, including a deadlock injected with <code>@MockitoSpyBean</code>.</p></div><div class="src"><pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+
+import java.util.Locale;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class StockContractTest extends ApiTest {
+
+    @MockitoSpyBean
+    StockSync stockSync;
+
+    @Test
+    void aSnapshotSetsTheCountsAndTheNextOneOverwritesThem() throws Exception {
+        sync(1, &quot;[{\&quot;sku\&quot;:\&quot;RICE-5KG\&quot;,\&quot;quantity\&quot;:40},{\&quot;sku\&quot;:\&quot;ATTA-10KG\&quot;,\&quot;quantity\&quot;:12}]&quot;).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.warehouseId&quot;).value(1)).andExpect(jsonPath(&quot;$.syncedItems&quot;).value(2)).andExpect(jsonPath(&quot;$.skusInWarehouse&quot;).value(2));
+        sync(1, &quot;[{\&quot;sku\&quot;:\&quot;RICE-5KG\&quot;,\&quot;quantity\&quot;:35}]&quot;).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.syncedItems&quot;).value(1)).andExpect(jsonPath(&quot;$.skusInWarehouse&quot;).value(2));
+        assertThat(quantity(1, &quot;RICE-5KG&quot;)).isEqualTo(35);   // the count, not 40 + 35
+        assertThat(quantity(1, &quot;ATTA-10KG&quot;)).isEqualTo(12);  // not in this snapshot: left alone
+        assertThat(rows(1)).isEqualTo(2);
+    }
+
+    @Test
+    void theSameSnapshotTwiceLeavesTheSameRows() throws Exception {
+        sync(2, items(3, 7)).andExpect(status().isOk());
+        sync(2, items(3, 7)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.skusInWarehouse&quot;).value(3));
+        assertThat(rows(2)).isEqualTo(3);
+        assertThat(quantity(2, &quot;SKU-00002&quot;)).isEqualTo(7);
+    }
+
+    @Test
+    void aThousandSkusGoInTwoChunks() throws Exception {
+        sync(1, items(1000, 3)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.syncedItems&quot;).value(1000));
+        assertThat(rows(1)).isEqualTo(1000);
+    }
+
+    @Test
+    void skusAreUpperCasedTheSameWayInEveryLocale() throws Exception {
+        Locale before = Locale.getDefault();
+        Locale.setDefault(Locale.forLanguageTag(&quot;tr-TR&quot;));   // in Turkish, &quot;i&quot;.toUpperCase() is &quot;İ&quot;, which the SKU rule refuses
+        try {
+            sync(1, &quot;[{\&quot;sku\&quot;:\&quot;milk-1l\&quot;,\&quot;quantity\&quot;:9}]&quot;).andExpect(status().isOk());
+        } finally {
+            Locale.setDefault(before);
+        }
+        assertThat(quantity(1, &quot;MILK-1L&quot;)).isEqualTo(9);
+    }
+
+    @Test
+    void theSameSkuTwiceIs422EvenInDifferentCase() throws Exception {
+        sync(1, &quot;[{\&quot;sku\&quot;:\&quot;dal-1kg\&quot;,\&quot;quantity\&quot;:5},{\&quot;sku\&quot;:\&quot;DAL-1KG\&quot;,\&quot;quantity\&quot;:8}]&quot;).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;SKU DAL-1KG appears twice; which count is right?&quot;));
+        assertThat(rows(1)).isZero();
+    }
+
+    @Test
+    void anUnknownWarehouseIs404() throws Exception {
+        sync(99, items(2, 1)).andExpect(status().isNotFound()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;No warehouse 99&quot;));
+    }
+
+    @Test
+    void malformedSnapshotsAre400() throws Exception {
+        for (String bad : new String[]{&quot;[]&quot;, items(1001, 1), &quot;[{\&quot;sku\&quot;:\&quot;RICE-5KG\&quot;,\&quot;quantity\&quot;:-1}]&quot;,
+                &quot;[{\&quot;sku\&quot;:\&quot;RICE-5KG\&quot;,\&quot;quantity\&quot;:2.5}]&quot;, &quot;[{\&quot;sku\&quot;:\&quot;RICE-5KG\&quot;}]&quot;, &quot;[{\&quot;sku\&quot;:\&quot;RICE 5KG\&quot;,\&quot;quantity\&quot;:1}]&quot;,
+                &quot;[{\&quot;sku\&quot;:\&quot;RICE-5KG\&quot;,\&quot;quantity\&quot;:1000001}]&quot;, &quot;[null]&quot;}) {
+            sync(1, bad).andExpect(status().isBadRequest());
+        }
+        assertThat(rows(1)).isZero();
+    }
+
+    @Test
+    void aDeadlockVictimIsRunAgain() throws Exception {
+        doThrow(new PessimisticLockingFailureException(&quot;Deadlock found when trying to get lock&quot;))
+                .doCallRealMethod().when(stockSync).sync(anyLong(), anyList());
+        sync(1, items(2, 4)).andExpect(status().isOk());
+        verify(stockSync, times(2)).sync(anyLong(), anyList());
+        assertThat(rows(1)).isEqualTo(2);
+    }
+
+    @Test
+    void threeDeadlocksInARowAre503() throws Exception {
+        doThrow(new PessimisticLockingFailureException(&quot;Deadlock found when trying to get lock&quot;)).when(stockSync).sync(anyLong(), anyList());
+        sync(1, items(2, 4)).andExpect(status().isServiceUnavailable());
+        verify(stockSync, times(3)).sync(anyLong(), anyList());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/basketo/inventory/ApiTest.java</p><div class="notes"><p>Shared setup: no stock before each test, the snapshot builder and the latch helper.</p></div><div class="src"><pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+
+/** Shared setup: the whole app on a real MySQL 8.4. Before each test, no warehouse has any stock. */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(MySqlTestConfig.class)
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+
+    @BeforeEach
+    void noStock() {
+        jdbc.sql(&quot;DELETE FROM stock_levels&quot;).update();
+    }
+
+    ResultActions sync(long warehouse, String itemsJson) throws Exception {
+        return mvc.perform(put(&quot;/warehouses/{id}/stock&quot;, warehouse).contentType(MediaType.APPLICATION_JSON).content(&quot;{\&quot;items\&quot;:&quot; + itemsJson + &quot;}&quot;));
+    }
+
+    /** n SKUs SKU-00001.. as a JSON array, all with the same quantity. */
+    static String items(int n, int quantity) {
+        return IntStream.rangeClosed(1, n).mapToObj(i -&gt; &quot;{\&quot;sku\&quot;:\&quot;SKU-%05d\&quot;,\&quot;quantity\&quot;:%d}&quot;.formatted(i, quantity))
+                .collect(Collectors.joining(&quot;,&quot;, &quot;[&quot;, &quot;]&quot;));
+    }
+
+    Integer quantity(long warehouse, String sku) {
+        return jdbc.sql(&quot;SELECT quantity FROM stock_levels WHERE warehouse_id = ? AND sku = ?&quot;).params(warehouse, sku)
+                .query(Integer.class).optional().orElse(null);
+    }
+
+    long rows(long warehouse) {
+        return jdbc.sql(&quot;SELECT count(*) FROM stock_levels WHERE warehouse_id = ?&quot;).param(warehouse).query(Long.class).single();
+    }
+
+    /** Runs n copies of the task on virtual threads, all released together by one latch; the task gets its index. */
+    static &lt;T&gt; List&lt;T&gt; together(int n, IndexedTask&lt;T&gt; task) throws Exception {
+        CountDownLatch start = new CountDownLatch(1);
+        List&lt;Future&lt;T&gt;&gt; futures = new ArrayList&lt;&gt;();
+        try (ExecutorService threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; n; i++) {
+                int index = i;
+                futures.add(threads.submit(() -&gt; {
+                    start.await();
+                    return task.call(index);
+                }));
+            }
+            start.countDown();
+        }
+        List&lt;T&gt; results = new ArrayList&lt;&gt;();
+        for (Future&lt;T&gt; f : futures) {
+            results.add(f.get());
+        }
+        return results;
+    }
+
+    interface IndexedTask&lt;T&gt; {
+        T call(int index) throws Exception;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/basketo/inventory/MySqlTestConfig.java</p><div class="notes"><p>MySQL 8.4 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.mysql.MySQLContainer;
+
+/** A real MySQL 8.4 in Docker (InnoDB, REPEATABLE READ by default), started once and shared by every test class. */
+@TestConfiguration(proxyBeanMethods = false)
+class MySqlTestConfig {
+
+    @Bean
+    @ServiceConnection
+    MySQLContainer mysql() {
+        return new MySQLContainer(&quot;mysql:8.4&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/basketo/inventory/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=ReadOneSkuChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 18 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 22 tests pass (18 station tests and 4 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>Read one SKU</h2><p>Add <code>GET /warehouses/{id}/stock/{sku}</code>: <code>{warehouseId, sku, quantity}</code>. <code>rice-5kg</code> finds <code>RICE-5KG</code>; a SKU the warehouse never synced is <code>404</code>.</p><p><b>Done when:</b> both tests in <code>ReadOneSkuChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Normalise the path the same way the sync does, with <code>Locale.ROOT</code>.</li><li><code>JdbcClient … .query(Level.class).optional()</code> maps a record by column names.</li></ul></details><p class="path">challenge/ReadOneSkuChallengeTest.java</p><pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: GET /warehouses/{id}/stock/{sku} returns {warehouseId, sku, quantity}. The SKU in the path is matched
+ * the way the sync stores it, so &quot;rice-5kg&quot; finds RICE-5KG. A SKU the warehouse has never synced is 404.
+ */
+class ReadOneSkuChallengeTest extends ApiTest {
+
+    @Test
+    void aSyncedSkuCanBeReadInAnyCase() throws Exception {
+        sync(1, &quot;[{\&quot;sku\&quot;:\&quot;RICE-5KG\&quot;,\&quot;quantity\&quot;:40}]&quot;).andExpect(status().isOk());
+        mvc.perform(get(&quot;/warehouses/1/stock/rice-5kg&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.warehouseId&quot;).value(1)).andExpect(jsonPath(&quot;$.sku&quot;).value(&quot;RICE-5KG&quot;)).andExpect(jsonPath(&quot;$.quantity&quot;).value(40));
+    }
+
+    @Test
+    void aSkuOfAnotherWarehouseOrNoneIs404() throws Exception {
+        sync(1, &quot;[{\&quot;sku\&quot;:\&quot;RICE-5KG\&quot;,\&quot;quantity\&quot;:40}]&quot;).andExpect(status().isOk());
+        mvc.perform(get(&quot;/warehouses/2/stock/RICE-5KG&quot;)).andExpect(status().isNotFound());
+        mvc.perform(get(&quot;/warehouses/1/stock/OIL-1L&quot;)).andExpect(status().isNotFound());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/StockController.java</p><div class="src"><pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
+@RestController
+class StockController {
+
+    /** Demo limits: up to 1,000 SKUs per call, up to 1,000,000 units each. */
+    record Line(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,30}&quot;) String sku, @NotNull @Min(0) @Max(1_000_000) Integer quantity) {
+    }
+
+    record Snapshot(@NotNull @Size(min = 1, max = 1000) List&lt;@NotNull @Valid Line&gt; items) {
+    }
+
+    enum Mode { delta, full }
+
+    @GetMapping(&quot;/warehouses/{id}/stock/{sku}&quot;)
+    StockSync.Level get(@PathVariable long id, @PathVariable String sku) {
+        return sync.level(id, sku.toUpperCase(Locale.ROOT))
+                .orElseThrow(() -&gt; new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;Warehouse &quot; + id + &quot; has no SKU &quot; + sku.toUpperCase(Locale.ROOT)));
+    }
+
+    private static final Logger log = LoggerFactory.getLogger(StockController.class);
+
+    private final StockSync sync;
+
+    StockController(StockSync sync) {
+        this.sync = sync;
+    }
+
+    /** PUT: the body is the warehouse&#x27;s count for these SKUs. Sending it twice leaves the same rows. */
+    @PutMapping(&quot;/warehouses/{id}/stock&quot;)
+    StockSync.Synced put(@PathVariable long id, @RequestParam(defaultValue = &quot;delta&quot;) Mode mode, @Valid @RequestBody Snapshot body) {
+        List&lt;StockSync.Item&gt; items = body.items().stream()
+                .map(l -&gt; new StockSync.Item(l.sku().toUpperCase(Locale.ROOT), l.quantity())).toList();
+        Set&lt;String&gt; seen = new HashSet&lt;&gt;();
+        for (StockSync.Item item : items) {
+            if (!seen.add(item.sku())) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, &quot;SKU &quot; + item.sku() + &quot; appears twice; which count is right?&quot;);
+            }
+        }
+        // InnoDB may still pick a sync as a deadlock victim (error 1213); the whole snapshot rolled back, so run it again.
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return mode == Mode.full ? sync.syncFull(id, items) : sync.sync(id, items);
+            } catch (PessimisticLockingFailureException e) {
+                log.warn(&quot;Stock sync of warehouse {} deadlocked (attempt {}): {}&quot;, id, attempt, e.getMostSpecificCause().getMessage());
+                if (attempt == 3) {
+                    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, &quot;Stock sync kept deadlocking; try again&quot;, e);
+                }
+            }
+        }
+    }
+}</code></pre></div><p class="path">challenge/solution/StockSync.java</p><div class="src"><pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Writes a warehouse&#x27;s stock snapshot with one MySQL upsert per chunk: no SELECT first, so there is no gap between
+ * &quot;not there&quot; and &quot;insert&quot; for another sync to fall into.
+ */
+@Service
+class StockSync {
+
+    record Item(String sku, int quantity) {
+    }
+
+    record Synced(long warehouseId, int syncedItems, long skusInWarehouse, int zeroedSkus) {
+    }
+
+    record Level(long warehouseId, String sku, int quantity) {
+    }
+
+    Optional&lt;Level&gt; level(long warehouseId, String sku) {
+        return jdbc.sql(&quot;SELECT warehouse_id, sku, quantity FROM stock_levels WHERE warehouse_id = ? AND sku = ?&quot;)
+                .params(warehouseId, sku).query(Level.class).optional();
+    }
+
+    /** Rows per statement. Each row is 3 parameters; 500 rows stays far below MySQL&#x27;s 65,535 placeholders. */
+    static final int CHUNK = 500;
+
+    private final JdbcClient jdbc;
+
+    StockSync(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    @Transactional
+    Synced sync(long warehouseId, List&lt;Item&gt; items) {
+        // One sync per warehouse at a time: a second one waits here, on one row, until the first commits. Without it,
+        // parallel syncs of one warehouse deadlocked often inside InnoDB; the retry in StockController covers the rare rest.
+        if (jdbc.sql(&quot;SELECT id FROM warehouses WHERE id = ? FOR UPDATE&quot;).param(warehouseId).query(Long.class).optional().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;No warehouse &quot; + warehouseId);
+        }
+        for (int from = 0; from &lt; items.size(); from += CHUNK) {
+            upsert(warehouseId, items.subList(from, Math.min(from + CHUNK, items.size())));
+        }
+        long skus = jdbc.sql(&quot;SELECT count(*) FROM stock_levels WHERE warehouse_id = ?&quot;).param(warehouseId).query(Long.class).single();
+        return new Synced(warehouseId, items.size(), skus, 0);
+    }
+
+    /** Challenge 2: the snapshot is everything on the shelves; SKUs it does not mention go to 0, in the same transaction. */
+    @Transactional
+    Synced syncFull(long warehouseId, List&lt;Item&gt; items) {
+        Synced synced = sync(warehouseId, items);   // joins this transaction; the warehouse row stays locked until commit
+        List&lt;Object&gt; params = new ArrayList&lt;&gt;(List.of(warehouseId));
+        items.forEach(item -&gt; params.add(item.sku()));
+        int zeroed = jdbc.sql(&quot;UPDATE stock_levels SET quantity = 0 WHERE warehouse_id = ? AND quantity &lt;&gt; 0 AND sku NOT IN (&quot;
+                + String.join(&quot;, &quot;, Collections.nCopies(items.size(), &quot;?&quot;)) + &quot;)&quot;).params(params).update();
+        return new Synced(warehouseId, items.size(), synced.skusInWarehouse(), zeroed);
+    }
+
+    private void upsert(long warehouseId, List&lt;Item&gt; chunk) {
+        // MySQL 8.0.19+ row alias; VALUES(quantity) in the update is deprecated.
+        String sql = &quot;INSERT INTO stock_levels (warehouse_id, sku, quantity) VALUES &quot;
+                + String.join(&quot;, &quot;, Collections.nCopies(chunk.size(), &quot;(?, ?, ?)&quot;))
+                + &quot; AS incoming ON DUPLICATE KEY UPDATE quantity = incoming.quantity&quot;;
+        List&lt;Object&gt; params = new ArrayList&lt;&gt;(chunk.size() * 3);
+        for (Item item : chunk) {
+            params.add(warehouseId);
+            params.add(item.sku());
+            params.add(item.quantity());
+        }
+        jdbc.sql(sql).params(params).update();
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 30 minutes</p><h2>A full stock-take</h2><p>Add <code>?mode=full</code>: the snapshot is everything on the shelves, so every SKU of that warehouse it does not list is set to 0 (kept, not deleted). The response gains <code>zeroedSkus</code>.</p><p><b>Done when:</b> both tests in <code>FullSnapshotChallengeTest</code> pass, and the station tests still do.</p><details class="qa"><summary>Hints</summary><ul><li>Zero in the same transaction as the upserts: a sync that fails halfway must not leave SKUs zeroed.</li><li><code>… WHERE warehouse_id = ? AND sku NOT IN (?, ?, …)</code>; the warehouse lock already keeps other syncs out.</li><li>Keep the existing <code>sync(id, items)</code> as it is; the contract tests stub it.</li></ul></details><p class="path">challenge/FullSnapshotChallengeTest.java</p><pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: PUT /warehouses/{id}/stock?mode=full says &quot;this is everything on the shelves&quot;: every SKU of that
+ * warehouse missing from the snapshot is set to 0 (kept, not deleted), and the response says how many with
+ * &quot;zeroedSkus&quot;. Without the parameter, the sync works as before. Other warehouses are never touched.
+ */
+class FullSnapshotChallengeTest extends ApiTest {
+
+    @Test
+    void aFullSnapshotZeroesWhatIsMissing() throws Exception {
+        sync(1, items(5, 9)).andExpect(status().isOk());
+        sync(2, items(5, 9)).andExpect(status().isOk());
+        mvc.perform(put(&quot;/warehouses/1/stock&quot;).param(&quot;mode&quot;, &quot;full&quot;).contentType(MediaType.APPLICATION_JSON)
+                        .content(&quot;{\&quot;items\&quot;:[{\&quot;sku\&quot;:\&quot;SKU-00001\&quot;,\&quot;quantity\&quot;:4},{\&quot;sku\&quot;:\&quot;SKU-00002\&quot;,\&quot;quantity\&quot;:6}]}&quot;))
+                .andExpect(status().isOk()).andExpect(jsonPath(&quot;$.zeroedSkus&quot;).value(3)).andExpect(jsonPath(&quot;$.skusInWarehouse&quot;).value(5));
+        assertThat(quantity(1, &quot;SKU-00001&quot;)).isEqualTo(4);
+        assertThat(quantity(1, &quot;SKU-00005&quot;)).isZero();
+        assertThat(quantity(2, &quot;SKU-00005&quot;)).isEqualTo(9);
+    }
+
+    @Test
+    void withoutTheModeMissingSkusAreLeftAlone() throws Exception {
+        sync(1, items(5, 9)).andExpect(status().isOk());
+        sync(1, &quot;[{\&quot;sku\&quot;:\&quot;SKU-00001\&quot;,\&quot;quantity\&quot;:4}]&quot;).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.zeroedSkus&quot;).value(0));
+        assertThat(quantity(1, &quot;SKU-00005&quot;)).isEqualTo(9);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/StockSync.java</p><div class="src"><pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Writes a warehouse&#x27;s stock snapshot with one MySQL upsert per chunk: no SELECT first, so there is no gap between
+ * &quot;not there&quot; and &quot;insert&quot; for another sync to fall into.
+ */
+@Service
+class StockSync {
+
+    record Item(String sku, int quantity) {
+    }
+
+    record Synced(long warehouseId, int syncedItems, long skusInWarehouse, int zeroedSkus) {
+    }
+
+    record Level(long warehouseId, String sku, int quantity) {
+    }
+
+    Optional&lt;Level&gt; level(long warehouseId, String sku) {
+        return jdbc.sql(&quot;SELECT warehouse_id, sku, quantity FROM stock_levels WHERE warehouse_id = ? AND sku = ?&quot;)
+                .params(warehouseId, sku).query(Level.class).optional();
+    }
+
+    /** Rows per statement. Each row is 3 parameters; 500 rows stays far below MySQL&#x27;s 65,535 placeholders. */
+    static final int CHUNK = 500;
+
+    private final JdbcClient jdbc;
+
+    StockSync(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    @Transactional
+    Synced sync(long warehouseId, List&lt;Item&gt; items) {
+        // One sync per warehouse at a time: a second one waits here, on one row, until the first commits. Without it,
+        // parallel syncs of one warehouse deadlocked often inside InnoDB; the retry in StockController covers the rare rest.
+        if (jdbc.sql(&quot;SELECT id FROM warehouses WHERE id = ? FOR UPDATE&quot;).param(warehouseId).query(Long.class).optional().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;No warehouse &quot; + warehouseId);
+        }
+        for (int from = 0; from &lt; items.size(); from += CHUNK) {
+            upsert(warehouseId, items.subList(from, Math.min(from + CHUNK, items.size())));
+        }
+        long skus = jdbc.sql(&quot;SELECT count(*) FROM stock_levels WHERE warehouse_id = ?&quot;).param(warehouseId).query(Long.class).single();
+        return new Synced(warehouseId, items.size(), skus, 0);
+    }
+
+    /** Challenge 2: the snapshot is everything on the shelves; SKUs it does not mention go to 0, in the same transaction. */
+    @Transactional
+    Synced syncFull(long warehouseId, List&lt;Item&gt; items) {
+        Synced synced = sync(warehouseId, items);   // joins this transaction; the warehouse row stays locked until commit
+        List&lt;Object&gt; params = new ArrayList&lt;&gt;(List.of(warehouseId));
+        items.forEach(item -&gt; params.add(item.sku()));
+        int zeroed = jdbc.sql(&quot;UPDATE stock_levels SET quantity = 0 WHERE warehouse_id = ? AND quantity &lt;&gt; 0 AND sku NOT IN (&quot;
+                + String.join(&quot;, &quot;, Collections.nCopies(items.size(), &quot;?&quot;)) + &quot;)&quot;).params(params).update();
+        return new Synced(warehouseId, items.size(), synced.skusInWarehouse(), zeroed);
+    }
+
+    private void upsert(long warehouseId, List&lt;Item&gt; chunk) {
+        // MySQL 8.0.19+ row alias; VALUES(quantity) in the update is deprecated.
+        String sql = &quot;INSERT INTO stock_levels (warehouse_id, sku, quantity) VALUES &quot;
+                + String.join(&quot;, &quot;, Collections.nCopies(chunk.size(), &quot;(?, ?, ?)&quot;))
+                + &quot; AS incoming ON DUPLICATE KEY UPDATE quantity = incoming.quantity&quot;;
+        List&lt;Object&gt; params = new ArrayList&lt;&gt;(chunk.size() * 3);
+        for (Item item : chunk) {
+            params.add(warehouseId);
+            params.add(item.sku());
+            params.add(item.quantity());
+        }
+        jdbc.sql(sql).params(params).update();
+    }
+}</code></pre></div><p class="path">challenge/solution/StockController.java</p><div class="src"><pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
+@RestController
+class StockController {
+
+    /** Demo limits: up to 1,000 SKUs per call, up to 1,000,000 units each. */
+    record Line(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,30}&quot;) String sku, @NotNull @Min(0) @Max(1_000_000) Integer quantity) {
+    }
+
+    record Snapshot(@NotNull @Size(min = 1, max = 1000) List&lt;@NotNull @Valid Line&gt; items) {
+    }
+
+    enum Mode { delta, full }
+
+    @GetMapping(&quot;/warehouses/{id}/stock/{sku}&quot;)
+    StockSync.Level get(@PathVariable long id, @PathVariable String sku) {
+        return sync.level(id, sku.toUpperCase(Locale.ROOT))
+                .orElseThrow(() -&gt; new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;Warehouse &quot; + id + &quot; has no SKU &quot; + sku.toUpperCase(Locale.ROOT)));
+    }
+
+    private static final Logger log = LoggerFactory.getLogger(StockController.class);
+
+    private final StockSync sync;
+
+    StockController(StockSync sync) {
+        this.sync = sync;
+    }
+
+    /** PUT: the body is the warehouse&#x27;s count for these SKUs. Sending it twice leaves the same rows. */
+    @PutMapping(&quot;/warehouses/{id}/stock&quot;)
+    StockSync.Synced put(@PathVariable long id, @RequestParam(defaultValue = &quot;delta&quot;) Mode mode, @Valid @RequestBody Snapshot body) {
+        List&lt;StockSync.Item&gt; items = body.items().stream()
+                .map(l -&gt; new StockSync.Item(l.sku().toUpperCase(Locale.ROOT), l.quantity())).toList();
+        Set&lt;String&gt; seen = new HashSet&lt;&gt;();
+        for (StockSync.Item item : items) {
+            if (!seen.add(item.sku())) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT, &quot;SKU &quot; + item.sku() + &quot; appears twice; which count is right?&quot;);
+            }
+        }
+        // InnoDB may still pick a sync as a deadlock victim (error 1213); the whole snapshot rolled back, so run it again.
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return mode == Mode.full ? sync.syncFull(id, items) : sync.sync(id, items);
+            } catch (PessimisticLockingFailureException e) {
+                log.warn(&quot;Stock sync of warehouse {} deadlocked (attempt {}): {}&quot;, id, attempt, e.getMostSpecificCause().getMessage());
+                if (attempt == 3) {
+                    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, &quot;Stock sync kept deadlocking; try again&quot;, e);
+                }
+            }
+        }
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>The same sync on PostgreSQL</h2>
+<p>Basketo's new region runs PostgreSQL. Write the upsert with <code>INSERT … ON CONFLICT (warehouse_id, sku) DO UPDATE SET quantity = EXCLUDED.quantity</code>. Then answer: what does each database do when one statement holds the same SKU twice? (PostgreSQL refuses: "ON CONFLICT DO UPDATE command cannot affect row a second time"; MySQL applies both.) Which other unique keys could fire MySQL's update but not PostgreSQL's? Does the warehouse lock still make sense?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: both old versions, step by step on two connections.</li>
+<li>Add the unique key, and write the multi-row upsert against it.</li>
+<li>Put the snapshot in one transaction, in chunks of 500.</li>
+<li>Run real parallel syncs; handle what they show (here: deadlocks, below).</li>
+</ol>
+<h2>Why the upsert was not the end</h2>
+<p>With the upsert alone, ten parallel syncs (five per warehouse, the same 200 new SKUs) deadlocked inside InnoDB about 20 times per test run while building this station, and once a request lost all three attempts. Several syncs of the <em>same</em> warehouse were taking row and gap locks on the same new keys in a different order. Locking the warehouse row first (<code>SELECT … FOR UPDATE</code> on one existing row: no gap) makes syncs of one warehouse take turns. Afterwards a run showed 0 or 1 deadlocks, between the two warehouses; the retry covers those. The lock is a reduction, not a guarantee: InnoDB may always choose a victim, which is why the retry stays.</p>
+<h2>Where MySQL and PostgreSQL differ</h2>
+<div class="scroll"><table class=""><thead><tr><th></th><th>MySQL 8.4</th><th>PostgreSQL 17</th></tr></thead><tbody><tr><td>Syntax</td><td><code>INSERT … AS incoming ON DUPLICATE KEY UPDATE q = incoming.q</code></td><td><code>INSERT … ON CONFLICT (warehouse_id, sku) DO UPDATE SET q = EXCLUDED.q</code></td></tr><tr><td>Which key</td><td>Any unique key or the primary key that clashes</td><td>The one you name (or a named constraint)</td></tr><tr><td>Same key twice in one statement</td><td>Both applied, in order</td><td>Error: cannot affect row a second time</td></tr><tr><td>Affected rows</td><td>1 inserted, 2 updated, 0 unchanged</td><td>1 per row inserted or updated</td></tr><tr><td>Get the row back</td><td><code>LAST_INSERT_ID()</code> tricks</td><td><code>RETURNING</code></td></tr></tbody></table></div>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Unique key + multi-row upsert + warehouse lock + retry</td><td>MySQL-specific SQL; syncs of one warehouse take turns.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Select, then insert</td><td>Duplicates under concurrency.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Select <code>FOR UPDATE</code>, then insert</td><td>Gap-lock deadlocks, even between warehouses.</td><td><span class="pill bad">The trap, version 2</span></td></tr><tr><td>Insert, catch the duplicate, then update</td><td>Two statements per SKU, and an error per known SKU.</td><td><span class="pill warn">Works, slowly</span></td></tr><tr><td><code>READ COMMITTED</code> isolation</td><td>No gap locks for searches; select-then-insert then fails on the unique key instead.</td><td><span class="pill warn">Moves the problem</span></td></tr><tr><td>Load into a staging table, then one <code>INSERT … SELECT … ON DUPLICATE KEY UPDATE</code></td><td>An extra table; best for very large snapshots.</td><td><span class="pill warn">Valid at scale</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Table</th><th>Constraints</th><th>Why</th></tr></thead><tbody><tr><td><code>warehouses</code></td><td>PK</td><td>What can sync; its row is the per-warehouse lock.</td></tr><tr><td><code>stock_levels</code></td><td><code>stock_levels_warehouse_sku</code> (UNIQUE), <code>stock_levels_warehouse_fk</code>, <code>stock_levels_quantity_range</code>, <code>stock_levels_sku_shape</code></td><td>One row per SKU per warehouse; the key the upsert relies on.</td></tr></tbody></table></div>
+<p><strong>Transaction boundary:</strong> one snapshot, from the warehouse lock to the last chunk. A retry starts it again from the top.</p>
+<pre class="code"><code class="language-sql">CREATE TABLE warehouses (
+    id   BIGINT       NOT NULL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE stock_levels (
+    id           BIGINT      NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    warehouse_id BIGINT      NOT NULL,
+    sku          VARCHAR(30) NOT NULL,
+    quantity     INT         NOT NULL,
+    updated_at   TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    -- The rule the old sync only checked in Java: one row per SKU per warehouse. ON DUPLICATE KEY UPDATE needs it.
+    CONSTRAINT stock_levels_warehouse_sku UNIQUE (warehouse_id, sku),
+    CONSTRAINT stock_levels_warehouse_fk FOREIGN KEY (warehouse_id) REFERENCES warehouses (id),
+    CONSTRAINT stock_levels_quantity_range CHECK (quantity BETWEEN 0 AND 1000000),
+    CONSTRAINT stock_levels_sku_shape CHECK (REGEXP_LIKE(sku, &#x27;^[A-Z0-9-]{3,30}$&#x27;, &#x27;c&#x27;))
+);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Count the deadlocks</dt><dd>The app logs each one. A few a night are normal for InnoDB; a rising count means more writers on the same rows.</dd>
+<dt>Lock wait timeout</dt><dd>A sync waiting for another sync of the same warehouse waits up to <code>innodb_lock_wait_timeout</code> (50 s by default). A huge snapshot can make the next one time out.</dd>
+<dt>Snapshot size</dt><dd>1000 SKUs per call is a demo rule. Larger warehouses send several calls; each is its own transaction.</dd>
+<dt>Counts are not stock</dt><dd>Orders placed between the count and the sync are lost if the count simply overwrites. Real systems store counts with a time and apply orders after it.</dd>
+<dt>Replication</dt><dd><code>ON DUPLICATE KEY UPDATE</code> on a table with more than one unique key is flagged unsafe for statement-based replication; row-based (the MySQL 8 default) is fine.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>Why does select-then-insert create duplicates?</summary><p>Two transactions can both look before either inserts. Without a unique key, both inserts succeed. Only a constraint decides between them.</p></details><details class="qa"><summary>What is a gap lock?</summary><p>In REPEATABLE READ, InnoDB locks the space between index records that a search covered, so no one can insert there. Locking a row that does not exist locks a gap.</p></details><details class="qa"><summary>Why did SELECT … FOR UPDATE deadlock two warehouses?</summary><p>Both locked the same gap (gap locks do not conflict with each other), then both inserted into it, which needs the other&#x27;s gap lock released. A cycle: InnoDB kills one with error 1213.</p></details><details class="qa"><summary>How does ON DUPLICATE KEY UPDATE decide to update?</summary><p>When the insert clashes with any unique key or the primary key. With no unique key it never fires, and simply inserts.</p></details><details class="qa"><summary>How do you retry a deadlock correctly?</summary><p>The victim&#x27;s whole transaction was rolled back, so retry the whole transaction, a bounded number of times, and log it.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 18 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>SQL</td><td>A multi-row upsert with a row alias.</td><td>The PostgreSQL version, and where it behaves differently.</td></tr><tr><td>Concurrency</td><td>Why select-then-insert fails, both ways.</td><td>Why the warehouse lock reduces deadlocks but the retry stays.</td></tr><tr><td>Transactions</td><td>One snapshot, one transaction.</td><td>What a retry must start from.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate tidies the sync: "the foreign key already checks the warehouse", "SKUs exactly as printed on the label", and the upsert now adds, "like a delivery". Read the two files and list every problem before opening the findings.</p>
+<p class="path">review/StockController.java</p>
+<pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+
+@RestController
+class StockController {
+
+    /** Demo limits: up to 1,000 SKUs per call, up to 1,000,000 units each. */
+    record Line(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,30}&quot;) String sku, @NotNull @Min(0) @Max(1_000_000) Integer quantity) {
+    }
+
+    record Snapshot(@NotNull @Size(min = 1, max = 1000) List&lt;@NotNull @Valid Line&gt; items) {
+    }
+
+    private static final Logger log = LoggerFactory.getLogger(StockController.class);
+
+    private final StockSync sync;
+
+    StockController(StockSync sync) {
+        this.sync = sync;
+    }
+
+    /** PUT: the body is the warehouse&#x27;s count for these SKUs. Sending it twice leaves the same rows. */
+    @PutMapping(&quot;/warehouses/{id}/stock&quot;)
+    StockSync.Synced put(@PathVariable long id, @Valid @RequestBody Snapshot body) {
+        // Warehouses send SKUs exactly as printed on the label; keep them as sent.
+        List&lt;StockSync.Item&gt; items = body.items().stream().map(l -&gt; new StockSync.Item(l.sku(), l.quantity())).toList();
+        // InnoDB may still pick a sync as a deadlock victim (error 1213); the whole snapshot rolled back, so run it again.
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return sync.sync(id, items);
+            } catch (PessimisticLockingFailureException e) {
+                log.warn(&quot;Stock sync of warehouse {} deadlocked (attempt {}): {}&quot;, id, attempt, e.getMostSpecificCause().getMessage());
+                if (attempt == 3) {
+                    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, &quot;Stock sync kept deadlocking; try again&quot;, e);
+                }
+            }
+        }
+    }
+}</code></pre>
+<p class="path">review/StockSync.java</p>
+<pre class="code"><code class="language-java">package com.basketo.inventory;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * Writes a warehouse&#x27;s stock snapshot with one MySQL upsert per chunk: no SELECT first, so there is no gap between
+ * &quot;not there&quot; and &quot;insert&quot; for another sync to fall into.
+ */
+@Service
+class StockSync {
+
+    record Item(String sku, int quantity) {
+    }
+
+    record Synced(long warehouseId, int syncedItems, long skusInWarehouse) {
+    }
+
+    /** Rows per statement. Each row is 3 parameters; 500 rows stays far below MySQL&#x27;s 65,535 placeholders. */
+    static final int CHUNK = 500;
+
+    private final JdbcClient jdbc;
+
+    StockSync(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    @Transactional
+    Synced sync(long warehouseId, List&lt;Item&gt; items) {
+        // The foreign key already checks the warehouse; no need for an extra query.
+        for (int from = 0; from &lt; items.size(); from += CHUNK) {
+            upsert(warehouseId, items.subList(from, Math.min(from + CHUNK, items.size())));
+        }
+        long skus = jdbc.sql(&quot;SELECT count(*) FROM stock_levels WHERE warehouse_id = ?&quot;).param(warehouseId).query(Long.class).single();
+        return new Synced(warehouseId, items.size(), skus);
+    }
+
+    private void upsert(long warehouseId, List&lt;Item&gt; chunk) {
+        // A delivery adds to what is on the shelf.
+        String sql = &quot;INSERT INTO stock_levels (warehouse_id, sku, quantity) VALUES &quot;
+                + String.join(&quot;, &quot;, Collections.nCopies(chunk.size(), &quot;(?, ?, ?)&quot;))
+                + &quot; AS incoming ON DUPLICATE KEY UPDATE quantity = stock_levels.quantity + incoming.quantity&quot;;
+        List&lt;Object&gt; params = new ArrayList&lt;&gt;(chunk.size() * 3);
+        for (Item item : chunk) {
+            params.add(warehouseId);
+            params.add(item.sku());
+            params.add(item.quantity());
+        }
+        jdbc.sql(sql).params(params).update();
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>The upsert adds the count</summary><p>"A delivery adds to what is on the shelf" is true for deliveries, not for a stock-take. Every resync doubles the stock.</p><p class="evidence"><b>Test evidence:</b> <code>aSnapshotSetsTheCountsAndTheNextOneOverwritesThem</code>, <code>theSameSnapshotTwiceLeavesTheSameRows</code>, <code>anUpsertUpdatesTheRowInPlace</code> and <code>parallelSnapshotsOfOneWarehouseLeaveOneWholeSnapshot</code> fail.</p></details><details class="finding"><summary><span class="sev">2</span>The same SKU twice is accepted</summary><p>MySQL applies both rows of one statement, so with finding 1 the two counts are summed; without it, the last one wins silently.</p><p class="evidence"><b>Test evidence:</b> <code>theSameSkuTwiceIs422EvenInDifferentCase</code> fails.</p></details><details class="finding"><summary><span class="sev">3</span>No warehouse check</summary><p>"The foreign key already checks it": it does, as a <code>500</code> with a constraint message instead of a <code>404</code>. The check was also the per-warehouse lock.</p><p class="evidence"><b>Test evidence:</b> <code>anUnknownWarehouseIs404</code> fails.</p></details><details class="finding"><summary><span class="sev">4</span>SKUs kept as sent</summary><p><code>dal-1kg</code> and <code>DAL-1KG</code> become two products, and the database's <code>stock_levels_sku_shape</code> refuses lower case anyway: a <code>500</code>.</p><p class="evidence"><b>Test evidence:</b> <code>skusAreUpperCasedTheSameWayInEveryLocale</code> fails.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the two flawed files copied over the real ones, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>SelectThenInsertTrapTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill ok">3 / 3</span></td></tr><tr><td><code>StockConcurrencyTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">1 / 2</span></td></tr><tr><td><code>StockContractTest</code></td><td><span class="pill ok">9 / 9</span></td><td><span class="pill bad">4 / 9</span></td></tr><tr><td><code>StockDatabaseTest</code></td><td><span class="pill ok">4 / 4</span></td><td><span class="pill bad">3 / 4</span></td></tr></tbody></table></div>
+<p class="note">No duplicate row got through: the unique key held. What the flaws broke is what the numbers mean, which no constraint can check for you.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
