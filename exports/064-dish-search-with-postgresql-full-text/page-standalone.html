@@ -1,0 +1,1241 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 064 · Dish search with PostgreSQL full-text</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 064</span>
+    <h1>Dish search with PostgreSQL full-text</h1>
+    <p class="scenario">Searching &#x27;paneer tikka&#x27; misses &#x27;Paneer Tikka Masala&#x27; and LIKE &#x27;%...%&#x27; scans 3 million dishes.</p>
+    <p class="sim"><b>Simulation</b><span>Dishes, restaurants and prices are demo data (200,008 rows), not Tiffino's. Nothing is ordered.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Food delivery</li>
+      <li><b>Types</b>Database</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>062 Shipment search by phone number</p>
+      <p><span class="eyebrow">Builds toward</span><br>151 Product search with OpenSearch</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · JdbcClient · PostgreSQL 17 full-text search (tsvector, websearch_to_tsquery, ts_rank) · GIN index · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>A hungry customer</strong><p>Types "paneer tikka". The menu has "Paneer Tikka Masala".</p></li><li><strong>Nothing found, slowly</strong><p>The search compared characters: lower-case "paneer" is not "Paneer", "dosas" is not "Dosa", and descriptions were never looked at. And <code>LIKE '%…%'</code> reads every dish's name to find the few that match.</p></li><li><strong>The fix</strong><p>Store each dish's words, normalised, in a <code>tsvector</code> kept by PostgreSQL; search words with a GIN index; rank name matches first.</p></li></ol>
+<p class="lesson">People search with words. Match words, not characters, and let an index find them.</p>
+
+<h2>What are we building?</h2>
+<p><code>GET /dishes/search?q=paneer tikka&amp;city=pune</code>: up to 20 dishes that contain those words, best matches first.</p>
+
+<h2>An everyday analogy</h2>
+<p>A cookbook's index. You look up "paneer" and get page numbers, instead of reading every recipe. The index lists "dosa" once for "dosa" and "dosas", and ignores "the" and "with".</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>When a dish is saved</strong>, PostgreSQL turns its name and description into words: "Paneer Tikka Masala" → paneer, tikka, masala.</li>
+<li><strong>When someone searches</strong>, their text becomes words the same way: "TIKKAS paneer" → tikka AND paneer.</li>
+<li><strong>The GIN index</strong> finds the dishes with all those words.</li>
+<li><strong>Ranking</strong> puts dishes with the words in their name before those with them only in the description.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: someone types "panner". What does full-text search return?</summary><p>Nothing: "panner" is not a word in any dish, and full-text search does not guess spellings. That is a real limit, tested on purpose; Practice 2 adds "did you mean" with trigrams.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No typo tolerance.</strong> Practice 2; a search engine does it better.</li>
+<li><strong>No Hindi or Marathi.</strong> One language configuration, English.</li>
+<li><strong>No ordering.</strong> Dishes are read only.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Full-text search</strong></td><td>Searching by words, not by exact characters.</td><td>Asking a waiter for "something with paneer".</td><td>this station</td></tr><tr><td><strong>tsvector</strong></td><td>A row's text as a sorted list of normalised words (lexemes).</td><td>The index at the back of a cookbook.</td><td>the <code>search</code> column</td></tr><tr><td><strong>tsquery</strong></td><td>The words being searched for, with AND, OR, NOT.</td><td>"Paneer and tikka, not Mysore."</td><td><code>websearch_to_tsquery</code></td></tr><tr><td><strong>Stemming</strong></td><td>Reducing words to a common root.</td><td>dosas, dosa → dosa.</td><td>the <code>english</code> configuration</td></tr><tr><td><strong>GIN index</strong></td><td>For each word, the list of rows containing it.</td><td>The cookbook index: paneer → pages 12, 40, 77.</td><td><code>dishes_search</code></td></tr><tr><td><strong>Ranking</strong></td><td>Ordering matches by how well they match.</td><td>A dish named "Paneer Tikka" before one that mentions it.</td><td><code>ts_rank</code> with weights A and B</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Tiffino</strong> (a fictional food delivery app) has 3 million dishes. Its search missed obvious matches and scanned every dish.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo data: 7 Pune dishes and 1 Mumbai dish written out, 200,000 generated ones that never mention paneer, tikka or dosa.</p>
+<ol class="gwt">
+<li><b>Given</b> "paneer tikka" in Pune, <b>then</b> the three dishes with both words in the name, then Butter Chicken, whose description mentions paneer tikka.</li>
+<li><b>Given</b> "TIKKAS PANEER", <b>then</b> the same four; "dosas" finds both dosas.</li>
+<li><b>Given</b> <code>"masala dosa" -mysore</code>, <b>then</b> only Masala Dosa.</li>
+<li><b>Given</b> characters such as <code>&amp; | ! ( :*</code>, <b>then</b> they are ignored, never a <code>500</code>.</li>
+<li><b>Given</b> only stop words, a typo, or another city, <b>then</b> an empty list.</li>
+<li><b>Given</b> q shorter than 2 or longer than 100, or no city, <b>then</b> <code>400</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>The search vector is kept by the database (a generated column), never by app code.</li>
+<li>User text goes through <code>websearch_to_tsquery</code>, never <code>to_tsquery</code>.</li>
+<li>The search uses the GIN index; checked with EXPLAIN in a test.</li>
+<li>Name matches rank above description matches.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Build a weighted <code>tsvector</code> as a generated column.</li>
+<li>Choose between <code>to_tsquery</code>, <code>plainto_tsquery</code> and <code>websearch_to_tsquery</code>.</li>
+<li>Index it with GIN and rank with <code>ts_rank</code>.</li>
+<li>Know what full-text search does not do.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/dishes/search?q=…&amp;city=…</code></td><td><code>{q, city, dishes: [{id, name, restaurant, pricePaise}]}</code>, at most 20, best first.</td></tr></tbody></table></div>
+<p>The search text understands what people already type into search boxes: words (all must match), <code>"exact phrase"</code>, <code>-word</code> to exclude, and <code>or</code>.</p>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>Results, possibly an empty list</td></tr><tr><td><span class="pill warn">400</span></td><td>q missing, under 2 or over 100 characters; city missing or not 3 to 30 letters</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 16 Oct 2026. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: paneer tikka</h3><p><b>Why:</b> both words anywhere in the name or description; Butter Chicken last, a description match.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /dishes/search HTTP/1.1
+
+city=pune</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 383
+
+{
+  &quot;q&quot;: &quot;paneer tikka&quot;,
+  &quot;city&quot;: &quot;pune&quot;,
+  &quot;dishes&quot;: [
+    {
+      &quot;id&quot;: 4,
+      &quot;name&quot;: &quot;Tandoori Paneer Tikka Roll&quot;,
+      &quot;restaurant&quot;: &quot;Tandoor Express&quot;,
+      &quot;pricePaise&quot;: 18000
+    },
+    {
+      &quot;id&quot;: 1,
+      &quot;name&quot;: &quot;Paneer Tikka Masala&quot;,
+      &quot;restaurant&quot;: &quot;Punjab Grill&quot;,
+      &quot;pricePaise&quot;: 32000
+    },
+    {
+      &quot;id&quot;: 2,
+      &quot;name&quot;: &quot;Paneer Tikka&quot;,
+      &quot;restaurant&quot;: &quot;Punjab Grill&quot;,
+      &quot;pricePaise&quot;: 28000
+    },
+    {
+      &quot;id&quot;: 3,
+      &quot;name&quot;: &quot;Butter Chicken&quot;,
+      &quot;restaurant&quot;: &quot;Punjab Grill&quot;,
+      &quot;pricePaise&quot;: 34000
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 2: DOSAS in Pune</h3><p><b>Why:</b> case and plural do not matter.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /dishes/search HTTP/1.1
+
+city=Pune</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 191
+
+{
+  &quot;q&quot;: &quot;DOSAS&quot;,
+  &quot;city&quot;: &quot;pune&quot;,
+  &quot;dishes&quot;: [
+    {
+      &quot;id&quot;: 5,
+      &quot;name&quot;: &quot;Masala Dosa&quot;,
+      &quot;restaurant&quot;: &quot;Vaishali&quot;,
+      &quot;pricePaise&quot;: 12000
+    },
+    {
+      &quot;id&quot;: 6,
+      &quot;name&quot;: &quot;Mysore Masala Dosa&quot;,
+      &quot;restaurant&quot;: &quot;Vaishali&quot;,
+      &quot;pricePaise&quot;: 14000
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 3: <code>"masala dosa" -mysore</code></h3><p><b>Why:</b> search-box syntax.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /dishes/search HTTP/1.1
+
+city=pune</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 129
+
+{
+  &quot;q&quot;: &quot;\&quot;masala dosa\&quot; -mysore&quot;,
+  &quot;city&quot;: &quot;pune&quot;,
+  &quot;dishes&quot;: [
+    {
+      &quot;id&quot;: 5,
+      &quot;name&quot;: &quot;Masala Dosa&quot;,
+      &quot;restaurant&quot;: &quot;Vaishali&quot;,
+      &quot;pricePaise&quot;: 12000
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 4: panner</h3><p><b>Why:</b> empty: full-text matches words, not spellings.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /dishes/search HTTP/1.1
+
+city=pune</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 40
+
+{
+  &quot;q&quot;: &quot;panner&quot;,
+  &quot;city&quot;: &quot;pune&quot;,
+  &quot;dishes&quot;: []
+}</code></pre></div></div></section><section class="example"><h3>Case 5: p</h3><p><b>Why:</b> <code>400</code>; one letter is not a search.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /dishes/search HTTP/1.1
+
+city=pune</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Validation failure&quot;,
+  &quot;instance&quot;: &quot;/dishes/search&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section>
+<h2>What PostgreSQL does to the words</h2>
+<p class="muted">Asked directly in <code>psql</code> (<code>docs/captures/words.txt</code>).</p>
+<pre class="code"><code class="language-text">                      stored                      |      searched      |             syntax             
+--------------------------------------------------+--------------------+--------------------------------
+ &#x27;dosa&#x27;:5 &#x27;masala&#x27;:3 &#x27;paneer&#x27;:1 &#x27;tikka&#x27;:2 &#x27;two&#x27;:4 | &#x27;tikka&#x27; &amp; &#x27;paneer&#x27; | &#x27;masala&#x27; &lt;-&gt; &#x27;dosa&#x27; &amp; !&#x27;mysor&#x27;
+(1 row)</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>Both words, in name or description</td><td>Name matches first</td><td><code>paneerTikkaFindsEveryDishWithBothWordsNameMatchesFirst</code></td></tr><tr><td>Capitals, other word order, plurals</td><td>Same results</td><td><code>caseWordOrderAndPluralsDoNotMatter</code></td></tr><tr><td>Phrases, exclusions, or</td><td>Understood</td><td><code>searchSyntaxPeopleAlreadyKnow</code></td></tr><tr><td><code>&amp; | ! ( :*</code></td><td>Ignored, not a 500</td><td><code>oddCharactersAreSearchedNotParsed</code></td></tr><tr><td>Stop words only; another city</td><td>Empty</td><td><code>noMatchIsAnEmptyList</code></td></tr><tr><td>A typo</td><td>Empty: the limit</td><td><code>aTypoFindsNothingThatIsTheLimit</code></td></tr><tr><td>Writing the search column directly; renaming a dish</td><td>Refused; the words follow the name</td><td><code>theSearchColumnIsKeptByTheDatabaseNotByTheApp</code></td></tr><tr><td>Bad rows; a half-added menu</td><td>Refused; rolled back</td><td><code>DishDatabaseTest</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead"><code>LIKE '%term%'</code> that cannot use an index and misses word forms.</p>
+<p>The old query is kept in the test: <code>name LIKE '%' || :q || '%'</code>.</p>
+<ul>
+<li><strong>Misses.</strong> "paneer tikka" finds nothing (the menu says "Paneer"); "Paneer Tikka" misses Butter Chicken (descriptions were never searched); "Tikka Paneer" and "Masala Dosas" find nothing.</li>
+<li><strong>Reads.</strong> A B-tree is sorted from the first character; <code>'%Paneer%'</code> has no first character to start from. PostgreSQL narrowed by city, then read every Pune dish's name: 4823 pages. The full-text search read 69.</li>
+<li><strong>The first fix that breaks.</strong> <code>to_tsquery</code> expects its own syntax: <code>to_tsquery('english', 'paneer tikka')</code> is "syntax error in tsquery", a <code>500</code> for an ordinary search. <code>websearch_to_tsquery</code> never fails on what people type.</li>
+</ul>
+<p>While building, each fix was undone once: <code>to_tsquery</code> turned 6 tests red; the name alone in the vector 4; the <code>simple</code> configuration (no stemming) 3; no ranking 2; no GIN index 1; <code>plainto_tsquery</code> 1 (no phrases or exclusions); no lower-casing of the city 1.</p>
+</div>
+<pre class="code"><code class="language-text">                                   QUERY PLAN                                   
+--------------------------------------------------------------------------------
+ Limit (actual rows=3 loops=1)
+   Buffers: shared hit=4823
+   -&gt;  Sort (actual rows=3 loops=1)
+         Sort Key: id
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=4823
+         -&gt;  Bitmap Heap Scan on dishes (actual rows=3 loops=1)
+               Recheck Cond: ((city)::text = &#x27;pune&#x27;::text)
+               Filter: ((name)::text ~~ &#x27;%Paneer%&#x27;::text)
+               Rows Removed by Filter: 66670
+               Heap Blocks: exact=4762
+               Buffers: shared hit=4820
+               -&gt;  Bitmap Index Scan on dishes_city (actual rows=66673 loops=1)
+                     Index Cond: ((city)::text = &#x27;pune&#x27;::text)
+                     Buffers: shared hit=58
+ Planning:
+   Buffers: shared hit=118
+(17 rows)</code></pre><pre class="code"><code class="language-text">                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
+ Limit (actual rows=4 loops=1)
+   Buffers: shared hit=69
+   -&gt;  Sort (actual rows=4 loops=1)
+         Sort Key: (ts_rank(dishes.search, &#x27;&#x27;&#x27;paneer&#x27;&#x27;&#x27;::tsquery)) DESC, dishes.id
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=69
+         -&gt;  Bitmap Heap Scan on dishes (actual rows=4 loops=1)
+               Recheck Cond: ((search @@ &#x27;&#x27;&#x27;paneer&#x27;&#x27;&#x27;::tsquery) AND ((city)::text = &#x27;pune&#x27;::text))
+               Heap Blocks: exact=1
+               Buffers: shared hit=63
+               -&gt;  BitmapAnd (actual rows=0 loops=1)
+                     Buffers: shared hit=62
+                     -&gt;  Bitmap Index Scan on dishes_search (actual rows=5 loops=1)
+                           Index Cond: (search @@ &#x27;&#x27;&#x27;paneer&#x27;&#x27;&#x27;::tsquery)
+                           Buffers: shared hit=4
+                     -&gt;  Bitmap Index Scan on dishes_city (actual rows=66673 loops=1)
+                           Index Cond: ((city)::text = &#x27;pune&#x27;::text)
+                           Buffers: shared hit=58
+ Planning:
+   Buffers: shared hit=161
+(20 rows)</code></pre><pre class="code"><code class="language-java">package com.tiffino.dishes;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** Written first. The old LIKE search on the same 200,008 dishes: what it misses, and what it reads. */
+class LikeSearchTrapTest extends ApiTest {
+
+    static final String OLD = &quot;SELECT name FROM dishes WHERE city = :city AND name LIKE &#x27;%&#x27; || :q || &#x27;%&#x27; ORDER BY id LIMIT 20&quot;;
+
+    private List&lt;String&gt; old(String q) {
+        return jdbc.sql(OLD).param(&quot;q&quot;, q).param(&quot;city&quot;, &quot;pune&quot;).query(String.class).list();
+    }
+
+    @Test
+    void likeMissesCaseWordOrderPluralsAndDescriptions() {
+        assertThat(old(&quot;paneer tikka&quot;)).isEmpty();                                    // the menu says &quot;Paneer&quot;
+        assertThat(old(&quot;Paneer Tikka&quot;)).containsExactly(&quot;Paneer Tikka Masala&quot;, &quot;Paneer Tikka&quot;, &quot;Tandoori Paneer Tikka Roll&quot;);   // not Butter Chicken
+        assertThat(old(&quot;Tikka Paneer&quot;)).isEmpty();
+        assertThat(old(&quot;Masala Dosas&quot;)).isEmpty();
+        assertThat(new DishSearchProbe(jdbc).names(&quot;paneer tikka&quot;)).hasSize(4);
+        assertThat(new DishSearchProbe(jdbc).names(&quot;Masala Dosas&quot;)).hasSize(2);
+    }
+
+    @Test
+    void likeWithALeadingWildcardReadsEveryDishInTheCityTheGinIndexReadsAFew() {
+        Plan like = explain(OLD, Map.of(&quot;q&quot;, &quot;Paneer&quot;, &quot;city&quot;, &quot;pune&quot;));   // the old query exactly, spelled as the menu does
+        Plan fullText = explain(DishSearch.SQL, Map.of(&quot;q&quot;, &quot;paneer&quot;, &quot;city&quot;, &quot;pune&quot;));
+        assertThat(like.indexes()).doesNotContain(&quot;dishes_search&quot;);   // at best it narrows by city, then reads the name of every Pune dish
+        assertThat(fullText.indexes()).contains(&quot;dishes_search&quot;);
+        assertThat(like.pages()).isGreaterThan(20 * fullText.pages());
+    }
+
+    @Test
+    void toTsqueryOnWhatPeopleTypeIsASyntaxError() {
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;SELECT to_tsquery(&#x27;english&#x27;, :q)&quot;).param(&quot;q&quot;, &quot;paneer tikka&quot;).query(String.class).single())
+                .rootCause().hasMessageContaining(&quot;syntax error in tsquery&quot;);
+        assertThat(jdbc.sql(&quot;SELECT websearch_to_tsquery(&#x27;english&#x27;, :q)::text&quot;).param(&quot;q&quot;, &quot;paneer tikka&quot;).query(String.class).single())
+                .isEqualTo(&quot;&#x27;paneer&#x27; &amp; &#x27;tikka&#x27;&quot;);
+    }
+
+    /** The new search&#x27;s SQL, read back as names, so the old and new can sit side by side. */
+    record DishSearchProbe(org.springframework.jdbc.core.simple.JdbcClient jdbc) {
+        List&lt;String&gt; names(String q) {
+            return jdbc.sql(DishSearch.SQL).param(&quot;q&quot;, q).param(&quot;city&quot;, &quot;pune&quot;).query((rs, i) -&gt; rs.getString(&quot;name&quot;)).list();
+        }
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080; the first start loads 200,008 dishes
+./mvnw test                 # all 13 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>See how text becomes words, and how a search matches them:</p>
+<pre class="code"><code class="language-sql">docker compose exec postgres psql -U tiffino -d tiffino
+SELECT to_tsvector(&#x27;english&#x27;, &#x27;The spiciest dosas in Pune&#x27;);
+SELECT to_tsvector(&#x27;english&#x27;, &#x27;Masala Dosa&#x27;) @@ websearch_to_tsquery(&#x27;english&#x27;, &#x27;dosas&#x27;);
+SELECT to_tsquery(&#x27;english&#x27;, &#x27;paneer tikka&#x27;);   -- the error people meet first</code></pre>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>syntax error in tsquery</code></td><td><code>to_tsquery</code> given text with spaces or symbols.</td><td><code>websearch_to_tsquery</code> for anything a person typed.</td></tr><tr><td><code>cannot insert a non-DEFAULT value into column "search"</code></td><td>Code writing the generated column.</td><td>Leave it out; PostgreSQL computes it.</td></tr><tr><td><code>text-search query contains only stop words or doesn't contain lexemes, ignored</code> (a notice)</td><td>Only stop words were searched.</td><td>Expected; the result is empty.</td></tr><tr><td>The test's error message lacks the PostgreSQL text</td><td>Spring's exception wraps it.</td><td>Assert on the root cause. Found while building this station.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/064-dish-search-with-postgresql-full-text/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/tiffino/dishes/
+│   ├── DishController.java   ├── DishSearch.java   └── DishesApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__dishes.sql, V2__demo_dishes.sql, V3__search_index.sql
+├── src/test/java/com/tiffino/dishes/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the database behind it.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">DishController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">DishSearch.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">V1__dishes.sql</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">V3__search_index.sql</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">V2__demo_dishes.sql</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">compose.yaml</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">DishesApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/tiffino/dishes/DishController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Checks the length of q and the city, lower-cases the city.</dd><dt>Why</dt><dd>One-letter searches and huge inputs never reach the database.</dd><dt>Without it</dt><dd>"p" matching nothing useful after a full scan.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.dishes;
+
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Locale;
+
+@RestController
+class DishController {
+
+    private final DishSearch search;
+
+    DishController(DishSearch search) {
+        this.search = search;
+    }
+
+    @GetMapping(&quot;/dishes/search&quot;)
+    DishSearch.Results search(@RequestParam @Size(min = 2, max = 100) String q,
+                              @RequestParam @Pattern(regexp = &quot;[A-Za-z-]{3,30}&quot;) String city) {
+        return search.search(q.strip(), city.toLowerCase(Locale.ROOT));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/tiffino/dishes/DishSearch.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>One SQL query: parse, match through the index, rank, top 20.</dd><dt>Why</dt><dd><code>websearch_to_tsquery</code> once, reused for match and rank.</dd><dt>Without it</dt><dd><code>LIKE</code>, or a <code>to_tsquery</code> that fails on spaces.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.dishes;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+class DishSearch {
+
+    record Dish(long id, String name, String restaurant, int pricePaise) {
+    }
+
+    record Results(String q, String city, List&lt;Dish&gt; dishes) {
+    }
+
+    /**
+     * websearch_to_tsquery reads what people type (&quot;paneer tikka&quot;, &quot;\&quot;masala dosa\&quot; -mysore&quot;) and never fails on
+     * odd characters. The query matches the stored tsvector through the GIN index; ts_rank puts name matches
+     * (weight A) above description matches (weight B).
+     */
+    static final String SQL = &quot;&quot;&quot;
+            SELECT id, name, restaurant, price_paise
+            FROM dishes, websearch_to_tsquery(&#x27;english&#x27;, :q) AS query
+            WHERE city = :city AND search @@ query
+            ORDER BY ts_rank(search, query) DESC, id
+            LIMIT 20&quot;&quot;&quot;;
+
+    private final JdbcClient jdbc;
+
+    DishSearch(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    Results search(String q, String city) {
+        return new Results(q, city, jdbc.sql(SQL).param(&quot;q&quot;, q).param(&quot;city&quot;, city).query(Dish.class).list());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/resources/db/migration/V1__dishes.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The table, with <code>search</code> as a generated column.</dd><dt>Why</dt><dd>PostgreSQL rebuilds the words whenever the name or description changes; no app code can forget.</dd><dt>Without it</dt><dd>A search column that drifts from the menu.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">CREATE TABLE dishes (
+    id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    city        VARCHAR(30)  NOT NULL CONSTRAINT dishes_city_shape CHECK (city ~ &#x27;^[a-z-]{3,30}$&#x27;),
+    restaurant  VARCHAR(100) NOT NULL,
+    name        VARCHAR(100) NOT NULL CONSTRAINT dishes_name_not_blank CHECK (btrim(name) &lt;&gt; &#x27;&#x27;),
+    description VARCHAR(500),
+    price_paise INTEGER      NOT NULL CONSTRAINT dishes_price_range CHECK (price_paise BETWEEN 1000 AND 500000),
+    -- Kept by PostgreSQL itself: the words of the name (weight A) and the description (weight B), stemmed in English.
+    search      TSVECTOR GENERATED ALWAYS AS (
+                    setweight(to_tsvector(&#x27;english&#x27;, name), &#x27;A&#x27;) || setweight(to_tsvector(&#x27;english&#x27;, coalesce(description, &#x27;&#x27;)), &#x27;B&#x27;)) STORED
+);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/resources/db/migration/V3__search_index.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The GIN index on <code>search</code>, and one on city.</dd><dt>Why</dt><dd>The search reads only the rows containing the words.</dd><dt>Without it</dt><dd>A full read of every dish in the city.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">-- A GIN index holds, for every word, the list of dishes containing it: a search reads only those lists.
+CREATE INDEX dishes_search ON dishes USING GIN (search);
+CREATE INDEX dishes_city ON dishes (city);
+ANALYZE dishes;</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_dishes.sql</p><div class="notes"><p>8 dishes by hand, 200,000 generated.</p></div><div class="src"><pre class="code"><code class="language-sql">-- Pune: dishes written out, so every search on the page can be checked by hand.
+INSERT INTO dishes (city, restaurant, name, description, price_paise) VALUES
+    (&#x27;pune&#x27;, &#x27;Punjab Grill&#x27;, &#x27;Paneer Tikka Masala&#x27;, &#x27;Grilled cottage cheese in a spiced tomato gravy&#x27;, 32000),
+    (&#x27;pune&#x27;, &#x27;Punjab Grill&#x27;, &#x27;Paneer Tikka&#x27;, &#x27;Cottage cheese cubes marinated and grilled in the tandoor&#x27;, 28000),
+    (&#x27;pune&#x27;, &#x27;Punjab Grill&#x27;, &#x27;Butter Chicken&#x27;, &#x27;Our best seller after the paneer tikka: chicken in a buttery tomato gravy&#x27;, 34000),
+    (&#x27;pune&#x27;, &#x27;Tandoor Express&#x27;, &#x27;Tandoori Paneer Tikka Roll&#x27;, &#x27;Paneer tikka wrapped in a rumali roti&#x27;, 18000),
+    (&#x27;pune&#x27;, &#x27;Vaishali&#x27;, &#x27;Masala Dosa&#x27;, &#x27;Crisp rice crepe with spiced potato&#x27;, 12000),
+    (&#x27;pune&#x27;, &#x27;Vaishali&#x27;, &#x27;Mysore Masala Dosa&#x27;, &#x27;With a red chutney spread inside&#x27;, 14000),
+    (&#x27;pune&#x27;, &#x27;Vaishali&#x27;, &#x27;Filter Coffee&#x27;, NULL, 5000),
+    (&#x27;mumbai&#x27;, &#x27;Bandra Bites&#x27;, &#x27;Paneer Tikka Pizza&#x27;, &#x27;Thin crust with paneer tikka and onions&#x27;, 42000);
+
+-- 200,000 generated dishes in three cities (Tiffino has 3 million): none mentions paneer, tikka or dosa.
+INSERT INTO dishes (city, restaurant, name, description, price_paise)
+SELECT (ARRAY[&#x27;pune&#x27;, &#x27;mumbai&#x27;, &#x27;delhi&#x27;])[g % 3 + 1],
+       &#x27;Kitchen &#x27; || (g % 5000),
+       (ARRAY[&#x27;Veg&#x27;, &#x27;Chicken&#x27;, &#x27;Mutton&#x27;, &#x27;Egg&#x27;, &#x27;Fish&#x27;])[g % 5 + 1] || &#x27; &#x27; || (ARRAY[&#x27;Biryani&#x27;, &#x27;Curry&#x27;, &#x27;Thali&#x27;, &#x27;Fried Rice&#x27;, &#x27;Noodles&#x27;, &#x27;Roll&#x27;, &#x27;Kebab&#x27;])[g % 7 + 1],
+       &#x27;House special number &#x27; || g,
+       10000 + (g % 40) * 1000
+FROM generate_series(1, 200000) AS g;</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Problem details on.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: tiffino-dishes
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/tiffino
+    username: tiffino
+    password: tiffino</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: tiffino
+      POSTGRES_USER: tiffino
+      POSTGRES_PASSWORD: tiffino
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U tiffino -d tiffino&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/java/com/tiffino/dishes/DishesApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.dishes;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class DishesApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(DishesApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found (empty)</td><td><code>DishContractTest</code> (7)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>LikeSearchTrapTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>DishDatabaseTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0 -- in com.tiffino.dishes.DishContractTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.tiffino.dishes.LikeSearchTrapTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.tiffino.dishes.DishDatabaseTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">LikeSearchTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">DishDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">DishContractTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/tiffino/dishes/LikeSearchTrapTest.java</p><div class="notes"><p>Written first: what LIKE misses, what it reads, and the <code>to_tsquery</code> error.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.dishes;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** Written first. The old LIKE search on the same 200,008 dishes: what it misses, and what it reads. */
+class LikeSearchTrapTest extends ApiTest {
+
+    static final String OLD = &quot;SELECT name FROM dishes WHERE city = :city AND name LIKE &#x27;%&#x27; || :q || &#x27;%&#x27; ORDER BY id LIMIT 20&quot;;
+
+    private List&lt;String&gt; old(String q) {
+        return jdbc.sql(OLD).param(&quot;q&quot;, q).param(&quot;city&quot;, &quot;pune&quot;).query(String.class).list();
+    }
+
+    @Test
+    void likeMissesCaseWordOrderPluralsAndDescriptions() {
+        assertThat(old(&quot;paneer tikka&quot;)).isEmpty();                                    // the menu says &quot;Paneer&quot;
+        assertThat(old(&quot;Paneer Tikka&quot;)).containsExactly(&quot;Paneer Tikka Masala&quot;, &quot;Paneer Tikka&quot;, &quot;Tandoori Paneer Tikka Roll&quot;);   // not Butter Chicken
+        assertThat(old(&quot;Tikka Paneer&quot;)).isEmpty();
+        assertThat(old(&quot;Masala Dosas&quot;)).isEmpty();
+        assertThat(new DishSearchProbe(jdbc).names(&quot;paneer tikka&quot;)).hasSize(4);
+        assertThat(new DishSearchProbe(jdbc).names(&quot;Masala Dosas&quot;)).hasSize(2);
+    }
+
+    @Test
+    void likeWithALeadingWildcardReadsEveryDishInTheCityTheGinIndexReadsAFew() {
+        Plan like = explain(OLD, Map.of(&quot;q&quot;, &quot;Paneer&quot;, &quot;city&quot;, &quot;pune&quot;));   // the old query exactly, spelled as the menu does
+        Plan fullText = explain(DishSearch.SQL, Map.of(&quot;q&quot;, &quot;paneer&quot;, &quot;city&quot;, &quot;pune&quot;));
+        assertThat(like.indexes()).doesNotContain(&quot;dishes_search&quot;);   // at best it narrows by city, then reads the name of every Pune dish
+        assertThat(fullText.indexes()).contains(&quot;dishes_search&quot;);
+        assertThat(like.pages()).isGreaterThan(20 * fullText.pages());
+    }
+
+    @Test
+    void toTsqueryOnWhatPeopleTypeIsASyntaxError() {
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;SELECT to_tsquery(&#x27;english&#x27;, :q)&quot;).param(&quot;q&quot;, &quot;paneer tikka&quot;).query(String.class).single())
+                .rootCause().hasMessageContaining(&quot;syntax error in tsquery&quot;);
+        assertThat(jdbc.sql(&quot;SELECT websearch_to_tsquery(&#x27;english&#x27;, :q)::text&quot;).param(&quot;q&quot;, &quot;paneer tikka&quot;).query(String.class).single())
+                .isEqualTo(&quot;&#x27;paneer&#x27; &amp; &#x27;tikka&#x27;&quot;);
+    }
+
+    /** The new search&#x27;s SQL, read back as names, so the old and new can sit side by side. */
+    record DishSearchProbe(org.springframework.jdbc.core.simple.JdbcClient jdbc) {
+        List&lt;String&gt; names(String q) {
+            return jdbc.sql(DishSearch.SQL).param(&quot;q&quot;, q).param(&quot;city&quot;, &quot;pune&quot;).query((rs, i) -&gt; rs.getString(&quot;name&quot;)).list();
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/tiffino/dishes/DishDatabaseTest.java</p><div class="notes"><p>Named constraints, the generated column, and a rolled-back menu.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.dishes;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessException;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The rules as PostgreSQL enforces them, with plain SQL, in a test city removed afterwards. */
+class DishDatabaseTest extends ApiTest {
+
+    @AfterEach
+    void removeTestDishes() {
+        jdbc.sql(&quot;DELETE FROM dishes WHERE city = &#x27;testville&#x27;&quot;).update();
+    }
+
+    private long dish(String name, int paise) {
+        return jdbc.sql(&quot;INSERT INTO dishes (city, restaurant, name, price_paise) VALUES (&#x27;testville&#x27;, &#x27;Test Kitchen&#x27;, ?, ?) RETURNING id&quot;)
+                .params(name, paise).query(Long.class).single();
+    }
+
+    private long matches(String q) {
+        return jdbc.sql(&quot;SELECT count(*) FROM dishes WHERE city = &#x27;testville&#x27; AND search @@ websearch_to_tsquery(&#x27;english&#x27;, ?)&quot;).param(q).query(Long.class).single();
+    }
+
+    @Test
+    void namedConstraintsHoldWithoutJava() {
+        assertThatThrownBy(() -&gt; dish(&quot;   &quot;, 10000)).isInstanceOf(DataAccessException.class).hasMessageContaining(&quot;dishes_name_not_blank&quot;);
+        assertThatThrownBy(() -&gt; dish(&quot;Free Lunch&quot;, 0)).hasMessageContaining(&quot;dishes_price_range&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO dishes (city, restaurant, name, price_paise) VALUES (&#x27;Testville&#x27;, &#x27;X&#x27;, &#x27;Y&#x27;, 10000)&quot;).update())
+                .hasMessageContaining(&quot;dishes_city_shape&quot;);
+    }
+
+    @Test
+    void theSearchColumnIsKeptByTheDatabaseNotByTheApp() {
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO dishes (city, restaurant, name, price_paise, search) VALUES (&#x27;testville&#x27;, &#x27;X&#x27;, &#x27;Y&#x27;, 10000, to_tsvector(&#x27;cheat&#x27;))&quot;).update())
+                .rootCause().hasMessageContaining(&quot;cannot insert a non-DEFAULT value into column \&quot;search\&quot;&quot;);
+        long id = dish(&quot;Veg Pulao&quot;, 15000);
+        assertThat(matches(&quot;pulao&quot;)).isEqualTo(1);
+        jdbc.sql(&quot;UPDATE dishes SET name = &#x27;Veg Khichdi&#x27; WHERE id = ?&quot;).param(id).update();
+        assertThat(matches(&quot;pulao&quot;)).isZero();   // renamed: the old word is gone from the index too
+        assertThat(matches(&quot;khichdi&quot;)).isEqualTo(1);
+    }
+
+    @Test
+    void aMenuWithOneBadPriceIsNotAddedAtAll() {
+        assertThatThrownBy(() -&gt; transaction.executeWithoutResult(tx -&gt; {
+            dish(&quot;Rajma Chawal&quot;, 16000);
+            dish(&quot;Chole Bhature&quot;, 18000);
+            dish(&quot;Lassi&quot;, 999999);
+        })).hasMessageContaining(&quot;dishes_price_range&quot;);
+        assertThat(matches(&quot;rajma or chole&quot;)).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/tiffino/dishes/DishContractTest.java</p><div class="notes"><p>The endpoint through HTTP.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.dishes;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class DishContractTest extends ApiTest {
+
+    @Test
+    void paneerTikkaFindsEveryDishWithBothWordsNameMatchesFirst() throws Exception {
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;q&quot;, &quot;paneer tikka&quot;).param(&quot;city&quot;, &quot;pune&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.q&quot;).value(&quot;paneer tikka&quot;)).andExpect(jsonPath(&quot;$.city&quot;).value(&quot;pune&quot;))
+                .andExpect(jsonPath(&quot;$.dishes&quot;, hasSize(4)))
+                .andExpect(jsonPath(&quot;$.dishes[0:3].name&quot;, containsInAnyOrder(&quot;Tandoori Paneer Tikka Roll&quot;, &quot;Paneer Tikka Masala&quot;, &quot;Paneer Tikka&quot;)))
+                .andExpect(jsonPath(&quot;$.dishes[3].name&quot;).value(&quot;Butter Chicken&quot;))   // only its description mentions paneer tikka
+                .andExpect(jsonPath(&quot;$.dishes[0].pricePaise&quot;).isNumber());
+    }
+
+    @Test
+    void caseWordOrderAndPluralsDoNotMatter() throws Exception {
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;q&quot;, &quot;TIKKAS PANEER&quot;).param(&quot;city&quot;, &quot;Pune&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.dishes&quot;, hasSize(4)));
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;q&quot;, &quot;dosas&quot;).param(&quot;city&quot;, &quot;pune&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.dishes[*].name&quot;, containsInAnyOrder(&quot;Masala Dosa&quot;, &quot;Mysore Masala Dosa&quot;)));
+    }
+
+    @Test
+    void searchSyntaxPeopleAlreadyKnow() throws Exception {
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;q&quot;, &quot;\&quot;masala dosa\&quot; -mysore&quot;).param(&quot;city&quot;, &quot;pune&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.dishes[*].name&quot;, contains(&quot;Masala Dosa&quot;)));
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;q&quot;, &quot;dosa or coffee&quot;).param(&quot;city&quot;, &quot;pune&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.dishes&quot;, hasSize(3)));
+    }
+
+    @Test
+    void oddCharactersAreSearchedNotParsed() throws Exception {
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;q&quot;, &quot;paneer &amp; | ! ( :*&quot;).param(&quot;city&quot;, &quot;pune&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.dishes&quot;, hasSize(4)));
+    }
+
+    @Test
+    void noMatchIsAnEmptyList() throws Exception {
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;q&quot;, &quot;the and of&quot;).param(&quot;city&quot;, &quot;pune&quot;)).andExpect(status().isOk())   // only stop words
+                .andExpect(jsonPath(&quot;$.dishes&quot;, empty()));
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;q&quot;, &quot;paneer tikka&quot;).param(&quot;city&quot;, &quot;delhi&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.dishes&quot;, empty()));
+    }
+
+    @Test
+    void aTypoFindsNothingThatIsTheLimit() throws Exception {
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;q&quot;, &quot;panner&quot;).param(&quot;city&quot;, &quot;pune&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.dishes&quot;, empty()));
+    }
+
+    @Test
+    void badParametersAre400() throws Exception {
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;city&quot;, &quot;pune&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;q&quot;, &quot;p&quot;).param(&quot;city&quot;, &quot;pune&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;q&quot;, &quot;x&quot;.repeat(101)).param(&quot;city&quot;, &quot;pune&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;q&quot;, &quot;paneer&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;q&quot;, &quot;paneer&quot;).param(&quot;city&quot;, &quot;pune1&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/tiffino/dishes/ApiTest.java</p><div class="notes"><p>Shared setup and the EXPLAIN reader.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.dishes;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+/** Shared setup: the whole app on a real PostgreSQL with the demo data (8 dishes written out, 200,000 generated). */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+    @Autowired
+    TransactionTemplate transaction;
+
+    final JsonMapper json = JsonMapper.builder().build();
+
+    /** What one run did: the plan&#x27;s node types and indexes, and the 8 kB pages it touched (EXPLAIN ANALYZE, BUFFERS). */
+    record Plan(List&lt;String&gt; nodes, List&lt;String&gt; indexes, long pages) {
+    }
+
+    Plan explain(String sql, Map&lt;String, Object&gt; params) {
+        return transaction.execute(status -&gt; {
+            jdbc.sql(&quot;SET LOCAL max_parallel_workers_per_gather = 0&quot;).update();
+            String plan = jdbc.sql(&quot;EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) &quot; + sql).params(params).query(String.class).single();
+            JsonNode root = json.readTree(plan).get(0).get(&quot;Plan&quot;);
+            List&lt;String&gt; nodes = new ArrayList&lt;&gt;();
+            List&lt;String&gt; indexes = new ArrayList&lt;&gt;();
+            walk(root, nodes, indexes);
+            return new Plan(nodes, indexes, root.get(&quot;Shared Hit Blocks&quot;).asLong() + root.get(&quot;Shared Read Blocks&quot;).asLong());
+        });
+    }
+
+    private static void walk(JsonNode node, List&lt;String&gt; nodes, List&lt;String&gt; indexes) {
+        nodes.add(node.get(&quot;Node Type&quot;).asString());
+        if (node.has(&quot;Index Name&quot;)) {
+            indexes.add(node.get(&quot;Index Name&quot;).asString());
+        }
+        if (node.has(&quot;Plans&quot;)) {
+            node.get(&quot;Plans&quot;).forEach(child -&gt; walk(child, nodes, indexes));
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/tiffino/dishes/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.dishes;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker: the English dictionary, the GIN index and the planner are the real ones. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/tiffino/dishes/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=MaxPriceChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 13 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 16 tests pass (13 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>Within budget</h2><p>Add <code>maxPrice</code> in whole rupees: only dishes at or under it, still ranked. Negative is <code>400</code>.</p><p><b>Done when:</b> the test in <code>MaxPriceChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>One more condition on <code>price_paise</code>, bound as a parameter.</li><li>Keep <code>DishSearch.SQL</code> as it is: the trap test runs it.</li></ul></details><p class="path">challenge/MaxPriceChallengeTest.java</p><pre class="code"><code class="language-java">package com.tiffino.dishes;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Challenge 1: maxPrice (whole rupees) keeps only dishes at or under that price, still ranked. Negative is 400. */
+class MaxPriceChallengeTest extends ApiTest {
+
+    @Test
+    void onlyDishesWithinBudget() throws Exception {
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;q&quot;, &quot;paneer tikka&quot;).param(&quot;city&quot;, &quot;pune&quot;).param(&quot;maxPrice&quot;, &quot;300&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.dishes[*].name&quot;, containsInAnyOrder(&quot;Paneer Tikka&quot;, &quot;Tandoori Paneer Tikka Roll&quot;)));
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;q&quot;, &quot;paneer&quot;).param(&quot;city&quot;, &quot;pune&quot;).param(&quot;maxPrice&quot;, &quot;-1&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/DishSearch.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.dishes;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+class DishSearch {
+
+    record Dish(long id, String name, String restaurant, int pricePaise) {
+    }
+
+    record Results(String q, String city, List&lt;Dish&gt; dishes, List&lt;String&gt; suggestions) {
+    }
+
+    /**
+     * websearch_to_tsquery reads what people type (&quot;paneer tikka&quot;, &quot;\&quot;masala dosa\&quot; -mysore&quot;) and never fails on
+     * odd characters. The query matches the stored tsvector through the GIN index; ts_rank puts name matches
+     * (weight A) above description matches (weight B).
+     */
+    static final String SQL = &quot;&quot;&quot;
+            SELECT id, name, restaurant, price_paise
+            FROM dishes, websearch_to_tsquery(&#x27;english&#x27;, :q) AS query
+            WHERE city = :city AND search @@ query
+            ORDER BY ts_rank(search, query) DESC, id
+            LIMIT 20&quot;&quot;&quot;;
+
+    /** Challenge 1: the same search with a budget. */
+    static final String WITHIN_BUDGET = SQL.replace(&quot;AND search @@ query&quot;, &quot;AND search @@ query AND price_paise &lt;= :maxPaise&quot;);
+
+    private final JdbcClient jdbc;
+
+    DishSearch(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    Results search(String q, String city) {
+        return search(q, city, Integer.MAX_VALUE);
+    }
+
+    /** Challenge 1: a budget; challenge 2: suggestions only when full-text found nothing. */
+    Results search(String q, String city, int maxPaise) {
+        List&lt;Dish&gt; dishes = jdbc.sql(WITHIN_BUDGET).param(&quot;q&quot;, q).param(&quot;city&quot;, city).param(&quot;maxPaise&quot;, maxPaise).query(Dish.class).list();
+        List&lt;String&gt; suggestions = dishes.isEmpty() ? jdbc.sql(&quot;&quot;&quot;
+                        SELECT name FROM dishes WHERE city = :city AND lower(name) % lower(:q)
+                        GROUP BY name ORDER BY max(similarity(lower(name), lower(:q))) DESC, name LIMIT 5&quot;&quot;&quot;)
+                .param(&quot;city&quot;, city).param(&quot;q&quot;, q).query(String.class).list() : List.of();
+        return new Results(q, city, dishes, suggestions);
+    }
+}</code></pre></div><p class="path">challenge/solution/DishController.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.dishes;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Locale;
+
+@RestController
+class DishController {
+
+    private final DishSearch search;
+
+    DishController(DishSearch search) {
+        this.search = search;
+    }
+
+    @GetMapping(&quot;/dishes/search&quot;)
+    DishSearch.Results search(@RequestParam @Size(min = 2, max = 100) String q,
+                              @RequestParam @Pattern(regexp = &quot;[A-Za-z-]{3,30}&quot;) String city,
+                              @RequestParam(required = false) @Min(0) @Max(5000) Integer maxPrice) {
+        return search.search(q.strip(), city.toLowerCase(Locale.ROOT), maxPrice == null ? Integer.MAX_VALUE : maxPrice * 100);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 35 minutes</p><h2>Did you mean…</h2><p>When nothing matches, return <code>suggestions</code>: up to 5 dish names in the city that look like what was typed.</p><p><b>Done when:</b> both tests in <code>DidYouMeanChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>The <code>pg_trgm</code> extension compares three-letter pieces: <code>lower(name) % lower(:q)</code> and <code>similarity(…)</code>.</li><li>Add <code>CREATE EXTENSION pg_trgm</code> and a GIN <code>gin_trgm_ops</code> index in a new migration.</li><li>Found while building: that index on <code>lower(name)</code> also makes <code>lower(name) LIKE '%paneer%'</code> indexable.</li></ul></details><p class="path">challenge/DidYouMeanChallengeTest.java</p><pre class="code"><code class="language-java">package com.tiffino.dishes;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.hasItem;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: when full-text finds nothing, &quot;suggestions&quot; lists up to 5 dish names in the city that look like what
+ * was typed (pg_trgm similarity), so &quot;panner&quot; can offer &quot;Paneer Tikka&quot;. When it finds something, no suggestions.
+ */
+class DidYouMeanChallengeTest extends ApiTest {
+
+    @Test
+    void aTypoGetsSuggestions() throws Exception {
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;q&quot;, &quot;panner tika&quot;).param(&quot;city&quot;, &quot;pune&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.dishes&quot;, empty())).andExpect(jsonPath(&quot;$.suggestions&quot;, hasItem(&quot;Paneer Tikka&quot;)));
+    }
+
+    @Test
+    void aHitNeedsNoSuggestions() throws Exception {
+        mvc.perform(get(&quot;/dishes/search&quot;).param(&quot;q&quot;, &quot;paneer&quot;).param(&quot;city&quot;, &quot;pune&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.suggestions&quot;, empty()));
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/V4__trigram_suggestions.sql</p><div class="src"><pre class="code"><code class="language-sql">-- Challenge 2: trigram similarity (&quot;panner&quot; shares most three-letter pieces with &quot;paneer&quot;), with its own index.
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX dishes_name_trigram ON dishes USING GIN (lower(name) gin_trgm_ops);</code></pre></div><p class="path">challenge/solution/DishSearch.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.dishes;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+class DishSearch {
+
+    record Dish(long id, String name, String restaurant, int pricePaise) {
+    }
+
+    record Results(String q, String city, List&lt;Dish&gt; dishes, List&lt;String&gt; suggestions) {
+    }
+
+    /**
+     * websearch_to_tsquery reads what people type (&quot;paneer tikka&quot;, &quot;\&quot;masala dosa\&quot; -mysore&quot;) and never fails on
+     * odd characters. The query matches the stored tsvector through the GIN index; ts_rank puts name matches
+     * (weight A) above description matches (weight B).
+     */
+    static final String SQL = &quot;&quot;&quot;
+            SELECT id, name, restaurant, price_paise
+            FROM dishes, websearch_to_tsquery(&#x27;english&#x27;, :q) AS query
+            WHERE city = :city AND search @@ query
+            ORDER BY ts_rank(search, query) DESC, id
+            LIMIT 20&quot;&quot;&quot;;
+
+    /** Challenge 1: the same search with a budget. */
+    static final String WITHIN_BUDGET = SQL.replace(&quot;AND search @@ query&quot;, &quot;AND search @@ query AND price_paise &lt;= :maxPaise&quot;);
+
+    private final JdbcClient jdbc;
+
+    DishSearch(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    Results search(String q, String city) {
+        return search(q, city, Integer.MAX_VALUE);
+    }
+
+    /** Challenge 1: a budget; challenge 2: suggestions only when full-text found nothing. */
+    Results search(String q, String city, int maxPaise) {
+        List&lt;Dish&gt; dishes = jdbc.sql(WITHIN_BUDGET).param(&quot;q&quot;, q).param(&quot;city&quot;, city).param(&quot;maxPaise&quot;, maxPaise).query(Dish.class).list();
+        List&lt;String&gt; suggestions = dishes.isEmpty() ? jdbc.sql(&quot;&quot;&quot;
+                        SELECT name FROM dishes WHERE city = :city AND lower(name) % lower(:q)
+                        GROUP BY name ORDER BY max(similarity(lower(name), lower(:q))) DESC, name LIMIT 5&quot;&quot;&quot;)
+                .param(&quot;city&quot;, city).param(&quot;q&quot;, q).query(String.class).list() : List.of();
+        return new Results(q, city, dishes, suggestions);
+    }
+}</code></pre></div><p class="path">challenge/solution/DishController.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.dishes;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Locale;
+
+@RestController
+class DishController {
+
+    private final DishSearch search;
+
+    DishController(DishSearch search) {
+        this.search = search;
+    }
+
+    @GetMapping(&quot;/dishes/search&quot;)
+    DishSearch.Results search(@RequestParam @Size(min = 2, max = 100) String q,
+                              @RequestParam @Pattern(regexp = &quot;[A-Za-z-]{3,30}&quot;) String city,
+                              @RequestParam(required = false) @Min(0) @Max(5000) Integer maxPrice) {
+        return search.search(q.strip(), city.toLowerCase(Locale.ROOT), maxPrice == null ? Integer.MAX_VALUE : maxPrice * 100);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>When is a search engine worth it?</h2>
+<p>Product wants Hindi and Marathi names, "paneer" to find "cottage cheese", typo tolerance everywhere, results boosted by popularity and distance, and suggestions as you type, on 3 million dishes. Which can PostgreSQL do (configurations, synonym dictionaries, pg_trgm), and which point to OpenSearch or Elasticsearch? What does keeping a second copy in sync cost, and how stale can a search result be?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, indexes</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: what LIKE misses and what it reads.</li>
+<li>Add a weighted, generated <code>tsvector</code> column and a GIN index.</li>
+<li>Parse with <code>websearch_to_tsquery</code>, match with <code>@@</code>, rank with <code>ts_rank</code>.</li>
+<li>Prove the index is used with EXPLAIN, and test the limits (typos, stop words).</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Generated tsvector + GIN + websearch_to_tsquery</td><td>One column and index; English only.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td><code>LIKE '%term%'</code></td><td>Misses forms and case; reads every row.</td><td><span class="pill bad">The trap</span></td></tr><tr><td><code>ILIKE</code> + pg_trgm index</td><td>Indexed and typo-friendly; no stemming or ranking by words.</td><td><span class="pill warn">Good for names</span></td></tr><tr><td><code>to_tsvector(…)</code> in the query, expression index</td><td>No extra column; every query must repeat the exact expression.</td><td><span class="pill warn">Works</span></td></tr><tr><td>A tsvector kept by app code or a trigger</td><td>Easy to forget a path that changes the name.</td><td><span class="pill warn">Generated is simpler</span></td></tr><tr><td>OpenSearch / Elasticsearch</td><td>A second store kept in sync.</td><td><span class="pill warn">For relevance at scale</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Object</th><th>What</th><th>Why</th></tr></thead><tbody><tr><td><code>search</code></td><td><code>tsvector GENERATED ALWAYS AS (…) STORED</code>: name weight A, description weight B</td><td>Always matches the current name and description.</td></tr><tr><td><code>dishes_search</code></td><td>GIN on <code>search</code></td><td>Rows per word.</td></tr><tr><td><code>dishes_city</code></td><td>B-tree on <code>city</code></td><td>Every search is in one city.</td></tr><tr><td><code>dishes_city_shape</code>, <code>dishes_name_not_blank</code>, <code>dishes_price_range</code></td><td>CHECKs</td><td>No impossible dishes from any writer.</td></tr></tbody></table></div>
+<pre class="code"><code class="language-sql">CREATE TABLE dishes (
+    id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    city        VARCHAR(30)  NOT NULL CONSTRAINT dishes_city_shape CHECK (city ~ &#x27;^[a-z-]{3,30}$&#x27;),
+    restaurant  VARCHAR(100) NOT NULL,
+    name        VARCHAR(100) NOT NULL CONSTRAINT dishes_name_not_blank CHECK (btrim(name) &lt;&gt; &#x27;&#x27;),
+    description VARCHAR(500),
+    price_paise INTEGER      NOT NULL CONSTRAINT dishes_price_range CHECK (price_paise BETWEEN 1000 AND 500000),
+    -- Kept by PostgreSQL itself: the words of the name (weight A) and the description (weight B), stemmed in English.
+    search      TSVECTOR GENERATED ALWAYS AS (
+                    setweight(to_tsvector(&#x27;english&#x27;, name), &#x27;A&#x27;) || setweight(to_tsvector(&#x27;english&#x27;, coalesce(description, &#x27;&#x27;)), &#x27;B&#x27;)) STORED
+);</code></pre><pre class="code"><code class="language-sql">-- A GIN index holds, for every word, the list of dishes containing it: a search reads only those lists.
+CREATE INDEX dishes_search ON dishes USING GIN (search);
+CREATE INDEX dishes_city ON dishes (city);
+ANALYZE dishes;</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Adding the column to a big table</dt><dd>A stored generated column rewrites the table when added. On 3 million rows, plan it: a new table and a backfill, or a maintenance window.</dd>
+<dt>GIN and writes</dt><dd>GIN indexes are slower to update than B-trees; PostgreSQL batches new entries in a pending list (<code>fastupdate</code>), cleaned by vacuum.</dd>
+<dt>Language</dt><dd>The <code>english</code> configuration stems English words. Indian dish names stem oddly or not at all; test with real menus.</dd>
+<dt>Ranking cost</dt><dd><code>ts_rank</code> reads each match's vector. For a word in a million dishes, cap the work, for example rank only the first matches.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>Why can&#x27;t LIKE &#x27;%term%&#x27; use a B-tree index?</summary><p>A B-tree is sorted from the first character; a leading wildcard gives no starting point, so every row must be checked. A trigram index can help; a B-tree cannot.</p></details><details class="qa"><summary>What are tsvector and tsquery?</summary><p>A tsvector is a document as normalised words with positions; a tsquery is words joined with AND, OR, NOT; @@ tests whether one matches the other.</p></details><details class="qa"><summary>to_tsquery, plainto_tsquery or websearch_to_tsquery?</summary><p>to_tsquery takes its own operator syntax and fails on plain text; plainto_tsquery ANDs all words; websearch_to_tsquery also understands quotes, -word and or, and never errors.</p></details><details class="qa"><summary>Why a GIN index?</summary><p>It maps each word to the rows containing it, so a search reads only those rows.</p></details><details class="qa"><summary>When do you need a search engine instead?</summary><p>Typo tolerance, synonyms, many languages, relevance tuning and facets at large scale: things PostgreSQL does only partly, at the cost of a second store kept in sync.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 13 tests pass.</td><td>You read both saved plans.</td></tr><tr><td>Full-text</td><td>Generated tsvector and websearch_to_tsquery.</td><td>Weights and ranking.</td></tr><tr><td>Indexes</td><td>GIN used, proved by EXPLAIN.</td><td>Why the trigram index made LIKE indexable.</td></tr><tr><td>Limits</td><td>Knows typos find nothing.</td><td>Can argue for or against a search engine.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This station has no flawed version to review. Use this checklist on any text search:</p>
+<ul class="rules">
+<li>Is user text ever passed to <code>to_tsquery</code>?</li>
+<li>Can the search vector drift from the text it describes?</li>
+<li>Does an EXPLAIN show the index on realistic data?</li>
+<li>Are the limits (typos, languages) tested and stated?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
