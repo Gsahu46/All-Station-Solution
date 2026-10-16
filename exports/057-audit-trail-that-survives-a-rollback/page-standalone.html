@@ -1,0 +1,1457 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 057 · Audit trail that survives a rollback</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 057</span>
+    <h1>Audit trail that survives a rollback</h1>
+    <p class="scenario">Failed transfer attempts must be audited, but the audit row rolls back with the failed transfer.</p>
+    <p class="sim"><b>Simulation</b><span>Accounts and transfers are demo data, not Tijori's. A transfer changes two balances and writes a record: no bank network (IMPS, NEFT, UPI) is involved.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Fintech</li>
+      <li><b>Types</b>Database</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>055 Checkout as one transaction</p>
+      <p><span class="eyebrow">Builds toward</span><br>058 Welcome emails with Spring application events</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · @Transactional propagation (REQUIRED, REQUIRES_NEW) · TransactionSynchronization afterCompletion · JdbcClient · PostgreSQL 17 · Flyway · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Audit every attempt</strong><p>Regulators and fraud teams want every transfer attempt recorded, especially the failed ones: those are where fraud shows.</p></li><li><strong>The failures vanished</strong><p>Tijori's code caught the failure and wrote an audit row, then rethrew. The transaction rolled back, as it should, and took the audit row with it. The trail showed only successes.</p></li><li><strong>The fix</strong><p>Write audit rows in a transaction of their own (REQUIRES_NEW), and write the outcome only when the transfer's transaction has really ended.</p></li></ol>
+<p class="lesson">A record that must outlive a failure cannot live inside the failing transaction.</p>
+
+<h2>What are we building?</h2>
+<p><code>POST /transfers</code> records a transfer between two accounts: two balances change and a transfer record is written. Every attempt leaves events in the audit trail: one when it starts, and one outcome, COMPLETED or FAILED with a reason. <code>GET /audit-events?accountId=…</code> shows an account's trail, failures included.</p>
+
+<h2>An everyday analogy</h2>
+<p>A bank's visitor register at the door. You sign it when you walk in, whatever happens at the counter. If your request is refused, the counter tears up your form, but nobody tears a page out of the visitor register. The old code kept the register on the counter, inside the form.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>The transfer starts</strong> its transaction, and records TRANSFER_ATTEMPTED in a separate one, committed at once.</li>
+<li><strong>It debits, credits, records</strong> the transfer; any refusal throws and rolls back.</li>
+<li><strong>When the transaction ends</strong>, committed or rolled back, Spring calls the transfer's callback.</li>
+<li><strong>The callback records</strong> COMPLETED or FAILED (with the reason), again in a transaction of its own.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: why not write COMPLETED just before the method returns?</summary><p>Because the transaction is not over: the commit can still fail, or a caller can roll back the transaction this method joined. The trail would then say COMPLETED for a transfer that never happened. Only after completion is the outcome known.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No bank network.</strong> Balances in one database.</li>
+<li><strong>No fraud rules.</strong> A lockout is challenge 2.</li>
+<li><strong>No login.</strong> Anyone can call the API.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Rollback</strong></td><td>Undoing every change a transaction made.</td><td>Tearing up a bill that was never paid.</td><td>A failed transfer</td></tr><tr><td><strong>Propagation</strong></td><td>What a transactional method does when a transaction is already open.</td><td>Joining the same bill, or opening your own.</td><td><code>REQUIRED</code>, <code>REQUIRES_NEW</code></td></tr><tr><td><strong>REQUIRED</strong></td><td>Join the caller's transaction; start one only if there is none.</td><td>Adding a line to the same bill.</td><td><code>TransferService.transfer</code></td></tr><tr><td><strong>REQUIRES_NEW</strong></td><td>Pause the caller's transaction and run in a new one that commits on its own.</td><td>A separate receipt, signed at once.</td><td><code>AuditTrail.record</code></td></tr><tr><td><strong>Transaction synchronization</strong></td><td>Code Spring calls when the transaction ends.</td><td>A note to phone the customer once the bill is settled, or torn up.</td><td><code>afterCompletion</code></td></tr><tr><td><strong>Attempt id</strong></td><td>One id shared by every event of one transfer attempt.</td><td>A token number at a counter.</td><td><code>attempt_id</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Tijori</strong> (a fictional digital bank) must keep an audit trail of every transfer attempt. Failed attempts disappeared from it, because their audit rows rolled back with the transfer.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> Asha (₹25,000) sends Ravi ₹1,500, <b>then</b> <code>201</code>, both balances change, and the trail has ATTEMPTED then COMPLETED with one attempt id.</li>
+<li><b>Given</b> Ravi (₹100) tries to send ₹5,000, <b>then</b> <code>422</code>, his balance is unchanged, and the trail has ATTEMPTED then FAILED "Insufficient funds".</li>
+<li><b>Given</b> a transfer to account 99, <b>then</b> <code>422</code>, Asha's debit is rolled back, and the attempt is still in the trail.</li>
+<li><b>Given</b> a caller rolls back a transfer that returned normally, <b>then</b> the trail says FAILED, never COMPLETED.</li>
+<li><b>Given</b> a malformed body, <b>then</b> <code>400</code> and no attempt; an unknown account's trail, <code>404</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>Audit rows commit on their own; no business rollback can remove them.</li>
+<li>Each attempt has exactly one outcome, enforced by the database.</li>
+<li>The outcome is written only after the transaction's real end.</li>
+<li>Money in integer paise; balances never below zero.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Choose between <code>REQUIRED</code> and <code>REQUIRES_NEW</code>, and know what each costs.</li>
+<li>Run code after commit or rollback with a transaction synchronization.</li>
+<li>Know that data access in those callbacks needs its own transaction.</li>
+<li>Prove propagation behaviour against a real database.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/transfers</code></td><td>Transfer: <code>fromAccountId</code>, <code>toAccountId</code>, <code>amountPaise</code> (₹1 to ₹5 lakh).</td></tr><tr><td><code>GET</code></td><td><code>/audit-events?accountId=1</code></td><td>Every event where the account sent or would have received, oldest first.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">201</span></td><td>Transferred; audited ATTEMPTED and COMPLETED</td></tr><tr><td><span class="pill ok">200</span></td><td>The trail</td></tr><tr><td><span class="pill warn">400</span></td><td>Malformed body (not an attempt, not audited); no <code>accountId</code></td></tr><tr><td><span class="pill warn">404</span></td><td>No such account (trail)</td></tr><tr><td><span class="pill warn">422</span></td><td>Insufficient funds, same account, unknown account: audited ATTEMPTED and FAILED</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 16 Oct 2026, in this order, against one fresh database. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: Asha sends Ravi ₹1,500</h3><p><b>Why:</b> <code>201</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /transfers HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;fromAccountId&quot;: 1,
+  &quot;toAccountId&quot;: 2,
+  &quot;amountPaise&quot;: 150000
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /transfers/1
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 1,
+  &quot;attemptId&quot;: &quot;8b856395-8c84-4990-8b92-5ab8479a9c79&quot;,
+  &quot;fromAccountId&quot;: 1,
+  &quot;toAccountId&quot;: 2,
+  &quot;amountPaise&quot;: 150000,
+  &quot;status&quot;: &quot;COMPLETED&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: Ravi (₹100) tries ₹5,000</h3><p><b>Why:</b> <code>422</code>, and still audited.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /transfers HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;fromAccountId&quot;: 2,
+  &quot;toAccountId&quot;: 1,
+  &quot;amountPaise&quot;: 500000
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Account 2 cannot send 500000 paise.&quot;,
+  &quot;instance&quot;: &quot;/transfers&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Insufficient funds&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: Asha sends ₹10 to account 99</h3><p><b>Why:</b> her debit ran, then the credit found no account: rolled back, <code>422</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /transfers HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;fromAccountId&quot;: 1,
+  &quot;toAccountId&quot;: 99,
+  &quot;amountPaise&quot;: 1000
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No account 99.&quot;,
+  &quot;instance&quot;: &quot;/transfers&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Unknown account&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: Asha's trail</h3><p><b>Why:</b> two attempts, one COMPLETED, one FAILED, each pair sharing its attempt id.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /audit-events?accountId=1 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 1156
+
+[
+  {
+    &quot;id&quot;: 1,
+    &quot;attemptId&quot;: &quot;8b856395-8c84-4990-8b92-5ab8479a9c79&quot;,
+    &quot;event&quot;: &quot;TRANSFER_ATTEMPTED&quot;,
+    &quot;fromAccount&quot;: 1,
+    &quot;toAccount&quot;: 2,
+    &quot;amountPaise&quot;: 150000,
+    &quot;reason&quot;: null,
+    &quot;at&quot;: &quot;2026-10-16T07:11:57.140904Z&quot;
+  },
+  {
+    &quot;id&quot;: 2,
+    &quot;attemptId&quot;: &quot;8b856395-8c84-4990-8b92-5ab8479a9c79&quot;,
+    &quot;event&quot;: &quot;TRANSFER_COMPLETED&quot;,
+    &quot;fromAccount&quot;: 1,
+    &quot;toAccount&quot;: 2,
+    &quot;amountPaise&quot;: 150000,
+    &quot;reason&quot;: null,
+    &quot;at&quot;: &quot;2026-10-16T07:11:57.156129Z&quot;
+  },
+  {
+    &quot;id&quot;: 3,
+    &quot;attemptId&quot;: &quot;b37e2491-aebf-4b17-8e3c-167fd1f2cf11&quot;,
+    &quot;event&quot;: &quot;TRANSFER_ATTEMPTED&quot;,
+    &quot;fromAccount&quot;: 2,
+    &quot;toAccount&quot;: 1,
+    &quot;amountPaise&quot;: 500000,
+    &quot;reason&quot;: null,
+    &quot;at&quot;: &quot;2026-10-16T07:11:57.181663Z&quot;
+  },
+  {
+    &quot;id&quot;: 4,
+    &quot;attemptId&quot;: &quot;b37e2491-aebf-4b17-8e3c-167fd1f2cf11&quot;,
+    &quot;event&quot;: &quot;TRANSFER_FAILED&quot;,
+    &quot;fromAccount&quot;: 2,
+    &quot;toAccount&quot;: 1,
+    &quot;amountPaise&quot;: 500000,
+    &quot;reason&quot;: &quot;Insufficient funds&quot;,
+    &quot;at&quot;: &quot;2026-10-16T07:11:57.190755Z&quot;
+  },
+  {
+    &quot;id&quot;: 5,
+    &quot;attemptId&quot;: &quot;e2b00bb2-6dd1-4d67-b911-0c356bcf5eda&quot;,
+    &quot;event&quot;: &quot;TRANSFER_ATTEMPTED&quot;,
+    &quot;fromAccount&quot;: 1,
+    &quot;toAccount&quot;: 99,
+    &quot;amountPaise&quot;: 1000,
+    &quot;reason&quot;: null,
+    &quot;at&quot;: &quot;2026-10-16T07:11:57.209125Z&quot;
+  },
+  {
+    &quot;id&quot;: 6,
+    &quot;attemptId&quot;: &quot;e2b00bb2-6dd1-4d67-b911-0c356bcf5eda&quot;,
+    &quot;event&quot;: &quot;TRANSFER_FAILED&quot;,
+    &quot;fromAccount&quot;: 1,
+    &quot;toAccount&quot;: 99,
+    &quot;amountPaise&quot;: 1000,
+    &quot;reason&quot;: &quot;Unknown account&quot;,
+    &quot;at&quot;: &quot;2026-10-16T07:11:57.213725Z&quot;
+  }
+]</code></pre></div></div></section><section class="example"><h3>Case 5: Ravi's trail</h3><p><b>Why:</b> the transfer he received and the one he failed to send.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /audit-events?accountId=2 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 770
+
+[
+  {
+    &quot;id&quot;: 1,
+    &quot;attemptId&quot;: &quot;8b856395-8c84-4990-8b92-5ab8479a9c79&quot;,
+    &quot;event&quot;: &quot;TRANSFER_ATTEMPTED&quot;,
+    &quot;fromAccount&quot;: 1,
+    &quot;toAccount&quot;: 2,
+    &quot;amountPaise&quot;: 150000,
+    &quot;reason&quot;: null,
+    &quot;at&quot;: &quot;2026-10-16T07:11:57.140904Z&quot;
+  },
+  {
+    &quot;id&quot;: 2,
+    &quot;attemptId&quot;: &quot;8b856395-8c84-4990-8b92-5ab8479a9c79&quot;,
+    &quot;event&quot;: &quot;TRANSFER_COMPLETED&quot;,
+    &quot;fromAccount&quot;: 1,
+    &quot;toAccount&quot;: 2,
+    &quot;amountPaise&quot;: 150000,
+    &quot;reason&quot;: null,
+    &quot;at&quot;: &quot;2026-10-16T07:11:57.156129Z&quot;
+  },
+  {
+    &quot;id&quot;: 3,
+    &quot;attemptId&quot;: &quot;b37e2491-aebf-4b17-8e3c-167fd1f2cf11&quot;,
+    &quot;event&quot;: &quot;TRANSFER_ATTEMPTED&quot;,
+    &quot;fromAccount&quot;: 2,
+    &quot;toAccount&quot;: 1,
+    &quot;amountPaise&quot;: 500000,
+    &quot;reason&quot;: null,
+    &quot;at&quot;: &quot;2026-10-16T07:11:57.181663Z&quot;
+  },
+  {
+    &quot;id&quot;: 4,
+    &quot;attemptId&quot;: &quot;b37e2491-aebf-4b17-8e3c-167fd1f2cf11&quot;,
+    &quot;event&quot;: &quot;TRANSFER_FAILED&quot;,
+    &quot;fromAccount&quot;: 2,
+    &quot;toAccount&quot;: 1,
+    &quot;amountPaise&quot;: 500000,
+    &quot;reason&quot;: &quot;Insufficient funds&quot;,
+    &quot;at&quot;: &quot;2026-10-16T07:11:57.190755Z&quot;
+  }
+]</code></pre></div></div></section><section class="example"><h3>Case 6: account 99's trail</h3><p><b>Why:</b> no such account: <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /audit-events?accountId=99 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No account 99.&quot;,
+  &quot;instance&quot;: &quot;/audit-events&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Account not found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: 99 paise</h3><p><b>Why:</b> <code>400</code>: a malformed request is not an attempt.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /transfers HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;fromAccountId&quot;: 1,
+  &quot;toAccountId&quot;: 2,
+  &quot;amountPaise&quot;: 99
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Invalid request content.&quot;,
+  &quot;instance&quot;: &quot;/transfers&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section>
+<h2>The balances afterwards</h2>
+<p class="muted">Read with psql after the requests above (<code>docs/captures/balances.txt</code>): Asha was debited once, ₹1,500. Case 3's debit was rolled back; its audit events were not.</p>
+<pre class="code"><code class="language-text"> id |   holder   | balance_paise 
+----+------------+---------------
+  1 | Asha Verma |       2350000
+  2 | Ravi Menon |        160000
+(2 rows)</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>A transfer</td><td>Both balances change; ATTEMPTED and COMPLETED, one attempt id</td><td><code>aTransferChangesBothBalancesAndIsAuditedTwice</code></td></tr><tr><td>Insufficient funds, same account, unknown account</td><td><code>422</code> each; debit rolled back; each audited with its reason</td><td><code>everyRefusalIsAuditedWithItsReason</code></td></tr><tr><td>Malformed bodies</td><td><code>400</code>; no events</td><td><code>malformedTransfersAre400AndNotAttempts</code></td></tr><tr><td>Unknown account's trail; no account given</td><td><code>404</code>; <code>400</code></td><td><code>unknownAccountsHaveNoTrail</code></td></tr><tr><td>Bad rows written directly; two outcomes for one attempt</td><td>Refused by named constraints</td><td><code>namedConstraintsHoldWithoutJava</code></td></tr><tr><td>REQUIRES_NEW and REQUIRED inside a rolled-back transaction</td><td>The first survives, the second does not</td><td><code>requiresNewSurvivesTheCallersRollbackAndRequiredDoesNot</code></td></tr><tr><td>A caller rolls back a transfer that returned normally</td><td>FAILED, not COMPLETED; balances unchanged</td><td><code>aTransferRolledBackByItsCallerIsAuditedAsFailedNotCompleted</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Writing the audit row in the same transaction, so it rolls back too.</p>
+<p>The old service is kept in the tests as <code>OldTransferService</code>, a real proxied bean. Its catch block writes a TRANSFER_FAILED row with the same <code>JdbcClient</code>, then rethrows. Ravi's ₹5,000 attempt fails as it should, and the trail is empty: the rollback took the audit row too. The same attempt through the fixed API leaves ATTEMPTED and FAILED "Insufficient funds", and Ravi's balance unchanged.</p>
+<p>While building, each part was undone once. <code>REQUIRED</code> instead of <code>REQUIRES_NEW</code> on the audit write turned 4 tests red. Writing COMPLETED inside the method, before the commit, turned 1 red: the test whose caller rolls back, where the trail then claimed a completed transfer. Not capturing the reason turned 2 red.</p>
+</div>
+<pre class="code"><code class="language-java">package com.tijori.transfers;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Import;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The first test written for this station: Ravi (₹100) tries to send ₹5,000, the old way and the new way. */
+@Import(OldTransferService.class)
+class AuditRollbackTrapTest extends ApiTest {
+
+    @Autowired
+    OldTransferService old;
+
+    @Test
+    void theOldAuditRowRolledBackWithTheTransfer() {
+        assertThatThrownBy(() -&gt; old.transfer(2, 1, 500_000)).hasMessage(&quot;insufficient funds&quot;);
+        assertThat(events()).isEmpty();   // the failed attempt left no trace: exactly what the auditors asked for, gone
+    }
+
+    @Test
+    void theNewTrailKeepsTheAttemptAndItsFailure() throws Exception {
+        transfer(2, 1, 500_000).andExpect(status().isUnprocessableContent());
+        assertThat(events()).containsExactly(&quot;TRANSFER_ATTEMPTED&quot;, &quot;TRANSFER_FAILED Insufficient funds&quot;);
+        assertThat(balance(2)).isEqualTo(10_000);
+    }
+}</code></pre><pre class="code"><code class="language-java">package com.tijori.transfers;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * The transfer as it shipped, kept only in tests (the trap test registers it as a bean). It audits the failure,
+ * carefully, in a catch block, with the same JdbcClient, in the same transaction that is about to roll back.
+ */
+class OldTransferService {
+
+    private final JdbcClient jdbc;
+
+    OldTransferService(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    @Transactional
+    public void transfer(long from, long to, long amountPaise) {
+        try {
+            int debited = jdbc.sql(&quot;UPDATE accounts SET balance_paise = balance_paise - ? WHERE id = ? AND balance_paise &gt;= ?&quot;).params(amountPaise, from, amountPaise).update();
+            if (debited == 0) {
+                throw new IllegalStateException(&quot;insufficient funds&quot;);
+            }
+            jdbc.sql(&quot;UPDATE accounts SET balance_paise = balance_paise + ? WHERE id = ?&quot;).params(amountPaise, to).update();
+        } catch (IllegalStateException e) {
+            jdbc.sql(&quot;INSERT INTO audit_events (attempt_id, event, from_account, to_account, amount_paise, reason) VALUES (gen_random_uuid(), &#x27;TRANSFER_FAILED&#x27;, ?, ?, ?, ?)&quot;)
+                    .params(from, to, amountPaise, e.getMessage()).update();
+            throw e;   // ...and the rollback takes the audit row with it
+        }
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 9 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Change <code>REQUIRES_NEW</code> to the default in <code>AuditTrail</code> (remove <code>propagation = …</code>) and run:</p>
+<pre class="code"><code class="language-bash">./mvnw test -Dtest=AuditRollbackTrapTest</code></pre>
+<p>The new trail now loses its failures exactly like the old one. Put it back.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>Audit rows of failed operations are missing</td><td>Written in the failing transaction.</td><td><code>REQUIRES_NEW</code>, or write outside the transaction.</td></tr><tr><td>A write in <code>afterCommit</code>/<code>afterCompletion</code> does nothing or errors</td><td>It tried to join a transaction that is already finished.</td><td>Call a <code>REQUIRES_NEW</code> method from the callback.</td></tr><tr><td>Requests hang under load</td><td>Each <code>REQUIRES_NEW</code> holds a second connection while the first waits: the pool runs dry.</td><td>Pool size above the concurrency; keep nested transactions short.</td></tr><tr><td>COMPLETED in the trail for a transfer that rolled back</td><td>Outcome written before the commit.</td><td>Write it in <code>afterCompletion</code>, from the real status.</td></tr><tr><td><code>Transaction synchronization is not active</code></td><td><code>registerSynchronization</code> called outside a transaction.</td><td>Call it inside a <code>@Transactional</code> method.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/057-audit-trail-that-survives-a-rollback/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/tijori/transfers/
+│   ├── TransferController.java   ├── TransferService.java   ├── AuditTrail.java   └── TransfersApplication.java
+├── src/main/resources/
+│   ├── application.yaml   └── db/migration/V1__accounts_transfers_audit.sql, V2__demo_accounts.sql
+├── src/test/java/com/tijori/transfers/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the database.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">TransferController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">TransferService.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">AuditTrail.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">V1__accounts_transfers_audit.sql</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">V2__demo_accounts.sql</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">TransfersApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/tijori/transfers/TransferController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Validates the transfer; reads an account's trail.</dd><dt>Why</dt><dd>HTTP only; a malformed body never becomes an attempt.</dd><dt>Without it</dt><dd>Validation errors audited as attempts.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.transfers;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.util.List;
+
+@RestController
+class TransferController {
+
+    /** Demo limit: ₹1 to ₹5 lakh per transfer. */
+    record NewTransfer(@NotNull Long fromAccountId, @NotNull Long toAccountId, @NotNull @Min(100) @Max(50_000_000) Long amountPaise) {
+    }
+
+    private final TransferService transfers;
+    private final AuditTrail audit;
+    private final JdbcClient jdbc;
+
+    TransferController(TransferService transfers, AuditTrail audit, JdbcClient jdbc) {
+        this.transfers = transfers;
+        this.audit = audit;
+        this.jdbc = jdbc;
+    }
+
+    /** Demo: unprotected. A real bank authenticates the account holder and asks for a second factor. */
+    @PostMapping(&quot;/transfers&quot;)
+    ResponseEntity&lt;TransferService.Transfer&gt; transfer(@Valid @RequestBody NewTransfer body) {
+        TransferService.Transfer t = transfers.transfer(body.fromAccountId(), body.toAccountId(), body.amountPaise());
+        return ResponseEntity.created(URI.create(&quot;/transfers/&quot; + t.id())).body(t);
+    }
+
+    /** Oldest first: the story of the account&#x27;s attempts, in order. Demo: unprotected; real audit logs are staff-only. */
+    @GetMapping(&quot;/audit-events&quot;)
+    List&lt;AuditTrail.AuditEvent&gt; audit(@RequestParam long accountId) {
+        if (jdbc.sql(&quot;SELECT count(*) FROM accounts WHERE id = ?&quot;).param(accountId).query(Long.class).single() == 0) {
+            throw TransferService.problem(HttpStatus.NOT_FOUND, &quot;Account not found&quot;, &quot;No account &quot; + accountId + &quot;.&quot;);
+        }
+        return audit.forAccount(accountId);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/tijori/transfers/TransferService.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Records the attempt, moves the money, and leaves the outcome to the end of the transaction.</dd><dt>Why</dt><dd>REQUIRED for the business work; a synchronization for the outcome.</dd><dt>Without it</dt><dd>COMPLETED for a transfer that rolled back.</dd></dl><ul><li><code>registerSynchronization</code> hooks into the transaction this call runs in, even if it is the caller's.</li><li>The reason is kept in an <code>AtomicReference</code> set in the catch block and read in <code>afterCompletion</code>.</li><li>The debit is conditional: zero rows means insufficient funds (or no account).</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.transfers;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.ErrorResponseException;
+
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
+
+/**
+ * A transfer between two accounts. Simulated: two balances and a record change; no bank network is involved.
+ * Its audit trail: TRANSFER_ATTEMPTED before anything else, then TRANSFER_COMPLETED or TRANSFER_FAILED once the
+ * outcome is final, and none of it can be rolled back with the transfer.
+ */
+@Service
+class TransferService {
+
+    record Transfer(long id, UUID attemptId, long fromAccountId, long toAccountId, long amountPaise, String status) {
+    }
+
+    private final JdbcClient jdbc;
+    private final AuditTrail audit;
+
+    TransferService(JdbcClient jdbc, AuditTrail audit) {
+        this.jdbc = jdbc;
+        this.audit = audit;
+    }
+
+    @Transactional   // REQUIRED: joins the caller&#x27;s transaction if there is one, starts one if not
+    public Transfer transfer(long from, long to, long amountPaise) {
+        UUID attempt = UUID.randomUUID();
+        audit.record(attempt, &quot;TRANSFER_ATTEMPTED&quot;, from, to, amountPaise, null);   // committed already, on its own
+        AtomicReference&lt;String&gt; reason = new AtomicReference&lt;&gt;();
+        // The outcome is known only when the transaction ends: possibly after this method returned, in the caller.
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_COMMITTED) {
+                    audit.record(attempt, &quot;TRANSFER_COMPLETED&quot;, from, to, amountPaise, null);
+                } else {
+                    audit.record(attempt, &quot;TRANSFER_FAILED&quot;, from, to, amountPaise, reason.get() == null ? &quot;rolled back after the transfer ran&quot; : reason.get());
+                }
+            }
+        });
+        try {
+            return move(attempt, from, to, amountPaise);
+        } catch (ErrorResponseException e) {
+            reason.set(e.getBody().getTitle());
+            throw e;
+        } catch (RuntimeException e) {
+            reason.set(e.getClass().getSimpleName());
+            throw e;
+        }
+    }
+
+    private Transfer move(UUID attempt, long from, long to, long amountPaise) {
+        if (from == to) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Same account&quot;, &quot;An account cannot transfer to itself.&quot;);
+        }
+        int debited = jdbc.sql(&quot;UPDATE accounts SET balance_paise = balance_paise - ? WHERE id = ? AND balance_paise &gt;= ?&quot;).params(amountPaise, from, amountPaise).update();
+        if (debited == 0) {
+            boolean exists = jdbc.sql(&quot;SELECT count(*) FROM accounts WHERE id = ?&quot;).param(from).query(Long.class).single() &gt; 0;
+            throw exists ? problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Insufficient funds&quot;, &quot;Account &quot; + from + &quot; cannot send &quot; + amountPaise + &quot; paise.&quot;)
+                    : problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Unknown account&quot;, &quot;No account &quot; + from + &quot;.&quot;);
+        }
+        if (jdbc.sql(&quot;UPDATE accounts SET balance_paise = balance_paise + ? WHERE id = ?&quot;).params(amountPaise, to).update() == 0) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Unknown account&quot;, &quot;No account &quot; + to + &quot;.&quot;);   // the debit above rolls back
+        }
+        long id = jdbc.sql(&quot;INSERT INTO transfers (attempt_id, from_account, to_account, amount_paise) VALUES (?, ?, ?, ?) RETURNING id&quot;)
+                .params(attempt, from, to, amountPaise).query(Long.class).single();
+        return new Transfer(id, attempt, from, to, amountPaise, &quot;COMPLETED&quot;);
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/tijori/transfers/AuditTrail.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Writes and reads audit events.</dd><dt>Why</dt><dd><code>REQUIRES_NEW</code>: each write commits on its own, also when called from <code>afterCompletion</code>.</dd><dt>Without it</dt><dd>Audit rows that roll back.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.transfers;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+/** The audit_events table. Every write commits on its own, whatever happens to the caller&#x27;s transaction. */
+@Component
+class AuditTrail {
+
+    record AuditEvent(long id, UUID attemptId, String event, long fromAccount, long toAccount, long amountPaise, String reason, Instant at) {
+    }
+
+    private final JdbcClient jdbc;
+
+    AuditTrail(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    /**
+     * REQUIRES_NEW: the caller&#x27;s transaction is suspended, this insert runs and commits in a transaction of its own
+     * (on a second connection), and the caller&#x27;s resumes. A rollback of the caller cannot touch it.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void record(UUID attemptId, String event, long from, long to, long amountPaise, String reason) {
+        jdbc.sql(&quot;INSERT INTO audit_events (attempt_id, event, from_account, to_account, amount_paise, reason) VALUES (?, ?, ?, ?, ?, ?)&quot;)
+                .params(attemptId, event, from, to, amountPaise, reason).update();
+    }
+
+    @Transactional(readOnly = true)
+    public List&lt;AuditEvent&gt; forAccount(long accountId) {
+        return jdbc.sql(&quot;SELECT id, attempt_id, event, from_account, to_account, amount_paise, reason, at FROM audit_events WHERE from_account = ? OR to_account = ? ORDER BY id&quot;)
+                .params(accountId, accountId).query(AuditEvent.class).list();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/resources/db/migration/V1__accounts_transfers_audit.sql</p><div class="notes"><p>Accounts, transfers and the audit table, with named constraints and one outcome per attempt.</p></div><div class="src"><pre class="code"><code class="language-sql">-- Tijori transfers and their audit trail. Audit rows reference accounts only loosely: an attempt to an account that
+-- does not exist must still be recorded, so audit_events has no foreign keys.
+CREATE TABLE accounts (
+    id            BIGINT PRIMARY KEY,
+    holder        VARCHAR(80) NOT NULL,
+    balance_paise BIGINT      NOT NULL,
+    CONSTRAINT accounts_balance_not_negative CHECK (balance_paise &gt;= 0)
+);
+
+CREATE TABLE transfers (
+    id           BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    attempt_id   UUID        NOT NULL,
+    from_account BIGINT      NOT NULL,
+    to_account   BIGINT      NOT NULL,
+    amount_paise BIGINT      NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT transfers_from_fk FOREIGN KEY (from_account) REFERENCES accounts (id),
+    CONSTRAINT transfers_to_fk FOREIGN KEY (to_account) REFERENCES accounts (id),
+    CONSTRAINT transfers_not_to_self CHECK (from_account &lt;&gt; to_account),
+    CONSTRAINT transfers_amount_range CHECK (amount_paise BETWEEN 100 AND 50000000),
+    CONSTRAINT transfers_attempt_unique UNIQUE (attempt_id)
+);
+
+CREATE TABLE audit_events (
+    id           BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    attempt_id   UUID         NOT NULL,
+    event        VARCHAR(20)  NOT NULL,
+    from_account BIGINT       NOT NULL,
+    to_account   BIGINT       NOT NULL,
+    amount_paise BIGINT       NOT NULL,
+    reason       VARCHAR(120),
+    at           TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT audit_events_event_known CHECK (event IN (&#x27;TRANSFER_ATTEMPTED&#x27;, &#x27;TRANSFER_COMPLETED&#x27;, &#x27;TRANSFER_FAILED&#x27;)),
+    CONSTRAINT audit_events_reason_on_failure CHECK ((event = &#x27;TRANSFER_FAILED&#x27;) = (reason IS NOT NULL)),
+    -- One outcome per attempt: never both COMPLETED and FAILED.
+    CONSTRAINT audit_events_one_per_attempt UNIQUE (attempt_id, event)
+);
+
+CREATE UNIQUE INDEX audit_events_one_outcome ON audit_events (attempt_id) WHERE event &lt;&gt; &#x27;TRANSFER_ATTEMPTED&#x27;;
+CREATE INDEX audit_events_from ON audit_events (from_account);
+CREATE INDEX audit_events_to ON audit_events (to_account);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_accounts.sql</p><div class="notes"><p>Asha (₹25,000) and Ravi (₹100).</p></div><div class="src"><pre class="code"><code class="language-sql">-- Demo accounts (invented).
+INSERT INTO accounts (id, holder, balance_paise) VALUES
+    (1, &#x27;Asha Verma&#x27;, 2500000),   -- ₹25,000
+    (2, &#x27;Ravi Menon&#x27;,   10000);   -- ₹100</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Problem details on; decimals refused for whole-number fields.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: tijori-transfers
+  mvc:
+    problemdetails:
+      enabled: true
+  jackson:
+    deserialization:
+      accept-float-as-int: false   # 1499.50 for a paise field is a client bug: 400, not 1499
+  datasource:
+    url: jdbc:postgresql://localhost:5432/tijori
+    username: tijori
+    password: tijori</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/tijori/transfers/TransfersApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.transfers;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class TransfersApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(TransfersApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>TransferContractTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>AuditRollbackTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>AuditDatabaseTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.tijori.transfers.AuditRollbackTrapTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.tijori.transfers.TransferContractTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.tijori.transfers.AuditDatabaseTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">AuditRollbackTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">TransferContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">AuditDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">OldTransferService.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">RequiredPropagation.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-6-b" aria-controls="tests-6" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/tijori/transfers/AuditRollbackTrapTest.java</p><div class="notes"><p>Written first: the old catch-block audit, and the new trail, for the same failed attempt.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.transfers;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Import;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The first test written for this station: Ravi (₹100) tries to send ₹5,000, the old way and the new way. */
+@Import(OldTransferService.class)
+class AuditRollbackTrapTest extends ApiTest {
+
+    @Autowired
+    OldTransferService old;
+
+    @Test
+    void theOldAuditRowRolledBackWithTheTransfer() {
+        assertThatThrownBy(() -&gt; old.transfer(2, 1, 500_000)).hasMessage(&quot;insufficient funds&quot;);
+        assertThat(events()).isEmpty();   // the failed attempt left no trace: exactly what the auditors asked for, gone
+    }
+
+    @Test
+    void theNewTrailKeepsTheAttemptAndItsFailure() throws Exception {
+        transfer(2, 1, 500_000).andExpect(status().isUnprocessableContent());
+        assertThat(events()).containsExactly(&quot;TRANSFER_ATTEMPTED&quot;, &quot;TRANSFER_FAILED Insufficient funds&quot;);
+        assertThat(balance(2)).isEqualTo(10_000);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/tijori/transfers/TransferContractTest.java</p><div class="notes"><p>Transfers, refusals with reasons, and the trail.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.transfers;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The HTTP contract: transfers and the account&#x27;s audit trail; valid, invalid and not found. */
+class TransferContractTest extends ApiTest {
+
+    @Test
+    void aTransferChangesBothBalancesAndIsAuditedTwice() throws Exception {
+        transfer(1, 2, 150_000).andExpect(status().isCreated())
+                .andExpect(content().json(&quot;{\&quot;fromAccountId\&quot;:1,\&quot;toAccountId\&quot;:2,\&quot;amountPaise\&quot;:150000,\&quot;status\&quot;:\&quot;COMPLETED\&quot;}&quot;));
+        assertThat(balance(1)).isEqualTo(2_350_000);
+        assertThat(balance(2)).isEqualTo(160_000);
+        mvc.perform(get(&quot;/audit-events&quot;).param(&quot;accountId&quot;, &quot;2&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$[*].event&quot;).value(org.hamcrest.Matchers.contains(&quot;TRANSFER_ATTEMPTED&quot;, &quot;TRANSFER_COMPLETED&quot;)));
+        assertThat(jdbc.sql(&quot;SELECT count(DISTINCT attempt_id) FROM audit_events&quot;).query(Long.class).single()).isEqualTo(1);   // one attempt, two events
+    }
+
+    @Test
+    void everyRefusalIsAuditedWithItsReason() throws Exception {
+        transfer(2, 1, 500_000).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Insufficient funds&quot;));
+        transfer(1, 1, 1_000).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Same account&quot;));
+        transfer(1, 99, 1_000).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Unknown account&quot;));
+        assertThat(balance(1)).isEqualTo(2_500_000);   // the debit before &quot;unknown account&quot; was rolled back
+        assertThat(events()).containsExactly(&quot;TRANSFER_ATTEMPTED&quot;, &quot;TRANSFER_FAILED Insufficient funds&quot;,
+                &quot;TRANSFER_ATTEMPTED&quot;, &quot;TRANSFER_FAILED Same account&quot;, &quot;TRANSFER_ATTEMPTED&quot;, &quot;TRANSFER_FAILED Unknown account&quot;);
+    }
+
+    @Test
+    void malformedTransfersAre400AndNotAttempts() throws Exception {
+        transfer(1, 2, 99).andExpect(status().isBadRequest());
+        transfer(1, 2, 50_000_001).andExpect(status().isBadRequest());
+        mvc.perform(post(&quot;/transfers&quot;).contentType(MediaType.APPLICATION_JSON).content(&quot;{\&quot;fromAccountId\&quot;:1,\&quot;amountPaise\&quot;:1000}&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(post(&quot;/transfers&quot;).contentType(MediaType.APPLICATION_JSON).content(&quot;{\&quot;fromAccountId\&quot;:1,\&quot;toAccountId\&quot;:2,\&quot;amountPaise\&quot;:10.5}&quot;)).andExpect(status().isBadRequest());
+        assertThat(events()).isEmpty();
+    }
+
+    @Test
+    void unknownAccountsHaveNoTrail() throws Exception {
+        mvc.perform(get(&quot;/audit-events&quot;).param(&quot;accountId&quot;, &quot;99&quot;)).andExpect(status().isNotFound()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;No account 99.&quot;));
+        mvc.perform(get(&quot;/audit-events&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/tijori/transfers/AuditDatabaseTest.java</p><div class="notes"><p>Named constraints; REQUIRES_NEW vs REQUIRED; a caller's rollback after a normal return.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.transfers;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Import;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The tables&#x27; rules with Java bypassed, and propagation against a real database: who survives whose rollback. */
+@Import(RequiredPropagation.class)
+class AuditDatabaseTest extends ApiTest {
+
+    @Autowired
+    TransactionTemplate transaction;
+    @Autowired
+    AuditTrail audit;
+    @Autowired
+    RequiredPropagation required;
+    @Autowired
+    TransferService transfers;
+
+    @Test
+    void namedConstraintsHoldWithoutJava() {
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;UPDATE accounts SET balance_paise = -1 WHERE id = 2&quot;).update()).hasMessageContaining(&quot;accounts_balance_not_negative&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO transfers (attempt_id, from_account, to_account, amount_paise) VALUES (gen_random_uuid(), 1, 1, 100)&quot;).update())
+                .hasMessageContaining(&quot;transfers_not_to_self&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO transfers (attempt_id, from_account, to_account, amount_paise) VALUES (gen_random_uuid(), 1, 9, 100)&quot;).update())
+                .hasMessageContaining(&quot;transfers_to_fk&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO audit_events (attempt_id, event, from_account, to_account, amount_paise) VALUES (gen_random_uuid(), &#x27;TRANSFER_FAILED&#x27;, 1, 2, 100)&quot;).update())
+                .hasMessageContaining(&quot;audit_events_reason_on_failure&quot;);
+        UUID attempt = UUID.randomUUID();
+        audit.record(attempt, &quot;TRANSFER_COMPLETED&quot;, 1, 2, 100, null);
+        assertThatThrownBy(() -&gt; audit.record(attempt, &quot;TRANSFER_FAILED&quot;, 1, 2, 100, &quot;late&quot;)).hasMessageContaining(&quot;audit_events_one_outcome&quot;);
+    }
+
+    @Test
+    void requiresNewSurvivesTheCallersRollbackAndRequiredDoesNot() {
+        transaction.executeWithoutResult(s -&gt; {
+            audit.record(UUID.randomUUID(), &quot;TRANSFER_ATTEMPTED&quot;, 1, 2, 100, null);   // REQUIRES_NEW
+            required.record();                                                          // REQUIRED: joins this transaction
+            s.setRollbackOnly();
+        });
+        assertThat(events()).containsExactly(&quot;TRANSFER_ATTEMPTED&quot;);   // one survived, one went with the rollback
+    }
+
+    @Test
+    void aTransferRolledBackByItsCallerIsAuditedAsFailedNotCompleted() {
+        // The service returned normally, inside a caller&#x27;s transaction that then rolled back.
+        transaction.executeWithoutResult(s -&gt; {
+            transfers.transfer(1, 2, 150_000);
+            s.setRollbackOnly();
+        });
+        assertThat(balance(1)).isEqualTo(2_500_000);
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM transfers&quot;).query(Long.class).single()).isZero();
+        assertThat(events()).containsExactly(&quot;TRANSFER_ATTEMPTED&quot;, &quot;TRANSFER_FAILED rolled back after the transfer ran&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/tijori/transfers/OldTransferService.java</p><div class="notes"><p>The old service, kept only in tests.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.transfers;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * The transfer as it shipped, kept only in tests (the trap test registers it as a bean). It audits the failure,
+ * carefully, in a catch block, with the same JdbcClient, in the same transaction that is about to roll back.
+ */
+class OldTransferService {
+
+    private final JdbcClient jdbc;
+
+    OldTransferService(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    @Transactional
+    public void transfer(long from, long to, long amountPaise) {
+        try {
+            int debited = jdbc.sql(&quot;UPDATE accounts SET balance_paise = balance_paise - ? WHERE id = ? AND balance_paise &gt;= ?&quot;).params(amountPaise, from, amountPaise).update();
+            if (debited == 0) {
+                throw new IllegalStateException(&quot;insufficient funds&quot;);
+            }
+            jdbc.sql(&quot;UPDATE accounts SET balance_paise = balance_paise + ? WHERE id = ?&quot;).params(amountPaise, to).update();
+        } catch (IllegalStateException e) {
+            jdbc.sql(&quot;INSERT INTO audit_events (attempt_id, event, from_account, to_account, amount_paise, reason) VALUES (gen_random_uuid(), &#x27;TRANSFER_FAILED&#x27;, ?, ?, ?, ?)&quot;)
+                    .params(from, to, amountPaise, e.getMessage()).update();
+            throw e;   // ...and the rollback takes the audit row with it
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/tijori/transfers/RequiredPropagation.java</p><div class="notes"><p>Test-only bean: the same insert with REQUIRED, for comparison.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.transfers;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.annotation.Transactional;
+
+/** Test-only bean: the same audit insert with the default propagation, REQUIRED, for comparison. */
+class RequiredPropagation {
+
+    private final JdbcClient jdbc;
+
+    RequiredPropagation(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    @Transactional
+    public void record() {
+        jdbc.sql(&quot;INSERT INTO audit_events (attempt_id, event, from_account, to_account, amount_paise) VALUES (gen_random_uuid(), &#x27;TRANSFER_ATTEMPTED&#x27;, 1, 2, 100)&quot;).update();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/tijori/transfers/ApiTest.java</p><div class="notes"><p>Shared setup: no transfers or events, balances reset.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.transfers;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import java.util.List;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/** Shared setup: the app on a real PostgreSQL. Before each test: no transfers or events, Asha (1) ₹25,000, Ravi (2) ₹100. */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+
+    @BeforeEach
+    void freshBank() {
+        jdbc.sql(&quot;TRUNCATE transfers, audit_events RESTART IDENTITY&quot;).update();
+        jdbc.sql(&quot;UPDATE accounts SET balance_paise = CASE id WHEN 1 THEN 2500000 ELSE 10000 END&quot;).update();
+    }
+
+    ResultActions transfer(long from, long to, long paise) throws Exception {
+        return mvc.perform(post(&quot;/transfers&quot;).contentType(MediaType.APPLICATION_JSON)
+                .content(&quot;{\&quot;fromAccountId\&quot;:%d,\&quot;toAccountId\&quot;:%d,\&quot;amountPaise\&quot;:%d}&quot;.formatted(from, to, paise)));
+    }
+
+    /** Every event, oldest first, as &quot;EVENT reason&quot;. */
+    List&lt;String&gt; events() {
+        return jdbc.sql(&quot;SELECT event || coalesce(&#x27; &#x27; || reason, &#x27;&#x27;) FROM audit_events ORDER BY id&quot;).query(String.class).list();
+    }
+
+    long balance(long account) {
+        return jdbc.sql(&quot;SELECT balance_paise FROM accounts WHERE id = ?&quot;).param(account).query(Long.class).single();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-6" aria-labelledby="tests-6-b" hidden><p class="path">src/test/java/com/tijori/transfers/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.transfers;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker. Nested transactions, callbacks and constraints must behave exactly as in production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/tijori/transfers/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=AttemptIdChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 9 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solution copied in, all 11 tests pass (9 station tests and 2 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 15 minutes</p><h2>The attempt id in the refusal</h2><p>Add <code>attemptId</code> to every refused transfer's problem response: the same id its audit events carry.</p><p><b>Done when:</b> the test in <code>AttemptIdChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li><code>ProblemDetail.setProperty</code> adds a field to the response.</li><li>The catch block already has the problem and the attempt id.</li></ul></details><p class="path">challenge/AttemptIdChallengeTest.java</p><pre class="code"><code class="language-java">package com.tijori.transfers;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: a refused transfer&#x27;s problem response carries &quot;attemptId&quot;, the same id as its audit events, so a
+ * customer reading it to support can be found in the trail at once.
+ */
+class AttemptIdChallengeTest extends ApiTest {
+
+    @Test
+    void theRefusalNamesItsAttempt() throws Exception {
+        String body = transfer(2, 1, 500_000).andExpect(status().isUnprocessableContent()).andReturn().getResponse().getContentAsString();
+        String attemptId = com.jayway.jsonpath.JsonPath.read(body, &quot;$.attemptId&quot;);
+        assertThat(jdbc.sql(&quot;SELECT event FROM audit_events WHERE attempt_id = ?::uuid ORDER BY id&quot;).param(attemptId).query(String.class).list())
+                .containsExactly(&quot;TRANSFER_ATTEMPTED&quot;, &quot;TRANSFER_FAILED&quot;);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/TransferService.java</p><div class="src"><pre class="code"><code class="language-java">package com.tijori.transfers;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.ErrorResponseException;
+
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
+
+/**
+ * A transfer between two accounts. Simulated: two balances and a record change; no bank network is involved.
+ * Its audit trail: TRANSFER_ATTEMPTED before anything else, then TRANSFER_COMPLETED or TRANSFER_FAILED once the
+ * outcome is final, and none of it can be rolled back with the transfer.
+ */
+@Service
+class TransferService {
+
+    record Transfer(long id, UUID attemptId, long fromAccountId, long toAccountId, long amountPaise, String status) {
+    }
+
+    private final JdbcClient jdbc;
+    private final AuditTrail audit;
+
+    TransferService(JdbcClient jdbc, AuditTrail audit) {
+        this.jdbc = jdbc;
+        this.audit = audit;
+    }
+
+    @Transactional   // REQUIRED: joins the caller&#x27;s transaction if there is one, starts one if not
+    public Transfer transfer(long from, long to, long amountPaise) {
+        UUID attempt = UUID.randomUUID();
+        audit.record(attempt, &quot;TRANSFER_ATTEMPTED&quot;, from, to, amountPaise, null);   // committed already, on its own
+        AtomicReference&lt;String&gt; reason = new AtomicReference&lt;&gt;();
+        // The outcome is known only when the transaction ends: possibly after this method returned, in the caller.
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_COMMITTED) {
+                    audit.record(attempt, &quot;TRANSFER_COMPLETED&quot;, from, to, amountPaise, null);
+                } else {
+                    audit.record(attempt, &quot;TRANSFER_FAILED&quot;, from, to, amountPaise, reason.get() == null ? &quot;rolled back after the transfer ran&quot; : reason.get());
+                }
+            }
+        });
+        try {
+            return move(attempt, from, to, amountPaise);
+        } catch (ErrorResponseException e) {
+            reason.set(e.getBody().getTitle());
+            e.getBody().setProperty(&quot;attemptId&quot;, attempt);   // the same id support will find in the trail
+            throw e;
+        } catch (RuntimeException e) {
+            reason.set(e.getClass().getSimpleName());
+            throw e;
+        }
+    }
+
+    /** Demo rule: 3 failed transfers from one account within 10 minutes lock it out until they age. */
+    static final int MAX_RECENT_FAILURES = 3;
+
+    private Transfer move(UUID attempt, long from, long to, long amountPaise) {
+        long recentFailures = jdbc.sql(&quot;SELECT count(*) FROM audit_events WHERE from_account = ? AND event = &#x27;TRANSFER_FAILED&#x27; AND at &gt; now() - interval &#x27;10 minutes&#x27;&quot;)
+                .param(from).query(Long.class).single();
+        if (recentFailures &gt;= MAX_RECENT_FAILURES) {
+            throw problem(HttpStatus.TOO_MANY_REQUESTS, &quot;Too many failed attempts&quot;, &quot;Account &quot; + from + &quot; had &quot; + recentFailures + &quot; failed transfers in the last 10 minutes.&quot;);
+        }
+        if (from == to) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Same account&quot;, &quot;An account cannot transfer to itself.&quot;);
+        }
+        int debited = jdbc.sql(&quot;UPDATE accounts SET balance_paise = balance_paise - ? WHERE id = ? AND balance_paise &gt;= ?&quot;).params(amountPaise, from, amountPaise).update();
+        if (debited == 0) {
+            boolean exists = jdbc.sql(&quot;SELECT count(*) FROM accounts WHERE id = ?&quot;).param(from).query(Long.class).single() &gt; 0;
+            throw exists ? problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Insufficient funds&quot;, &quot;Account &quot; + from + &quot; cannot send &quot; + amountPaise + &quot; paise.&quot;)
+                    : problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Unknown account&quot;, &quot;No account &quot; + from + &quot;.&quot;);
+        }
+        if (jdbc.sql(&quot;UPDATE accounts SET balance_paise = balance_paise + ? WHERE id = ?&quot;).params(amountPaise, to).update() == 0) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Unknown account&quot;, &quot;No account &quot; + to + &quot;.&quot;);   // the debit above rolls back
+        }
+        long id = jdbc.sql(&quot;INSERT INTO transfers (attempt_id, from_account, to_account, amount_paise) VALUES (?, ?, ?, ?) RETURNING id&quot;)
+                .params(attempt, from, to, amountPaise).query(Long.class).single();
+        return new Transfer(id, attempt, from, to, amountPaise, &quot;COMPLETED&quot;);
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 25 minutes</p><h2>Lock out repeated failures</h2><p>After 3 failed transfers from an account within 10 minutes, refuse its next ones with <code>429</code> "Too many failed attempts", until the failures age. Count from the audit trail.</p><p><b>Done when:</b> the test in <code>LockoutChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>The count only works because failures survive their rollbacks: that is the point.</li><li>The blocked attempt is itself an attempt: it is audited like the others.</li></ul></details><p class="path">challenge/LockoutChallengeTest.java</p><pre class="code"><code class="language-java">package com.tijori.transfers;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: after 3 failed transfers from an account in the last 10 minutes, further transfers from it are 429
+ * &quot;Too many failed attempts&quot; (and audited as failed attempts). The count comes from the audit trail, which only
+ * works because failures survive their rollbacks. Other accounts are not affected. Demo rule, not a bank&#x27;s.
+ */
+class LockoutChallengeTest extends ApiTest {
+
+    @Test
+    void threeFailuresLockTheSenderForAWhile() throws Exception {
+        for (int i = 0; i &lt; 3; i++) {
+            transfer(2, 1, 500_000).andExpect(status().isUnprocessableContent());
+        }
+        transfer(2, 1, 1_000).andExpect(status().isTooManyRequests()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Too many failed attempts&quot;));
+        assertThat(balance(2)).isEqualTo(10_000);
+        transfer(1, 2, 1_000).andExpect(status().isCreated());   // Asha is not locked
+        jdbc.sql(&quot;UPDATE audit_events SET at = at - interval &#x27;11 minutes&#x27;&quot;).update();
+        transfer(2, 1, 1_000).andExpect(status().isCreated());   // ten minutes later, Ravi can try again
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/TransferService.java</p><div class="src"><pre class="code"><code class="language-java">package com.tijori.transfers;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.ErrorResponseException;
+
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
+
+/**
+ * A transfer between two accounts. Simulated: two balances and a record change; no bank network is involved.
+ * Its audit trail: TRANSFER_ATTEMPTED before anything else, then TRANSFER_COMPLETED or TRANSFER_FAILED once the
+ * outcome is final, and none of it can be rolled back with the transfer.
+ */
+@Service
+class TransferService {
+
+    record Transfer(long id, UUID attemptId, long fromAccountId, long toAccountId, long amountPaise, String status) {
+    }
+
+    private final JdbcClient jdbc;
+    private final AuditTrail audit;
+
+    TransferService(JdbcClient jdbc, AuditTrail audit) {
+        this.jdbc = jdbc;
+        this.audit = audit;
+    }
+
+    @Transactional   // REQUIRED: joins the caller&#x27;s transaction if there is one, starts one if not
+    public Transfer transfer(long from, long to, long amountPaise) {
+        UUID attempt = UUID.randomUUID();
+        audit.record(attempt, &quot;TRANSFER_ATTEMPTED&quot;, from, to, amountPaise, null);   // committed already, on its own
+        AtomicReference&lt;String&gt; reason = new AtomicReference&lt;&gt;();
+        // The outcome is known only when the transaction ends: possibly after this method returned, in the caller.
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_COMMITTED) {
+                    audit.record(attempt, &quot;TRANSFER_COMPLETED&quot;, from, to, amountPaise, null);
+                } else {
+                    audit.record(attempt, &quot;TRANSFER_FAILED&quot;, from, to, amountPaise, reason.get() == null ? &quot;rolled back after the transfer ran&quot; : reason.get());
+                }
+            }
+        });
+        try {
+            return move(attempt, from, to, amountPaise);
+        } catch (ErrorResponseException e) {
+            reason.set(e.getBody().getTitle());
+            e.getBody().setProperty(&quot;attemptId&quot;, attempt);   // the same id support will find in the trail
+            throw e;
+        } catch (RuntimeException e) {
+            reason.set(e.getClass().getSimpleName());
+            throw e;
+        }
+    }
+
+    /** Demo rule: 3 failed transfers from one account within 10 minutes lock it out until they age. */
+    static final int MAX_RECENT_FAILURES = 3;
+
+    private Transfer move(UUID attempt, long from, long to, long amountPaise) {
+        long recentFailures = jdbc.sql(&quot;SELECT count(*) FROM audit_events WHERE from_account = ? AND event = &#x27;TRANSFER_FAILED&#x27; AND at &gt; now() - interval &#x27;10 minutes&#x27;&quot;)
+                .param(from).query(Long.class).single();
+        if (recentFailures &gt;= MAX_RECENT_FAILURES) {
+            throw problem(HttpStatus.TOO_MANY_REQUESTS, &quot;Too many failed attempts&quot;, &quot;Account &quot; + from + &quot; had &quot; + recentFailures + &quot; failed transfers in the last 10 minutes.&quot;);
+        }
+        if (from == to) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Same account&quot;, &quot;An account cannot transfer to itself.&quot;);
+        }
+        int debited = jdbc.sql(&quot;UPDATE accounts SET balance_paise = balance_paise - ? WHERE id = ? AND balance_paise &gt;= ?&quot;).params(amountPaise, from, amountPaise).update();
+        if (debited == 0) {
+            boolean exists = jdbc.sql(&quot;SELECT count(*) FROM accounts WHERE id = ?&quot;).param(from).query(Long.class).single() &gt; 0;
+            throw exists ? problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Insufficient funds&quot;, &quot;Account &quot; + from + &quot; cannot send &quot; + amountPaise + &quot; paise.&quot;)
+                    : problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Unknown account&quot;, &quot;No account &quot; + from + &quot;.&quot;);
+        }
+        if (jdbc.sql(&quot;UPDATE accounts SET balance_paise = balance_paise + ? WHERE id = ?&quot;).params(amountPaise, to).update() == 0) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Unknown account&quot;, &quot;No account &quot; + to + &quot;.&quot;);   // the debit above rolls back
+        }
+        long id = jdbc.sql(&quot;INSERT INTO transfers (attempt_id, from_account, to_account, amount_paise) VALUES (?, ?, ?, ?) RETURNING id&quot;)
+                .params(attempt, from, to, amountPaise).query(Long.class).single();
+        return new Transfer(id, attempt, from, to, amountPaise, &quot;COMPLETED&quot;);
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String title, String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail);
+        p.setTitle(title);
+        return new ErrorResponseException(status, p, null);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Where should the audit trail live?</h2>
+<p>Compare three homes for it: a table in the same database written with REQUIRES_NEW (this station), an outbox table written in the same transaction and shipped elsewhere, and a log line sent to a log pipeline. For each: can an event be lost, can it describe something that never happened, and who can change it later?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, mapping</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test with the old catch-block audit as a real bean.</li>
+<li>Move audit writes to a bean whose method is <code>REQUIRES_NEW</code>.</li>
+<li>Record the attempt first; record the outcome from <code>afterCompletion</code>.</li>
+<li>Prove both against a rollback by a caller, not only by an exception.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td><code>REQUIRES_NEW</code> audit writes + <code>afterCompletion</code> outcome</td><td>A second connection per audit write.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Audit in the same transaction</td><td>Failures vanish.</td><td><span class="pill bad">The trap</span></td></tr><tr><td><code>@TransactionalEventListener(phase = AFTER_COMPLETION)</code></td><td>The same idea through events; the listener still needs <code>REQUIRES_NEW</code>.</td><td><span class="pill warn">Equivalent</span></td></tr><tr><td>Audit written by the controller after the service returns</td><td>Misses calls from jobs and other services; a caller's rollback is invisible.</td><td><span class="pill bad">Incomplete</span></td></tr><tr><td><code>NESTED</code> (savepoints)</td><td>Rolls back with the outer transaction: the opposite of what an audit needs.</td><td><span class="pill bad">Wrong tool</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Table</th><th>Constraints</th></tr></thead><tbody><tr><td><code>accounts</code></td><td><code>accounts_balance_not_negative</code></td></tr><tr><td><code>transfers</code></td><td><code>transfers_from_fk</code>, <code>transfers_to_fk</code>, <code>transfers_not_to_self</code>, <code>transfers_amount_range</code>, <code>transfers_attempt_unique</code></td></tr><tr><td><code>audit_events</code></td><td><code>audit_events_event_known</code>, <code>audit_events_reason_on_failure</code>, <code>audit_events_one_per_attempt</code>, partial unique <code>audit_events_one_outcome</code>; no foreign keys, on purpose</td></tr></tbody></table></div>
+<pre class="code"><code class="language-sql">-- Tijori transfers and their audit trail. Audit rows reference accounts only loosely: an attempt to an account that
+-- does not exist must still be recorded, so audit_events has no foreign keys.
+CREATE TABLE accounts (
+    id            BIGINT PRIMARY KEY,
+    holder        VARCHAR(80) NOT NULL,
+    balance_paise BIGINT      NOT NULL,
+    CONSTRAINT accounts_balance_not_negative CHECK (balance_paise &gt;= 0)
+);
+
+CREATE TABLE transfers (
+    id           BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    attempt_id   UUID        NOT NULL,
+    from_account BIGINT      NOT NULL,
+    to_account   BIGINT      NOT NULL,
+    amount_paise BIGINT      NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT transfers_from_fk FOREIGN KEY (from_account) REFERENCES accounts (id),
+    CONSTRAINT transfers_to_fk FOREIGN KEY (to_account) REFERENCES accounts (id),
+    CONSTRAINT transfers_not_to_self CHECK (from_account &lt;&gt; to_account),
+    CONSTRAINT transfers_amount_range CHECK (amount_paise BETWEEN 100 AND 50000000),
+    CONSTRAINT transfers_attempt_unique UNIQUE (attempt_id)
+);
+
+CREATE TABLE audit_events (
+    id           BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    attempt_id   UUID         NOT NULL,
+    event        VARCHAR(20)  NOT NULL,
+    from_account BIGINT       NOT NULL,
+    to_account   BIGINT       NOT NULL,
+    amount_paise BIGINT       NOT NULL,
+    reason       VARCHAR(120),
+    at           TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT audit_events_event_known CHECK (event IN (&#x27;TRANSFER_ATTEMPTED&#x27;, &#x27;TRANSFER_COMPLETED&#x27;, &#x27;TRANSFER_FAILED&#x27;)),
+    CONSTRAINT audit_events_reason_on_failure CHECK ((event = &#x27;TRANSFER_FAILED&#x27;) = (reason IS NOT NULL)),
+    -- One outcome per attempt: never both COMPLETED and FAILED.
+    CONSTRAINT audit_events_one_per_attempt UNIQUE (attempt_id, event)
+);
+
+CREATE UNIQUE INDEX audit_events_one_outcome ON audit_events (attempt_id) WHERE event &lt;&gt; &#x27;TRANSFER_ATTEMPTED&#x27;;
+CREATE INDEX audit_events_from ON audit_events (from_account);
+CREATE INDEX audit_events_to ON audit_events (to_account);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Connections</dt><dd>Each <code>REQUIRES_NEW</code> borrows a second connection while the first is held. Under load, a pool smaller than twice the concurrent requests can deadlock on itself.</dd>
+<dt>A crash between the two</dt><dd>If the app dies after ATTEMPTED and before the outcome, the attempt has no outcome. A nightly check lists attempts older than a few minutes with no outcome, for a person to resolve.</dd>
+<dt>Keep it append-only</dt><dd>Grant the application INSERT and SELECT on <code>audit_events</code>, never UPDATE or DELETE.</dd>
+<dt>Retention</dt><dd>Audit trails often must be kept for years; plan partitions or archiving from the start.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>REQUIRED vs REQUIRES_NEW?</summary><p>REQUIRED joins the current transaction (or starts one): it commits or rolls back with the caller. REQUIRES_NEW suspends the caller&#x27;s transaction and runs in a new one that commits independently.</p></details><details class="qa"><summary>Why does a failure audit need REQUIRES_NEW?</summary><p>The failure makes the business transaction roll back. Anything written in it, including the audit row, rolls back too. A separate transaction is the only way the row survives.</p></details><details class="qa"><summary>How do you run code after a transaction commits?</summary><p>Register a TransactionSynchronization (afterCommit or afterCompletion), or use @TransactionalEventListener with a phase. Data access there must use REQUIRES_NEW.</p></details><details class="qa"><summary>What does REQUIRES_NEW cost?</summary><p>A second database connection and transaction per call, held while the outer one waits. It can exhaust the pool, and it can deadlock if the inner transaction needs rows the outer one locked.</p></details><details class="qa"><summary>Is NESTED the same as REQUIRES_NEW?</summary><p>No. NESTED uses a savepoint inside the outer transaction: it can roll back on its own, but if the outer transaction rolls back, it goes too.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 9 tests pass.</td><td>You switched REQUIRES_NEW off and saw the trail lose its failures.</td></tr><tr><td>Propagation</td><td>REQUIRED vs REQUIRES_NEW.</td><td>You can explain NESTED and the connection cost.</td></tr><tr><td>Outcome</td><td>Written after completion.</td><td>You covered a caller's rollback, not only an exception.</td></tr><tr><td>Audit design</td><td>One outcome per attempt, in the schema.</td><td>A plan for attempts with no outcome.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This Foundations station has no flawed version to review. Use this checklist on any record that must survive a failure:</p>
+<ul class="rules">
+<li>Which transaction is this row written in, and what happens to it if that transaction rolls back?</li>
+<li>Is "it worked" recorded before or after the commit?</li>
+<li>Does a nested transaction lock rows the outer one also needs?</li>
+<li>Could the pool run out of connections when every request opens two?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
