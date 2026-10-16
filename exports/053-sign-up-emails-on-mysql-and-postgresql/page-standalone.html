@@ -1,0 +1,1431 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 053 · Sign-up emails on MySQL and PostgreSQL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 053</span>
+    <h1>Sign-up emails on MySQL and PostgreSQL</h1>
+    <p class="scenario">&#x27;Asha@x.com&#x27; and &#x27;asha@x.com&#x27; are one user on MySQL but two on PostgreSQL.</p>
+    <p class="sim"><b>Simulation</b><span>Sign-ups are demo records; no email is sent to confirm an address.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Foundations</li>
+      <li><b>Experience</b>0–1 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>SaaS</li>
+      <li><b>Types</b>Database</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>038 Gym memberships with migrations and constraints · 043 Doctor directory with JPA</p>
+      <p><span class="eyebrow">Builds toward</span><br>059 Loyalty points tested on real PostgreSQL · 060 Inventory sync with MySQL upserts</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · JdbcClient · PostgreSQL 17 and MySQL 8.4 · Flyway per vendor · Testcontainers (both databases, shared containers)</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Two databases, one schema</strong><p>Taskloom runs on MySQL for some customers and PostgreSQL for others, with the same table: <code>email VARCHAR(254) UNIQUE</code>.</p></li><li><strong>One user or two?</strong><p>On MySQL, Asha@x.com and asha@x.com were one user. On PostgreSQL, they were two accounts, and Asha's projects were split between them. Support also found MySQL refusing josé@x.com because jose@x.com existed.</p></li><li><strong>The fix</strong><p>Say exactly what "the same email" means (the same after lower-casing, nothing else), write it into each database's schema in that database's own words, and run the same tests on both.</p></li></ol>
+<p class="lesson">"UNIQUE" means "unique under this database's comparison rules", and the rules differ.</p>
+
+<h2>What are we building?</h2>
+<p><code>POST /signups</code> takes an email and a name. The same email in any case is refused with <code>409</code>, on PostgreSQL and on MySQL alike. The address is kept as the person typed it.</p>
+
+<h2>An everyday analogy</h2>
+<p>Two school offices keep the same register. One files every name in capitals; the other files names exactly as written, so "ASHA" and "Asha" get two pages. Same register, different filing rule. The fix is to agree on the rule and write it on both registers' covers.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Trim</strong> the address and check its shape (ASCII only, a demo rule).</li>
+<li><strong>Look up</strong> <code>lower(email)</code>: is this person already here?</li>
+<li><strong>Insert</strong>; the unique index on <code>lower(email)</code> refuses a duplicate, even one sent at the same moment.</li>
+<li><strong>Answer</strong> <code>201</code>, or <code>409</code> for either refusal.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: MySQL already ignores case. Why change its schema at all?</summary><p>Its default also ignores accents, and its rules depend on a collation setting someone can change. Making the column exact (<code>utf8mb4_bin</code>) and the index explicit (<code>lower(email)</code>) gives the same rule PostgreSQL has, written down, not inherited.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No email verification.</strong> Addresses are not confirmed.</li>
+<li><strong>No international addresses.</strong> Non-ASCII emails are refused (a demo rule).</li>
+<li><strong>No login.</strong> A sign-up is a record.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Collation</strong></td><td>A database's rules for comparing and sorting text.</td><td>A dictionary that files "Asha" and "asha" together, or apart.</td><td><code>utf8mb4_0900_ai_ci</code>, <code>utf8mb4_bin</code></td></tr><tr><td><strong>Case-insensitive</strong></td><td>Upper and lower case count as the same letter.</td><td>"ASHA" and "asha" are one name.</td><td>MySQL's default</td></tr><tr><td><strong>Accent-insensitive</strong></td><td>Letters with and without accents count as the same.</td><td>"jose" and "josé" are one name.</td><td>The <code>ai</code> in MySQL's default</td></tr><tr><td><strong>Expression index</strong></td><td>An index on a computed value, not the raw column.</td><td>An index card filed under the name in lower case.</td><td><code>lower(email)</code></td></tr><tr><td><strong>Testcontainers</strong></td><td>Real databases in Docker, started by the tests.</td><td>A practice kitchen with the real stove.</td><td><code>Databases</code></td></tr><tr><td><strong>Portability</strong></td><td>The same code giving the same answers on different databases.</td><td>A recipe that works on gas and induction.</td><td>Same tests on both</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Taskloom</strong> (a fictional SaaS) supports both MySQL and PostgreSQL. Sign-up uniqueness behaved differently on each, creating duplicate accounts on one and refusing real addresses on the other.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> Asha@x.com signed up, <b>then</b> asha@x.com, ASHA@X.COM and " asha@x.com " are <code>409</code>, on both databases.</li>
+<li><b>Given</b> 10 spellings of the same address at the same moment, <b>then</b> one sign-up, nine <code>409</code>, on both.</li>
+<li><b>Given</b> jose@x.com and josé@x.com written directly to the table, <b>then</b> two rows, on both.</li>
+<li><b>Given</b> an address without @, with non-ASCII letters, over 254 characters, or a blank name, <b>then</b> <code>400</code>.</li>
+<li><b>Given</b> an unknown sign-up id, <b>then</b> <code>404</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>"The same email" means equal after lower-casing, and nothing more, on every database.</li>
+<li>The rule is a named unique index in each schema: <code>signups_email_unique</code>.</li>
+<li>Each database gets its own migration, in its own SQL.</li>
+<li>Every contract and database test runs on both databases.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Explain collations, and how MySQL and PostgreSQL compare text by default.</li>
+<li>Enforce case-insensitive uniqueness with an expression index on both.</li>
+<li>Run the same tests on two real databases with Testcontainers.</li>
+<li>Know where portability ends.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, against both databases, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/signups</code></td><td>Sign up: <code>email</code> (trimmed, ASCII, up to 254 characters) and <code>name</code>.</td></tr><tr><td><code>GET</code></td><td><code>/signups/{id}</code></td><td>Read a sign-up back (added so "not found" has something to miss).</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">201</span></td><td>Signed up; <code>Location</code> points at it</td></tr><tr><td><span class="pill ok">200</span></td><td>The sign-up</td></tr><tr><td><span class="pill warn">400</span></td><td>Email or name missing or malformed</td></tr><tr><td><span class="pill warn">404</span></td><td>No such sign-up</td></tr><tr><td><span class="pill warn">409</span></td><td>This email, in any case, has already signed up</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl on 16 Oct 2026, in this order: the same jar running twice, on PostgreSQL (port 8080) and on MySQL (port 8081). JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: PostgreSQL, Asha@x.com</h3><p><b>Why:</b> <code>201</code>, kept as typed.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /signups HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;email&quot;: &quot;Asha@x.com&quot;,
+  &quot;name&quot;: &quot;Asha Verma&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /signups/1
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 1,
+  &quot;email&quot;: &quot;Asha@x.com&quot;,
+  &quot;name&quot;: &quot;Asha Verma&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: PostgreSQL, asha@x.com</h3><p><b>Why:</b> the same person: <code>409</code>. The old schema let this in.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /signups HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;email&quot;: &quot;asha@x.com&quot;,
+  &quot;name&quot;: &quot;Asha Verma&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 409 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;asha@x.com has already signed up (emails are compared ignoring case).&quot;,
+  &quot;instance&quot;: &quot;/signups&quot;,
+  &quot;status&quot;: 409,
+  &quot;title&quot;: &quot;Already signed up&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: MySQL, Asha@x.com</h3><p><b>Why:</b> <code>201</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /signups HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;email&quot;: &quot;Asha@x.com&quot;,
+  &quot;name&quot;: &quot;Asha Verma&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /signups/1
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 1,
+  &quot;email&quot;: &quot;Asha@x.com&quot;,
+  &quot;name&quot;: &quot;Asha Verma&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: MySQL, asha@x.com</h3><p><b>Why:</b> <code>409</code>: the same answer as PostgreSQL, from the same rule.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /signups HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;email&quot;: &quot;asha@x.com&quot;,
+  &quot;name&quot;: &quot;Asha Verma&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 409 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;asha@x.com has already signed up (emails are compared ignoring case).&quot;,
+  &quot;instance&quot;: &quot;/signups&quot;,
+  &quot;status&quot;: 409,
+  &quot;title&quot;: &quot;Already signed up&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: asha.x.com</h3><p><b>Why:</b> <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /signups HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;email&quot;: &quot;asha.x.com&quot;,
+  &quot;name&quot;: &quot;Asha Verma&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Invalid request content.&quot;,
+  &quot;instance&quot;: &quot;/signups&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: sign-up 99</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /signups/99 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No sign-up 99.&quot;,
+  &quot;instance&quot;: &quot;/signups/99&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Sign-up not found&quot;
+}</code></pre></div></div></section>
+<h2>What "equal" means to each database</h2>
+<p class="muted">Asked directly with psql and the mysql client (connected in utf8mb4, as the app is) after the requests above (<code>docs/captures/equality.txt</code>): the default text comparison, with no table and no index.</p>
+<pre class="code"><code class="language-text">-- PostgreSQL 17
+ case_ignored | accents_ignored 
+--------------+-----------------
+ f            | f
+(1 row)
+
+-- MySQL 8.4, default collation utf8mb4_0900_ai_ci
++--------------+-----------------+
+| case_ignored | accents_ignored |
++--------------+-----------------+
+|            1 |               1 |
++--------------+-----------------+</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it. Each Spring test runs twice: once per database.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>Mixed-case address</td><td>Kept as typed</td><td><code>aSignupKeepsTheEmailAsTyped</code></td></tr><tr><td>Another case, or with spaces</td><td><code>409</code>, one row</td><td><code>theSameEmailInAnyCaseIs409</code></td></tr><tr><td>Similar but different addresses</td><td>All accepted</td><td><code>differentEmailsAreDifferent</code></td></tr><tr><td>No @, non-ASCII, too long, blank name, missing email</td><td><code>400</code>, no row</td><td><code>badSignupsAre400</code></td></tr><tr><td>Unknown id</td><td><code>404</code></td><td><code>unknownSignupsAre404</code></td></tr><tr><td>Duplicate or malformed rows written directly</td><td>Refused by named constraints</td><td><code>namedConstraintsHoldWithoutJava</code></td></tr><tr><td>jose@ and josé@ written directly</td><td>Two rows</td><td><code>anAccentMakesADifferentAddressOnBothDatabases</code></td></tr><tr><td>A batch with a duplicate</td><td>Nothing kept</td><td><code>aBatchWithADuplicateLeavesNothing</code></td></tr><tr><td>10 spellings at the same moment</td><td>One <code>201</code>, nine <code>409</code></td><td><code>tenSpellingsAtOnceMakeOneSignup</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Assuming case-insensitive uniqueness works the same on both databases.</p>
+<p>The trap test uses no Spring at all: plain JDBC on the two real databases, the old table (<code>email VARCHAR(254) NOT NULL UNIQUE</code>) created the same way on each, and the same inserts. PostgreSQL keeps both Ashas; MySQL keeps one. MySQL also refuses josé@x.com after jose@x.com, because its default collation ignores accents. The old lookup, <code>WHERE email = ?</code>, says "not signed up yet" on PostgreSQL. On the same table, an index on <code>lower(email)</code> refuses the second Asha.</p>
+<p>While building, each part was undone once. A plain unique index on PostgreSQL turned 3 database tests red; the HTTP tests stayed green, because the Java lookup on <code>lower(email)</code> still answered <code>409</code> one request at a time. Only the race and the direct inserts showed the missing rule. MySQL's default collation instead of <code>utf8mb4_bin</code> turned 1 red (the accent test). Without the <code>DuplicateKeyException</code> catch, 2 (the race, on both databases). Comparing <code>email = ?</code> in the lookup turned none red: the index still answered <code>409</code>.</p>
+</div>
+<pre class="code"><code class="language-java">package com.taskloom.signups;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * The first test written for this station, without Spring: the old table, &quot;email VARCHAR(254) UNIQUE&quot;, created the
+ * same way on both real databases, and the same two inserts. The databases disagree.
+ */
+class CaseSensitivityTrapTest {
+
+    static final String OLD_TABLE = &quot;CREATE TABLE old_signups (id INT PRIMARY KEY, email VARCHAR(254) NOT NULL UNIQUE)&quot;;
+
+    @BeforeAll
+    static void start() {
+        Databases.POSTGRES.start();
+        Databases.MYSQL.start();
+    }
+
+    /** The containers are shared with the Spring tests, whose Flyway wants an empty schema: leave none behind. */
+    @AfterAll
+    static void dropTheOldTable() throws SQLException {
+        for (var db : java.util.List.of(Databases.POSTGRES, Databases.MYSQL)) {
+            try (Connection c = open(db); Statement s = c.createStatement()) {
+                s.execute(&quot;DROP TABLE IF EXISTS old_signups&quot;);
+            }
+        }
+    }
+
+    static Connection open(org.testcontainers.containers.JdbcDatabaseContainer&lt;?&gt; db) throws SQLException {
+        return DriverManager.getConnection(db.getJdbcUrl(), db.getUsername(), db.getPassword());
+    }
+
+    /** Creates the old table fresh and inserts the emails in order; returns how many rows went in before one was refused. */
+    static int insert(org.testcontainers.containers.JdbcDatabaseContainer&lt;?&gt; db, String... emails) throws SQLException {
+        try (Connection c = open(db); Statement s = c.createStatement()) {
+            s.execute(&quot;DROP TABLE IF EXISTS old_signups&quot;);
+            s.execute(OLD_TABLE);
+            for (int i = 0; i &lt; emails.length; i++) {
+                try {
+                    s.execute(&quot;INSERT INTO old_signups VALUES (&quot; + i + &quot;, &#x27;&quot; + emails[i] + &quot;&#x27;)&quot;);
+                } catch (SQLException duplicate) {
+                    return i;
+                }
+            }
+            return emails.length;
+        }
+    }
+
+    @Test
+    void postgresqlKeepsTwoAshas() throws SQLException {
+        assertThat(insert(Databases.POSTGRES, &quot;Asha@x.com&quot;, &quot;asha@x.com&quot;)).isEqualTo(2);   // two accounts for one person
+    }
+
+    @Test
+    void mysqlKeepsOne() throws SQLException {
+        assertThat(insert(Databases.MYSQL, &quot;Asha@x.com&quot;, &quot;asha@x.com&quot;)).isEqualTo(1);      // its default collation ignores case
+    }
+
+    @Test
+    void mysqlAlsoIgnoresAccentsWhichNobodyAskedFor() throws SQLException {
+        // utf8mb4_0900_ai_ci: &quot;ai&quot; is accent-insensitive. Two different addresses collide.
+        assertThat(insert(Databases.MYSQL, &quot;jose@x.com&quot;, &quot;josé@x.com&quot;)).isEqualTo(1);
+        assertThat(insert(Databases.POSTGRES, &quot;jose@x.com&quot;, &quot;josé@x.com&quot;)).isEqualTo(2);
+    }
+
+    @Test
+    void theOldCodeLookedUpWithEqualsSoPostgresMissedTheDuplicateToo() throws SQLException {
+        insert(Databases.POSTGRES, &quot;Asha@x.com&quot;);
+        try (Connection c = open(Databases.POSTGRES); Statement s = c.createStatement()) {
+            var found = s.executeQuery(&quot;SELECT count(*) FROM old_signups WHERE email = &#x27;asha@x.com&#x27;&quot;);
+            found.next();
+            assertThat(found.getInt(1)).isZero();   // &quot;not signed up yet&quot;, says the check before the insert
+        }
+        assertThatThrownBy(() -&gt; {
+            try (Connection c = open(Databases.POSTGRES); Statement s = c.createStatement()) {
+                s.execute(&quot;CREATE UNIQUE INDEX old_signups_lower ON old_signups (lower(email))&quot;);
+                s.execute(&quot;INSERT INTO old_signups VALUES (9, &#x27;asha@x.com&#x27;)&quot;);
+            }
+        }).hasMessageContaining(&quot;old_signups_lower&quot;);   // the fix, on the same table: now refused
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d --wait                       # PostgreSQL on 5432, MySQL on 3306
+./mvnw spring-boot:run                            # the API on PostgreSQL, http://localhost:8080
+./mvnw spring-boot:run -Dspring-boot.run.profiles=mysql   # or the same API on MySQL
+./mvnw test                                       # all 22 tests; starts its own containers</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d --wait
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd spring-boot:run &quot;-Dspring-boot.run.profiles=mysql&quot;
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. MySQL takes longer to start than PostgreSQL; the first test run downloads both images.</p>
+<h2>Try it yourself</h2>
+<p>Ask each database what "equal" means:</p>
+<pre class="code"><code class="language-bash">docker compose exec postgres psql -U taskloom -d taskloom -c &quot;SELECT &#x27;Asha@x.com&#x27; = &#x27;asha@x.com&#x27;&quot;
+docker compose exec mysql mysql --default-character-set=utf8mb4 -utaskloom -ptaskloom taskloom -e &quot;SELECT &#x27;Asha@x.com&#x27; = &#x27;asha@x.com&#x27;, &#x27;jose@x.com&#x27; = &#x27;josé@x.com&#x27;&quot;</code></pre>
+<p>Compare your answers with <code>docs/captures/equality.txt</code>, from the build machine. Leave out <code>--default-character-set=utf8mb4</code> once: the client then talks latin1 to the server, and the answer about accents changes. That happened while this station was built.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>Duplicate accounts on PostgreSQL only</td><td>A plain <code>UNIQUE (email)</code>; PostgreSQL compares exactly.</td><td>A unique index on <code>lower(email)</code>.</td></tr><tr><td>MySQL refuses an address that is different</td><td>The default collation ignores accents (<code>ai</code>).</td><td><code>COLLATE utf8mb4_bin</code> on the column, plus the <code>lower(email)</code> index.</td></tr><tr><td><code>Found non-empty schema(s) ... but no schema history table</code></td><td>Something created a table before Flyway ran (here: a test).</td><td>Clean up after tests that create tables by hand.</td></tr><tr><td>Flyway runs the wrong SQL for the database</td><td>One migrations folder for both.</td><td><code>spring.flyway.locations: classpath:db/migration/{vendor}</code>.</td></tr><tr><td>The mysql client gives a different answer from the app</td><td>The client's connection character set (latin1 here) decides the collation of literals.</td><td><code>--default-character-set=utf8mb4</code>, as JDBC uses.</td></tr><tr><td>The first test run is slow</td><td>MySQL's container takes several seconds to be ready.</td><td>The containers are shared, so it happens once per run.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/053-sign-up-emails-on-mysql-and-postgresql/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/taskloom/signups/
+│   ├── SignupController.java   ├── SignupDesk.java   └── SignupsApplication.java
+├── src/main/resources/
+│   ├── application.yaml   ├── application-mysql.yaml
+│   └── db/migration/postgresql/V1__signups.sql, db/migration/mysql/V1__signups.sql
+├── src/test/java/com/taskloom/signups/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then each database's schema.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">SignupController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">SignupDesk.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">V1__signups.sql</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">V1__signups.sql</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">application-mysql.yaml</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">compose.yaml</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">pom.xml</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">SignupsApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/taskloom/signups/SignupController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Trims and validates; <code>Location</code> on success.</dd><dt>Why</dt><dd>ASCII emails only, with the reason written down.</dd><dt>Without it</dt><dd>Lower-casing rules that differ between Java and each database.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.signups;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+
+@RestController
+class SignupController {
+
+    /**
+     * Demo rule: ASCII emails only. Lower-casing non-ASCII letters can differ between Java, PostgreSQL and MySQL, and
+     * internationalised addresses need their own design. Spaces around the address are trimmed before the check.
+     */
+    record NewSignup(@NotBlank @Size(max = 254) @Pattern(regexp = &quot;\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\s*&quot;) String email,
+                     @NotBlank @Size(max = 80) String name) {
+    }
+
+    private final SignupDesk desk;
+
+    SignupController(SignupDesk desk) {
+        this.desk = desk;
+    }
+
+    @PostMapping(&quot;/signups&quot;)
+    ResponseEntity&lt;SignupDesk.Signup&gt; signUp(@Valid @RequestBody NewSignup body) {
+        SignupDesk.Signup signup = desk.signUp(body.email().strip(), body.name().strip());
+        return ResponseEntity.created(URI.create(&quot;/signups/&quot; + signup.id())).body(signup);
+    }
+
+    /** Read-back, so a client can confirm what was stored. */
+    @GetMapping(&quot;/signups/{id}&quot;)
+    SignupDesk.Signup get(@PathVariable long id) {
+        return desk.find(id).orElseThrow(() -&gt; {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No sign-up &quot; + id + &quot;.&quot;);
+            p.setTitle(&quot;Sign-up not found&quot;);
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        });
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/taskloom/signups/SignupDesk.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Looks up <code>lower(email)</code>, inserts, turns a duplicate key into <code>409</code>.</dd><dt>Why</dt><dd>Plain SQL that means the same on both databases.</dd><dt>Without it</dt><dd>A lookup that misses a duplicate the index then refuses.</dd></dl><ul><li><code>lower(email) = ?</code> with a <code>Locale.ROOT</code> lower-cased value matches the expression index on both.</li><li>Spring turns both databases' duplicate errors into <code>DuplicateKeyException</code>.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.signups;
+
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponseException;
+
+import java.util.Locale;
+import java.util.Optional;
+
+/**
+ * Sign-ups on either database. The email is kept as the person typed it; &quot;the same email&quot; means the same after
+ * lower-casing, on both databases, because both schemas index lower(email) and the queries compare lower(email).
+ */
+@Service
+class SignupDesk {
+
+    record Signup(long id, String email, String name) {
+    }
+
+    private final JdbcClient jdbc;
+
+    SignupDesk(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    Signup signUp(String email, String name) {
+        if (findByEmail(email).isPresent()) {
+            throw taken(email);
+        }
+        KeyHolder key = new GeneratedKeyHolder();
+        try {
+            jdbc.sql(&quot;INSERT INTO signups (email, name) VALUES (?, ?)&quot;).params(email, name).update(key, &quot;id&quot;);
+        } catch (DuplicateKeyException e) {
+            // Two sign-ups with the same email at the same moment both pass the check; the unique index stops one.
+            throw taken(email);
+        }
+        return new Signup(key.getKey().longValue(), email, name);
+    }
+
+    Optional&lt;Signup&gt; find(long id) {
+        return jdbc.sql(&quot;SELECT id, email, name FROM signups WHERE id = ?&quot;).param(id).query(Signup.class).optional();
+    }
+
+    /** lower(email) = ? matches the expression index on both databases, so this is an index lookup. */
+    Optional&lt;Signup&gt; findByEmail(String email) {
+        return jdbc.sql(&quot;SELECT id, email, name FROM signups WHERE lower(email) = ?&quot;).param(email.toLowerCase(Locale.ROOT))
+                .query(Signup.class).optional();
+    }
+
+    private static ErrorResponseException taken(String email) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, email + &quot; has already signed up (emails are compared ignoring case).&quot;);
+        p.setTitle(&quot;Already signed up&quot;);
+        return new ErrorResponseException(HttpStatus.CONFLICT, p, null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/resources/db/migration/postgresql/V1__signups.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>PostgreSQL's schema: an expression index on <code>lower(email)</code>.</dd><dt>Why</dt><dd>PostgreSQL compares exactly by default.</dd><dt>Without it</dt><dd>Two accounts for one person.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">-- PostgreSQL compares text case-sensitively: a plain UNIQUE (email) lets Asha@x.com and asha@x.com both in.
+CREATE TABLE signups (
+    id         BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    email      VARCHAR(254) NOT NULL,
+    name       VARCHAR(80)  NOT NULL,
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT signups_email_shape CHECK (email LIKE &#x27;_%@_%&#x27; AND email NOT LIKE &#x27;% %&#x27;)
+);
+
+-- Unique on the lower-cased email: one person, one sign-up, however they type it.
+CREATE UNIQUE INDEX signups_email_unique ON signups (lower(email));</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/resources/db/migration/mysql/V1__signups.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>MySQL's schema: an exact column (<code>utf8mb4_bin</code>) and a functional index on <code>lower(email)</code>.</dd><dt>Why</dt><dd>The same rule as PostgreSQL, the same name.</dd><dt>Without it</dt><dd>Accent-insensitive comparison nobody chose.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">-- MySQL&#x27;s default collation (utf8mb4_0900_ai_ci) ignores case AND accents: jose@x.com and josé@x.com would be &quot;equal&quot;.
+-- utf8mb4_bin compares exactly, like PostgreSQL; the index on lower(email) then adds case-insensitivity, and nothing else.
+CREATE TABLE signups (
+    id         BIGINT       NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    email      VARCHAR(254) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+    name       VARCHAR(80)  NOT NULL,
+    created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    CONSTRAINT signups_email_shape CHECK (email LIKE &#x27;_%@_%&#x27; AND email NOT LIKE &#x27;% %&#x27;)
+);
+
+-- A functional index (MySQL 8.0.13+): the same rule as PostgreSQL&#x27;s, under the same name.
+CREATE UNIQUE INDEX signups_email_unique ON signups ((lower(email)));</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>PostgreSQL by default; Flyway reads <code>db/migration/{vendor}</code>.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: taskloom-signups
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:   # PostgreSQL by default; run with --spring.profiles.active=mysql for MySQL
+    url: jdbc:postgresql://localhost:5432/taskloom
+    username: taskloom
+    password: taskloom
+  flyway:
+    # {vendor} becomes postgresql or mysql: each database gets its own schema, written for it.
+    locations: classpath:db/migration/{vendor}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/resources/application-mysql.yaml</p><div class="notes"><p>The <code>mysql</code> profile: the MySQL connection.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/taskloom
+    username: taskloom
+    password: taskloom</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>Both databases, with health checks.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: taskloom
+      POSTGRES_USER: taskloom
+      POSTGRES_PASSWORD: taskloom
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U taskloom -d taskloom&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: taskloom
+      MYSQL_USER: taskloom
+      MYSQL_PASSWORD: taskloom
+      MYSQL_ROOT_PASSWORD: taskloom-root
+    ports:
+      - &quot;3306:3306&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;mysqladmin ping -h 127.0.0.1 -utaskloom -ptaskloom --silent&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 60</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">pom.xml</p><div class="notes"><p>Both drivers, both Flyway modules, both Testcontainers modules.</p></div><div class="src"><pre class="code"><code class="language-xml">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;project xmlns=&quot;http://maven.apache.org/POM/4.0.0&quot;
+         xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot;
+         xsi:schemaLocation=&quot;http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd&quot;&gt;
+    &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+
+    &lt;parent&gt;
+        &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+        &lt;artifactId&gt;spring-boot-starter-parent&lt;/artifactId&gt;
+        &lt;version&gt;4.1.1&lt;/version&gt;
+        &lt;relativePath/&gt;
+    &lt;/parent&gt;
+
+    &lt;groupId&gt;com.taskloom&lt;/groupId&gt;
+    &lt;artifactId&gt;signups&lt;/artifactId&gt;
+    &lt;version&gt;1.0.0&lt;/version&gt;
+    &lt;name&gt;Station 053 - Sign-up emails on MySQL and PostgreSQL&lt;/name&gt;
+
+    &lt;properties&gt;
+        &lt;java.version&gt;25&lt;/java.version&gt;
+    &lt;/properties&gt;
+
+    &lt;dependencies&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-webmvc&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-validation&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-jdbc&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-flyway&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;!-- Both databases: the same app runs on either, chosen by profile --&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.flywaydb&lt;/groupId&gt;
+            &lt;artifactId&gt;flyway-database-postgresql&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.flywaydb&lt;/groupId&gt;
+            &lt;artifactId&gt;flyway-mysql&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.postgresql&lt;/groupId&gt;
+            &lt;artifactId&gt;postgresql&lt;/artifactId&gt;
+            &lt;scope&gt;runtime&lt;/scope&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;com.mysql&lt;/groupId&gt;
+            &lt;artifactId&gt;mysql-connector-j&lt;/artifactId&gt;
+            &lt;scope&gt;runtime&lt;/scope&gt;
+        &lt;/dependency&gt;
+
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-test&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-webmvc-test&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-testcontainers&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.testcontainers&lt;/groupId&gt;
+            &lt;artifactId&gt;testcontainers-postgresql&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.testcontainers&lt;/groupId&gt;
+            &lt;artifactId&gt;testcontainers-mysql&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+    &lt;/dependencies&gt;
+
+    &lt;build&gt;
+        &lt;plugins&gt;
+            &lt;plugin&gt;
+                &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+                &lt;artifactId&gt;spring-boot-maven-plugin&lt;/artifactId&gt;
+            &lt;/plugin&gt;
+        &lt;/plugins&gt;
+    &lt;/build&gt;
+&lt;/project&gt;</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">src/main/java/com/taskloom/signups/SignupsApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.signups;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class SignupsApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(SignupsApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>PostgresSignupContractTest</code> (5), <code>MySqlSignupContractTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>CaseSensitivityTrapTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>PostgresSignupDatabaseTest</code> (4), <code>MySqlSignupDatabaseTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<h2>One test, two databases</h2>
+<p>The tests are written once, in <code>SignupContract</code> and <code>SignupDatabase</code>. Four tiny classes run them: each extends one and imports one database. The containers live in <code>Databases</code> and start once per run, shared by the Spring tests (through <code>@ServiceConnection</code>) and by the trap test (through plain JDBC).</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, PostgreSQL 17 and MySQL 8.4 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.taskloom.signups.CaseSensitivityTrapTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.taskloom.signups.MySqlSignupContractTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.taskloom.signups.PostgresSignupContractTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.taskloom.signups.MySqlSignupDatabaseTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.taskloom.signups.PostgresSignupDatabaseTest
+[INFO] Tests run: 22, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">SignupContract.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">SignupDatabase.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">PostgresSignupContractTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">Databases.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/taskloom/signups/SignupContract.java</p><div class="notes"><p>The HTTP contract, written once.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.signups;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The HTTP contract, written once and run on both databases (see the two subclasses). */
+abstract class SignupContract extends ApiTest {
+
+    @Test
+    void aSignupKeepsTheEmailAsTyped() throws Exception {
+        String url = signUp(&quot;Asha.Verma@Example.in&quot;).andExpect(status().isCreated())
+                .andExpect(content().json(&quot;{\&quot;email\&quot;:\&quot;Asha.Verma@Example.in\&quot;,\&quot;name\&quot;:\&quot;Asha Verma\&quot;}&quot;))
+                .andReturn().getResponse().getHeader(&quot;Location&quot;);
+        mvc.perform(get(url)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.email&quot;).value(&quot;Asha.Verma@Example.in&quot;));
+    }
+
+    @Test
+    void theSameEmailInAnyCaseIs409() throws Exception {
+        signUp(&quot;Asha@x.com&quot;).andExpect(status().isCreated());
+        signUp(&quot;asha@x.com&quot;).andExpect(status().isConflict()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Already signed up&quot;));
+        signUp(&quot;ASHA@X.COM&quot;).andExpect(status().isConflict());
+        signUp(&quot;  asha@x.com &quot;).andExpect(status().isConflict());   // spaces trimmed first
+        assertThat(rows()).isEqualTo(1);
+    }
+
+    @Test
+    void differentEmailsAreDifferent() throws Exception {
+        signUp(&quot;asha@x.com&quot;).andExpect(status().isCreated());
+        signUp(&quot;asha.v@x.com&quot;).andExpect(status().isCreated());
+        signUp(&quot;asha@x.co&quot;).andExpect(status().isCreated());
+    }
+
+    @Test
+    void badSignupsAre400() throws Exception {
+        signUp(&quot;asha.x.com&quot;).andExpect(status().isBadRequest());
+        signUp(&quot;josé@x.com&quot;).andExpect(status().isBadRequest());   // ASCII only (a demo rule)
+        signUp(&quot;a&quot;.repeat(250) + &quot;@x.com&quot;).andExpect(status().isBadRequest());
+        mvc.perform(post(&quot;/signups&quot;).contentType(MediaType.APPLICATION_JSON).content(&quot;{\&quot;email\&quot;:\&quot;asha@x.com\&quot;,\&quot;name\&quot;:\&quot; \&quot;}&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(post(&quot;/signups&quot;).contentType(MediaType.APPLICATION_JSON).content(&quot;{\&quot;name\&quot;:\&quot;Asha\&quot;}&quot;)).andExpect(status().isBadRequest());
+        assertThat(rows()).isZero();
+    }
+
+    @Test
+    void unknownSignupsAre404() throws Exception {
+        mvc.perform(get(&quot;/signups/999999&quot;)).andExpect(status().isNotFound()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;No sign-up 999999.&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/taskloom/signups/SignupDatabase.java</p><div class="notes"><p>Constraints, accents, a rollback and a race, written once.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.signups;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The schema&#x27;s rules with Java bypassed, a rollback, and a race, written once and run on both databases. */
+abstract class SignupDatabase extends ApiTest {
+
+    @Autowired
+    TransactionTemplate transaction;
+
+    void insert(String email) {
+        jdbc.sql(&quot;INSERT INTO signups (email, name) VALUES (?, &#x27;Direct&#x27;)&quot;).param(email).update();
+    }
+
+    @Test
+    void namedConstraintsHoldWithoutJava() {
+        insert(&quot;Asha@x.com&quot;);
+        assertThatThrownBy(() -&gt; insert(&quot;asha@X.com&quot;)).hasMessageContaining(&quot;signups_email_unique&quot;);
+        assertThatThrownBy(() -&gt; insert(&quot;asha.x.com&quot;)).hasMessageContaining(&quot;signups_email_shape&quot;);
+        assertThatThrownBy(() -&gt; insert(&quot;asha @x.com&quot;)).hasMessageContaining(&quot;signups_email_shape&quot;);
+    }
+
+    @Test
+    void anAccentMakesADifferentAddressOnBothDatabases() {
+        insert(&quot;jose@x.com&quot;);
+        insert(&quot;josé@x.com&quot;);   // refused on MySQL&#x27;s default collation; utf8mb4_bin keeps them apart, like PostgreSQL
+        assertThat(rows()).isEqualTo(2);
+    }
+
+    @Test
+    void aBatchWithADuplicateLeavesNothing() {
+        assertThatThrownBy(() -&gt; transaction.executeWithoutResult(s -&gt; {
+            insert(&quot;rohan@x.com&quot;);
+            insert(&quot;meera@x.com&quot;);
+            insert(&quot;ROHAN@x.com&quot;);   // the third row breaks the rule; the first two go with it
+        })).hasMessageContaining(&quot;signups_email_unique&quot;);
+        assertThat(rows()).isZero();
+    }
+
+    @Test
+    void tenSpellingsAtOnceMakeOneSignup() throws Exception {
+        String[] spellings = {&quot;asha@x.com&quot;, &quot;Asha@x.com&quot;, &quot;ASHA@x.com&quot;, &quot;asha@X.com&quot;, &quot;asha@X.COM&quot;,
+                &quot;aSha@x.com&quot;, &quot;asHa@x.com&quot;, &quot;ashA@x.com&quot;, &quot;ASHA@X.COM&quot;, &quot;Asha@X.Com&quot;};
+        AtomicInteger next = new AtomicInteger();
+        List&lt;Integer&gt; statuses = together(spellings.length, () -&gt; signUp(spellings[next.getAndIncrement()]).andReturn().getResponse().getStatus());
+        assertThat(statuses).filteredOn(s -&gt; s == 201).hasSize(1);
+        assertThat(statuses).filteredOn(s -&gt; s == 409).hasSize(9);
+        assertThat(rows()).isEqualTo(1);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/taskloom/signups/PostgresSignupContractTest.java</p><div class="notes"><p>The contract on PostgreSQL. Its three siblings are the same three lines for the other combinations.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.signups;
+
+import org.springframework.context.annotation.Import;
+
+/** Every test in SignupContract, run on PostgreSQL 17. */
+@Import(Databases.Postgres.class)
+class PostgresSignupContractTest extends SignupContract {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/taskloom/signups/Databases.java</p><div class="notes"><p>The two shared containers and their <code>@ServiceConnection</code> configurations.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.signups;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.mysql.MySQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/**
+ * One real PostgreSQL 17 and one real MySQL 8.4 in Docker, started once per test run and shared: by the Spring tests
+ * (through @ServiceConnection) and by the trap test (through plain JDBC).
+ */
+final class Databases {
+
+    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    static final MySQLContainer MYSQL = new MySQLContainer(&quot;mysql:8.4&quot;);
+
+    private Databases() {
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class Postgres {
+        @Bean
+        @ServiceConnection
+        PostgreSQLContainer postgres() {
+            return POSTGRES;
+        }
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class MySql {
+        @Bean
+        @ServiceConnection
+        MySQLContainer mysql() {
+            return MYSQL;
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/taskloom/signups/ApiTest.java</p><div class="notes"><p>Shared setup: an empty table before each test; parallel calls.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.signups;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/**
+ * Shared setup for the Spring tests. Each concrete test class picks a database with @Import(Databases.Postgres or
+ * Databases.MySql): the same tests, the same app, two databases. The table is emptied before each test.
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+
+    @BeforeEach
+    void noSignups() {
+        jdbc.sql(&quot;DELETE FROM signups&quot;).update();
+    }
+
+    ResultActions signUp(String email) throws Exception {
+        return mvc.perform(post(&quot;/signups&quot;).contentType(MediaType.APPLICATION_JSON)
+                .content(&quot;{\&quot;email\&quot;:\&quot;%s\&quot;,\&quot;name\&quot;:\&quot;Asha Verma\&quot;}&quot;.formatted(email)));
+    }
+
+    long rows() {
+        return jdbc.sql(&quot;SELECT count(*) FROM signups&quot;).query(Long.class).single();
+    }
+
+    /** Runs n copies of the task on virtual threads, all released together by one latch. */
+    static &lt;T&gt; List&lt;T&gt; together(int n, Callable&lt;T&gt; task) throws Exception {
+        CountDownLatch start = new CountDownLatch(1);
+        List&lt;Future&lt;T&gt;&gt; futures = new ArrayList&lt;&gt;();
+        try (ExecutorService threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; n; i++) {
+                futures.add(threads.submit(() -&gt; {
+                    start.await();
+                    return task.call();
+                }));
+            }
+            start.countDown();
+        }
+        List&lt;T&gt; results = new ArrayList&lt;&gt;();
+        for (Future&lt;T&gt; f : futures) {
+            results.add(f.get());
+        }
+        return results;
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/taskloom/signups/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=FindByEmailChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 22 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 24 tests pass (22 station tests and 2 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 15 minutes</p><h2>Find by email</h2><p>Add <code>GET /signups?email=…</code>: the sign-up for that address however it is typed, or <code>404</code>. The test runs on PostgreSQL; switch its <code>@Import</code> to try MySQL.</p><p><b>Done when:</b> the test in <code>FindByEmailChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li><code>SignupDesk.findByEmail</code> already exists.</li><li>Trim before looking up.</li></ul></details><p class="path">challenge/FindByEmailChallengeTest.java</p><pre class="code"><code class="language-java">package com.taskloom.signups;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Import;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: GET /signups?email=... finds a sign-up however the email is typed (case, spaces around it), and is 404
+ * when there is none. Runs on PostgreSQL; change the @Import to Databases.MySql.class to try MySQL.
+ */
+@Import(Databases.Postgres.class)
+class FindByEmailChallengeTest extends ApiTest {
+
+    @Test
+    void foundIgnoringCase() throws Exception {
+        signUp(&quot;Asha.Verma@Example.in&quot;);
+        mvc.perform(get(&quot;/signups&quot;).param(&quot;email&quot;, &quot; ASHA.VERMA@example.IN &quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.email&quot;).value(&quot;Asha.Verma@Example.in&quot;));
+        mvc.perform(get(&quot;/signups&quot;).param(&quot;email&quot;, &quot;rohan@example.in&quot;)).andExpect(status().isNotFound());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/SignupController.java</p><div class="src"><pre class="code"><code class="language-java">package com.taskloom.signups;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+
+@RestController
+class SignupController {
+
+    /**
+     * Demo rule: ASCII emails only. Lower-casing non-ASCII letters can differ between Java, PostgreSQL and MySQL, and
+     * internationalised addresses need their own design. Spaces around the address are trimmed before the check.
+     */
+    record NewSignup(@NotBlank @Size(max = 254) @Pattern(regexp = &quot;\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\s*&quot;) String email,
+                     @NotBlank @Size(max = 80) String name) {
+    }
+
+    private final SignupDesk desk;
+
+    SignupController(SignupDesk desk) {
+        this.desk = desk;
+    }
+
+    @PostMapping(&quot;/signups&quot;)
+    ResponseEntity&lt;SignupDesk.Signup&gt; signUp(@Valid @RequestBody NewSignup body) {
+        SignupDesk.Signup signup = desk.signUp(body.email().strip(), body.name().strip());
+        return ResponseEntity.created(URI.create(&quot;/signups/&quot; + signup.id())).body(signup);
+    }
+
+    record NewEmail(@NotBlank @Size(max = 254) @Pattern(regexp = &quot;\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\s*&quot;) String email) {
+    }
+
+    @GetMapping(&quot;/signups&quot;)
+    SignupDesk.Signup byEmail(@RequestParam String email) {
+        return desk.findByEmail(email.strip()).orElseThrow(() -&gt; notFound(&quot;No sign-up with that email.&quot;));
+    }
+
+    @PatchMapping(&quot;/signups/{id}/email&quot;)
+    SignupDesk.Signup changeEmail(@PathVariable long id, @Valid @RequestBody NewEmail body) {
+        return desk.changeEmail(id, body.email().strip()).orElseThrow(() -&gt; notFound(&quot;No sign-up &quot; + id + &quot;.&quot;));
+    }
+
+    static ErrorResponseException notFound(String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, detail);
+        p.setTitle(&quot;Sign-up not found&quot;);
+        return new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+    }
+
+    /** Read-back, so a client can confirm what was stored. */
+    @GetMapping(&quot;/signups/{id}&quot;)
+    SignupDesk.Signup get(@PathVariable long id) {
+        return desk.find(id).orElseThrow(() -&gt; {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No sign-up &quot; + id + &quot;.&quot;);
+            p.setTitle(&quot;Sign-up not found&quot;);
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        });
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 25 minutes</p><h2>Change an email</h2><p>Add <code>PATCH /signups/{id}/email</code>. Someone else's address in any case is <code>409</code>; changing the case of your own is fine. The test runs on MySQL.</p><p><b>Done when:</b> the test in <code>ChangeEmailChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>The lookup finds a holder: a conflict only if it is another row.</li><li>The unique index still guards the race between the check and the update.</li></ul></details><p class="path">challenge/ChangeEmailChallengeTest.java</p><pre class="code"><code class="language-java">package com.taskloom.signups;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.ResultActions;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: PATCH /signups/{id}/email {&quot;email&quot;: &quot;...&quot;} changes the address. Someone else&#x27;s address, in any case,
+ * is 409; your own in another case is fine (Asha@x.com to asha@x.com). Unknown id: 404. Runs on MySQL.
+ */
+@Import(Databases.MySql.class)
+class ChangeEmailChallengeTest extends ApiTest {
+
+    ResultActions change(String url, String email) throws Exception {
+        return mvc.perform(patch(url + &quot;/email&quot;).contentType(MediaType.APPLICATION_JSON).content(&quot;{\&quot;email\&quot;:\&quot;&quot; + email + &quot;\&quot;}&quot;));
+    }
+
+    @Test
+    void anAddressBelongsToOneSignup() throws Exception {
+        String asha = signUp(&quot;Asha@x.com&quot;).andReturn().getResponse().getHeader(&quot;Location&quot;);
+        signUp(&quot;rohan@x.com&quot;);
+        change(asha, &quot;asha@x.com&quot;).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.email&quot;).value(&quot;asha@x.com&quot;));
+        change(asha, &quot;ROHAN@x.com&quot;).andExpect(status().isConflict());
+        change(asha, &quot;asha.verma@x.com&quot;).andExpect(status().isOk());
+        change(&quot;/signups/999999&quot;, &quot;new@x.com&quot;).andExpect(status().isNotFound());
+        change(asha, &quot;not-an-email&quot;).andExpect(status().isBadRequest());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/SignupDesk.java</p><div class="src"><pre class="code"><code class="language-java">package com.taskloom.signups;
+
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponseException;
+
+import java.util.Locale;
+import java.util.Optional;
+
+/**
+ * Sign-ups on either database. The email is kept as the person typed it; &quot;the same email&quot; means the same after
+ * lower-casing, on both databases, because both schemas index lower(email) and the queries compare lower(email).
+ */
+@Service
+class SignupDesk {
+
+    record Signup(long id, String email, String name) {
+    }
+
+    private final JdbcClient jdbc;
+
+    SignupDesk(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    Signup signUp(String email, String name) {
+        if (findByEmail(email).isPresent()) {
+            throw taken(email);
+        }
+        KeyHolder key = new GeneratedKeyHolder();
+        try {
+            jdbc.sql(&quot;INSERT INTO signups (email, name) VALUES (?, ?)&quot;).params(email, name).update(key, &quot;id&quot;);
+        } catch (DuplicateKeyException e) {
+            // Two sign-ups with the same email at the same moment both pass the check; the unique index stops one.
+            throw taken(email);
+        }
+        return new Signup(key.getKey().longValue(), email, name);
+    }
+
+    /** Another sign-up holding this address, in any case, is a conflict; the same row may change its own case. */
+    Optional&lt;Signup&gt; changeEmail(long id, String email) {
+        Optional&lt;Signup&gt; holder = findByEmail(email);
+        if (holder.isPresent() &amp;&amp; holder.get().id() != id) {
+            throw taken(email);
+        }
+        try {
+            int updated = jdbc.sql(&quot;UPDATE signups SET email = ? WHERE id = ?&quot;).params(email, id).update();
+            return updated == 0 ? Optional.empty() : find(id);
+        } catch (DuplicateKeyException e) {
+            throw taken(email);   // someone took it between the check and the update
+        }
+    }
+
+    Optional&lt;Signup&gt; find(long id) {
+        return jdbc.sql(&quot;SELECT id, email, name FROM signups WHERE id = ?&quot;).param(id).query(Signup.class).optional();
+    }
+
+    /** lower(email) = ? matches the expression index on both databases, so this is an index lookup. */
+    Optional&lt;Signup&gt; findByEmail(String email) {
+        return jdbc.sql(&quot;SELECT id, email, name FROM signups WHERE lower(email) = ?&quot;).param(email.toLowerCase(Locale.ROOT))
+                .query(Signup.class).optional();
+    }
+
+    private static ErrorResponseException taken(String email) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, email + &quot; has already signed up (emails are compared ignoring case).&quot;);
+        p.setTitle(&quot;Already signed up&quot;);
+        return new ErrorResponseException(HttpStatus.CONFLICT, p, null);
+    }
+}</code></pre></div><p class="path">challenge/solution/SignupController.java</p><div class="src"><pre class="code"><code class="language-java">package com.taskloom.signups;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+
+@RestController
+class SignupController {
+
+    /**
+     * Demo rule: ASCII emails only. Lower-casing non-ASCII letters can differ between Java, PostgreSQL and MySQL, and
+     * internationalised addresses need their own design. Spaces around the address are trimmed before the check.
+     */
+    record NewSignup(@NotBlank @Size(max = 254) @Pattern(regexp = &quot;\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\s*&quot;) String email,
+                     @NotBlank @Size(max = 80) String name) {
+    }
+
+    private final SignupDesk desk;
+
+    SignupController(SignupDesk desk) {
+        this.desk = desk;
+    }
+
+    @PostMapping(&quot;/signups&quot;)
+    ResponseEntity&lt;SignupDesk.Signup&gt; signUp(@Valid @RequestBody NewSignup body) {
+        SignupDesk.Signup signup = desk.signUp(body.email().strip(), body.name().strip());
+        return ResponseEntity.created(URI.create(&quot;/signups/&quot; + signup.id())).body(signup);
+    }
+
+    record NewEmail(@NotBlank @Size(max = 254) @Pattern(regexp = &quot;\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\s*&quot;) String email) {
+    }
+
+    @GetMapping(&quot;/signups&quot;)
+    SignupDesk.Signup byEmail(@RequestParam String email) {
+        return desk.findByEmail(email.strip()).orElseThrow(() -&gt; notFound(&quot;No sign-up with that email.&quot;));
+    }
+
+    @PatchMapping(&quot;/signups/{id}/email&quot;)
+    SignupDesk.Signup changeEmail(@PathVariable long id, @Valid @RequestBody NewEmail body) {
+        return desk.changeEmail(id, body.email().strip()).orElseThrow(() -&gt; notFound(&quot;No sign-up &quot; + id + &quot;.&quot;));
+    }
+
+    static ErrorResponseException notFound(String detail) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, detail);
+        p.setTitle(&quot;Sign-up not found&quot;);
+        return new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+    }
+
+    /** Read-back, so a client can confirm what was stored. */
+    @GetMapping(&quot;/signups/{id}&quot;)
+    SignupDesk.Signup get(@PathVariable long id) {
+        return desk.find(id).orElseThrow(() -&gt; {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No sign-up &quot; + id + &quot;.&quot;);
+            p.setTitle(&quot;Sign-up not found&quot;);
+            return new ErrorResponseException(HttpStatus.NOT_FOUND, p, null);
+        });
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Is two databases worth it?</h2>
+<p>List what Taskloom pays for supporting both: two migrations per change, every test twice, features one database lacks. Then list what it gains. When would you drop one, and how would you move its customers?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, mapping</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test on both real databases, with the old table.</li>
+<li>Write the rule in words: equal after lower-casing, nothing else.</li>
+<li>Translate it into each database's SQL, under one constraint name.</li>
+<li>Write the tests once and run them on both.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Expression index on <code>lower(email)</code> on both; exact MySQL column</td><td>Two migrations; queries must use <code>lower(email)</code>.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Plain <code>UNIQUE (email)</code> on both</td><td>Different answers per database.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Store the email lower-cased</td><td>One plain unique index; the address is no longer shown as typed.</td><td><span class="pill warn">Simpler, loses the typing</span></td></tr><tr><td>PostgreSQL <code>citext</code> or a nondeterministic collation</td><td>Neat on PostgreSQL; nothing like it on MySQL.</td><td><span class="pill warn">One database only</span></td></tr><tr><td>Check uniqueness in Java only</td><td>Two requests at once both pass.</td><td><span class="pill bad">No</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Database</th><th>Column</th><th>Constraints</th></tr></thead><tbody><tr><td>PostgreSQL</td><td><code>email VARCHAR(254)</code> (exact comparison by default)</td><td><code>signups_email_unique</code> on <code>lower(email)</code>, <code>signups_email_shape</code></td></tr><tr><td>MySQL</td><td><code>email VARCHAR(254) COLLATE utf8mb4_bin</code></td><td><code>signups_email_unique</code> on <code>(lower(email))</code>, <code>signups_email_shape</code></td></tr></tbody></table></div>
+<pre class="code"><code class="language-sql">-- PostgreSQL compares text case-sensitively: a plain UNIQUE (email) lets Asha@x.com and asha@x.com both in.
+CREATE TABLE signups (
+    id         BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    email      VARCHAR(254) NOT NULL,
+    name       VARCHAR(80)  NOT NULL,
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT signups_email_shape CHECK (email LIKE &#x27;_%@_%&#x27; AND email NOT LIKE &#x27;% %&#x27;)
+);
+
+-- Unique on the lower-cased email: one person, one sign-up, however they type it.
+CREATE UNIQUE INDEX signups_email_unique ON signups (lower(email));</code></pre><pre class="code"><code class="language-sql">-- MySQL&#x27;s default collation (utf8mb4_0900_ai_ci) ignores case AND accents: jose@x.com and josé@x.com would be &quot;equal&quot;.
+-- utf8mb4_bin compares exactly, like PostgreSQL; the index on lower(email) then adds case-insensitivity, and nothing else.
+CREATE TABLE signups (
+    id         BIGINT       NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    email      VARCHAR(254) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+    name       VARCHAR(80)  NOT NULL,
+    created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    CONSTRAINT signups_email_shape CHECK (email LIKE &#x27;_%@_%&#x27; AND email NOT LIKE &#x27;% %&#x27;)
+);
+
+-- A functional index (MySQL 8.0.13+): the same rule as PostgreSQL&#x27;s, under the same name.
+CREATE UNIQUE INDEX signups_email_unique ON signups ((lower(email)));</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Foundations station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Existing duplicates</dt><dd>On a live PostgreSQL database, creating the new index fails while two Ashas exist. Find them first (<code>GROUP BY lower(email) HAVING count(*) &gt; 1</code>), merge the accounts with the customers, then add the index.</dd>
+<dt>Collations are settings</dt><dd>MySQL's server, database, table and column can each have a collation. Write the one you rely on into the column, not into a server setting someone may change.</dd>
+<dt>Upgrades</dt><dd>MySQL changed its default collation in version 8.0. A rule inherited from a default can change with an upgrade; a rule written in the schema does not.</dd>
+<dt>Index use</dt><dd>An expression index is only used when the query has the same expression. <code>WHERE email = ?</code> ignores it.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>Why can the same UNIQUE column behave differently on MySQL and PostgreSQL?</summary><p>Uniqueness uses the column&#x27;s comparison rules. MySQL&#x27;s default utf8mb4 collation is case- and accent-insensitive; PostgreSQL&#x27;s default comparison is exact.</p></details><details class="qa"><summary>How do you make email uniqueness case-insensitive in PostgreSQL?</summary><p>A unique expression index on lower(email), and queries that compare lower(email). citext is another option, PostgreSQL-only.</p></details><details class="qa"><summary>What does utf8mb4_0900_ai_ci mean?</summary><p>utf8mb4 is the character set; 0900 is the Unicode collation algorithm version; ai is accent-insensitive; ci is case-insensitive.</p></details><details class="qa"><summary>Why run the tests on both databases?</summary><p>Because the behaviour that matters lives in the database. A test on one says nothing about the other; Testcontainers makes running both cheap.</p></details><details class="qa"><summary>Where does portability end?</summary><p>At SQL syntax (identity columns, functional indexes), collations, error messages and features. Keep the rule the same, and let each schema say it in its own SQL.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 22 tests pass, on both databases.</td><td>You explained why the HTTP tests stayed green with a plain index.</td></tr><tr><td>Databases</td><td>Collations explained.</td><td>You can read a MySQL collation name.</td></tr><tr><td>Schema</td><td>Expression index on both.</td><td>A migration plan for existing duplicates.</td></tr><tr><td>Testing</td><td>Same tests, two databases.</td><td>Shared containers, one start per run.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This Foundations station has no flawed version to review. Use this checklist on any text that must be unique:</p>
+<ul class="rules">
+<li>What does "the same" mean here, in words?</li>
+<li>Which collation does each database use for this column, and is it written in the schema?</li>
+<li>Does every query compare the same expression the index is on?</li>
+<li>Is the rule tested on every database the product supports?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
