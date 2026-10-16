@@ -1,0 +1,1568 @@
+<title>Station 070 · Product catalog on MongoDB</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 070</span>
+    <h1>Product catalog on MongoDB</h1>
+    <p class="scenario">Catalog attributes differ per category and change weekly; the team is evaluating a document database.</p>
+    <p class="sim"><b>Simulation</b><span>Products, sellers, stock and orders are demo data, not Kartwala's. Nothing is sold; an order is a document in a test.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Specialisation</li>
+      <li><b>Industry</b>E-commerce</li>
+      <li><b>Types</b>Database</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>068 Flexible product attributes with jsonb</p>
+      <p><span class="eyebrow">Builds toward</span><br>182 Shopping cart on DynamoDB</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring Data MongoDB · MongoDB 8.0 ($jsonSchema, wildcard index, aggregation, transactions on a replica set) · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>A catalog that changes weekly</strong><p>Phones, shoes, and now sarees with fabric and length. Each category brings its own attributes; a document store keeps each product as one document, whatever it carries.</p></li><li><strong>Then: orders too?</strong><p>Someone proposes moving stock and orders to MongoDB as well. An order takes one from stock and writes an order: two documents. A retried request fails halfway, and a phone vanishes from stock with no order for it. Seller names copied into every listing go stale when a seller is renamed.</p></li><li><strong>The decision</strong><p>The catalog fits a document store well. Stock and orders, with rules across documents and frequent joins, stay in PostgreSQL, or must use transactions everywhere.</p></li></ol>
+<p class="lesson">Choose the store by the shape of the data and the rules between records, not by fashion.</p>
+
+<h2>What are we building?</h2>
+<p><code>POST /catalog/products</code> stores a product of any category as one document; <code>GET /catalog/products?category=phones&amp;attr.ram=8GB</code> finds them through an index.</p>
+
+<h2>An everyday analogy</h2>
+<p>A shop's catalogue binder: each product is a page, and a saree page simply has different boxes from a phone page. The binder is perfect for that. The till and the stock book are different: one sale must change both, or neither.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>At start</strong>, the app makes sure the collection exists with its validator and indexes.</li>
+<li><strong>A new product</strong> is checked in Java, written as a document, and checked again by MongoDB's validator.</li>
+<li><strong>A search</strong> becomes equality filters on <code>attributes.&lt;name&gt;</code>, answered by the wildcard index.</li>
+<li><strong>Several documents that must change together</strong> need a transaction, on a replica set.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: a seller is renamed. Their name is copied into 3,000 product documents. What has to happen?</summary><p>All 3,000 copies must be updated, ideally in one transaction; until then, listings show the old name. Or store only the seller's id and look the name up (<code>$lookup</code>) on every read. The trap test shows both.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>Not a migration.</strong> PostgreSQL stays; this is an evaluation with working code.</li>
+<li><strong>No sharding or replicas for scale.</strong> One node, a replica set only so transactions work.</li>
+<li><strong>No orders API.</strong> Orders appear only in the trap test, to show what goes wrong.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Document</strong></td><td>One record as a nested JSON-like object (BSON).</td><td>A filled-in form, with any extra pages it needs.</td><td>a product</td></tr><tr><td><strong>Collection</strong></td><td>A set of documents; MongoDB's table.</td><td>A drawer of forms.</td><td><code>products</code></td></tr><tr><td><strong>Schema validation</strong></td><td>Rules the server checks on every write.</td><td>The clerk refusing a form with a blank price.</td><td>the <code>$jsonSchema</code> validator</td></tr><tr><td><strong>Wildcard index</strong></td><td>One index over every key under a path.</td><td>One card index for every extra page, whatever it asks.</td><td><code>attributes.$**</code></td></tr><tr><td><strong>Aggregation</strong></td><td>A pipeline of steps: match, group, join, sort.</td><td>Sorting the drawer into piles and counting them.</td><td><code>$group</code>, <code>$lookup</code></td></tr><tr><td><strong>Replica set</strong></td><td>Several MongoDB servers holding the same data; needed for transactions.</td><td>A ledger kept in duplicate.</td><td>one node, <code>rs0</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Kartwala</strong> (a fictional marketplace): catalog attributes differ per category and change weekly. The team is evaluating a document database, and must decide what goes in it.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo data: three phones and three shoes, seeded at first start.</p>
+<ol class="gwt">
+<li><b>Given</b> a saree with fabric and length, a category nobody planned, <b>then</b> <code>201</code>, and it can be searched at once.</li>
+<li><b>Given</b> <code>category=phones&amp;attr.ram=8GB</code>, <b>then</b> the two 8GB phones, by SKU.</li>
+<li><b>Given</b> a duplicate SKU, <b>then</b> <code>409</code>.</li>
+<li><b>Given</b> a negative or fractional price, or a query operator as a value or field name, <b>then</b> <code>400</code>.</li>
+<li><b>Given</b> a bad document written with the driver directly, <b>then</b> MongoDB refuses it.</li>
+<li><b>Given</b> a transaction where one write fails, <b>then</b> none of its writes remain.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>The collection has a validator: required fields, types and ranges, checked by the server.</li>
+<li>SKUs are unique (an index); attribute searches use the wildcard index.</li>
+<li>User input never becomes a field name or an operator.</li>
+<li>Multi-document changes use a transaction; data that needs them constantly belongs elsewhere.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Model a catalog as documents with Spring Data MongoDB.</li>
+<li>Add schema validation and indexes to a "schemaless" store.</li>
+<li>Use the aggregation pipeline: <code>$group</code> and <code>$lookup</code>.</li>
+<li>Decide when a document store fits and when it does not.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its MongoDB, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/catalog/products</code></td><td><code>{sku, name, category, sellerId, pricePaise, attributes: {name: text}}</code>; <code>201</code>, Location with the document id.</td></tr><tr><td><code>GET</code></td><td><code>/catalog/products?category=…&amp;attr.&lt;name&gt;=…</code></td><td>Products matching every filter, at most 50, by SKU.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span> / <span class="pill ok">201</span></td><td>Results (possibly none) / created</td></tr><tr><td><span class="pill warn">400</span></td><td>A malformed product (price out of range or fractional, a value that is not text, a bad attribute name); a search with neither category nor filter, or a parameter that is not <code>category</code> or <code>attr.&lt;name&gt;</code></td></tr><tr><td><span class="pill warn">409</span></td><td>The SKU exists</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 16 Oct 2026. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: a saree</h3><p><b>Why:</b> a new category with its own attributes, and no schema change.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /catalog/products HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;sku&quot;: &quot;sr-silk-red&quot;,
+  &quot;name&quot;: &quot;Kanjeevaram Silk&quot;,
+  &quot;category&quot;: &quot;sarees&quot;,
+  &quot;sellerId&quot;: 8,
+  &quot;pricePaise&quot;: 1250000,
+  &quot;attributes&quot;: {
+    &quot;fabric&quot;: &quot;silk&quot;,
+    &quot;colour&quot;: &quot;Red&quot;,
+    &quot;length_m&quot;: &quot;6.3&quot;
+  }
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /catalog/products/6ad247a2b5973ad3b26629b0
+Content-Type: application/json
+
+{
+  &quot;id&quot;: &quot;6ad247a2b5973ad3b26629b0&quot;,
+  &quot;sku&quot;: &quot;SR-SILK-RED&quot;,
+  &quot;name&quot;: &quot;Kanjeevaram Silk&quot;,
+  &quot;category&quot;: &quot;sarees&quot;,
+  &quot;sellerId&quot;: 8,
+  &quot;pricePaise&quot;: 1250000,
+  &quot;attributes&quot;: {
+    &quot;fabric&quot;: &quot;silk&quot;,
+    &quot;colour&quot;: &quot;Red&quot;,
+    &quot;length_m&quot;: &quot;6.3&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 2: phones with 8GB</h3><p><b>Why:</b> a category and an attribute filter.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /catalog/products?category=phones&amp;attr.ram=8GB HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 377
+
+[
+  {
+    &quot;id&quot;: &quot;6ad247a1b5973ad3b26629aa&quot;,
+    &quot;sku&quot;: &quot;PH-NOVA-8-128&quot;,
+    &quot;name&quot;: &quot;Nova 5G&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 1899900,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;128GB&quot;,
+      &quot;colour&quot;: &quot;Blue&quot;
+    }
+  },
+  {
+    &quot;id&quot;: &quot;6ad247a1b5973ad3b26629ab&quot;,
+    &quot;sku&quot;: &quot;PH-NOVA-8-256&quot;,
+    &quot;name&quot;: &quot;Nova 5G&quot;,
+    &quot;category&quot;: &quot;phones&quot;,
+    &quot;sellerId&quot;: 7,
+    &quot;pricePaise&quot;: 2199900,
+    &quot;attributes&quot;: {
+      &quot;ram&quot;: &quot;8GB&quot;,
+      &quot;storage&quot;: &quot;256GB&quot;,
+      &quot;colour&quot;: &quot;Blue&quot;
+    }
+  }
+]</code></pre></div></div></section><section class="example"><h3>Case 3: the same SKU again</h3><p><b>Why:</b> the unique index: <code>409</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /catalog/products HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;sku&quot;: &quot;sr-silk-red&quot;,
+  &quot;name&quot;: &quot;Kanjeevaram Silk&quot;,
+  &quot;category&quot;: &quot;sarees&quot;,
+  &quot;sellerId&quot;: 8,
+  &quot;pricePaise&quot;: 1250000,
+  &quot;attributes&quot;: {
+    &quot;fabric&quot;: &quot;silk&quot;
+  }
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 409 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;SKU SR-SILK-RED already exists&quot;,
+  &quot;instance&quot;: &quot;/catalog/products&quot;,
+  &quot;status&quot;: 409,
+  &quot;title&quot;: &quot;Conflict&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: <code>{"$gt": ""}</code> as a value</h3><p><b>Why:</b> attributes are text: <code>400</code>, never a query operator.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /catalog/products HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;sku&quot;: &quot;sr-x&quot;,
+  &quot;name&quot;: &quot;X&quot;,
+  &quot;category&quot;: &quot;sarees&quot;,
+  &quot;sellerId&quot;: 8,
+  &quot;pricePaise&quot;: 1250000,
+  &quot;attributes&quot;: {
+    &quot;fabric&quot;: {
+      &quot;$gt&quot;: &quot;&quot;
+    }
+  }
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Failed to read request&quot;,
+  &quot;instance&quot;: &quot;/catalog/products&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: <code>attr.$where</code></h3><p><b>Why:</b> attribute names are checked: <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /catalog/products HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Unknown parameter attr.$where&quot;,
+  &quot;instance&quot;: &quot;/catalog/products&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section>
+<h2>What MongoDB says</h2>
+<p class="muted">From <code>docs/capture.sh</code>, in <code>mongosh</code>: the plan for an attribute search (<code>docs/captures/explain-attributes.txt</code>) and the validator refusing a negative price written directly (<code>docs/captures/validator-refuses.txt</code>).</p>
+<pre class="code"><code class="language-json">{
+  &quot;stage&quot;: &quot;FETCH&quot;,
+  &quot;inputStage&quot;: {
+    &quot;stage&quot;: &quot;IXSCAN&quot;,
+    &quot;indexName&quot;: &quot;products_attributes_wildcard&quot;,
+    &quot;keyPattern&quot;: {
+      &quot;$_path&quot;: 1,
+      &quot;attributes.ram&quot;: 1
+    }
+  }
+}</code></pre><pre class="code"><code class="language-text">Document failed validation: {&quot;operatorName&quot;:&quot;properties&quot;,&quot;propertiesNotSatisfied&quot;:[{&quot;propertyName&quot;:&quot;pricePaise&quot;,&quot;details&quot;:[{&quot;operatorName&quot;:&quot;minimum&quot;,&quot;specifiedAs&quot;:{&quot;minimum&quot;:100},&quot;reason&quot;:&quot;comparison failed&quot;,&quot;consideredValue&quot;:-100}]}]}</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>A new category</td><td>Stored and searchable</td><td><code>aNewCategoryNeedsNoSchemaChange</code></td></tr><tr><td>Category and attributes; cross-category; no match</td><td>Equality filters</td><td><code>searchByCategoryAndAttributes</code></td></tr><tr><td>Duplicate SKU</td><td><code>409</code></td><td><code>aDuplicateSkuIs409</code></td></tr><tr><td>Negative or fractional price; <code>$where</code> as a name; an operator as a value</td><td><code>400</code></td><td><code>malformedProductsAre400</code></td></tr><tr><td><code>attr.$where</code>, a dotted path, an operator as category, nothing</td><td><code>400</code></td><td><code>queryOperatorsInParametersAreRefused</code></td></tr><tr><td>Bad documents written with the driver</td><td>Refused by the validator and the unique index</td><td><code>theValidatorAndTheUniqueIndexHoldWithoutJava</code></td></tr><tr><td>Three inserts, the third invalid, in a transaction</td><td>None remain</td><td><code>aTransactionMakesSeveralDocumentsAllOrNothing</code></td></tr><tr><td>An attribute search</td><td>The wildcard index</td><td><code>attributeSearchesUseTheWildcardIndex</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Using a document store for data that needs joins and multi-document transactions.</p>
+<ul>
+<li><strong>Two writes, no transaction.</strong> Placing an order takes one phone from <code>stock</code>, then inserts into <code>orders</code>. A retried request reuses order number ORD-1, the insert fails, and stock is 4 with no order for the missing phone. In a transaction, the same failure leaves stock at 5.</li>
+<li><strong>Copies go stale.</strong> Listings carry a copy of the seller's name, the usual document-store habit. After the rename, every listing still says "Meera Footwear". The fresh name needs a <code>$lookup</code>, MongoDB's join, on every read.</li>
+</ul>
+<p>Neither is impossible in MongoDB; both are work you must remember everywhere, while PostgreSQL gives them by default. The catalog has neither problem, which is why it fits.</p>
+<p>While building, each fix was undone once: no validator turned 2 tests red; no unique index 2; no wildcard index 1; no attribute-name check 1.</p>
+</div>
+<pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import org.bson.Document;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.LookupOperation;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * Written first. The team&#x27;s plan to move orders and stock into MongoDB too, tried on two small examples: an order
+ * that touches two collections, and seller names copied into every listing.
+ */
+class DocumentStoreTrapTest extends ApiTest {
+
+    @Autowired
+    TransactionTemplate transaction;
+
+    @BeforeEach
+    void collections() {
+        mongo.insert(new Document(&quot;_id&quot;, &quot;PH-NOVA-8-128&quot;).append(&quot;onHand&quot;, 5), &quot;stock&quot;);
+        mongo.insert(new Document(&quot;_id&quot;, &quot;ORD-1&quot;).append(&quot;sku&quot;, &quot;PH-NOVA-8-128&quot;).append(&quot;quantity&quot;, 1), &quot;orders&quot;);   // yesterday&#x27;s order
+        mongo.insert(new Document(&quot;_id&quot;, 8L).append(&quot;name&quot;, &quot;Meera Footwear&quot;), &quot;sellers&quot;);
+        for (String sku : List.of(&quot;SH-RUN-9-BLK&quot;, &quot;SH-OXF-9-BRN&quot;, &quot;SH-OXF-10-BRN&quot;)) {   // each listing carries a copy of the seller&#x27;s name
+            mongo.insert(new Document(&quot;_id&quot;, sku).append(&quot;seller&quot;, new Document(&quot;id&quot;, 8L).append(&quot;name&quot;, &quot;Meera Footwear&quot;)), &quot;listings&quot;);
+        }
+    }
+
+    @AfterEach
+    void dropCollections() {
+        for (String c : List.of(&quot;stock&quot;, &quot;orders&quot;, &quot;sellers&quot;, &quot;listings&quot;)) {
+            mongo.dropCollection(c);
+        }
+    }
+
+    private int onHand() {
+        return mongo.findById(&quot;PH-NOVA-8-128&quot;, Document.class, &quot;stock&quot;).getInteger(&quot;onHand&quot;);
+    }
+
+    /** Take one from stock, then record the order: two writes, two collections. */
+    private void placeOrder(String orderNo) {
+        mongo.updateFirst(new Query(Criteria.where(&quot;_id&quot;).is(&quot;PH-NOVA-8-128&quot;).and(&quot;onHand&quot;).gte(1)), new Update().inc(&quot;onHand&quot;, -1), &quot;stock&quot;);
+        mongo.insert(new Document(&quot;_id&quot;, orderNo).append(&quot;sku&quot;, &quot;PH-NOVA-8-128&quot;).append(&quot;quantity&quot;, 1), &quot;orders&quot;);
+    }
+
+    @Test
+    void withoutATransactionAFailedOrderStillTakesStock() {
+        assertThatThrownBy(() -&gt; placeOrder(&quot;ORD-1&quot;)).isInstanceOf(DuplicateKeyException.class);   // a retried request reuses the order number
+        assertThat(onHand()).isEqualTo(4);   // one phone gone, no order to show for it
+    }
+
+    @Test
+    void aTransactionPutsTheStockBack() {
+        assertThatThrownBy(() -&gt; transaction.executeWithoutResult(tx -&gt; placeOrder(&quot;ORD-1&quot;))).isInstanceOf(DuplicateKeyException.class);
+        assertThat(onHand()).isEqualTo(5);
+    }
+
+    @Test
+    void copiedSellerNamesGoStaleAndALookupIsTheJoin() {
+        mongo.updateFirst(new Query(Criteria.where(&quot;_id&quot;).is(8L)), new Update().set(&quot;name&quot;, &quot;Meera Shoes &amp; Sandals&quot;), &quot;sellers&quot;);
+        assertThat(mongo.findAll(Document.class, &quot;listings&quot;)).extracting(d -&gt; d.get(&quot;seller&quot;, Document.class).getString(&quot;name&quot;))
+                .containsOnly(&quot;Meera Footwear&quot;);   // every copy still has the old name, until someone updates all of them
+        // The fresh name needs a $lookup: MongoDB&#x27;s join, written as an aggregation stage, run for every read.
+        LookupOperation lookup = Aggregation.lookup(&quot;sellers&quot;, &quot;seller.id&quot;, &quot;_id&quot;, &quot;current&quot;);
+        List&lt;Document&gt; joined = mongo.aggregate(Aggregation.newAggregation(lookup, Aggregation.unwind(&quot;current&quot;)), &quot;listings&quot;, Document.class).getMappedResults();
+        assertThat(joined).extracting(d -&gt; d.get(&quot;current&quot;, Document.class).getString(&quot;name&quot;)).containsOnly(&quot;Meera Shoes &amp; Sandals&quot;);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d --wait  # MongoDB 8.0 on localhost:27017, as replica set rs0
+./mvnw spring-boot:run       # the API on http://localhost:8080
+./mvnw test                  # all 12 tests; starts its own MongoDB container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d --wait
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Look at the documents and the validator in <code>mongosh</code>:</p>
+<pre class="code"><code class="language-javascript">docker compose exec mongo mongosh kartwala
+db.products.find({&quot;attributes.ram&quot;: &quot;8GB&quot;}, {sku: 1, attributes: 1})
+db.getCollectionInfos({name: &quot;products&quot;})[0].options.validator
+db.products.aggregate([{$group: {_id: &quot;$category&quot;, products: {$sum: 1}}}])</code></pre>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>Transaction numbers are only allowed on a replica set member or mongos</code></td><td>A standalone MongoDB; Testcontainers 2.0's <code>MongoDBContainer</code> is standalone unless asked.</td><td><code>.withReplicaSet()</code> in tests; <code>--replSet</code> in compose. Found while building this station.</td></tr><tr><td><code>Invalid bean definition with name 'mongo'</code></td><td>A bean called <code>mongo</code> next to Spring Boot's MongoClient bean of that name.</td><td>Name your bean something else. Found while building this station.</td></tr><tr><td><code>Document failed validation</code></td><td>A write breaking the <code>$jsonSchema</code>.</td><td>Expected; the error's <code>errInfo</code> names the rule.</td></tr><tr><td><code>E11000 duplicate key error</code></td><td>A second product with the same SKU.</td><td>Answered <code>409</code> by the app.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/070-product-catalog-on-mongodb/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/kartwala/catalog/
+│   ├── CatalogController.java   ├── Catalog.java   ├── CatalogSchema.java
+│   ├── CatalogProduct.java   └── CatalogApplication.java
+├── src/main/resources/application.yaml
+├── src/test/java/com/kartwala/catalog/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the collection behind it.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">CatalogController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">Catalog.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">CatalogSchema.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">CatalogProduct.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">CatalogApplication.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">compose.yaml</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/kartwala/catalog/CatalogController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Validates products; turns <code>attr.*</code> parameters into filters, refusing any name that is not plain lower-case.</dd><dt>Why</dt><dd>No user text becomes a field path or an operator.</dd><dt>Without it</dt><dd><code>attr.$where</code> or <code>{"$gt": ""}</code> reaching the query.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.net.URI;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
+
+@RestController
+class CatalogController {
+
+    /** The same rules as the collection&#x27;s validator, checked first for a clear 400. Demo limits. */
+    record NewProduct(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,30}&quot;) String sku,
+                      @NotBlank @Size(max = 120) String name,
+                      @NotNull @Pattern(regexp = &quot;[a-z]{2,30}&quot;) String category,
+                      @NotNull Long sellerId,
+                      @NotNull @Min(100) @Max(10_000_000) Integer pricePaise,
+                      @NotNull @Size(max = 20) Map&lt;@Pattern(regexp = &quot;[a-z][a-z_]{1,29}&quot;) String, @NotBlank @Size(max = 40) String&gt; attributes) {
+    }
+
+    private static final java.util.regex.Pattern ATTRIBUTE = java.util.regex.Pattern.compile(&quot;[a-z][a-z_]{1,29}&quot;);
+
+    private final Catalog catalog;
+
+    CatalogController(Catalog catalog) {
+        this.catalog = catalog;
+    }
+
+    @PostMapping(&quot;/catalog/products&quot;)
+    ResponseEntity&lt;CatalogProduct&gt; create(@Valid @RequestBody NewProduct body) {
+        CatalogProduct created = catalog.create(new CatalogProduct(null, body.sku().toUpperCase(Locale.ROOT), body.name().strip(), body.category(),
+                body.sellerId(), body.pricePaise(), body.attributes()));
+        return ResponseEntity.created(URI.create(&quot;/catalog/products/&quot; + created.id())).body(created);
+    }
+
+    /** ?category=phones&amp;attr.ram=8GB: every attr.* filter must match. */
+    @GetMapping(&quot;/catalog/products&quot;)
+    List&lt;CatalogProduct&gt; search(@RequestParam Map&lt;String, String&gt; params) {
+        Map&lt;String, String&gt; attributes = new TreeMap&lt;&gt;();
+        params.forEach((key, value) -&gt; {
+            if (key.startsWith(&quot;attr.&quot;) &amp;&amp; ATTRIBUTE.matcher(key.substring(5)).matches()) {
+                attributes.put(key.substring(5), value);
+            } else if (!key.equals(&quot;category&quot;)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Unknown parameter &quot; + key);
+            }
+        });
+        String category = params.get(&quot;category&quot;);
+        if (category != null &amp;&amp; !category.matches(&quot;[a-z]{2,30}&quot;)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Not a category: &quot; + category);
+        }
+        if (category == null &amp;&amp; attributes.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Give a category or at least one attr.&lt;name&gt;=&lt;value&gt;&quot;);
+        }
+        return catalog.search(category, attributes);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/kartwala/catalog/Catalog.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Inserts with <code>MongoTemplate</code>; searches with <code>Criteria</code> equality filters.</dd><dt>Why</dt><dd>A duplicate SKU becomes <code>409</code>; each filter is a value, never parsed.</dd><dt>Without it</dt><dd>Queries built from JSON text.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+import java.util.Map;
+
+@Service
+class Catalog {
+
+    private final MongoTemplate mongo;
+
+    Catalog(MongoTemplate mongo) {
+        this.mongo = mongo;
+    }
+
+    CatalogProduct create(CatalogProduct product) {
+        try {
+            return mongo.insert(product);
+        } catch (DuplicateKeyException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, &quot;SKU &quot; + product.sku() + &quot; already exists&quot;);
+        }
+    }
+
+    /**
+     * Every filter is an equality on attributes.&amp;lt;name&amp;gt;. Names were checked against a pattern first, so no one can
+     * pass &quot;$where&quot; or a dotted path; values are plain strings, never parsed as query operators.
+     */
+    List&lt;CatalogProduct&gt; search(String category, Map&lt;String, String&gt; attributes) {
+        Criteria criteria = new Criteria();
+        if (category != null) {
+            criteria = criteria.and(&quot;category&quot;).is(category);
+        }
+        for (Map.Entry&lt;String, String&gt; a : attributes.entrySet()) {
+            criteria = criteria.and(&quot;attributes.&quot; + a.getKey()).is(a.getValue());
+        }
+        return mongo.find(new Query(criteria).with(Sort.by(&quot;sku&quot;)).limit(50), CatalogProduct.class);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/kartwala/catalog/CatalogSchema.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Creates the collection with its <code>$jsonSchema</code> validator and the three indexes, at every start; seeds the demo data once.</dd><dt>Why</dt><dd>MongoDB applies the validator to every writer, not only this app.</dd><dt>Without it</dt><dd>"Schemaless" meaning "anything goes".</dd></dl><ul><li>Index creation is idempotent: the same name and keys again do nothing.</li><li>The validator is only applied when this app creates the collection; an existing collection needs <code>collMod</code>.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.CreateCollectionOptions;
+import com.mongodb.client.model.IndexOptions;
+import com.mongodb.client.model.ValidationOptions;
+import org.bson.Document;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+/**
+ * MongoDB has no migrations here, so the app makes sure, at start, that the collection has its rules: a $jsonSchema
+ * validator the server applies to every write, and the indexes. Safe to run on every start.
+ */
+@Component
+@Order(1)
+class CatalogSchema implements ApplicationRunner {
+
+    static final String VALIDATOR = &quot;&quot;&quot;
+            {&quot;$jsonSchema&quot;: {
+              &quot;bsonType&quot;: &quot;object&quot;,
+              &quot;required&quot;: [&quot;sku&quot;, &quot;name&quot;, &quot;category&quot;, &quot;sellerId&quot;, &quot;pricePaise&quot;, &quot;attributes&quot;],
+              &quot;properties&quot;: {
+                &quot;sku&quot;: {&quot;bsonType&quot;: &quot;string&quot;, &quot;pattern&quot;: &quot;^[A-Z0-9-]{3,30}$&quot;},
+                &quot;name&quot;: {&quot;bsonType&quot;: &quot;string&quot;, &quot;minLength&quot;: 1, &quot;maxLength&quot;: 120},
+                &quot;category&quot;: {&quot;bsonType&quot;: &quot;string&quot;, &quot;pattern&quot;: &quot;^[a-z]{2,30}$&quot;},
+                &quot;sellerId&quot;: {&quot;bsonType&quot;: &quot;long&quot;},
+                &quot;pricePaise&quot;: {&quot;bsonType&quot;: &quot;int&quot;, &quot;minimum&quot;: 100, &quot;maximum&quot;: 10000000},
+                &quot;attributes&quot;: {&quot;bsonType&quot;: &quot;object&quot;, &quot;maxProperties&quot;: 20, &quot;additionalProperties&quot;: {&quot;bsonType&quot;: &quot;string&quot;, &quot;maxLength&quot;: 40}}
+              }}}&quot;&quot;&quot;;
+
+    private final MongoTemplate mongo;
+
+    CatalogSchema(MongoTemplate mongo) {
+        this.mongo = mongo;
+    }
+
+    @Override
+    public void run(ApplicationArguments args) {
+        MongoDatabase db = mongo.getDb();
+        if (!mongo.collectionExists(&quot;products&quot;)) {
+            db.createCollection(&quot;products&quot;, new CreateCollectionOptions().validationOptions(new ValidationOptions().validator(Document.parse(VALIDATOR))));
+        }
+        var products = db.getCollection(&quot;products&quot;);
+        products.createIndex(new Document(&quot;sku&quot;, 1), new IndexOptions().name(&quot;products_sku_unique&quot;).unique(true));
+        products.createIndex(new Document(&quot;category&quot;, 1).append(&quot;sku&quot;, 1), new IndexOptions().name(&quot;products_category_sku&quot;));
+        // A wildcard index: one index over every key inside attributes, whatever keys a category brings.
+        products.createIndex(new Document(&quot;attributes.$**&quot;, 1), new IndexOptions().name(&quot;products_attributes_wildcard&quot;));
+        if (products.countDocuments() == 0) {
+            products.insertMany(List.of(
+                    product(&quot;PH-NOVA-8-128&quot;, &quot;Nova 5G&quot;, &quot;phones&quot;, 7, 1899900, new Document(&quot;ram&quot;, &quot;8GB&quot;).append(&quot;storage&quot;, &quot;128GB&quot;).append(&quot;colour&quot;, &quot;Blue&quot;)),
+                    product(&quot;PH-NOVA-8-256&quot;, &quot;Nova 5G&quot;, &quot;phones&quot;, 7, 2199900, new Document(&quot;ram&quot;, &quot;8GB&quot;).append(&quot;storage&quot;, &quot;256GB&quot;).append(&quot;colour&quot;, &quot;Blue&quot;)),
+                    product(&quot;PH-ZEN-6-128&quot;, &quot;Zen Lite&quot;, &quot;phones&quot;, 7, 1299900, new Document(&quot;ram&quot;, &quot;6GB&quot;).append(&quot;storage&quot;, &quot;128GB&quot;)),
+                    product(&quot;SH-RUN-9-BLK&quot;, &quot;Road Runner&quot;, &quot;shoes&quot;, 8, 349900, new Document(&quot;size&quot;, &quot;9&quot;).append(&quot;colour&quot;, &quot;Black&quot;).append(&quot;material&quot;, &quot;mesh&quot;)),
+                    product(&quot;SH-OXF-9-BRN&quot;, &quot;Oxford Classic&quot;, &quot;shoes&quot;, 8, 599900, new Document(&quot;size&quot;, &quot;9&quot;).append(&quot;colour&quot;, &quot;Brown&quot;).append(&quot;material&quot;, &quot;leather&quot;)),
+                    product(&quot;SH-OXF-10-BRN&quot;, &quot;Oxford Classic&quot;, &quot;shoes&quot;, 8, 599900, new Document(&quot;size&quot;, &quot;10&quot;).append(&quot;colour&quot;, &quot;Brown&quot;).append(&quot;material&quot;, &quot;leather&quot;))));
+        }
+    }
+
+    private static Document product(String sku, String name, String category, long seller, int paise, Document attributes) {
+        return new Document(&quot;sku&quot;, sku).append(&quot;name&quot;, name).append(&quot;category&quot;, category).append(&quot;sellerId&quot;, seller)
+                .append(&quot;pricePaise&quot;, paise).append(&quot;attributes&quot;, attributes);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/kartwala/catalog/CatalogProduct.java</p><div class="notes"><p>The document as a Java record.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+
+import java.util.Map;
+
+/** One document per product: the fields every product has, and its category&#x27;s own attributes in one sub-document. */
+@Document(&quot;products&quot;)
+record CatalogProduct(@Id String id, String sku, String name, String category, long sellerId, int pricePaise, Map&lt;String, String&gt; attributes) {
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/kartwala/catalog/CatalogApplication.java</p><div class="notes"><p>Entry point, and the <code>MongoTransactionManager</code> Spring Boot does not create by itself.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.data.mongodb.MongoDatabaseFactory;
+import org.springframework.data.mongodb.MongoTransactionManager;
+
+@SpringBootApplication
+public class CatalogApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(CatalogApplication.class, args);
+    }
+
+    /** Not configured by Spring Boot: without it, @Transactional does nothing for MongoDB. Needs a replica set. */
+    @Bean
+    MongoTransactionManager transactionManager(MongoDatabaseFactory factory) {
+        return new MongoTransactionManager(factory);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>The MongoDB URI (<code>spring.mongodb.uri</code> in Spring Boot 4) and whole paise only.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: kartwala-catalog
+  mvc:
+    problemdetails:
+      enabled: true
+  jackson:
+    deserialization:
+      accept-float-as-int: false   # 499.99 for a paise field is a client bug: 400
+  mongodb:
+    uri: mongodb://localhost:27017/kartwala?directConnection=true</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>MongoDB 8.0 as a one-node replica set; the healthcheck starts it on first run.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  mongo:
+    image: mongo:8.0
+    command: [&quot;--replSet&quot;, &quot;rs0&quot;, &quot;--bind_ip_all&quot;]   # a one-node replica set: MongoDB only allows multi-document transactions on one
+    ports:
+      - &quot;27017:27017&quot;
+    healthcheck:
+      # Starts the replica set on the first check, then reports healthy once this node is its primary.
+      test: [&quot;CMD&quot;, &quot;mongosh&quot;, &quot;--quiet&quot;, &quot;--eval&quot;, &quot;try { rs.status() } catch (e) { rs.initiate({_id: &#x27;rs0&#x27;, members: [{_id: 0, host: &#x27;localhost:27017&#x27;}]}) }; db.hello().isWritablePrimary || quit(1)&quot;]
+      interval: 2s
+      timeout: 5s
+      retries: 30</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found (empty)</td><td><code>CatalogContractTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>DocumentStoreTrapTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>CatalogDatabaseTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p>"Constraints" here are the collection's validator and unique index; "rollback" is a multi-document transaction, on a real replica set.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, MongoDB 8.0 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.catalog.CatalogContractTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.catalog.DocumentStoreTrapTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.catalog.CatalogDatabaseTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">DocumentStoreTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">CatalogDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">CatalogContractTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">MongoTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/kartwala/catalog/DocumentStoreTrapTest.java</p><div class="notes"><p>Written first: an order across two collections, and copied names.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import org.bson.Document;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.LookupOperation;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * Written first. The team&#x27;s plan to move orders and stock into MongoDB too, tried on two small examples: an order
+ * that touches two collections, and seller names copied into every listing.
+ */
+class DocumentStoreTrapTest extends ApiTest {
+
+    @Autowired
+    TransactionTemplate transaction;
+
+    @BeforeEach
+    void collections() {
+        mongo.insert(new Document(&quot;_id&quot;, &quot;PH-NOVA-8-128&quot;).append(&quot;onHand&quot;, 5), &quot;stock&quot;);
+        mongo.insert(new Document(&quot;_id&quot;, &quot;ORD-1&quot;).append(&quot;sku&quot;, &quot;PH-NOVA-8-128&quot;).append(&quot;quantity&quot;, 1), &quot;orders&quot;);   // yesterday&#x27;s order
+        mongo.insert(new Document(&quot;_id&quot;, 8L).append(&quot;name&quot;, &quot;Meera Footwear&quot;), &quot;sellers&quot;);
+        for (String sku : List.of(&quot;SH-RUN-9-BLK&quot;, &quot;SH-OXF-9-BRN&quot;, &quot;SH-OXF-10-BRN&quot;)) {   // each listing carries a copy of the seller&#x27;s name
+            mongo.insert(new Document(&quot;_id&quot;, sku).append(&quot;seller&quot;, new Document(&quot;id&quot;, 8L).append(&quot;name&quot;, &quot;Meera Footwear&quot;)), &quot;listings&quot;);
+        }
+    }
+
+    @AfterEach
+    void dropCollections() {
+        for (String c : List.of(&quot;stock&quot;, &quot;orders&quot;, &quot;sellers&quot;, &quot;listings&quot;)) {
+            mongo.dropCollection(c);
+        }
+    }
+
+    private int onHand() {
+        return mongo.findById(&quot;PH-NOVA-8-128&quot;, Document.class, &quot;stock&quot;).getInteger(&quot;onHand&quot;);
+    }
+
+    /** Take one from stock, then record the order: two writes, two collections. */
+    private void placeOrder(String orderNo) {
+        mongo.updateFirst(new Query(Criteria.where(&quot;_id&quot;).is(&quot;PH-NOVA-8-128&quot;).and(&quot;onHand&quot;).gte(1)), new Update().inc(&quot;onHand&quot;, -1), &quot;stock&quot;);
+        mongo.insert(new Document(&quot;_id&quot;, orderNo).append(&quot;sku&quot;, &quot;PH-NOVA-8-128&quot;).append(&quot;quantity&quot;, 1), &quot;orders&quot;);
+    }
+
+    @Test
+    void withoutATransactionAFailedOrderStillTakesStock() {
+        assertThatThrownBy(() -&gt; placeOrder(&quot;ORD-1&quot;)).isInstanceOf(DuplicateKeyException.class);   // a retried request reuses the order number
+        assertThat(onHand()).isEqualTo(4);   // one phone gone, no order to show for it
+    }
+
+    @Test
+    void aTransactionPutsTheStockBack() {
+        assertThatThrownBy(() -&gt; transaction.executeWithoutResult(tx -&gt; placeOrder(&quot;ORD-1&quot;))).isInstanceOf(DuplicateKeyException.class);
+        assertThat(onHand()).isEqualTo(5);
+    }
+
+    @Test
+    void copiedSellerNamesGoStaleAndALookupIsTheJoin() {
+        mongo.updateFirst(new Query(Criteria.where(&quot;_id&quot;).is(8L)), new Update().set(&quot;name&quot;, &quot;Meera Shoes &amp; Sandals&quot;), &quot;sellers&quot;);
+        assertThat(mongo.findAll(Document.class, &quot;listings&quot;)).extracting(d -&gt; d.get(&quot;seller&quot;, Document.class).getString(&quot;name&quot;))
+                .containsOnly(&quot;Meera Footwear&quot;);   // every copy still has the old name, until someone updates all of them
+        // The fresh name needs a $lookup: MongoDB&#x27;s join, written as an aggregation stage, run for every read.
+        LookupOperation lookup = Aggregation.lookup(&quot;sellers&quot;, &quot;seller.id&quot;, &quot;_id&quot;, &quot;current&quot;);
+        List&lt;Document&gt; joined = mongo.aggregate(Aggregation.newAggregation(lookup, Aggregation.unwind(&quot;current&quot;)), &quot;listings&quot;, Document.class).getMappedResults();
+        assertThat(joined).extracting(d -&gt; d.get(&quot;current&quot;, Document.class).getString(&quot;name&quot;)).containsOnly(&quot;Meera Shoes &amp; Sandals&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/kartwala/catalog/CatalogDatabaseTest.java</p><div class="notes"><p>The validator and unique index with the driver, a transaction, the wildcard index, an aggregation.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import com.mongodb.MongoWriteException;
+import org.bson.Document;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The collection&#x27;s rules as MongoDB enforces them, with the driver directly (no Java validation), plus a transaction and an aggregation. */
+class CatalogDatabaseTest extends ApiTest {
+
+    @Autowired
+    TransactionTemplate transaction;
+
+    private static Document doc(String sku, Object paise, Object attributes) {
+        return new Document(&quot;sku&quot;, sku).append(&quot;name&quot;, &quot;Test&quot;).append(&quot;category&quot;, &quot;phones&quot;).append(&quot;sellerId&quot;, 7L)
+                .append(&quot;pricePaise&quot;, paise).append(&quot;attributes&quot;, attributes);
+    }
+
+    private void insert(Document d) {
+        mongo.getCollection(&quot;products&quot;).insertOne(d);
+    }
+
+    @Test
+    void theValidatorAndTheUniqueIndexHoldWithoutJava() {
+        assertThatThrownBy(() -&gt; insert(doc(&quot;T-NEG&quot;, -5, new Document()))).isInstanceOf(MongoWriteException.class).hasMessageContaining(&quot;Document failed validation&quot;);
+        assertThatThrownBy(() -&gt; insert(doc(&quot;T-NUM&quot;, 99900, new Document(&quot;ram&quot;, 8)))).hasMessageContaining(&quot;Document failed validation&quot;);   // a number where text belongs
+        assertThatThrownBy(() -&gt; insert(doc(&quot;t-lower&quot;, 99900, new Document()))).hasMessageContaining(&quot;Document failed validation&quot;);
+        assertThatThrownBy(() -&gt; insert(new Document(&quot;sku&quot;, &quot;T-BARE&quot;))).hasMessageContaining(&quot;Document failed validation&quot;);
+        assertThatThrownBy(() -&gt; insert(doc(&quot;PH-NOVA-8-128&quot;, 99900, new Document()))).hasMessageContaining(&quot;E11000&quot;).hasMessageContaining(&quot;products_sku_unique&quot;);
+    }
+
+    @Test
+    void aTransactionMakesSeveralDocumentsAllOrNothing() {
+        assertThatThrownBy(() -&gt; transaction.executeWithoutResult(tx -&gt; {
+            mongo.insert(doc(&quot;T-ONE&quot;, 99900, new Document()), &quot;products&quot;);
+            mongo.insert(doc(&quot;T-TWO&quot;, 99900, new Document()), &quot;products&quot;);
+            mongo.insert(doc(&quot;T-THREE&quot;, 0, new Document()), &quot;products&quot;);   // the validator refuses this one
+        })).hasMessageContaining(&quot;Document failed validation&quot;);
+        assertThat(mongo.count(new Query(Criteria.where(&quot;sku&quot;).regex(&quot;^T-&quot;)), &quot;products&quot;)).isZero();
+    }
+
+    @Test
+    void attributeSearchesUseTheWildcardIndex() {
+        Document plan = mongo.getCollection(&quot;products&quot;).find(new Document(&quot;attributes.ram&quot;, &quot;8GB&quot;)).explain();
+        String winning = plan.get(&quot;queryPlanner&quot;, Document.class).get(&quot;winningPlan&quot;, Document.class).toJson();
+        assertThat(winning).contains(&quot;IXSCAN&quot;).contains(&quot;products_attributes_wildcard&quot;);
+    }
+
+    @Test
+    void anAggregationCountsProductsPerCategory() {
+        List&lt;Document&gt; counts = mongo.aggregate(Aggregation.newAggregation(
+                Aggregation.group(&quot;category&quot;).count().as(&quot;products&quot;), Aggregation.sort(org.springframework.data.domain.Sort.by(&quot;_id&quot;))), &quot;products&quot;, Document.class).getMappedResults();
+        assertThat(counts).extracting(d -&gt; d.getString(&quot;_id&quot;) + &quot;=&quot; + d.getInteger(&quot;products&quot;)).containsExactly(&quot;phones=3&quot;, &quot;shoes=3&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/kartwala/catalog/CatalogContractTest.java</p><div class="notes"><p>Both endpoints through HTTP, including operator injection.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.matchesPattern;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class CatalogContractTest extends ApiTest {
+
+    static final String SAREE = &quot;&quot;&quot;
+            {&quot;sku&quot;: &quot;t-saree-silk-red&quot;, &quot;name&quot;: &quot;Kanjeevaram Silk&quot;, &quot;category&quot;: &quot;sarees&quot;, &quot;sellerId&quot;: 8, &quot;pricePaise&quot;: 1250000,
+             &quot;attributes&quot;: {&quot;fabric&quot;: &quot;silk&quot;, &quot;colour&quot;: &quot;Red&quot;, &quot;length_m&quot;: &quot;6.3&quot;}}&quot;&quot;&quot;;
+
+    @Test
+    void aNewCategoryNeedsNoSchemaChange() throws Exception {
+        create(SAREE).andExpect(status().isCreated())
+                .andExpect(header().string(&quot;Location&quot;, matchesPattern(&quot;/catalog/products/[0-9a-f]{24}&quot;)))
+                .andExpect(jsonPath(&quot;$.sku&quot;).value(&quot;T-SAREE-SILK-RED&quot;)).andExpect(jsonPath(&quot;$.attributes.fabric&quot;).value(&quot;silk&quot;));
+        mvc.perform(get(&quot;/catalog/products&quot;).param(&quot;category&quot;, &quot;sarees&quot;).param(&quot;attr.fabric&quot;, &quot;silk&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$[*].sku&quot;, contains(&quot;T-SAREE-SILK-RED&quot;)));
+    }
+
+    @Test
+    void searchByCategoryAndAttributes() throws Exception {
+        mvc.perform(get(&quot;/catalog/products&quot;).param(&quot;category&quot;, &quot;phones&quot;).param(&quot;attr.ram&quot;, &quot;8GB&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$[*].sku&quot;, contains(&quot;PH-NOVA-8-128&quot;, &quot;PH-NOVA-8-256&quot;)));
+        mvc.perform(get(&quot;/catalog/products&quot;).param(&quot;attr.size&quot;, &quot;9&quot;).param(&quot;attr.material&quot;, &quot;leather&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$[*].sku&quot;, contains(&quot;SH-OXF-9-BRN&quot;)));
+        mvc.perform(get(&quot;/catalog/products&quot;).param(&quot;category&quot;, &quot;phones&quot;).param(&quot;attr.ram&quot;, &quot;12GB&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$&quot;, empty()));
+    }
+
+    @Test
+    void aDuplicateSkuIs409() throws Exception {
+        create(SAREE).andExpect(status().isCreated());
+        create(SAREE).andExpect(status().isConflict()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;SKU T-SAREE-SILK-RED already exists&quot;));
+    }
+
+    @Test
+    void malformedProductsAre400() throws Exception {
+        create(SAREE.replace(&quot;1250000&quot;, &quot;-5&quot;)).andExpect(status().isBadRequest());
+        create(SAREE.replace(&quot;1250000&quot;, &quot;12500.5&quot;)).andExpect(status().isBadRequest());
+        create(SAREE.replace(&quot;\&quot;fabric\&quot;&quot;, &quot;\&quot;$where\&quot;&quot;)).andExpect(status().isBadRequest());
+        create(SAREE.replace(&quot;\&quot;silk\&quot;&quot;, &quot;{\&quot;$gt\&quot;: \&quot;\&quot;}&quot;)).andExpect(status().isBadRequest());   // an operator where a value belongs
+    }
+
+    @Test
+    void queryOperatorsInParametersAreRefused() throws Exception {
+        mvc.perform(get(&quot;/catalog/products&quot;).param(&quot;attr.$where&quot;, &quot;1&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/catalog/products&quot;).param(&quot;attr.attributes.ram&quot;, &quot;8GB&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/catalog/products&quot;).param(&quot;category&quot;, &quot;{\&quot;$ne\&quot;: null}&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/catalog/products&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/kartwala/catalog/ApiTest.java</p><div class="notes"><p>Shared setup.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import org.junit.jupiter.api.AfterEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/** Shared setup: the whole app on a real MongoDB with the six demo products. Test SKUs start with T- and are removed. */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(MongoTestConfig.class)
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    MongoTemplate mongo;
+
+    @AfterEach
+    void removeTestProducts() {
+        mongo.remove(new Query(Criteria.where(&quot;sku&quot;).regex(&quot;^T-&quot;)), &quot;products&quot;);
+    }
+
+    ResultActions create(String body) throws Exception {
+        return mvc.perform(post(&quot;/catalog/products&quot;).contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/kartwala/catalog/MongoTestConfig.java</p><div class="notes"><p>MongoDB 8.0 in Docker as a replica set, via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.mongodb.MongoDBContainer;
+
+/** A real MongoDB 8.0 in Docker, as a one-node replica set, so multi-document transactions are available. */
+@TestConfiguration(proxyBeanMethods = false)
+class MongoTestConfig {
+
+    @Bean
+    @ServiceConnection
+    MongoDBContainer mongoContainer() {   // not &quot;mongo&quot;: Spring Boot already names its MongoClient bean that
+        return new MongoDBContainer(&quot;mongo:8.0&quot;).withReplicaSet();   // Testcontainers 2.0 no longer starts one by default
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/kartwala/catalog/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=ProductByIdChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 12 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 15 tests pass (12 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>One product by id</h2><p>Add <code>GET /catalog/products/{id}</code>: the product behind the Location header. Not 24 hex digits: <code>400</code>; unknown: <code>404</code>.</p><p><b>Done when:</b> both tests in <code>ProductByIdChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li><code>ObjectId.isValid(id)</code> before <code>new ObjectId(id)</code>, which throws otherwise.</li><li><code>mongo.findById</code> returns <code>null</code> when nothing matches.</li></ul></details><p class="path">challenge/ProductByIdChallengeTest.java</p><pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: GET /catalog/products/{id} returns one product by the id in its Location header. An id that is not
+ * 24 hex digits is 400; a well-formed id nobody has is 404.
+ */
+class ProductByIdChallengeTest extends ApiTest {
+
+    @Test
+    void theLocationHeaderLeadsToTheProduct() throws Exception {
+        String location = create(CatalogContractTest.SAREE).andReturn().getResponse().getHeader(&quot;Location&quot;);
+        mvc.perform(get(location)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.sku&quot;).value(&quot;T-SAREE-SILK-RED&quot;));
+    }
+
+    @Test
+    void malformedIs400AndUnknownIs404() throws Exception {
+        mvc.perform(get(&quot;/catalog/products/not-an-id&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/catalog/products/000000000000000000000000&quot;)).andExpect(status().isNotFound());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/Catalog.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import org.bson.Document;
+import org.bson.types.ObjectId;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
+@Service
+class Catalog {
+
+    private final MongoTemplate mongo;
+
+    Catalog(MongoTemplate mongo) {
+        this.mongo = mongo;
+    }
+
+    CatalogProduct create(CatalogProduct product) {
+        try {
+            return mongo.insert(product);
+        } catch (DuplicateKeyException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, &quot;SKU &quot; + product.sku() + &quot; already exists&quot;);
+        }
+    }
+
+    /** Challenge 1. */
+    CatalogProduct byId(String id) {
+        if (!ObjectId.isValid(id)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Not a product id: &quot; + id);
+        }
+        CatalogProduct product = mongo.findById(new ObjectId(id), CatalogProduct.class);
+        if (product == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;No product &quot; + id);
+        }
+        return product;
+    }
+
+    /** Challenge 2: $match the category and products having the attribute, then $group by its value. */
+    Map&lt;String, Integer&gt; facet(String category, String facet) {
+        Map&lt;String, Integer&gt; counts = new TreeMap&lt;&gt;();
+        mongo.aggregate(Aggregation.newAggregation(
+                        Aggregation.match(Criteria.where(&quot;category&quot;).is(category).and(&quot;attributes.&quot; + facet).exists(true)),
+                        Aggregation.group(&quot;attributes.&quot; + facet).count().as(&quot;n&quot;)), &quot;products&quot;, Document.class)
+                .getMappedResults().forEach(d -&gt; counts.put(d.getString(&quot;_id&quot;), d.getInteger(&quot;n&quot;)));
+        return counts;
+    }
+
+    /**
+     * Every filter is an equality on attributes.&amp;lt;name&amp;gt;. Names were checked against a pattern first, so no one can
+     * pass &quot;$where&quot; or a dotted path; values are plain strings, never parsed as query operators.
+     */
+    List&lt;CatalogProduct&gt; search(String category, Map&lt;String, String&gt; attributes) {
+        Criteria criteria = new Criteria();
+        if (category != null) {
+            criteria = criteria.and(&quot;category&quot;).is(category);
+        }
+        for (Map.Entry&lt;String, String&gt; a : attributes.entrySet()) {
+            criteria = criteria.and(&quot;attributes.&quot; + a.getKey()).is(a.getValue());
+        }
+        return mongo.find(new Query(criteria).with(Sort.by(&quot;sku&quot;)).limit(50), CatalogProduct.class);
+    }
+}</code></pre></div><p class="path">challenge/solution/CatalogController.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.net.URI;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
+
+@RestController
+class CatalogController {
+
+    /** The same rules as the collection&#x27;s validator, checked first for a clear 400. Demo limits. */
+    record NewProduct(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,30}&quot;) String sku,
+                      @NotBlank @Size(max = 120) String name,
+                      @NotNull @Pattern(regexp = &quot;[a-z]{2,30}&quot;) String category,
+                      @NotNull Long sellerId,
+                      @NotNull @Min(100) @Max(10_000_000) Integer pricePaise,
+                      @NotNull @Size(max = 20) Map&lt;@Pattern(regexp = &quot;[a-z][a-z_]{1,29}&quot;) String, @NotBlank @Size(max = 40) String&gt; attributes) {
+    }
+
+    private static final java.util.regex.Pattern ATTRIBUTE = java.util.regex.Pattern.compile(&quot;[a-z][a-z_]{1,29}&quot;);
+
+    private final Catalog catalog;
+
+    CatalogController(Catalog catalog) {
+        this.catalog = catalog;
+    }
+
+    @PostMapping(&quot;/catalog/products&quot;)
+    ResponseEntity&lt;CatalogProduct&gt; create(@Valid @RequestBody NewProduct body) {
+        CatalogProduct created = catalog.create(new CatalogProduct(null, body.sku().toUpperCase(Locale.ROOT), body.name().strip(), body.category(),
+                body.sellerId(), body.pricePaise(), body.attributes()));
+        return ResponseEntity.created(URI.create(&quot;/catalog/products/&quot; + created.id())).body(created);
+    }
+
+    @GetMapping(&quot;/catalog/products/{id}&quot;)
+    CatalogProduct byId(@PathVariable String id) {
+        return catalog.byId(id);
+    }
+
+    @GetMapping(&quot;/catalog/facets&quot;)
+    Map&lt;String, Integer&gt; facets(@RequestParam @jakarta.validation.constraints.Pattern(regexp = &quot;[a-z]{2,30}&quot;) String category,
+                                @RequestParam @jakarta.validation.constraints.Pattern(regexp = &quot;[a-z][a-z_]{1,29}&quot;) String facet) {
+        return catalog.facet(category, facet);
+    }
+
+    /** ?category=phones&amp;attr.ram=8GB: every attr.* filter must match. */
+    @GetMapping(&quot;/catalog/products&quot;)
+    List&lt;CatalogProduct&gt; search(@RequestParam Map&lt;String, String&gt; params) {
+        Map&lt;String, String&gt; attributes = new TreeMap&lt;&gt;();
+        params.forEach((key, value) -&gt; {
+            if (key.startsWith(&quot;attr.&quot;) &amp;&amp; ATTRIBUTE.matcher(key.substring(5)).matches()) {
+                attributes.put(key.substring(5), value);
+            } else if (!key.equals(&quot;category&quot;)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Unknown parameter &quot; + key);
+            }
+        });
+        String category = params.get(&quot;category&quot;);
+        if (category != null &amp;&amp; !category.matches(&quot;[a-z]{2,30}&quot;)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Not a category: &quot; + category);
+        }
+        if (category == null &amp;&amp; attributes.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Give a category or at least one attr.&lt;name&gt;=&lt;value&gt;&quot;);
+        }
+        return catalog.search(category, attributes);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 30 minutes</p><h2>Counts per value</h2><p>Add <code>GET /catalog/facets?category&amp;facet=ram</code>: the category's products per value of one attribute, with an aggregation.</p><p><b>Done when:</b> the test in <code>FacetChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li><code>Aggregation.match(…category…and("attributes." + facet).exists(true))</code>, then <code>Aggregation.group("attributes." + facet).count()</code>.</li><li>Check the facet name with the same pattern as attribute names: it becomes a field path.</li></ul></details><p class="path">challenge/FacetChallengeTest.java</p><pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: GET /catalog/facets?category=phones&amp;facet=ram counts the category&#x27;s products per value of one
+ * attribute, with an aggregation ($match, then $group): {&quot;6GB&quot;: 1, &quot;8GB&quot;: 2}. Products without it are not counted.
+ */
+class FacetChallengeTest extends ApiTest {
+
+    @Test
+    void countsPerValue() throws Exception {
+        mvc.perform(get(&quot;/catalog/facets&quot;).param(&quot;category&quot;, &quot;phones&quot;).param(&quot;facet&quot;, &quot;ram&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.6GB&quot;).value(1)).andExpect(jsonPath(&quot;$.8GB&quot;).value(2));
+        mvc.perform(get(&quot;/catalog/facets&quot;).param(&quot;category&quot;, &quot;shoes&quot;).param(&quot;facet&quot;, &quot;material&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.leather&quot;).value(2)).andExpect(jsonPath(&quot;$.mesh&quot;).value(1));
+        mvc.perform(get(&quot;/catalog/facets&quot;).param(&quot;category&quot;, &quot;phones&quot;).param(&quot;facet&quot;, &quot;$where&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/Catalog.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import org.bson.Document;
+import org.bson.types.ObjectId;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
+@Service
+class Catalog {
+
+    private final MongoTemplate mongo;
+
+    Catalog(MongoTemplate mongo) {
+        this.mongo = mongo;
+    }
+
+    CatalogProduct create(CatalogProduct product) {
+        try {
+            return mongo.insert(product);
+        } catch (DuplicateKeyException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, &quot;SKU &quot; + product.sku() + &quot; already exists&quot;);
+        }
+    }
+
+    /** Challenge 1. */
+    CatalogProduct byId(String id) {
+        if (!ObjectId.isValid(id)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Not a product id: &quot; + id);
+        }
+        CatalogProduct product = mongo.findById(new ObjectId(id), CatalogProduct.class);
+        if (product == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;No product &quot; + id);
+        }
+        return product;
+    }
+
+    /** Challenge 2: $match the category and products having the attribute, then $group by its value. */
+    Map&lt;String, Integer&gt; facet(String category, String facet) {
+        Map&lt;String, Integer&gt; counts = new TreeMap&lt;&gt;();
+        mongo.aggregate(Aggregation.newAggregation(
+                        Aggregation.match(Criteria.where(&quot;category&quot;).is(category).and(&quot;attributes.&quot; + facet).exists(true)),
+                        Aggregation.group(&quot;attributes.&quot; + facet).count().as(&quot;n&quot;)), &quot;products&quot;, Document.class)
+                .getMappedResults().forEach(d -&gt; counts.put(d.getString(&quot;_id&quot;), d.getInteger(&quot;n&quot;)));
+        return counts;
+    }
+
+    /**
+     * Every filter is an equality on attributes.&amp;lt;name&amp;gt;. Names were checked against a pattern first, so no one can
+     * pass &quot;$where&quot; or a dotted path; values are plain strings, never parsed as query operators.
+     */
+    List&lt;CatalogProduct&gt; search(String category, Map&lt;String, String&gt; attributes) {
+        Criteria criteria = new Criteria();
+        if (category != null) {
+            criteria = criteria.and(&quot;category&quot;).is(category);
+        }
+        for (Map.Entry&lt;String, String&gt; a : attributes.entrySet()) {
+            criteria = criteria.and(&quot;attributes.&quot; + a.getKey()).is(a.getValue());
+        }
+        return mongo.find(new Query(criteria).with(Sort.by(&quot;sku&quot;)).limit(50), CatalogProduct.class);
+    }
+}</code></pre></div><p class="path">challenge/solution/CatalogController.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.net.URI;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
+
+@RestController
+class CatalogController {
+
+    /** The same rules as the collection&#x27;s validator, checked first for a clear 400. Demo limits. */
+    record NewProduct(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,30}&quot;) String sku,
+                      @NotBlank @Size(max = 120) String name,
+                      @NotNull @Pattern(regexp = &quot;[a-z]{2,30}&quot;) String category,
+                      @NotNull Long sellerId,
+                      @NotNull @Min(100) @Max(10_000_000) Integer pricePaise,
+                      @NotNull @Size(max = 20) Map&lt;@Pattern(regexp = &quot;[a-z][a-z_]{1,29}&quot;) String, @NotBlank @Size(max = 40) String&gt; attributes) {
+    }
+
+    private static final java.util.regex.Pattern ATTRIBUTE = java.util.regex.Pattern.compile(&quot;[a-z][a-z_]{1,29}&quot;);
+
+    private final Catalog catalog;
+
+    CatalogController(Catalog catalog) {
+        this.catalog = catalog;
+    }
+
+    @PostMapping(&quot;/catalog/products&quot;)
+    ResponseEntity&lt;CatalogProduct&gt; create(@Valid @RequestBody NewProduct body) {
+        CatalogProduct created = catalog.create(new CatalogProduct(null, body.sku().toUpperCase(Locale.ROOT), body.name().strip(), body.category(),
+                body.sellerId(), body.pricePaise(), body.attributes()));
+        return ResponseEntity.created(URI.create(&quot;/catalog/products/&quot; + created.id())).body(created);
+    }
+
+    @GetMapping(&quot;/catalog/products/{id}&quot;)
+    CatalogProduct byId(@PathVariable String id) {
+        return catalog.byId(id);
+    }
+
+    @GetMapping(&quot;/catalog/facets&quot;)
+    Map&lt;String, Integer&gt; facets(@RequestParam @jakarta.validation.constraints.Pattern(regexp = &quot;[a-z]{2,30}&quot;) String category,
+                                @RequestParam @jakarta.validation.constraints.Pattern(regexp = &quot;[a-z][a-z_]{1,29}&quot;) String facet) {
+        return catalog.facet(category, facet);
+    }
+
+    /** ?category=phones&amp;attr.ram=8GB: every attr.* filter must match. */
+    @GetMapping(&quot;/catalog/products&quot;)
+    List&lt;CatalogProduct&gt; search(@RequestParam Map&lt;String, String&gt; params) {
+        Map&lt;String, String&gt; attributes = new TreeMap&lt;&gt;();
+        params.forEach((key, value) -&gt; {
+            if (key.startsWith(&quot;attr.&quot;) &amp;&amp; ATTRIBUTE.matcher(key.substring(5)).matches()) {
+                attributes.put(key.substring(5), value);
+            } else if (!key.equals(&quot;category&quot;)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Unknown parameter &quot; + key);
+            }
+        });
+        String category = params.get(&quot;category&quot;);
+        if (category != null &amp;&amp; !category.matches(&quot;[a-z]{2,30}&quot;)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Not a category: &quot; + category);
+        }
+        if (category == null &amp;&amp; attributes.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, &quot;Give a category or at least one attr.&lt;name&gt;=&lt;value&gt;&quot;);
+        }
+        return catalog.search(category, attributes);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>MongoDB, PostgreSQL, or both?</h2>
+<p>For each of these, choose a store and say why: the product catalog, stock levels, orders and payments, reviews, the search index, sellers. If both stores are used, which is the source of truth for what, and how does a product's price reach an order? Compare with station 068, where the same catalog lives in PostgreSQL jsonb.</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: collection, validator, indexes</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: an order across two collections, and copied seller names.</li>
+<li>Model a product as one document; keep references (seller id) rather than copies.</li>
+<li>Give the collection a validator and indexes, created by the app at start.</li>
+<li>Refuse operators and field paths from users; use transactions where documents must change together.</li>
+</ol>
+<h2>When a document store fits</h2>
+<div class="scroll"><table class=""><thead><tr><th>Fits well</th><th>Fits badly</th></tr></thead><tbody><tr><td>Records read and written whole, like a product page</td><td>Records that must change together, like stock and orders</td></tr><tr><td>Fields that differ per record and change often</td><td>Data joined in many ways, like reports across sellers and orders</td></tr><tr><td>Nested data owned by one record</td><td>Shared data copied into many records, like seller names</td></tr><tr><td>Scaling reads and writes across servers</td><td>Strict invariants across records, like "never oversell"</td></tr></tbody></table></div>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Catalog in MongoDB, with validator and indexes</td><td>A second database to run.</td><td><span class="pill ok">Chosen for the catalog</span></td></tr><tr><td>Orders and stock in MongoDB too</td><td>Transactions everywhere, or inconsistent stock.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Catalog in PostgreSQL jsonb (station 068)</td><td>One database; constraints and joins for the rest.</td><td><span class="pill warn">Often enough</span></td></tr><tr><td>Copies of seller data in each product</td><td>Fast reads; stale copies after changes.</td><td><span class="pill warn">Only with an update plan</span></td></tr><tr><td>References plus <code>$lookup</code></td><td>Always fresh; a join on every read.</td><td><span class="pill warn">For data that changes</span></td></tr></tbody></table></div>
+<h2>The collection</h2>
+<div class="scroll"><table class=""><thead><tr><th>Object</th><th>What</th><th>Why</th></tr></thead><tbody><tr><td>Validator</td><td><code>$jsonSchema</code>: required fields, types, ranges, patterns</td><td>Rules for every writer.</td></tr><tr><td><code>products_sku_unique</code></td><td>Unique index on <code>sku</code></td><td>One product per SKU.</td></tr><tr><td><code>products_category_sku</code></td><td>Index on <code>category, sku</code></td><td>Category pages, in SKU order.</td></tr><tr><td><code>products_attributes_wildcard</code></td><td>Wildcard index on <code>attributes.$**</code></td><td>Any attribute filter, without an index per key.</td></tr></tbody></table></div>
+<pre class="code"><code class="language-java">package com.kartwala.catalog;
+
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.CreateCollectionOptions;
+import com.mongodb.client.model.IndexOptions;
+import com.mongodb.client.model.ValidationOptions;
+import org.bson.Document;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+/**
+ * MongoDB has no migrations here, so the app makes sure, at start, that the collection has its rules: a $jsonSchema
+ * validator the server applies to every write, and the indexes. Safe to run on every start.
+ */
+@Component
+@Order(1)
+class CatalogSchema implements ApplicationRunner {
+
+    static final String VALIDATOR = &quot;&quot;&quot;
+            {&quot;$jsonSchema&quot;: {
+              &quot;bsonType&quot;: &quot;object&quot;,
+              &quot;required&quot;: [&quot;sku&quot;, &quot;name&quot;, &quot;category&quot;, &quot;sellerId&quot;, &quot;pricePaise&quot;, &quot;attributes&quot;],
+              &quot;properties&quot;: {
+                &quot;sku&quot;: {&quot;bsonType&quot;: &quot;string&quot;, &quot;pattern&quot;: &quot;^[A-Z0-9-]{3,30}$&quot;},
+                &quot;name&quot;: {&quot;bsonType&quot;: &quot;string&quot;, &quot;minLength&quot;: 1, &quot;maxLength&quot;: 120},
+                &quot;category&quot;: {&quot;bsonType&quot;: &quot;string&quot;, &quot;pattern&quot;: &quot;^[a-z]{2,30}$&quot;},
+                &quot;sellerId&quot;: {&quot;bsonType&quot;: &quot;long&quot;},
+                &quot;pricePaise&quot;: {&quot;bsonType&quot;: &quot;int&quot;, &quot;minimum&quot;: 100, &quot;maximum&quot;: 10000000},
+                &quot;attributes&quot;: {&quot;bsonType&quot;: &quot;object&quot;, &quot;maxProperties&quot;: 20, &quot;additionalProperties&quot;: {&quot;bsonType&quot;: &quot;string&quot;, &quot;maxLength&quot;: 40}}
+              }}}&quot;&quot;&quot;;
+
+    private final MongoTemplate mongo;
+
+    CatalogSchema(MongoTemplate mongo) {
+        this.mongo = mongo;
+    }
+
+    @Override
+    public void run(ApplicationArguments args) {
+        MongoDatabase db = mongo.getDb();
+        if (!mongo.collectionExists(&quot;products&quot;)) {
+            db.createCollection(&quot;products&quot;, new CreateCollectionOptions().validationOptions(new ValidationOptions().validator(Document.parse(VALIDATOR))));
+        }
+        var products = db.getCollection(&quot;products&quot;);
+        products.createIndex(new Document(&quot;sku&quot;, 1), new IndexOptions().name(&quot;products_sku_unique&quot;).unique(true));
+        products.createIndex(new Document(&quot;category&quot;, 1).append(&quot;sku&quot;, 1), new IndexOptions().name(&quot;products_category_sku&quot;));
+        // A wildcard index: one index over every key inside attributes, whatever keys a category brings.
+        products.createIndex(new Document(&quot;attributes.$**&quot;, 1), new IndexOptions().name(&quot;products_attributes_wildcard&quot;));
+        if (products.countDocuments() == 0) {
+            products.insertMany(List.of(
+                    product(&quot;PH-NOVA-8-128&quot;, &quot;Nova 5G&quot;, &quot;phones&quot;, 7, 1899900, new Document(&quot;ram&quot;, &quot;8GB&quot;).append(&quot;storage&quot;, &quot;128GB&quot;).append(&quot;colour&quot;, &quot;Blue&quot;)),
+                    product(&quot;PH-NOVA-8-256&quot;, &quot;Nova 5G&quot;, &quot;phones&quot;, 7, 2199900, new Document(&quot;ram&quot;, &quot;8GB&quot;).append(&quot;storage&quot;, &quot;256GB&quot;).append(&quot;colour&quot;, &quot;Blue&quot;)),
+                    product(&quot;PH-ZEN-6-128&quot;, &quot;Zen Lite&quot;, &quot;phones&quot;, 7, 1299900, new Document(&quot;ram&quot;, &quot;6GB&quot;).append(&quot;storage&quot;, &quot;128GB&quot;)),
+                    product(&quot;SH-RUN-9-BLK&quot;, &quot;Road Runner&quot;, &quot;shoes&quot;, 8, 349900, new Document(&quot;size&quot;, &quot;9&quot;).append(&quot;colour&quot;, &quot;Black&quot;).append(&quot;material&quot;, &quot;mesh&quot;)),
+                    product(&quot;SH-OXF-9-BRN&quot;, &quot;Oxford Classic&quot;, &quot;shoes&quot;, 8, 599900, new Document(&quot;size&quot;, &quot;9&quot;).append(&quot;colour&quot;, &quot;Brown&quot;).append(&quot;material&quot;, &quot;leather&quot;)),
+                    product(&quot;SH-OXF-10-BRN&quot;, &quot;Oxford Classic&quot;, &quot;shoes&quot;, 8, 599900, new Document(&quot;size&quot;, &quot;10&quot;).append(&quot;colour&quot;, &quot;Brown&quot;).append(&quot;material&quot;, &quot;leather&quot;))));
+        }
+    }
+
+    private static Document product(String sku, String name, String category, long seller, int paise, Document attributes) {
+        return new Document(&quot;sku&quot;, sku).append(&quot;name&quot;, name).append(&quot;category&quot;, category).append(&quot;sellerId&quot;, seller)
+                .append(&quot;pricePaise&quot;, paise).append(&quot;attributes&quot;, attributes);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Replica sets</dt><dd>Production MongoDB runs as a replica set of at least three members; one node here only enables transactions.</dd>
+<dt>Changing the validator</dt><dd>Use <code>collMod</code> with <code>validationLevel: moderate</code> first, so existing documents that break new rules can be fixed before they are enforced.</dd>
+<dt>Two databases</dt><dd>Keeping MongoDB and PostgreSQL consistent (a product's price reaching an order) needs an outbox or events; nothing spans both stores' transactions.</dd>
+<dt>Licence</dt><dd>MongoDB Community is under the SSPL; check that it suits how the service is offered.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>When would you choose a document database?</summary><p>When records are read and written whole, vary in shape, and rarely need joins or rules across records; a product catalog is the classic case.</p></details><details class="qa"><summary>Is MongoDB schemaless?</summary><p>It does not require a schema, but it supports $jsonSchema validators that the server enforces on writes; a production collection should have one.</p></details><details class="qa"><summary>Does MongoDB support transactions?</summary><p>Yes, multi-document ACID transactions since 4.0, on replica sets (and sharded clusters since 4.2); they have limits and costs, so designs avoid needing them constantly.</p></details><details class="qa"><summary>Embed or reference?</summary><p>Embed data owned by the document and read with it; reference data shared by many documents or changed independently, and join with $lookup or a second query.</p></details><details class="qa"><summary>What is NoSQL injection?</summary><p>User input becoming a query operator or field path, such as {&quot;$gt&quot;: &quot;&quot;} or $where; prevent it by validating types and names and never building queries from JSON text.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 12 tests pass.</td><td>You ran the explain in mongosh.</td></tr><tr><td>MongoDB</td><td>Documents, validator, indexes.</td><td>Wildcard index and aggregation.</td></tr><tr><td>Safety</td><td>No operator injection.</td><td>Why a replica set is needed.</td></tr><tr><td>Judgement</td><td>Catalog in, orders out.</td><td>Embed vs reference, argued for one field.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view (not part of this station)</li></ul><p class="rule">Reviewer views start with stations marked for them in the roadmap.</p></aside>
+<h2>No reviewer view for this station</h2>
+<p>This station has no flawed version to review. Use this checklist when data moves to a document store:</p>
+<ul class="rules">
+<li>Which writes touch more than one document, and are they in a transaction?</li>
+<li>What is copied into documents, and who updates every copy?</li>
+<li>Does the collection have a validator and the indexes its queries need?</li>
+<li>Can any request value become a field name or an operator?</li>
+</ul>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
