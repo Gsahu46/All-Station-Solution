@@ -1,0 +1,2362 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 074 · Device sessions for a streaming app</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 074</span>
+    <h1>Device sessions for a streaming app</h1>
+    <p class="scenario">A stolen long-lived token kept working for months; &#x27;log out of all devices&#x27; did nothing.</p>
+    <p class="sim"><b>Simulation</b><span>Members and devices are demo data, not Streamo's. No video plays: "playback" is only a scope in the token. The signing key in application.yaml is a demo key.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Streaming</li>
+      <li><b>Types</b>Database · Security</li>
+      <li><b>Reviewer view</b>Yes</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>073 Login with JWT for a fitness app</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring Security 7 resource server · HS256 access tokens · rotating refresh tokens · JdbcClient · PostgreSQL 17 · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>A token on a shared laptop</strong><p>Streamo's apps got a refresh token at sign-in that lasted a year and never changed. A copy taken from a shared laptop kept working.</p></li><li><strong>The button that did nothing</strong><p>The owner pressed "log out of all devices". It refreshed her screen; the copied token kept working for months.</p></li><li><strong>The fix</strong><p>Refresh tokens are swapped at every use and stored only as hashes. A used one shown again ends that device for everyone holding it. Each device can be removed, and its access token stops at once.</p></li></ol>
+<p class="lesson">A secret that never changes can be copied once and used forever. Make every copy go stale.</p>
+
+<h2>What are we building?</h2>
+<p>Sign-in per device, <code>POST /auth/refresh</code> that swaps the refresh token every time, <code>POST /auth/logout</code> for this device, and a device list where each device can be removed.</p>
+
+<h2>An everyday analogy</h2>
+<p>A hotel key card that the desk re-codes every morning. Last night's card stops working. If someone shows up with last night's card, the desk knows a copy exists and cancels that room's cards, and the guest comes down for a new one.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Sign in</strong> on a device: a 10-minute access token and a 30-day refresh token. The table stores only the refresh token's hash.</li>
+<li><strong>Refresh</strong>: the refresh token is used up in one database statement and a new one comes back.</li>
+<li><strong>Reuse</strong>: a used-up token shown again ends the device: the thief's copy and the owner's new token both stop.</li>
+<li><strong>Remove</strong> a device from the list: its refresh token stops, and its access token is refused on the next request.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: a thief copies the refresh token and uses it before the owner does. Who is caught?</summary><p>Both. The thief gets a new pair; then the owner's app sends the old token, which is now used up. That ends the device, so the thief's new token dies too, and the owner simply signs in again. The trap test <code>theThiefRefreshingFirstIsCaughtWhenTheOwnerRefreshes</code> shows it.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No playback.</strong> "playback" is only a scope; nothing streams.</li>
+<li><strong>No sign-in with Google or passkeys.</strong> Those are stations 075 and 076.</li>
+<li><strong>Tokens are not tied to the device's hardware.</strong> A copied token works until it is used twice or removed (see Practice, challenge 3).</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Access token</strong></td><td>A signed token that opens the API for 10 minutes.</td><td>A day pass to a gym.</td><td><code>accessToken</code>, a JWT</td></tr><tr><td><strong>Refresh token</strong></td><td>A long random secret the app trades for a new access token, without the password.</td><td>The membership card you show to get today's day pass.</td><td><code>refreshToken</code>, 30 days</td></tr><tr><td><strong>Rotation</strong></td><td>Every refresh hands back a new refresh token; the old one is used up.</td><td>A card that is swapped for a new one at every visit.</td><td><code>refresh_tokens.used_at</code></td></tr><tr><td><strong>Reuse detection</strong></td><td>A used-up refresh token shown again means two people have it: end the device.</td><td>Two people with the same old card: both are stopped at the desk.</td><td><code>revoked_reason = 'reuse'</code></td></tr><tr><td><strong>Device session</strong></td><td>One signed-in device: what the device list shows and what "remove" ends.</td><td>One key on the key ring.</td><td><code>device_sessions</code></td></tr><tr><td><strong>Hash</strong></td><td>A one-way fingerprint: the table holds it, never the token.</td><td>A fingerprint, not the finger.</td><td>SHA-256 in <code>token_hash</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Streamo</strong> (a fictional streaming app): a stolen refresh token kept working for months, and "log out of all devices" did nothing.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo data: members anika and rohan. Demo rules: access tokens last 10 minutes, refresh tokens 30 days.</p>
+<ol class="gwt">
+<li><b>Given</b> a right email and password on a device, <b>then</b> <code>200</code> with an access token, a refresh token and the device id.</li>
+<li><b>Given</b> a valid refresh token, <b>then</b> <code>200</code> with a new pair, and the old refresh token is used up.</li>
+<li><b>Given</b> a used-up refresh token, <b>then</b> <code>401</code>, and that device is signed out for everyone.</li>
+<li><b>Given</b> a device removed from the list or logged out, <b>then</b> its access and refresh tokens are refused at once.</li>
+<li><b>Given</b> another member's device id, <b>then</b> <code>404</code>, the same as an unknown id, and nothing changes.</li>
+<li><b>Given</b> a TV's token, <b>then</b> the device list is <code>403</code>: a TV in a living room may play, not manage the account.</li>
+<li><b>Given</b> ten refreshes with one token at the same moment, <b>then</b> exactly one gets a new pair.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>Refresh tokens are 32 random bytes; only their SHA-256 is stored.</li>
+<li>At most one unused refresh token per device: the database enforces it.</li>
+<li>Unknown, expired, used and signed-out refresh tokens all get the same answer.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Pair short access tokens with rotating refresh tokens.</li>
+<li>Detect reuse and end the device session.</li>
+<li>Make revocation immediate, and say what it costs.</li>
+<li>Put ownership into the query, and answer 404 for other people's things.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/auth/login</code></td><td><code>{email, password, deviceName, deviceType}</code> (phone, tv or web); a new device session and its token pair.</td></tr><tr><td><code>POST</code></td><td><code>/auth/refresh</code></td><td><code>{refreshToken}</code>; a new pair, the old refresh token used up.</td></tr><tr><td><code>POST</code></td><td><code>/auth/logout</code></td><td>Bearer token; signs out this device only. <code>204</code>.</td></tr><tr><td><code>GET</code></td><td><code>/me/devices</code></td><td>This member's signed-in devices, oldest first; <code>current</code> marks the one asking. Scope <code>devices</code>.</td></tr><tr><td><code>DELETE</code></td><td><code>/me/devices/{id}</code></td><td>Signs out one device. Scope <code>devices</code>. <code>204</code>.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span> / <span class="pill ok">204</span></td><td>Tokens issued, list returned / device signed out</td></tr><tr><td><span class="pill warn">400</span></td><td>A field missing or too long, an unknown device type, a refresh token of the wrong shape, a device id that is not a UUID</td></tr><tr><td><span class="pill warn">401</span></td><td>Wrong login; a refresh token that is unknown, expired, used or signed out; no access token, or one that fails a check or whose device is signed out</td></tr><tr><td><span class="pill warn">403</span></td><td>A TV's token on the device endpoints</td></tr><tr><td><span class="pill warn">404</span></td><td>A device id that is unknown or another member's</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 19 Oct 2026. JSON bodies are indented for reading; <code>Date</code>, connection and standard security headers are left out. Each real token is replaced by a name, so you can follow which one was sent.</p>
+<section class="example"><h3>Case 1: anika signs in on her phone</h3><p><b>Why:</b> a pair for this device, and its id.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /auth/login HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;email&quot;: &quot;anika@example.com&quot;,
+  &quot;password&quot;: &quot;anika-demo-pass&quot;,
+  &quot;deviceName&quot;: &quot;Anika phone&quot;,
+  &quot;deviceType&quot;: &quot;phone&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 463
+
+{
+  &quot;accessToken&quot;: &quot;&lt;access token 1&gt;&quot;,
+  &quot;refreshToken&quot;: &quot;&lt;refresh token 1&gt;&quot;,
+  &quot;tokenType&quot;: &quot;Bearer&quot;,
+  &quot;expiresIn&quot;: 600,
+  &quot;deviceId&quot;: &quot;107cf393-3abd-4bd3-aa65-59be6defe51a&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: and on the living-room TV</h3><p><b>Why:</b> a second device session.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /auth/login HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;email&quot;: &quot;anika@example.com&quot;,
+  &quot;password&quot;: &quot;anika-demo-pass&quot;,
+  &quot;deviceName&quot;: &quot;Living room TV&quot;,
+  &quot;deviceType&quot;: &quot;tv&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 453
+
+{
+  &quot;accessToken&quot;: &quot;&lt;TV access token&gt;&quot;,
+  &quot;refreshToken&quot;: &quot;&lt;TV refresh token&gt;&quot;,
+  &quot;tokenType&quot;: &quot;Bearer&quot;,
+  &quot;expiresIn&quot;: 600,
+  &quot;deviceId&quot;: &quot;9c839a13-3232-4f35-9d20-8fb24cb08e68&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: the phone refreshes</h3><p><b>Why:</b> refresh token 1 is used up; token 2 replaces it. The access token is the same text as in case 1: same member, device, scope and second, and signing the same claims with the same key gives the same token.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /auth/refresh HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;refreshToken&quot;: &quot;&lt;refresh token 1&gt;&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 463
+
+{
+  &quot;accessToken&quot;: &quot;&lt;access token 1&gt;&quot;,
+  &quot;refreshToken&quot;: &quot;&lt;refresh token 2&gt;&quot;,
+  &quot;tokenType&quot;: &quot;Bearer&quot;,
+  &quot;expiresIn&quot;: 600,
+  &quot;deviceId&quot;: &quot;107cf393-3abd-4bd3-aa65-59be6defe51a&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: the device list from the phone</h3><p><b>Why:</b> both devices; the phone is <code>current</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /me/devices HTTP/1.1
+Authorization: Bearer &lt;access token 1&gt;</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 366
+
+[
+  {
+    &quot;id&quot;: &quot;107cf393-3abd-4bd3-aa65-59be6defe51a&quot;,
+    &quot;name&quot;: &quot;Anika phone&quot;,
+    &quot;type&quot;: &quot;phone&quot;,
+    &quot;createdAt&quot;: &quot;2026-10-19T12:44:00.650606Z&quot;,
+    &quot;lastUsedAt&quot;: &quot;2026-10-19T12:44:00.843213Z&quot;,
+    &quot;current&quot;: true
+  },
+  {
+    &quot;id&quot;: &quot;9c839a13-3232-4f35-9d20-8fb24cb08e68&quot;,
+    &quot;name&quot;: &quot;Living room TV&quot;,
+    &quot;type&quot;: &quot;tv&quot;,
+    &quot;createdAt&quot;: &quot;2026-10-19T12:44:00.811623Z&quot;,
+    &quot;lastUsedAt&quot;: &quot;2026-10-19T12:44:00.811663Z&quot;,
+    &quot;current&quot;: false
+  }
+]</code></pre></div></div></section><section class="example"><h3>Case 5: the TV asks for the list</h3><p><b>Why:</b> <code>403</code>: its token has <code>playback</code> only.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /me/devices HTTP/1.1
+Authorization: Bearer &lt;TV access token&gt;</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 403 
+Content-Type: application/problem+json
+Content-Length: 100
+
+{
+  &quot;title&quot;: &quot;Not allowed&quot;,
+  &quot;status&quot;: 403,
+  &quot;detail&quot;: &quot;This device cannot do this.&quot;,
+  &quot;instance&quot;: &quot;/me/devices&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: the phone removes the TV</h3><p><b>Why:</b> <code>204</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">DELETE /me/devices/9c839a13-3232-4f35-9d20-8fb24cb08e68 HTTP/1.1
+Authorization: Bearer &lt;access token 1&gt;</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 204</code></pre></div></div></section><section class="example"><h3>Case 7: the TV's access token, right after</h3><p><b>Why:</b> <code>401</code> at once, not in 10 minutes.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /me/devices HTTP/1.1
+Authorization: Bearer &lt;TV access token&gt;</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 401 
+WWW-Authenticate: Bearer
+Content-Type: application/problem+json
+Content-Length: 130
+
+{
+  &quot;title&quot;: &quot;Sign-in required&quot;,
+  &quot;status&quot;: 401,
+  &quot;detail&quot;: &quot;Send a valid access token: sign in again to get one.&quot;,
+  &quot;instance&quot;: &quot;/me/devices&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 8: rohan tries to remove anika's phone</h3><p><b>Why:</b> <code>404</code>, as for an id that does not exist; the phone stays signed in.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">DELETE /me/devices/107cf393-3abd-4bd3-aa65-59be6defe51a HTTP/1.1
+Authorization: Bearer &lt;access token of rohan&gt;</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No such device&quot;,
+  &quot;instance&quot;: &quot;/me/devices/107cf393-3abd-4bd3-aa65-59be6defe51a&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Not Found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 9: refresh token 1 again, as a thief would</h3><p><b>Why:</b> used up: <code>401</code>, and the phone's session ends.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /auth/refresh HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;refreshToken&quot;: &quot;&lt;refresh token 1&gt;&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 401 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Sign in again on this device&quot;,
+  &quot;instance&quot;: &quot;/auth/refresh&quot;,
+  &quot;status&quot;: 401,
+  &quot;title&quot;: &quot;Unauthorized&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 10: the phone's own new token</h3><p><b>Why:</b> also <code>401</code>: anika signs in again, and the thief's copy is dead for good.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /auth/refresh HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;refreshToken&quot;: &quot;&lt;refresh token 2&gt;&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 401 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Sign in again on this device&quot;,
+  &quot;instance&quot;: &quot;/auth/refresh&quot;,
+  &quot;status&quot;: 401,
+  &quot;title&quot;: &quot;Unauthorized&quot;
+}</code></pre></div></div></section>
+<h2>What the database holds afterwards</h2>
+<p class="muted">From <code>psql</code> in <code>docs/capture.sh</code>, after the requests above.</p>
+<pre class="code"><code class="language-text">       email       |  device_name   | device_type | revoked_reason 
+-------------------+----------------+-------------+----------------
+ anika@example.com | Anika phone    | phone       | reuse
+ anika@example.com | Living room TV | tv          | removed
+ rohan@example.com | Rohan phone    | phone       | 
+(3 rows)</code></pre><pre class="code"><code class="language-text">     token_hash      |  device_name   | valid_for | used 
+---------------------+----------------+-----------+------
+ fb8e03983c9a2bb9... | Anika phone    | 30 days   | t
+ 61329891bdba9f1f... | Living room TV | 30 days   | f
+ 11e3154957e04e55... | Anika phone    | 30 days   | t
+ 88ac3925798c7940... | Rohan phone    | 30 days   | f
+(4 rows)</code></pre>
+<p>The TV was removed (case 6) and the phone ended by reuse (case 9); Rohan's phone is untouched (case 8). Only hashes are stored (cut to 16 characters here). Both of the phone's tokens show as used: token 2 was used up by the attempt in case 10, although the device had already ended, so it got no new pair.</p></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>Login</td><td>A pair for this device: 600-second access token, 43-character refresh token</td><td><code>loginGivesAShortAccessTokenAndARefreshTokenForThisDevice</code></td></tr><tr><td>Refresh</td><td>A new pair; one unused refresh token left; the chain goes on</td><td><code>refreshGivesANewPairAndTheOldRefreshTokenIsUsedUp</code></td></tr><tr><td>The device list</td><td>Active devices only, this one marked</td><td><code>theDeviceListShowsOnlyActiveDevicesAndMarksThisOne</code></td></tr><tr><td>Logout</td><td>This device only</td><td><code>logoutEndsThisDeviceOnly</code></td></tr><tr><td>Wrong password, unknown email, bad body</td><td>Identical <code>401</code>s; <code>400</code></td><td><code>wrongLoginsAre401AndBadBodiesAre400</code></td></tr><tr><td>Unknown device, not a UUID</td><td><code>404</code>; <code>400</code></td><td><code>anUnknownDeviceIs404AndABadIdIs400</code></td></tr><tr><td>No access token</td><td><code>401</code> with a Bearer challenge</td><td><code>noTokenIs401</code></td></tr><tr><td>A TV's token on the device endpoints</td><td><code>403</code></td><td><code>aTvMayPlayButNotManageDevices</code></td></tr><tr><td>Another member's device</td><td><code>404</code>; that device stays signed in</td><td><code>anotherMembersDeviceIs404AndStaysSignedIn</code></td></tr><tr><td>10:20 and 10:31 old access token; 30-day-old refresh token</td><td>Accepted, then <code>401</code>; <code>401</code></td><td><code>accessTokensEndAfter10MinutesAndRefreshTokensAfter30Days</code></td></tr><tr><td>Ten refreshes with one token at once</td><td>Exactly one <code>200</code>; the device is ended for reuse</td><td><code>tenParallelRefreshesWithOneTokenGiveOnePairAndEndTheDevice</code></td></tr><tr><td>Odd refresh tokens and headers</td><td><code>400</code> or <code>401</code>, never an error</td><td><code>oddRefreshTokensAre400Or401NeverAnError</code></td></tr><tr><td>Rules written by plain SQL</td><td>Refused by named constraints</td><td><code>refreshTokenRulesHoldWithoutJava</code>, <code>deviceAndMemberRulesHoldWithoutJava</code></td></tr><tr><td>A rotation that fails half-way</td><td>Rolled back: the old token still works</td><td><code>aRotationThatFailsHalfWayLeavesTheOldTokenUsable</code></td></tr><tr><td>A clock that moves between two reads</td><td>Still exactly 30 days stored</td><td><code>aClockThatMovesBetweenReadsStillStoresA30DayToken</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Refresh tokens that never rotate, so a stolen one works for months.</p>
+<ul>
+<li><strong>The old store.</strong> One token per sign-in, kept as it is, never replaced. The test copies it, presses the old "log out of all devices", and the copy still says "anika". The table holds the token itself.</li>
+<li><strong>Owner first.</strong> On the real API, anika's app rotates; the thief's copy is now used up. Showing it ends the device: <code>401</code> for the thief and for anika's new token, and <code>revoked_reason</code> is <code>reuse</code>.</li>
+<li><strong>Thief first.</strong> The thief rotates first and gets a pair. Then anika's app sends the old token: used up, so the device ends and the thief's new token dies too.</li>
+<li><strong>Remove means now.</strong> The laptop removes the phone; one second later the phone's access token is <code>401</code>, not 10 minutes later.</li>
+</ul>
+<p>While building, each part was undone once: a refresh token usable again (no <code>used_at</code> check) turned 3 tests red; no device end on reuse 3; no active-session check on access tokens 2; no member in the remove query 1; a TV given the devices scope 1; refresh without a transaction 2 (in the parallel test no refresh won at all: see Code).</p>
+</div>
+<pre class="code"><code class="language-java">package com.streamo.devices;
+
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Written first. The old design: one refresh token per sign-in, stored as it is, valid for a year, never replaced,
+ * and a &quot;log out of all devices&quot; button that only cleared the app&#x27;s screen. Then the same theft against the real API.
+ */
+class NeverRotatingTokenTrapTest extends ApiTest {
+
+    /** The old token store, as it was: token text to member, nothing else. */
+    static final class OldTokenStore {
+        final Map&lt;String, String&gt; tokens = new HashMap&lt;&gt;();
+
+        String signIn(String member) {
+            String token = UUID.randomUUID().toString();
+            tokens.put(token, member);
+            return token;
+        }
+
+        String refresh(String token) {
+            return tokens.get(token);   // the same token, every time, for a year
+        }
+
+        void logOutOfAllDevices(String member) {
+            // the old button: a new access token on this screen, nothing removed from the store
+        }
+    }
+
+    @Test
+    void theOldTokenKeptWorkingForMonthsAfterItWasStolen() {
+        OldTokenStore old = new OldTokenStore();
+        String anikasToken = old.signIn(&quot;anika&quot;);
+        String stolenCopy = anikasToken;              // copied off a shared laptop
+        old.refresh(anikasToken);                     // anika keeps watching; her token never changes
+        old.logOutOfAllDevices(&quot;anika&quot;);              // she notices and presses the button
+        assertThat(old.refresh(stolenCopy)).isEqualTo(&quot;anika&quot;);   // months later, still anika
+        assertThat(old.tokens).containsKey(anikasToken);          // and the table holds the token itself
+    }
+
+    @Test
+    void aStolenRefreshTokenUsedAfterTheOwnerEndsTheWholeDevice() throws Exception {
+        JsonNode phone = login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;);
+        String stolenCopy = refresh(phone);
+        JsonNode next = body(refreshRequest(refresh(phone)).andExpect(status().isOk()));   // anika&#x27;s app rotates
+        assertThat(refresh(next)).isNotEqualTo(stolenCopy);
+
+        refreshRequest(stolenCopy).andExpect(status().isUnauthorized());   // the thief: a used token, a second holder
+        assertThat(revokedReason(phone.get(&quot;deviceId&quot;).asString())).isEqualTo(&quot;reuse&quot;);
+        refreshRequest(refresh(next)).andExpect(status().isUnauthorized());   // anika signs in again; the thief is out for good
+        devices(access(next)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void theThiefRefreshingFirstIsCaughtWhenTheOwnerRefreshes() throws Exception {
+        JsonNode phone = login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;);
+        JsonNode thief = body(refreshRequest(refresh(phone)).andExpect(status().isOk()));   // the thief is quicker
+        refreshRequest(refresh(phone)).andExpect(status().isUnauthorized());               // anika&#x27;s app: already used
+        refreshRequest(refresh(thief)).andExpect(status().isUnauthorized());               // so the thief&#x27;s new one dies too
+    }
+
+    @Test
+    void removingADeviceStopsItsAccessTokenAtOnce() throws Exception {
+        JsonNode phone = login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;);
+        JsonNode laptop = login(&quot;anika&quot;, &quot;Anika&#x27;s laptop&quot;, &quot;web&quot;);
+        devices(access(phone)).andExpect(status().isOk());
+        removeDevice(access(laptop), phone.get(&quot;deviceId&quot;).asString()).andExpect(status().isNoContent());
+        later(Duration.ofSeconds(1));
+        devices(access(phone)).andExpect(status().isUnauthorized());     // not in 10 minutes: now
+        refreshRequest(refresh(phone)).andExpect(status().isUnauthorized());
+        devices(access(laptop)).andExpect(status().isOk());
+    }
+
+    @Test
+    void theDatabaseHoldsOnlyAHashOfEachRefreshToken() throws Exception {
+        String token = refresh(login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;));
+        assertThat(jdbc.sql(&quot;SELECT token_hash FROM refresh_tokens&quot;).query(String.class).single())
+                .isEqualTo(Sessions.sha256(token)).isNotEqualTo(token);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 21 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Sign in, refresh twice with the same refresh token, and look at the device afterwards:</p>
+<pre class="code"><code class="language-bash">R=$(curl -s -X POST http://localhost:8080/auth/login -H &#x27;Content-Type: application/json&#x27; \
+  -d &#x27;{&quot;email&quot;: &quot;rohan@example.com&quot;, &quot;password&quot;: &quot;rohan-demo-pass&quot;, &quot;deviceName&quot;: &quot;My laptop&quot;, &quot;deviceType&quot;: &quot;web&quot;}&#x27; \
+  | sed &#x27;s/.*&quot;refreshToken&quot;:&quot;\([^&quot;]*\)&quot;.*/\1/&#x27;)
+curl -s -o /dev/null -w &#x27;%{http_code}\n&#x27; -X POST http://localhost:8080/auth/refresh -H &#x27;Content-Type: application/json&#x27; -d &quot;{\&quot;refreshToken\&quot;: \&quot;$R\&quot;}&quot;
+curl -s -o /dev/null -w &#x27;%{http_code}\n&#x27; -X POST http://localhost:8080/auth/refresh -H &#x27;Content-Type: application/json&#x27; -d &quot;{\&quot;refreshToken\&quot;: \&quot;$R\&quot;}&quot;
+docker compose exec postgres psql -U streamo -d streamo -c &quot;SELECT device_name, revoked_reason FROM device_sessions&quot;</code></pre>
+<p>The first refresh prints 200, the second 401, and the laptop's row says <code>reuse</code>.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>A removed device keeps working for minutes</td><td>Access tokens checked only by signature and expiry.</td><td>Check the device session on each request, as <code>JwtConfig</code> does, or accept the delay.</td></tr><tr><td>Phones signed out after a timeout and retry</td><td>The retry sent the already-used refresh token.</td><td>Expected with strict reuse detection; a short grace window or an idempotent retry softens it.</td></tr><tr><td>Every sign-in fails with <code>refresh_tokens_expiry</code></td><td>Creation and expiry times from two clock reads.</td><td>Read the clock once. Found while building this station.</td></tr><tr><td>A <code>401</code> "Sign-in required" on a public endpoint</td><td>A server error forwarded to <code>/error</code>, which the chain refused.</td><td>Permit <code>/error</code>, then read the real error in the log.</td></tr><tr><td><code>refresh_tokens_one_live_per_session</code> violated</td><td>A new refresh token inserted before the old one was used up.</td><td>Mark the old one used first, in the same transaction.</td></tr><tr><td><code>Could not find a valid Docker environment</code></td><td>Docker is not running.</td><td>Start Docker Desktop or the Docker service.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/074-device-sessions-for-a-streaming-app/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/streamo/devices/
+│   ├── SecurityConfig.java   ├── JwtConfig.java   ├── DeviceController.java
+│   ├── Sessions.java   ├── TokenService.java   ├── ProblemResponses.java
+│   └── DevicesApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__members_devices_tokens.sql, V2__demo_members.sql
+├── src/test/java/com/streamo/devices/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the database behind it.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">SecurityConfig.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">JwtConfig.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">DeviceController.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">Sessions.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">TokenService.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">ProblemResponses.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">V1__members_devices_tokens.sql</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">V2__demo_members.sql</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-9-b" aria-controls="code-9" aria-selected="false" data-group="code">compose.yaml</button><button class="file-btn" role="tab" id="code-10-b" aria-controls="code-10" aria-selected="false" data-group="code">DevicesApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/streamo/devices/SecurityConfig.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Who may call what.</dd><dt>Why</dt><dd>Login and refresh open (they check their own secrets); logout for any valid token; devices need scope <code>devices</code>; everything else refused; no session.</dd><dt>Without it</dt><dd>A TV in a living room managing the account, or a new endpoint open by default.</dd></dl><p><code>/error</code> is open: Spring forwards a server error there, and under <code>denyAll()</code> it came back as a <code>401</code> "Sign-in required" that hid the real <code>500</code>. Found while building.</p><p>CSRF is off because tokens travel in a header and a JSON body, never in a cookie a browser adds by itself. A web app that kept the refresh token in a cookie would need CSRF protection back.</p></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+class SecurityConfig {
+
+    /** Login and refresh are open (they check their own credentials); devices need the devices scope; the rest is refused. */
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems) throws Exception {
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(HttpMethod.POST, &quot;/auth/login&quot;, &quot;/auth/refresh&quot;).permitAll()
+                        .requestMatchers(&quot;/error&quot;).permitAll()   // otherwise a server error is forwarded here and shown as a 401
+                        .requestMatchers(HttpMethod.POST, &quot;/auth/logout&quot;).authenticated()
+                        .requestMatchers(&quot;/me/devices&quot;, &quot;/me/devices/*&quot;).hasAuthority(&quot;SCOPE_devices&quot;)
+                        .anyRequest().denyAll())
+                .oauth2ResourceServer(o -&gt; o.jwt(jwt -&gt; {}).authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable());   // tokens travel in a header and a body, never in a cookie the browser adds by itself
+        return http.build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/streamo/devices/JwtConfig.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The access-token checks, including "is this device still signed in?".</dd><dt>Why</dt><dd>Signature (HS256 only), expiry with 30 seconds of allowance, issuer, audience, and one indexed lookup of the device session.</dd><dt>Without it</dt><dd>A removed or logged-out device keeping access for the rest of its token's 10 minutes.</dd></dl><p>The lookup is a trade: one primary-key query per request buys immediate sign-out. Without it, "remove" works only for refresh tokens, and access tokens live on until they expire.</p></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import com.nimbusds.jose.jwk.source.ImmutableSecret;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtIssuerValidator;
+import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+import java.time.Clock;
+import java.time.Duration;
+import java.util.Base64;
+import java.util.List;
+
+/** Short-lived access tokens, signed with one shared key. Each names its device session, which must still be active. */
+@Configuration
+class JwtConfig {
+
+    @Bean
+    SecretKey jwtKey(@Value(&quot;${streamo.jwt.secret}&quot;) String secret) {
+        return new SecretKeySpec(Base64.getUrlDecoder().decode(secret), &quot;HmacSHA256&quot;);
+    }
+
+    @Bean
+    JwtEncoder jwtEncoder(SecretKey key) {
+        return new NimbusJwtEncoder(new ImmutableSecret&lt;&gt;(key));
+    }
+
+    /**
+     * Signature (HS256 only), expiry with a small allowance, issuer, audience, and one indexed lookup: is the device
+     * session still active? That lookup is what makes &quot;remove this device&quot; work at once instead of in 10 minutes.
+     */
+    @Bean
+    JwtDecoder jwtDecoder(SecretKey key, Clock clock, Sessions sessions, @Value(&quot;${streamo.jwt.issuer}&quot;) String issuer,
+                          @Value(&quot;${streamo.jwt.audience}&quot;) String audience, @Value(&quot;${streamo.jwt.clock-skew}&quot;) Duration skew) {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(key).macAlgorithm(MacAlgorithm.HS256).build();
+        JwtTimestampValidator timestamps = new JwtTimestampValidator(skew);
+        timestamps.setClock(clock);
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator&lt;&gt;(timestamps, new JwtIssuerValidator(issuer),
+                new JwtClaimValidator&lt;List&lt;String&gt;&gt;(JwtClaimNames.AUD, aud -&gt; aud != null &amp;&amp; aud.contains(audience)),
+                jwt -&gt; sessions.isActive(jwt.getClaimAsString(&quot;sid&quot;))
+                        ? OAuth2TokenValidatorResult.success()
+                        : OAuth2TokenValidatorResult.failure(new OAuth2Error(&quot;invalid_token&quot;, &quot;This device was signed out&quot;, null))));
+        return decoder;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/streamo/devices/DeviceController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The five endpoints and their input checks.</dd><dt>Why</dt><dd>One <code>401</code> for every failed login and every failed refresh; a refresh token must have the shape of ours; another member's device is a <code>404</code>.</dd><dt>Without it</dt><dd>Answers that tell an attacker which tokens or devices exist.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+class DeviceController {
+
+    record Login(@NotBlank @Email @Size(max = 254) String email, @NotNull @Size(min = 1, max = 64) String password,
+                 @NotBlank @Size(max = 60) String deviceName, @NotNull @Pattern(regexp = &quot;phone|tv|web&quot;) String deviceType) {
+    }
+
+    /** 32 bytes in base64url are exactly 43 characters; anything else cannot be one of ours. */
+    record Refresh(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9_-]{43}&quot;) String refreshToken) {
+    }
+
+    record DeviceView(UUID id, String name, String type, OffsetDateTime createdAt, OffsetDateTime lastUsedAt, boolean current) {
+    }
+
+    private final Sessions sessions;
+    private final TokenService tokens;
+
+    DeviceController(Sessions sessions, TokenService tokens) {
+        this.sessions = sessions;
+        this.tokens = tokens;
+    }
+
+    @PostMapping(&quot;/auth/login&quot;)
+    TokenService.TokenPair login(@Valid @RequestBody Login body) {
+        return tokens.pair(sessions.signIn(body.email(), body.password(), body.deviceName(), body.deviceType())
+                .orElseThrow(() -&gt; new ResponseStatusException(HttpStatus.UNAUTHORIZED, &quot;Wrong email or password&quot;)));
+    }
+
+    /** Unknown, expired, used or signed-out: one answer, so a caller learns nothing about which it was. */
+    @PostMapping(&quot;/auth/refresh&quot;)
+    TokenService.TokenPair refresh(@Valid @RequestBody Refresh body) {
+        return tokens.pair(sessions.refresh(body.refreshToken())
+                .orElseThrow(() -&gt; new ResponseStatusException(HttpStatus.UNAUTHORIZED, &quot;Sign in again on this device&quot;)));
+    }
+
+    @PostMapping(&quot;/auth/logout&quot;)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void logout(@AuthenticationPrincipal Jwt jwt) {
+        sessions.remove(member(jwt), UUID.fromString(jwt.getClaimAsString(&quot;sid&quot;)), &quot;logout&quot;);
+    }
+
+    @GetMapping(&quot;/me/devices&quot;)
+    List&lt;DeviceView&gt; devices(@AuthenticationPrincipal Jwt jwt) {
+        String current = jwt.getClaimAsString(&quot;sid&quot;);
+        return sessions.devices(member(jwt)).stream()
+                .map(d -&gt; new DeviceView(d.id(), d.name(), d.type(), d.createdAt(), d.lastUsedAt(), d.id().toString().equals(current))).toList();
+    }
+
+    /** Another member&#x27;s device answers like an unknown one: 404, and nothing changes. */
+    @DeleteMapping(&quot;/me/devices/{id}&quot;)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void remove(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        if (!sessions.remove(member(jwt), id, &quot;removed&quot;)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;No such device&quot;);
+        }
+    }
+
+    private static long member(Jwt jwt) {
+        return Long.parseLong(jwt.getSubject());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/streamo/devices/Sessions.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Sign-in, rotation, reuse detection, the device list.</dd><dt>Why</dt><dd>The refresh token is used up by one <code>UPDATE ... WHERE used_at IS NULL ... RETURNING</code>: of parallel calls, exactly one gets the row. A used token shown again ends the device. The whole rotation is one transaction.</dd><dt>Without it</dt><dd>Tokens that work twice, and a phone signed out by its own retry after a half-done rotation.</dd></dl><ul><li>The first run against the real app failed every sign-in: <code>created_at</code> and <code>expires_at</code> came from two clock reads, a few microseconds apart, so the token was 30 days and 1 microsecond long and <code>refresh_tokens_expiry</code> refused it. The tests had a clock that stood still. Now the clock is read once, and the test clock can move on every read. Found while building.</li><li>Without <code>@Transactional</code> on <code>refresh</code>, the parallel test found no winner at all: the first statement committed alone, a losing call then saw a used token and ended the device before the winner had finished. Found while building.</li><li>Ten parallel refreshes with one token end the device. That is the safe side of a race, and a real cost for a phone that retries after a timeout: a short grace window is the usual softening (not built here).</li><li>An unknown email still pays for one bcrypt check, so it answers as slowly as a wrong password. No test measures the timing.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Base64;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
+
+/** Device sessions and their refresh tokens: sign-in, rotation with reuse detection, sign-out, the device list. */
+@Service
+class Sessions {
+
+    record Issued(long memberId, UUID sessionId, String scope, String refreshToken) {
+    }
+
+    record Device(UUID id, String name, String type, OffsetDateTime createdAt, OffsetDateTime lastUsedAt) {
+    }
+
+    private static final SecureRandom RANDOM = new SecureRandom();
+
+    private final JdbcClient jdbc;
+    private final PasswordEncoder encoder;
+    private final Clock clock;
+    private final Duration refreshLifetime;
+    private final String dummyHash;
+
+    Sessions(JdbcClient jdbc, PasswordEncoder encoder, Clock clock, @Value(&quot;${streamo.refresh-lifetime}&quot;) Duration refreshLifetime) {
+        this.jdbc = jdbc;
+        this.encoder = encoder;
+        this.clock = clock;
+        this.refreshLifetime = refreshLifetime;
+        this.dummyHash = encoder.encode(&quot;no-such-member&quot;);
+    }
+
+    /** A TV in a living room can play, but only a phone or a browser may see and remove devices. */
+    static String scopeFor(String deviceType) {
+        return deviceType.equals(&quot;tv&quot;) ? &quot;playback&quot; : &quot;playback devices&quot;;
+    }
+
+    @Transactional
+    Optional&lt;Issued&gt; signIn(String email, String password, String deviceName, String deviceType) {
+        Optional&lt;Member&gt; member = jdbc.sql(&quot;SELECT id, password_hash FROM members WHERE email = ?&quot;)
+                .param(email.strip().toLowerCase(Locale.ROOT)).query(Member.class).optional();
+        // Unknown email: still pay for one bcrypt check, so the answer takes as long as a wrong password.
+        boolean matches = encoder.matches(password, member.map(Member::passwordHash).orElse(dummyHash));
+        if (member.isEmpty() || !matches) {
+            return Optional.empty();
+        }
+        UUID session = UUID.randomUUID();
+        jdbc.sql(&quot;INSERT INTO device_sessions (id, member_id, device_name, device_type, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?)&quot;)
+                .params(session, member.get().id(), deviceName.strip(), deviceType, now(), now()).update();
+        return Optional.of(new Issued(member.get().id(), session, scopeFor(deviceType), newRefreshToken(session)));
+    }
+
+    /**
+     * Rotation: the token is used up in one conditional UPDATE (of parallel calls exactly one gets the row) and a new
+     * one replaces it. A token that was already used means two holders: the device session is ended for both.
+     */
+    @Transactional
+    Optional&lt;Issued&gt; refresh(String refreshToken) {
+        String hash = sha256(refreshToken);
+        Optional&lt;UUID&gt; session = jdbc.sql(&quot;UPDATE refresh_tokens SET used_at = ? WHERE token_hash = ? AND used_at IS NULL AND expires_at &gt; ? RETURNING session_id&quot;)
+                .params(now(), hash, now()).query(UUID.class).optional();
+        if (session.isEmpty()) {
+            jdbc.sql(&quot;SELECT session_id FROM refresh_tokens WHERE token_hash = ? AND used_at IS NOT NULL&quot;).param(hash)
+                    .query(UUID.class).optional().ifPresent(reused -&gt; revoke(reused, &quot;reuse&quot;));
+            return Optional.empty();
+        }
+        Optional&lt;ActiveSession&gt; active = jdbc.sql(&quot;UPDATE device_sessions SET last_used_at = ? WHERE id = ? AND revoked_at IS NULL RETURNING member_id, device_type&quot;)
+                .params(now(), session.get()).query(ActiveSession.class).optional();
+        return active.map(a -&gt; new Issued(a.memberId(), session.get(), scopeFor(a.deviceType()), newRefreshToken(session.get())));
+    }
+
+    boolean isActive(String sessionId) {
+        try {
+            return sessionId != null &amp;&amp; jdbc.sql(&quot;SELECT EXISTS (SELECT 1 FROM device_sessions WHERE id = ? AND revoked_at IS NULL)&quot;)
+                    .param(UUID.fromString(sessionId)).query(Boolean.class).single();
+        } catch (IllegalArgumentException notAUuid) {
+            return false;
+        }
+    }
+
+    List&lt;Device&gt; devices(long memberId) {
+        return jdbc.sql(&quot;SELECT id, device_name AS name, device_type AS type, created_at, last_used_at FROM device_sessions WHERE member_id = ? AND revoked_at IS NULL ORDER BY created_at, id&quot;)
+                .param(memberId).query(Device.class).list();
+    }
+
+    /** Ownership is part of the query: another member&#x27;s device id finds no row, exactly like an unknown id. */
+    boolean remove(long memberId, UUID deviceId, String reason) {
+        return jdbc.sql(&quot;UPDATE device_sessions SET revoked_at = ?, revoked_reason = ? WHERE id = ? AND member_id = ? AND revoked_at IS NULL&quot;)
+                .params(now(), reason, deviceId, memberId).update() == 1;
+    }
+
+    private void revoke(UUID session, String reason) {
+        jdbc.sql(&quot;UPDATE device_sessions SET revoked_at = ?, revoked_reason = ? WHERE id = ? AND revoked_at IS NULL&quot;)
+                .params(now(), reason, session).update();
+    }
+
+    /** 32 random bytes for the device; only their SHA-256 is stored, so a copy of the table opens nothing. */
+    private String newRefreshToken(UUID session) {
+        byte[] bytes = new byte[32];
+        RANDOM.nextBytes(bytes);
+        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        OffsetDateTime created = now();   // one clock read: two would put expiry a few microseconds past the 30-day CHECK
+        jdbc.sql(&quot;INSERT INTO refresh_tokens (token_hash, session_id, created_at, expires_at) VALUES (?, ?, ?, ?)&quot;)
+                .params(sha256(token), session, created, created.plus(refreshLifetime)).update();
+        return token;
+    }
+
+    private OffsetDateTime now() {
+        return OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
+    }
+
+    static String sha256(String token) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance(&quot;SHA-256&quot;).digest(token.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private record Member(long id, String passwordHash) {
+    }
+
+    private record ActiveSession(long memberId, String deviceType) {
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/streamo/devices/TokenService.java</p><div class="notes"><p>The 10-minute access token: <code>sub</code> the member, <code>sid</code> the device session, <code>scope</code> from the device type.</p></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.stereotype.Service;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+
+/** The access token: who (sub), which device session (sid), what it may do (scope), for 10 minutes. */
+@Service
+class TokenService {
+
+    record TokenPair(String accessToken, String refreshToken, String tokenType, long expiresIn, String deviceId) {
+    }
+
+    private final JwtEncoder encoder;
+    private final Clock clock;
+    private final String issuer;
+    private final String audience;
+    private final Duration lifetime;
+
+    TokenService(JwtEncoder encoder, Clock clock, @Value(&quot;${streamo.jwt.issuer}&quot;) String issuer,
+                 @Value(&quot;${streamo.jwt.audience}&quot;) String audience, @Value(&quot;${streamo.jwt.access-lifetime}&quot;) Duration lifetime) {
+        this.encoder = encoder;
+        this.clock = clock;
+        this.issuer = issuer;
+        this.audience = audience;
+        this.lifetime = lifetime;
+    }
+
+    TokenPair pair(Sessions.Issued issued) {
+        Instant now = clock.instant();
+        JwtClaimsSet claims = JwtClaimsSet.builder()
+                .issuer(issuer).subject(Long.toString(issued.memberId())).audience(List.of(audience))
+                .issuedAt(now).expiresAt(now.plus(lifetime))
+                .claim(&quot;sid&quot;, issued.sessionId().toString()).claim(&quot;scope&quot;, issued.scope())
+                .build();
+        String access = encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims)).getTokenValue();
+        return new TokenPair(access, issued.refreshToken(), &quot;Bearer&quot;, lifetime.toSeconds(), issued.sessionId().toString());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/streamo/devices/ProblemResponses.java</p><div class="notes"><p>401 (with <code>WWW-Authenticate: Bearer</code>) and 403 in the same problem JSON as every other error.</p></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/** 401 and 403 from Spring Security&#x27;s filters, in the same problem shape as every other error. */
+@Component
+class ProblemResponses {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    /** 401: who are you? No token, or one that is not valid: forged, expired, for another API. One answer for all. */
+    void unauthenticated(HttpServletRequest req, HttpServletResponse res, AuthenticationException e) throws IOException {
+        res.setHeader(&quot;WWW-Authenticate&quot;, &quot;Bearer&quot;);
+        write(req, res, HttpStatus.UNAUTHORIZED, &quot;Sign-in required&quot;, &quot;Send a valid access token: sign in again to get one.&quot;);
+    }
+
+    /** 403: we know who you are, and you may not do this. */
+    void forbidden(HttpServletRequest req, HttpServletResponse res, AccessDeniedException e) throws IOException {
+        write(req, res, HttpStatus.FORBIDDEN, &quot;Not allowed&quot;, &quot;This device cannot do this.&quot;);
+    }
+
+    private static void write(HttpServletRequest req, HttpServletResponse res, HttpStatus status, String title, String detail) throws IOException {
+        Map&lt;String, Object&gt; body = new LinkedHashMap&lt;&gt;();
+        body.put(&quot;title&quot;, title);
+        body.put(&quot;status&quot;, status.value());
+        body.put(&quot;detail&quot;, detail);
+        body.put(&quot;instance&quot;, req.getRequestURI());
+        res.setStatus(status.value());
+        res.setContentType(&quot;application/problem+json&quot;);
+        JSON.writeValue(res.getOutputStream(), body);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/resources/db/migration/V1__members_devices_tokens.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Members, device sessions and refresh tokens, with their rules.</dd><dt>Why</dt><dd>Only hashes; at most 30 days; at most one unused refresh token per device; a revoked device always has a reason.</dd><dt>Without it</dt><dd>A script storing tokens in the clear, or two live tokens on one device.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">CREATE TABLE members (
+    id            bigint GENERATED ALWAYS AS IDENTITY CONSTRAINT members_pk PRIMARY KEY,
+    email         text NOT NULL,
+    password_hash text NOT NULL,
+    CONSTRAINT members_email_lower CHECK (email = lower(email)),
+    CONSTRAINT members_email_unique UNIQUE (email),
+    CONSTRAINT members_password_hash_shape CHECK (password_hash ~ &#x27;^\{bcrypt\}\$2[aby]\$(1[0-9]|2[0-9]|3[01])\$[./A-Za-z0-9]{53}$&#x27;)
+);
+
+-- One row per signed-in device. Revoking it ends the device&#x27;s refresh tokens and, through the access-token check,
+-- its access tokens at once.
+CREATE TABLE device_sessions (
+    id             uuid CONSTRAINT device_sessions_pk PRIMARY KEY,
+    member_id      bigint NOT NULL CONSTRAINT device_sessions_member_fk REFERENCES members ON DELETE CASCADE,
+    device_name    text NOT NULL,
+    device_type    text NOT NULL,
+    created_at     timestamptz NOT NULL,
+    last_used_at   timestamptz NOT NULL,
+    revoked_at     timestamptz,
+    revoked_reason text,
+    CONSTRAINT device_sessions_name_length CHECK (char_length(device_name) BETWEEN 1 AND 60),
+    CONSTRAINT device_sessions_type CHECK (device_type IN (&#x27;phone&#x27;, &#x27;tv&#x27;, &#x27;web&#x27;)),
+    CONSTRAINT device_sessions_revoked_reason CHECK (revoked_reason IN (&#x27;logout&#x27;, &#x27;removed&#x27;, &#x27;reuse&#x27;)),
+    CONSTRAINT device_sessions_revoked_with_reason CHECK ((revoked_at IS NULL) = (revoked_reason IS NULL))
+);
+CREATE INDEX device_sessions_active_by_member ON device_sessions (member_id) WHERE revoked_at IS NULL;
+
+-- Only the SHA-256 of each refresh token is stored. A used token stays, marked, so a second use is recognised.
+CREATE TABLE refresh_tokens (
+    token_hash char(64) CONSTRAINT refresh_tokens_pk PRIMARY KEY,
+    session_id uuid NOT NULL CONSTRAINT refresh_tokens_session_fk REFERENCES device_sessions ON DELETE CASCADE,
+    created_at timestamptz NOT NULL,
+    expires_at timestamptz NOT NULL,
+    used_at    timestamptz,
+    CONSTRAINT refresh_tokens_hash_shape CHECK (token_hash ~ &#x27;^[0-9a-f]{64}$&#x27;),
+    CONSTRAINT refresh_tokens_expiry CHECK (expires_at &gt; created_at AND expires_at &lt;= created_at + interval &#x27;30 days&#x27;),
+    CONSTRAINT refresh_tokens_used_in_time CHECK (used_at IS NULL OR used_at &gt;= created_at)
+);
+-- Rotation as a rule: a device has at most one refresh token that has not been used.
+CREATE UNIQUE INDEX refresh_tokens_one_live_per_session ON refresh_tokens (session_id) WHERE used_at IS NULL;</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_members.sql</p><div class="notes"><p>Two demo members with bcrypt hashes made by pgcrypto.</p></div><div class="src"><pre class="code"><code class="language-sql">-- bcrypt hashes made by PostgreSQL&#x27;s pgcrypto, the same format Spring&#x27;s BCryptPasswordEncoder reads.
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+INSERT INTO members (email, password_hash) VALUES
+    (&#x27;anika@example.com&#x27;, &#x27;{bcrypt}&#x27; || crypt(&#x27;anika-demo-pass&#x27;, gen_salt(&#x27;bf&#x27;, 10))),
+    (&#x27;rohan@example.com&#x27;, &#x27;{bcrypt}&#x27; || crypt(&#x27;rohan-demo-pass&#x27;, gen_salt(&#x27;bf&#x27;, 10)));</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Issuer, audience, lifetimes, allowance, and a demo key that real deployments take from a secret store.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: streamo-devices
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/streamo
+    username: streamo
+    password: streamo
+streamo:
+  jwt:
+    issuer: https://auth.streamo.example
+    audience: streamo-api
+    access-lifetime: 10m
+    clock-skew: 30s
+    # Demo only: in production from a secret store, at least 256 bits, shared by every pod. Overridden in tests.
+    secret: ZGVtby1vbmx5LXN0cmVhbW8tYWNjZXNzLXRva2VuLWtleS0yNTYtYml0cy1vci1tb3Jl
+  # Demo rule: a refresh token lasts 30 days unless used; each use replaces it with a new one.
+  refresh-lifetime: 30d</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-9" aria-labelledby="code-9-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: streamo
+      POSTGRES_USER: streamo
+      POSTGRES_PASSWORD: streamo
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U streamo -d streamo&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-10" aria-labelledby="code-10-b" hidden><p class="path">src/main/java/com/streamo/devices/DevicesApplication.java</p><div class="notes"><p>Entry point, and the <code>Clock</code> every time check uses.</p></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+import java.time.Clock;
+
+@SpringBootApplication
+public class DevicesApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(DevicesApplication.class, args);
+    }
+
+    /** Issuing and checking tokens both read the time from here, so tests can move it past an expiry. */
+    @Bean
+    Clock clock() {
+        return Clock.systemUTC();
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>DeviceContractTest</code> (6)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>NeverRotatingTokenTrapTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>DeviceDatabaseTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Security</td><td>401, 403, one user accessing another user's data, malicious input</td><td><code>DeviceSecurityTest</code> (6)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">The parallel test runs ten refreshes on virtual threads released by one latch, against the real PostgreSQL. The rollback test makes the database refuse new tokens with a trigger, so the failure happens inside the real transaction.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, Spring Security 7.1, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 -- in com.streamo.devices.DeviceSecurityTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.streamo.devices.DeviceDatabaseTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 -- in com.streamo.devices.DeviceContractTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.streamo.devices.NeverRotatingTokenTrapTest
+[INFO] Tests run: 21, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">NeverRotatingTokenTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">DeviceSecurityTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">DeviceDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">DeviceContractTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/streamo/devices/NeverRotatingTokenTrapTest.java</p><div class="notes"><p>Written first: the old store keeps a stolen token alive; the real API ends the device on reuse, whoever came first; remove means now; only hashes are stored.</p></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Written first. The old design: one refresh token per sign-in, stored as it is, valid for a year, never replaced,
+ * and a &quot;log out of all devices&quot; button that only cleared the app&#x27;s screen. Then the same theft against the real API.
+ */
+class NeverRotatingTokenTrapTest extends ApiTest {
+
+    /** The old token store, as it was: token text to member, nothing else. */
+    static final class OldTokenStore {
+        final Map&lt;String, String&gt; tokens = new HashMap&lt;&gt;();
+
+        String signIn(String member) {
+            String token = UUID.randomUUID().toString();
+            tokens.put(token, member);
+            return token;
+        }
+
+        String refresh(String token) {
+            return tokens.get(token);   // the same token, every time, for a year
+        }
+
+        void logOutOfAllDevices(String member) {
+            // the old button: a new access token on this screen, nothing removed from the store
+        }
+    }
+
+    @Test
+    void theOldTokenKeptWorkingForMonthsAfterItWasStolen() {
+        OldTokenStore old = new OldTokenStore();
+        String anikasToken = old.signIn(&quot;anika&quot;);
+        String stolenCopy = anikasToken;              // copied off a shared laptop
+        old.refresh(anikasToken);                     // anika keeps watching; her token never changes
+        old.logOutOfAllDevices(&quot;anika&quot;);              // she notices and presses the button
+        assertThat(old.refresh(stolenCopy)).isEqualTo(&quot;anika&quot;);   // months later, still anika
+        assertThat(old.tokens).containsKey(anikasToken);          // and the table holds the token itself
+    }
+
+    @Test
+    void aStolenRefreshTokenUsedAfterTheOwnerEndsTheWholeDevice() throws Exception {
+        JsonNode phone = login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;);
+        String stolenCopy = refresh(phone);
+        JsonNode next = body(refreshRequest(refresh(phone)).andExpect(status().isOk()));   // anika&#x27;s app rotates
+        assertThat(refresh(next)).isNotEqualTo(stolenCopy);
+
+        refreshRequest(stolenCopy).andExpect(status().isUnauthorized());   // the thief: a used token, a second holder
+        assertThat(revokedReason(phone.get(&quot;deviceId&quot;).asString())).isEqualTo(&quot;reuse&quot;);
+        refreshRequest(refresh(next)).andExpect(status().isUnauthorized());   // anika signs in again; the thief is out for good
+        devices(access(next)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void theThiefRefreshingFirstIsCaughtWhenTheOwnerRefreshes() throws Exception {
+        JsonNode phone = login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;);
+        JsonNode thief = body(refreshRequest(refresh(phone)).andExpect(status().isOk()));   // the thief is quicker
+        refreshRequest(refresh(phone)).andExpect(status().isUnauthorized());               // anika&#x27;s app: already used
+        refreshRequest(refresh(thief)).andExpect(status().isUnauthorized());               // so the thief&#x27;s new one dies too
+    }
+
+    @Test
+    void removingADeviceStopsItsAccessTokenAtOnce() throws Exception {
+        JsonNode phone = login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;);
+        JsonNode laptop = login(&quot;anika&quot;, &quot;Anika&#x27;s laptop&quot;, &quot;web&quot;);
+        devices(access(phone)).andExpect(status().isOk());
+        removeDevice(access(laptop), phone.get(&quot;deviceId&quot;).asString()).andExpect(status().isNoContent());
+        later(Duration.ofSeconds(1));
+        devices(access(phone)).andExpect(status().isUnauthorized());     // not in 10 minutes: now
+        refreshRequest(refresh(phone)).andExpect(status().isUnauthorized());
+        devices(access(laptop)).andExpect(status().isOk());
+    }
+
+    @Test
+    void theDatabaseHoldsOnlyAHashOfEachRefreshToken() throws Exception {
+        String token = refresh(login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;));
+        assertThat(jdbc.sql(&quot;SELECT token_hash FROM refresh_tokens&quot;).query(String.class).single())
+                .isEqualTo(Sessions.sha256(token)).isNotEqualTo(token);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/streamo/devices/DeviceSecurityTest.java</p><div class="notes"><p>401, 403 for a TV, another member's device, expiry, ten parallel refreshes, odd input.</p></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class DeviceSecurityTest extends ApiTest {
+
+    @Test
+    void noTokenIs401() throws Exception {
+        mvc.perform(get(&quot;/me/devices&quot;)).andExpect(status().isUnauthorized()).andExpect(header().string(&quot;WWW-Authenticate&quot;, &quot;Bearer&quot;));
+    }
+
+    @Test
+    void aTvMayPlayButNotManageDevices() throws Exception {
+        JsonNode tv = login(&quot;anika&quot;, &quot;Living room TV&quot;, &quot;tv&quot;);
+        devices(access(tv)).andExpect(status().isForbidden()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Not allowed&quot;));
+        removeDevice(access(tv), tv.get(&quot;deviceId&quot;).asString()).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void anotherMembersDeviceIs404AndStaysSignedIn() throws Exception {
+        JsonNode anika = login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;);
+        JsonNode rohan = login(&quot;rohan&quot;, &quot;Rohan&#x27;s phone&quot;, &quot;phone&quot;);
+        removeDevice(access(rohan), anika.get(&quot;deviceId&quot;).asString()).andExpect(status().isNotFound());
+        devices(access(rohan)).andExpect(jsonPath(&quot;$[*].name&quot;, contains(&quot;Rohan&#x27;s phone&quot;)));   // anika&#x27;s devices never listed
+        refreshRequest(refresh(anika)).andExpect(status().isOk());
+    }
+
+    @Test
+    void accessTokensEndAfter10MinutesAndRefreshTokensAfter30Days() throws Exception {
+        JsonNode phone = login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;);
+        later(Duration.ofMinutes(10).plusSeconds(20));
+        devices(access(phone)).andExpect(status().isOk());              // inside the 30-second allowance
+        later(Duration.ofSeconds(11));
+        devices(access(phone)).andExpect(status().isUnauthorized());
+        later(Duration.ofDays(30));
+        refreshRequest(refresh(phone)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void tenParallelRefreshesWithOneTokenGiveOnePairAndEndTheDevice() throws Exception {
+        JsonNode phone = login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;);
+        CountDownLatch start = new CountDownLatch(1);
+        List&lt;Future&lt;Integer&gt;&gt; results = new ArrayList&lt;&gt;();
+        try (ExecutorService threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; 10; i++) {
+                results.add(threads.submit(() -&gt; {
+                    start.await();
+                    return refreshRequest(refresh(phone)).andReturn().getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+        }
+        List&lt;Integer&gt; statuses = new ArrayList&lt;&gt;();
+        for (Future&lt;Integer&gt; f : results) {
+            statuses.add(f.get());
+        }
+        assertThat(statuses).containsOnly(200, 401).filteredOn(s -&gt; s == 200).hasSize(1);
+        // The other nine looked like a second holder: the device is ended, the safe side of a race.
+        assertThat(revokedReason(phone.get(&quot;deviceId&quot;).asString())).isEqualTo(&quot;reuse&quot;);
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM refresh_tokens&quot;).query(Long.class).single()).isEqualTo(2);
+    }
+
+    @Test
+    void oddRefreshTokensAre400Or401NeverAnError() throws Exception {
+        refreshRequest(&quot;not-a-token&quot;).andExpect(status().isBadRequest());
+        refreshRequest(&quot;&#x27; OR &#x27;1&#x27;=&#x27;1&quot;).andExpect(status().isBadRequest());
+        refreshRequest(&quot;a&quot;.repeat(5000)).andExpect(status().isBadRequest());
+        refreshRequest(&quot;A&quot;.repeat(43)).andExpect(status().isUnauthorized());   // the right shape, but not ours
+        for (String header : new String[]{&quot;Bearer not.a.jwt&quot;, &quot;Bearer &quot; + &quot;a&quot;.repeat(5000), &quot;Basic YW5pa2E6YW5pa2EtZGVtby1wYXNz&quot;}) {
+            mvc.perform(get(&quot;/me/devices&quot;).header(&quot;Authorization&quot;, header)).andExpect(status().isUnauthorized());
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/streamo/devices/DeviceDatabaseTest.java</p><div class="notes"><p>Every named constraint with plain SQL, and a rotation that fails half-way.</p></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
+import tools.jackson.databind.JsonNode;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The rules hold for every writer, not only this app: plain SQL straight to PostgreSQL, no Java checks on the way. */
+class DeviceDatabaseTest extends ApiTest {
+
+    static final String HASH = &quot;a&quot;.repeat(64);
+
+    String session(String type, String reason) {
+        String id = java.util.UUID.randomUUID().toString();
+        jdbc.sql(&quot;INSERT INTO device_sessions (id, member_id, device_name, device_type, created_at, last_used_at, revoked_at, revoked_reason) &quot;
+                        + &quot;SELECT ?::uuid, id, &#x27;Phone&#x27;, ?, now(), now(), CASE WHEN ?::text IS NULL THEN NULL ELSE now() END, ? FROM members WHERE email = &#x27;anika@example.com&#x27;&quot;)
+                .params(id, type, reason, reason).update();
+        return id;
+    }
+
+    void token(String sessionId, String hash, String validFor, boolean used) {
+        jdbc.sql(&quot;INSERT INTO refresh_tokens (token_hash, session_id, created_at, expires_at, used_at) VALUES (?, ?::uuid, now(), now() + ?::interval, CASE WHEN ? THEN now() END)&quot;)
+                .params(hash, sessionId, validFor, used).update();
+    }
+
+    static void violates(String constraint, Runnable sql) {
+        assertThatThrownBy(sql::run).isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining(constraint);
+    }
+
+    @Test
+    void refreshTokenRulesHoldWithoutJava() {
+        String s = session(&quot;phone&quot;, null);
+        violates(&quot;refresh_tokens_hash_shape&quot;, () -&gt; token(s, &quot;the-token-itself-not-a-hash&quot;, &quot;1 day&quot;, false));
+        violates(&quot;refresh_tokens_expiry&quot;, () -&gt; token(s, HASH, &quot;31 days&quot;, false));
+        violates(&quot;refresh_tokens_expiry&quot;, () -&gt; token(s, HASH, &quot;-1 minute&quot;, false));
+        token(s, HASH, &quot;30 days&quot;, true);
+        token(s, &quot;b&quot;.repeat(64), &quot;30 days&quot;, false);
+        violates(&quot;refresh_tokens_one_live_per_session&quot;, () -&gt; token(s, &quot;c&quot;.repeat(64), &quot;30 days&quot;, false));   // rotation: one live token per device
+        violates(&quot;refresh_tokens_pk&quot;, () -&gt; token(s, HASH, &quot;1 day&quot;, true));
+    }
+
+    @Test
+    void deviceAndMemberRulesHoldWithoutJava() {
+        violates(&quot;device_sessions_type&quot;, () -&gt; session(&quot;fridge&quot;, null));
+        violates(&quot;device_sessions_revoked_reason&quot;, () -&gt; session(&quot;phone&quot;, &quot;bored&quot;));
+        violates(&quot;device_sessions_revoked_with_reason&quot;, () -&gt; jdbc.sql(&quot;UPDATE device_sessions SET revoked_at = now() WHERE id = ?::uuid&quot;).param(session(&quot;phone&quot;, null)).update());
+        violates(&quot;device_sessions_name_length&quot;, () -&gt; jdbc.sql(&quot;UPDATE device_sessions SET device_name = &#x27;&#x27; WHERE id = ?::uuid&quot;).param(session(&quot;web&quot;, null)).update());
+        violates(&quot;members_email_lower&quot;, () -&gt; jdbc.sql(&quot;INSERT INTO members (email, password_hash) VALUES (&#x27;Mixed@Example.com&#x27;, &#x27;{bcrypt}&#x27; || crypt(&#x27;x&#x27;, gen_salt(&#x27;bf&#x27;, 10)))&quot;).update());
+        violates(&quot;members_password_hash_shape&quot;, () -&gt; jdbc.sql(&quot;INSERT INTO members (email, password_hash) VALUES (&#x27;plain@example.com&#x27;, &#x27;plain-text&#x27;)&quot;).update());
+    }
+
+    /** Found by the first run against the real app: two clock reads put expires_at a few microseconds past 30 days. */
+    @Test
+    void aClockThatMovesBetweenReadsStillStoresA30DayToken() throws Exception {
+        CLOCK.step = java.time.Duration.ofNanos(1_000);
+        JsonNode phone = login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;);
+        refreshRequest(refresh(phone)).andExpect(status().isOk());
+        assertThat(jdbc.sql(&quot;SELECT DISTINCT expires_at - created_at FROM refresh_tokens&quot;).query(String.class).list()).containsExactly(&quot;30 days&quot;);
+    }
+
+    /**
+     * A rotation that fails half-way (here: the new token cannot be stored) rolls back whole, so the old token is not
+     * used up and the phone can simply try again. Committed half-way, the phone would be signed out by its own retry.
+     */
+    @Test
+    void aRotationThatFailsHalfWayLeavesTheOldTokenUsable() throws Exception {
+        JsonNode phone = login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;);
+        jdbc.sql(&quot;&quot;&quot;
+                CREATE FUNCTION refuse_new_tokens() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION &#x27;storage is down&#x27;; END $$ LANGUAGE plpgsql;
+                CREATE TRIGGER refuse_new_tokens BEFORE INSERT ON refresh_tokens FOR EACH ROW EXECUTE FUNCTION refuse_new_tokens()&quot;&quot;&quot;).update();
+        try {
+            assertThatThrownBy(() -&gt; refreshRequest(refresh(phone))).hasRootCauseMessage(&quot;ERROR: storage is down\n  Where: PL/pgSQL function refuse_new_tokens() line 1 at RAISE&quot;);
+        } finally {
+            jdbc.sql(&quot;DROP TRIGGER refuse_new_tokens ON refresh_tokens; DROP FUNCTION refuse_new_tokens()&quot;).update();
+        }
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM refresh_tokens WHERE used_at IS NULL&quot;).query(Long.class).single()).isEqualTo(1);
+        refreshRequest(refresh(phone)).andExpect(status().isOk());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/streamo/devices/DeviceContractTest.java</p><div class="notes"><p>Login, refresh, the device list, logout, wrong input, through HTTP.</p></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.matchesPattern;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class DeviceContractTest extends ApiTest {
+
+    @Test
+    void loginGivesAShortAccessTokenAndARefreshTokenForThisDevice() throws Exception {
+        loginRequest(&quot;Anika@Example.com&quot;, &quot;anika-demo-pass&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.tokenType&quot;).value(&quot;Bearer&quot;)).andExpect(jsonPath(&quot;$.expiresIn&quot;).value(600))
+                .andExpect(jsonPath(&quot;$.accessToken&quot;).value(matchesPattern(&quot;[\\w-]+\\.[\\w-]+\\.[\\w-]+&quot;)))
+                .andExpect(jsonPath(&quot;$.refreshToken&quot;).value(matchesPattern(&quot;[\\w-]{43}&quot;)))
+                .andExpect(jsonPath(&quot;$.deviceId&quot;).value(matchesPattern(&quot;[0-9a-f-]{36}&quot;)));
+    }
+
+    @Test
+    void refreshGivesANewPairAndTheOldRefreshTokenIsUsedUp() throws Exception {
+        JsonNode first = login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;);
+        JsonNode second = body(refreshRequest(refresh(first)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.deviceId&quot;).value(first.get(&quot;deviceId&quot;).asString())));
+        assertThat(refresh(second)).isNotEqualTo(refresh(first));
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM refresh_tokens WHERE used_at IS NULL&quot;).query(Long.class).single()).isEqualTo(1);
+        refreshRequest(refresh(second)).andExpect(status().isOk());   // the chain goes on
+    }
+
+    @Test
+    void theDeviceListShowsOnlyActiveDevicesAndMarksThisOne() throws Exception {
+        JsonNode phone = login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;);
+        later(java.time.Duration.ofMinutes(1));   // listed oldest first
+        login(&quot;anika&quot;, &quot;Living room TV&quot;, &quot;tv&quot;);
+        later(java.time.Duration.ofMinutes(1));
+        JsonNode laptop = login(&quot;anika&quot;, &quot;Anika&#x27;s laptop&quot;, &quot;web&quot;);
+        logout(access(laptop)).andExpect(status().isNoContent());
+        devices(access(phone)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$[*].name&quot;, contains(&quot;Anika&#x27;s phone&quot;, &quot;Living room TV&quot;)))
+                .andExpect(jsonPath(&quot;$[*].current&quot;, contains(true, false)));
+    }
+
+    @Test
+    void logoutEndsThisDeviceOnly() throws Exception {
+        JsonNode phone = login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;);
+        JsonNode laptop = login(&quot;anika&quot;, &quot;Anika&#x27;s laptop&quot;, &quot;web&quot;);
+        logout(access(phone)).andExpect(status().isNoContent());
+        refreshRequest(refresh(phone)).andExpect(status().isUnauthorized()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Sign in again on this device&quot;));
+        assertThat(revokedReason(phone.get(&quot;deviceId&quot;).asString())).isEqualTo(&quot;logout&quot;);
+        refreshRequest(refresh(laptop)).andExpect(status().isOk());
+    }
+
+    @Test
+    void wrongLoginsAre401AndBadBodiesAre400() throws Exception {
+        loginRequest(&quot;anika@example.com&quot;, &quot;not-her-password&quot;, &quot;x&quot;, &quot;phone&quot;).andExpect(status().isUnauthorized()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Wrong email or password&quot;));
+        loginRequest(&quot;nobody@example.com&quot;, &quot;any-password&quot;, &quot;x&quot;, &quot;phone&quot;).andExpect(status().isUnauthorized()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Wrong email or password&quot;));
+        loginRequest(&quot;anika@example.com&quot;, &quot;anika-demo-pass&quot;, &quot;x&quot;, &quot;fridge&quot;).andExpect(status().isBadRequest());
+        loginRequest(&quot;anika@example.com&quot;, &quot;anika-demo-pass&quot;, &quot; &quot;, &quot;phone&quot;).andExpect(status().isBadRequest());
+        loginRequest(&quot;anika@example.com&quot;, &quot;anika-demo-pass&quot;, &quot;x&quot;.repeat(61), &quot;phone&quot;).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void anUnknownDeviceIs404AndABadIdIs400() throws Exception {
+        String token = access(login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;));
+        removeDevice(token, &quot;00000000-0000-0000-0000-000000000000&quot;).andExpect(status().isNotFound()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;No such device&quot;));
+        removeDevice(token, &quot;not-a-uuid&quot;).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/streamo/devices/ApiTest.java</p><div class="notes"><p>Shared setup: the test clock, a test key, no devices before each test, request helpers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.bean.override.convention.TestBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/**
+ * Shared setup: the whole app with its security on a real PostgreSQL, a test signing key, and a clock the tests move.
+ * Before each test: the two demo members, no devices, no refresh tokens.
+ */
+@SpringBootTest(properties = &quot;streamo.jwt.secret=&quot; + ApiTest.SECRET)
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    static final String SECRET = &quot;dGVzdC1vbmx5LXN0cmVhbW8tYWNjZXNzLXRva2VuLWtleS0yNTYtYml0cy1vci1tb3Jl&quot;;
+    static final Instant START = Instant.parse(&quot;2026-10-19T06:00:00Z&quot;);
+    static final JsonMapper JSON = JsonMapper.builder().build();
+
+    static final class TestClock extends Clock {
+        Instant now = START;
+        Duration step = Duration.ZERO;   // how far each read moves the clock: a real clock never reads the same twice
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            Instant t = now;
+            now = now.plus(step);
+            return t;
+        }
+    }
+
+    static final TestClock CLOCK = new TestClock();
+
+    @TestBean
+    Clock clock;
+
+    static Clock clock() {
+        return CLOCK;
+    }
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+
+    @BeforeEach
+    void noDevices() {
+        CLOCK.now = START;
+        CLOCK.step = Duration.ZERO;
+        jdbc.sql(&quot;DELETE FROM device_sessions&quot;).update();   // cascades to refresh_tokens
+    }
+
+    void later(Duration d) {
+        CLOCK.now = CLOCK.now.plus(d);
+    }
+
+    ResultActions loginRequest(String email, String password, String deviceName, String deviceType) throws Exception {
+        return mvc.perform(post(&quot;/auth/login&quot;).contentType(MediaType.APPLICATION_JSON).content(
+                &quot;{\&quot;email\&quot;:\&quot;%s\&quot;,\&quot;password\&quot;:\&quot;%s\&quot;,\&quot;deviceName\&quot;:\&quot;%s\&quot;,\&quot;deviceType\&quot;:\&quot;%s\&quot;}&quot;.formatted(email, password, deviceName, deviceType)));
+    }
+
+    /** A sign-in that must work: the token pair as JSON. */
+    JsonNode login(String member, String deviceName, String deviceType) throws Exception {
+        return body(loginRequest(member + &quot;@example.com&quot;, member + &quot;-demo-pass&quot;, deviceName, deviceType));
+    }
+
+    ResultActions refreshRequest(String refreshToken) throws Exception {
+        return mvc.perform(post(&quot;/auth/refresh&quot;).contentType(MediaType.APPLICATION_JSON).content(&quot;{\&quot;refreshToken\&quot;:\&quot;&quot; + refreshToken + &quot;\&quot;}&quot;));
+    }
+
+    ResultActions devices(String accessToken) throws Exception {
+        return mvc.perform(get(&quot;/me/devices&quot;).header(&quot;Authorization&quot;, &quot;Bearer &quot; + accessToken));
+    }
+
+    ResultActions removeDevice(String accessToken, String deviceId) throws Exception {
+        return mvc.perform(delete(&quot;/me/devices/{id}&quot;, deviceId).header(&quot;Authorization&quot;, &quot;Bearer &quot; + accessToken));
+    }
+
+    ResultActions logout(String accessToken) throws Exception {
+        return mvc.perform(post(&quot;/auth/logout&quot;).header(&quot;Authorization&quot;, &quot;Bearer &quot; + accessToken));
+    }
+
+    static JsonNode body(ResultActions result) throws Exception {
+        return JSON.readTree(result.andReturn().getResponse().getContentAsString());
+    }
+
+    static String access(JsonNode pair) {
+        return pair.get(&quot;accessToken&quot;).asString();
+    }
+
+    static String refresh(JsonNode pair) {
+        return pair.get(&quot;refreshToken&quot;).asString();
+    }
+
+    String revokedReason(String deviceId) {
+        return jdbc.sql(&quot;SELECT revoked_reason FROM device_sessions WHERE id = ?::uuid&quot;).param(deviceId).query(String.class).list().getFirst();   // null while active
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/streamo/devices/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker: the CHECK constraints on refresh tokens and devices behave exactly as in production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/streamo/devices/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=SignOutOtherDevicesChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 21 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 24 tests pass (21 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>Sign out every other device</h2><p>The button that did nothing: <code>DELETE /me/devices</code> signs out all of this member's other devices at once (<code>204</code>) and keeps this one. A TV may not use it.</p><p><b>Done when:</b> both tests in <code>SignOutOtherDevicesChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>One <code>UPDATE</code> with <code>member_id = ? AND id &lt;&gt; ?</code>: the current device is the token's <code>sid</code>.</li><li>The rule <code>/me/devices</code> already needs the <code>devices</code> scope.</li></ul></details><p class="path">challenge/SignOutOtherDevicesChallengeTest.java</p><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+
+import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: the button that did nothing. DELETE /me/devices signs out every other device of this member at once
+ * (204), keeps this one, and leaves other members alone. A TV may not press it (403).
+ */
+class SignOutOtherDevicesChallengeTest extends ApiTest {
+
+    @Test
+    void everyOtherDeviceIsSignedOutAtOnce() throws Exception {
+        JsonNode phone = login(&quot;anika&quot;, &quot;Anika&#x27;s phone&quot;, &quot;phone&quot;);
+        JsonNode tv = login(&quot;anika&quot;, &quot;Living room TV&quot;, &quot;tv&quot;);
+        JsonNode laptop = login(&quot;anika&quot;, &quot;Anika&#x27;s laptop&quot;, &quot;web&quot;);
+        JsonNode rohan = login(&quot;rohan&quot;, &quot;Rohan&#x27;s phone&quot;, &quot;phone&quot;);
+        mvc.perform(delete(&quot;/me/devices&quot;).header(&quot;Authorization&quot;, &quot;Bearer &quot; + access(phone))).andExpect(status().isNoContent());
+        devices(access(phone)).andExpect(jsonPath(&quot;$[*].name&quot;, contains(&quot;Anika&#x27;s phone&quot;)));
+        devices(access(laptop)).andExpect(status().isUnauthorized());
+        refreshRequest(refresh(tv)).andExpect(status().isUnauthorized());
+        refreshRequest(refresh(rohan)).andExpect(status().isOk());
+    }
+
+    @Test
+    void aTvCannotSignOutTheOthers() throws Exception {
+        JsonNode tv = login(&quot;anika&quot;, &quot;Living room TV&quot;, &quot;tv&quot;);
+        mvc.perform(delete(&quot;/me/devices&quot;).header(&quot;Authorization&quot;, &quot;Bearer &quot; + access(tv))).andExpect(status().isForbidden());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/DeviceController.java</p><div class="src"><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+class DeviceController {
+
+    record Login(@NotBlank @Email @Size(max = 254) String email, @NotNull @Size(min = 1, max = 64) String password,
+                 @NotBlank @Size(max = 60) String deviceName, @NotNull @Pattern(regexp = &quot;phone|tv|web&quot;) String deviceType) {
+    }
+
+    /** 32 bytes in base64url are exactly 43 characters; anything else cannot be one of ours. */
+    record Refresh(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9_-]{43}&quot;) String refreshToken) {
+    }
+
+    record DeviceView(UUID id, String name, String type, OffsetDateTime createdAt, OffsetDateTime lastUsedAt, boolean current) {
+    }
+
+    private final Sessions sessions;
+    private final TokenService tokens;
+
+    DeviceController(Sessions sessions, TokenService tokens) {
+        this.sessions = sessions;
+        this.tokens = tokens;
+    }
+
+    @PostMapping(&quot;/auth/login&quot;)
+    TokenService.TokenPair login(@Valid @RequestBody Login body) {
+        return tokens.pair(sessions.signIn(body.email(), body.password(), body.deviceName(), body.deviceType())
+                .orElseThrow(() -&gt; new ResponseStatusException(HttpStatus.UNAUTHORIZED, &quot;Wrong email or password&quot;)));
+    }
+
+    /** Unknown, expired, used or signed-out: one answer, so a caller learns nothing about which it was. */
+    @PostMapping(&quot;/auth/refresh&quot;)
+    TokenService.TokenPair refresh(@Valid @RequestBody Refresh body) {
+        return tokens.pair(sessions.refresh(body.refreshToken())
+                .orElseThrow(() -&gt; new ResponseStatusException(HttpStatus.UNAUTHORIZED, &quot;Sign in again on this device&quot;)));
+    }
+
+    @PostMapping(&quot;/auth/logout&quot;)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void logout(@AuthenticationPrincipal Jwt jwt) {
+        sessions.remove(member(jwt), UUID.fromString(jwt.getClaimAsString(&quot;sid&quot;)), &quot;logout&quot;);
+    }
+
+    @GetMapping(&quot;/me/devices&quot;)
+    List&lt;DeviceView&gt; devices(@AuthenticationPrincipal Jwt jwt) {
+        String current = jwt.getClaimAsString(&quot;sid&quot;);
+        return sessions.devices(member(jwt)).stream()
+                .map(d -&gt; new DeviceView(d.id(), d.name(), d.type(), d.createdAt(), d.lastUsedAt(), d.id().toString().equals(current))).toList();
+    }
+
+    @DeleteMapping(&quot;/me/devices&quot;)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void removeOthers(@AuthenticationPrincipal Jwt jwt) {
+        sessions.removeOthers(member(jwt), UUID.fromString(jwt.getClaimAsString(&quot;sid&quot;)));
+    }
+
+    /** Another member&#x27;s device answers like an unknown one: 404, and nothing changes. */
+    @DeleteMapping(&quot;/me/devices/{id}&quot;)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void remove(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        if (!sessions.remove(member(jwt), id, &quot;removed&quot;)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;No such device&quot;);
+        }
+    }
+
+    private static long member(Jwt jwt) {
+        return Long.parseLong(jwt.getSubject());
+    }
+}</code></pre></div><p class="path">challenge/solution/Sessions.java</p><div class="src"><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Base64;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
+
+/** Device sessions and their refresh tokens: sign-in, rotation with reuse detection, sign-out, the device list. */
+@Service
+class Sessions {
+
+    record Issued(long memberId, UUID sessionId, String scope, String refreshToken) {
+    }
+
+    record Device(UUID id, String name, String type, OffsetDateTime createdAt, OffsetDateTime lastUsedAt) {
+    }
+
+    private static final SecureRandom RANDOM = new SecureRandom();
+    /** Demo rule: signed-in devices per member. */
+    static final int MAX_DEVICES = 5;
+
+    private final JdbcClient jdbc;
+    private final PasswordEncoder encoder;
+    private final Clock clock;
+    private final Duration refreshLifetime;
+    private final String dummyHash;
+
+    Sessions(JdbcClient jdbc, PasswordEncoder encoder, Clock clock, @Value(&quot;${streamo.refresh-lifetime}&quot;) Duration refreshLifetime) {
+        this.jdbc = jdbc;
+        this.encoder = encoder;
+        this.clock = clock;
+        this.refreshLifetime = refreshLifetime;
+        this.dummyHash = encoder.encode(&quot;no-such-member&quot;);
+    }
+
+    /** A TV in a living room can play, but only a phone or a browser may see and remove devices. */
+    static String scopeFor(String deviceType) {
+        return deviceType.equals(&quot;tv&quot;) ? &quot;playback&quot; : &quot;playback devices&quot;;
+    }
+
+    @Transactional
+    Optional&lt;Issued&gt; signIn(String email, String password, String deviceName, String deviceType) {
+        Optional&lt;Member&gt; member = jdbc.sql(&quot;SELECT id, password_hash FROM members WHERE email = ?&quot;)
+                .param(email.strip().toLowerCase(Locale.ROOT)).query(Member.class).optional();
+        // Unknown email: still pay for one bcrypt check, so the answer takes as long as a wrong password.
+        boolean matches = encoder.matches(password, member.map(Member::passwordHash).orElse(dummyHash));
+        if (member.isEmpty() || !matches) {
+            return Optional.empty();
+        }
+        // Lock the member row, so two sign-ins at once cannot both see four devices and make seven.
+        jdbc.sql(&quot;SELECT id FROM members WHERE id = ? FOR UPDATE&quot;).param(member.get().id()).query(Long.class).single();
+        jdbc.sql(&quot;&quot;&quot;
+                UPDATE device_sessions SET revoked_at = ?, revoked_reason = &#x27;limit&#x27; WHERE id IN (
+                    SELECT id FROM device_sessions WHERE member_id = ? AND revoked_at IS NULL
+                    ORDER BY last_used_at DESC, id OFFSET ?)&quot;&quot;&quot;).params(now(), member.get().id(), MAX_DEVICES - 1).update();
+        UUID session = UUID.randomUUID();
+        jdbc.sql(&quot;INSERT INTO device_sessions (id, member_id, device_name, device_type, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?)&quot;)
+                .params(session, member.get().id(), deviceName.strip(), deviceType, now(), now()).update();
+        return Optional.of(new Issued(member.get().id(), session, scopeFor(deviceType), newRefreshToken(session)));
+    }
+
+    /**
+     * Rotation: the token is used up in one conditional UPDATE (of parallel calls exactly one gets the row) and a new
+     * one replaces it. A token that was already used means two holders: the device session is ended for both.
+     */
+    @Transactional
+    Optional&lt;Issued&gt; refresh(String refreshToken) {
+        String hash = sha256(refreshToken);
+        Optional&lt;UUID&gt; session = jdbc.sql(&quot;UPDATE refresh_tokens SET used_at = ? WHERE token_hash = ? AND used_at IS NULL AND expires_at &gt; ? RETURNING session_id&quot;)
+                .params(now(), hash, now()).query(UUID.class).optional();
+        if (session.isEmpty()) {
+            jdbc.sql(&quot;SELECT session_id FROM refresh_tokens WHERE token_hash = ? AND used_at IS NOT NULL&quot;).param(hash)
+                    .query(UUID.class).optional().ifPresent(reused -&gt; revoke(reused, &quot;reuse&quot;));
+            return Optional.empty();
+        }
+        Optional&lt;ActiveSession&gt; active = jdbc.sql(&quot;UPDATE device_sessions SET last_used_at = ? WHERE id = ? AND revoked_at IS NULL RETURNING member_id, device_type&quot;)
+                .params(now(), session.get()).query(ActiveSession.class).optional();
+        return active.map(a -&gt; new Issued(a.memberId(), session.get(), scopeFor(a.deviceType()), newRefreshToken(session.get())));
+    }
+
+    boolean isActive(String sessionId) {
+        try {
+            return sessionId != null &amp;&amp; jdbc.sql(&quot;SELECT EXISTS (SELECT 1 FROM device_sessions WHERE id = ? AND revoked_at IS NULL)&quot;)
+                    .param(UUID.fromString(sessionId)).query(Boolean.class).single();
+        } catch (IllegalArgumentException notAUuid) {
+            return false;
+        }
+    }
+
+    List&lt;Device&gt; devices(long memberId) {
+        return jdbc.sql(&quot;SELECT id, device_name AS name, device_type AS type, created_at, last_used_at FROM device_sessions WHERE member_id = ? AND revoked_at IS NULL ORDER BY created_at, id&quot;)
+                .param(memberId).query(Device.class).list();
+    }
+
+    /** Ownership is part of the query: another member&#x27;s device id finds no row, exactly like an unknown id. */
+    boolean remove(long memberId, UUID deviceId, String reason) {
+        return jdbc.sql(&quot;UPDATE device_sessions SET revoked_at = ?, revoked_reason = ? WHERE id = ? AND member_id = ? AND revoked_at IS NULL&quot;)
+                .params(now(), reason, deviceId, memberId).update() == 1;
+    }
+
+    /** Every device of this member except the one asking. */
+    void removeOthers(long memberId, UUID keep) {
+        jdbc.sql(&quot;UPDATE device_sessions SET revoked_at = ?, revoked_reason = &#x27;removed&#x27; WHERE member_id = ? AND id &lt;&gt; ? AND revoked_at IS NULL&quot;)
+                .params(now(), memberId, keep).update();
+    }
+
+    private void revoke(UUID session, String reason) {
+        jdbc.sql(&quot;UPDATE device_sessions SET revoked_at = ?, revoked_reason = ? WHERE id = ? AND revoked_at IS NULL&quot;)
+                .params(now(), reason, session).update();
+    }
+
+    /** 32 random bytes for the device; only their SHA-256 is stored, so a copy of the table opens nothing. */
+    private String newRefreshToken(UUID session) {
+        byte[] bytes = new byte[32];
+        RANDOM.nextBytes(bytes);
+        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        OffsetDateTime created = now();   // one clock read: two would put expiry a few microseconds past the 30-day CHECK
+        jdbc.sql(&quot;INSERT INTO refresh_tokens (token_hash, session_id, created_at, expires_at) VALUES (?, ?, ?, ?)&quot;)
+                .params(sha256(token), session, created, created.plus(refreshLifetime)).update();
+        return token;
+    }
+
+    private OffsetDateTime now() {
+        return OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
+    }
+
+    static String sha256(String token) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance(&quot;SHA-256&quot;).digest(token.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private record Member(long id, String passwordHash) {
+    }
+
+    private record ActiveSession(long memberId, String deviceType) {
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 35 minutes</p><h2>At most five devices</h2><p>Demo rule: at most 5 signed-in devices per member. Signing in on a sixth signs out the one used longest ago, with <code>revoked_reason = 'limit'</code>.</p><p><b>Done when:</b> the test in <code>DeviceLimitChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>The database refuses the new reason until a V3 migration replaces <code>device_sessions_revoked_reason</code>.</li><li><code>ORDER BY last_used_at DESC OFFSET 4</code> finds the devices to sign out.</li><li>Two sign-ins at the same moment could both count four: lock the member row first (<code>SELECT ... FOR UPDATE</code>).</li></ul></details><p class="path">challenge/DeviceLimitChallengeTest.java</p><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+
+import java.time.Duration;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: demo rule, at most 5 signed-in devices per member. Signing in on a sixth signs out the one used
+ * longest ago, with revoked_reason &#x27;limit&#x27; (a new value the database must accept).
+ */
+class DeviceLimitChallengeTest extends ApiTest {
+
+    @Test
+    void aSixthDeviceSignsOutTheLeastRecentlyUsed() throws Exception {
+        JsonNode first = login(&quot;anika&quot;, &quot;Device 1&quot;, &quot;web&quot;);
+        for (int i = 2; i &lt;= 5; i++) {
+            later(Duration.ofMinutes(1));
+            login(&quot;anika&quot;, &quot;Device &quot; + i, &quot;web&quot;);
+        }
+        later(Duration.ofMinutes(1));
+        JsonNode sixth = login(&quot;anika&quot;, &quot;Device 6&quot;, &quot;phone&quot;);
+        devices(access(sixth)).andExpect(jsonPath(&quot;$&quot;, hasSize(5)));
+        refreshRequest(refresh(first)).andExpect(status().isUnauthorized());
+        assertThat(revokedReason(first.get(&quot;deviceId&quot;).asString())).isEqualTo(&quot;limit&quot;);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/V3__device_limit.sql</p><div class="src"><pre class="code"><code class="language-sql">ALTER TABLE device_sessions DROP CONSTRAINT device_sessions_revoked_reason;
+ALTER TABLE device_sessions ADD CONSTRAINT device_sessions_revoked_reason CHECK (revoked_reason IN (&#x27;logout&#x27;, &#x27;removed&#x27;, &#x27;reuse&#x27;, &#x27;limit&#x27;));</code></pre></div><p class="path">challenge/solution/Sessions.java</p><div class="src"><pre class="code"><code class="language-java">package com.streamo.devices;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Base64;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
+
+/** Device sessions and their refresh tokens: sign-in, rotation with reuse detection, sign-out, the device list. */
+@Service
+class Sessions {
+
+    record Issued(long memberId, UUID sessionId, String scope, String refreshToken) {
+    }
+
+    record Device(UUID id, String name, String type, OffsetDateTime createdAt, OffsetDateTime lastUsedAt) {
+    }
+
+    private static final SecureRandom RANDOM = new SecureRandom();
+    /** Demo rule: signed-in devices per member. */
+    static final int MAX_DEVICES = 5;
+
+    private final JdbcClient jdbc;
+    private final PasswordEncoder encoder;
+    private final Clock clock;
+    private final Duration refreshLifetime;
+    private final String dummyHash;
+
+    Sessions(JdbcClient jdbc, PasswordEncoder encoder, Clock clock, @Value(&quot;${streamo.refresh-lifetime}&quot;) Duration refreshLifetime) {
+        this.jdbc = jdbc;
+        this.encoder = encoder;
+        this.clock = clock;
+        this.refreshLifetime = refreshLifetime;
+        this.dummyHash = encoder.encode(&quot;no-such-member&quot;);
+    }
+
+    /** A TV in a living room can play, but only a phone or a browser may see and remove devices. */
+    static String scopeFor(String deviceType) {
+        return deviceType.equals(&quot;tv&quot;) ? &quot;playback&quot; : &quot;playback devices&quot;;
+    }
+
+    @Transactional
+    Optional&lt;Issued&gt; signIn(String email, String password, String deviceName, String deviceType) {
+        Optional&lt;Member&gt; member = jdbc.sql(&quot;SELECT id, password_hash FROM members WHERE email = ?&quot;)
+                .param(email.strip().toLowerCase(Locale.ROOT)).query(Member.class).optional();
+        // Unknown email: still pay for one bcrypt check, so the answer takes as long as a wrong password.
+        boolean matches = encoder.matches(password, member.map(Member::passwordHash).orElse(dummyHash));
+        if (member.isEmpty() || !matches) {
+            return Optional.empty();
+        }
+        // Lock the member row, so two sign-ins at once cannot both see four devices and make seven.
+        jdbc.sql(&quot;SELECT id FROM members WHERE id = ? FOR UPDATE&quot;).param(member.get().id()).query(Long.class).single();
+        jdbc.sql(&quot;&quot;&quot;
+                UPDATE device_sessions SET revoked_at = ?, revoked_reason = &#x27;limit&#x27; WHERE id IN (
+                    SELECT id FROM device_sessions WHERE member_id = ? AND revoked_at IS NULL
+                    ORDER BY last_used_at DESC, id OFFSET ?)&quot;&quot;&quot;).params(now(), member.get().id(), MAX_DEVICES - 1).update();
+        UUID session = UUID.randomUUID();
+        jdbc.sql(&quot;INSERT INTO device_sessions (id, member_id, device_name, device_type, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?)&quot;)
+                .params(session, member.get().id(), deviceName.strip(), deviceType, now(), now()).update();
+        return Optional.of(new Issued(member.get().id(), session, scopeFor(deviceType), newRefreshToken(session)));
+    }
+
+    /**
+     * Rotation: the token is used up in one conditional UPDATE (of parallel calls exactly one gets the row) and a new
+     * one replaces it. A token that was already used means two holders: the device session is ended for both.
+     */
+    @Transactional
+    Optional&lt;Issued&gt; refresh(String refreshToken) {
+        String hash = sha256(refreshToken);
+        Optional&lt;UUID&gt; session = jdbc.sql(&quot;UPDATE refresh_tokens SET used_at = ? WHERE token_hash = ? AND used_at IS NULL AND expires_at &gt; ? RETURNING session_id&quot;)
+                .params(now(), hash, now()).query(UUID.class).optional();
+        if (session.isEmpty()) {
+            jdbc.sql(&quot;SELECT session_id FROM refresh_tokens WHERE token_hash = ? AND used_at IS NOT NULL&quot;).param(hash)
+                    .query(UUID.class).optional().ifPresent(reused -&gt; revoke(reused, &quot;reuse&quot;));
+            return Optional.empty();
+        }
+        Optional&lt;ActiveSession&gt; active = jdbc.sql(&quot;UPDATE device_sessions SET last_used_at = ? WHERE id = ? AND revoked_at IS NULL RETURNING member_id, device_type&quot;)
+                .params(now(), session.get()).query(ActiveSession.class).optional();
+        return active.map(a -&gt; new Issued(a.memberId(), session.get(), scopeFor(a.deviceType()), newRefreshToken(session.get())));
+    }
+
+    boolean isActive(String sessionId) {
+        try {
+            return sessionId != null &amp;&amp; jdbc.sql(&quot;SELECT EXISTS (SELECT 1 FROM device_sessions WHERE id = ? AND revoked_at IS NULL)&quot;)
+                    .param(UUID.fromString(sessionId)).query(Boolean.class).single();
+        } catch (IllegalArgumentException notAUuid) {
+            return false;
+        }
+    }
+
+    List&lt;Device&gt; devices(long memberId) {
+        return jdbc.sql(&quot;SELECT id, device_name AS name, device_type AS type, created_at, last_used_at FROM device_sessions WHERE member_id = ? AND revoked_at IS NULL ORDER BY created_at, id&quot;)
+                .param(memberId).query(Device.class).list();
+    }
+
+    /** Ownership is part of the query: another member&#x27;s device id finds no row, exactly like an unknown id. */
+    boolean remove(long memberId, UUID deviceId, String reason) {
+        return jdbc.sql(&quot;UPDATE device_sessions SET revoked_at = ?, revoked_reason = ? WHERE id = ? AND member_id = ? AND revoked_at IS NULL&quot;)
+                .params(now(), reason, deviceId, memberId).update() == 1;
+    }
+
+    /** Every device of this member except the one asking. */
+    void removeOthers(long memberId, UUID keep) {
+        jdbc.sql(&quot;UPDATE device_sessions SET revoked_at = ?, revoked_reason = &#x27;removed&#x27; WHERE member_id = ? AND id &lt;&gt; ? AND revoked_at IS NULL&quot;)
+                .params(now(), memberId, keep).update();
+    }
+
+    private void revoke(UUID session, String reason) {
+        jdbc.sql(&quot;UPDATE device_sessions SET revoked_at = ?, revoked_reason = ? WHERE id = ? AND revoked_at IS NULL&quot;)
+                .params(now(), reason, session).update();
+    }
+
+    /** 32 random bytes for the device; only their SHA-256 is stored, so a copy of the table opens nothing. */
+    private String newRefreshToken(UUID session) {
+        byte[] bytes = new byte[32];
+        RANDOM.nextBytes(bytes);
+        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        OffsetDateTime created = now();   // one clock read: two would put expiry a few microseconds past the 30-day CHECK
+        jdbc.sql(&quot;INSERT INTO refresh_tokens (token_hash, session_id, created_at, expires_at) VALUES (?, ?, ?, ?)&quot;)
+                .params(sha256(token), session, created, created.plus(refreshLifetime)).update();
+        return token;
+    }
+
+    private OffsetDateTime now() {
+        return OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
+    }
+
+    static String sha256(String token) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance(&quot;SHA-256&quot;).digest(token.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private record Member(long id, String passwordHash) {
+    }
+
+    private record ActiveSession(long memberId, String deviceType) {
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Retries, and tokens tied to the device</h2>
+<p>A phone on a train sends a refresh, the answer is lost, and it retries with the same token: today it is signed out. Design a grace window (how long, what the retry gets back, and why a thief inside the window is still caught later). Then read about DPoP (RFC 9449, Proposed Standard): tokens bound to a key that never leaves the device. What would a stolen copy be worth then?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: a stolen, never-changing token outlives "log out of all devices".</li>
+<li>Store device sessions and the hashes of their refresh tokens, with the rules as constraints.</li>
+<li>Rotate in one transaction: use up the old token with a conditional <code>UPDATE</code>, insert the new one.</li>
+<li>End the device on reuse; check the device on every access token.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Rotation with reuse detection, device check on every request</td><td>One lookup per request; a retry after a lost answer signs the device out.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>One long refresh token, never rotated</td><td>A copy works until it expires.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Rotation, no device check on access tokens</td><td>No lookup; a removed device keeps access for up to 10 minutes.</td><td><span class="pill warn">Valid with very short access tokens</span></td></tr><tr><td>Rotation with a grace window for retries</td><td>Fewer accidental sign-outs; a thief inside the window gets in once.</td><td><span class="pill warn">Common in practice</span></td></tr><tr><td>Sender-constrained tokens (DPoP, mTLS)</td><td>Keys on each device and proofs on each request.</td><td><span class="pill warn">Strongest; more moving parts</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Object</th><th>What</th><th>Why</th></tr></thead><tbody><tr><td><code>refresh_tokens_hash_shape</code></td><td>CHECK: 64 hex characters</td><td>Only SHA-256 hashes, never the token.</td></tr><tr><td><code>refresh_tokens_expiry</code></td><td>CHECK: after creation, at most 30 days later</td><td>No forever tokens from any writer.</td></tr><tr><td><code>refresh_tokens_one_live_per_session</code></td><td>Partial UNIQUE index on <code>session_id</code> where unused</td><td>Rotation as a rule: one live token per device.</td></tr><tr><td><code>device_sessions_revoked_with_reason</code>, <code>_revoked_reason</code></td><td>CHECKs</td><td>Every sign-out says why: logout, removed or reuse.</td></tr><tr><td><code>device_sessions_type</code>, <code>_name_length</code></td><td>CHECKs</td><td>Only phone, tv and web; a name the list can show.</td></tr></tbody></table></div>
+<p><strong>Transaction boundary:</strong> one refresh is one transaction: use up the old token, touch the device, insert the new token. A failure anywhere leaves the old token unused, so the retry works.</p>
+<pre class="code"><code class="language-sql">CREATE TABLE members (
+    id            bigint GENERATED ALWAYS AS IDENTITY CONSTRAINT members_pk PRIMARY KEY,
+    email         text NOT NULL,
+    password_hash text NOT NULL,
+    CONSTRAINT members_email_lower CHECK (email = lower(email)),
+    CONSTRAINT members_email_unique UNIQUE (email),
+    CONSTRAINT members_password_hash_shape CHECK (password_hash ~ &#x27;^\{bcrypt\}\$2[aby]\$(1[0-9]|2[0-9]|3[01])\$[./A-Za-z0-9]{53}$&#x27;)
+);
+
+-- One row per signed-in device. Revoking it ends the device&#x27;s refresh tokens and, through the access-token check,
+-- its access tokens at once.
+CREATE TABLE device_sessions (
+    id             uuid CONSTRAINT device_sessions_pk PRIMARY KEY,
+    member_id      bigint NOT NULL CONSTRAINT device_sessions_member_fk REFERENCES members ON DELETE CASCADE,
+    device_name    text NOT NULL,
+    device_type    text NOT NULL,
+    created_at     timestamptz NOT NULL,
+    last_used_at   timestamptz NOT NULL,
+    revoked_at     timestamptz,
+    revoked_reason text,
+    CONSTRAINT device_sessions_name_length CHECK (char_length(device_name) BETWEEN 1 AND 60),
+    CONSTRAINT device_sessions_type CHECK (device_type IN (&#x27;phone&#x27;, &#x27;tv&#x27;, &#x27;web&#x27;)),
+    CONSTRAINT device_sessions_revoked_reason CHECK (revoked_reason IN (&#x27;logout&#x27;, &#x27;removed&#x27;, &#x27;reuse&#x27;)),
+    CONSTRAINT device_sessions_revoked_with_reason CHECK ((revoked_at IS NULL) = (revoked_reason IS NULL))
+);
+CREATE INDEX device_sessions_active_by_member ON device_sessions (member_id) WHERE revoked_at IS NULL;
+
+-- Only the SHA-256 of each refresh token is stored. A used token stays, marked, so a second use is recognised.
+CREATE TABLE refresh_tokens (
+    token_hash char(64) CONSTRAINT refresh_tokens_pk PRIMARY KEY,
+    session_id uuid NOT NULL CONSTRAINT refresh_tokens_session_fk REFERENCES device_sessions ON DELETE CASCADE,
+    created_at timestamptz NOT NULL,
+    expires_at timestamptz NOT NULL,
+    used_at    timestamptz,
+    CONSTRAINT refresh_tokens_hash_shape CHECK (token_hash ~ &#x27;^[0-9a-f]{64}$&#x27;),
+    CONSTRAINT refresh_tokens_expiry CHECK (expires_at &gt; created_at AND expires_at &lt;= created_at + interval &#x27;30 days&#x27;),
+    CONSTRAINT refresh_tokens_used_in_time CHECK (used_at IS NULL OR used_at &gt;= created_at)
+);
+-- Rotation as a rule: a device has at most one refresh token that has not been used.
+CREATE UNIQUE INDEX refresh_tokens_one_live_per_session ON refresh_tokens (session_id) WHERE used_at IS NULL;</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Old rows</dt><dd>Used and expired refresh tokens pile up. Keep used ones while their session could still be attacked (here at most 30 days), then delete them in a scheduled job.</dd>
+<dt>Where apps keep the token</dt><dd>Mobile apps: the platform's keychain or keystore. Browsers: an <code>HttpOnly</code>, <code>Secure</code>, <code>SameSite</code> cookie on the refresh path only, and then CSRF protection on that path.</dd>
+<dt>Telling the member</dt><dd>A reuse is a sign of theft: tell the member which device was signed out, and suggest a password change.</dd>
+<dt>Logs</dt><dd>Never log tokens or request bodies of the auth endpoints.</dd>
+<dt>Standards</dt><dd>The OAuth 2.0 Security Best Current Practice (RFC 9700, BCP 240) asks for refresh tokens that are rotated or bound to the client; refresh tokens themselves are in RFC 6749 (Proposed Standard).</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>Why have two tokens?</summary><p>The access token is checked on every request without the database (or with one cheap lookup) and lives minutes. The refresh token is checked only on refresh, can be stored and revoked, and lives weeks.</p></details><details class="qa"><summary>What is refresh token rotation?</summary><p>Each refresh hands back a new refresh token and marks the old one used. A stolen copy goes stale at the owner&#x27;s next refresh.</p></details><details class="qa"><summary>What do you do when a used refresh token comes back?</summary><p>Assume two holders and end the whole device session: the attacker&#x27;s copy and the owner&#x27;s latest token both stop; the owner signs in again.</p></details><details class="qa"><summary>Why store only a hash of refresh tokens?</summary><p>A leaked table or backup then opens nothing. A fast hash such as SHA-256 is enough here because the token is 256 random bits, not a guessable password.</p></details><details class="qa"><summary>How do you make logout immediate with JWTs?</summary><p>Check something server-side on each request, such as the device session or a revoke list, or keep access tokens so short that the delay is acceptable.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 21 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>Rotation</td><td>A new refresh token at every refresh.</td><td>Reuse ends the device; parallel refreshes have exactly one winner.</td></tr><tr><td>Revocation</td><td>Remove and logout stop refresh tokens.</td><td>Access tokens stop at once too, and you can say what that costs.</td></tr><tr><td>Data</td><td>Only hashes stored.</td><td>Rotation enforced by a partial unique index.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate fixes "members on trains keep getting signed out": the refresh token now stays the same for its 30 days, so a retry is harmless. They also drop the per-request device lookup ("tokens are signed, the database is busy"), and simplify device removal because "UUIDs cannot be guessed". Read the two files and list every problem before opening the findings.</p>
+<p class="path">review/Sessions.java</p>
+<pre class="code"><code class="language-java">package com.streamo.devices;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Base64;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
+
+/** Device sessions and their refresh tokens: sign-in, refresh, sign-out, the device list. */
+@Service
+class Sessions {
+
+    record Issued(long memberId, UUID sessionId, String scope, String refreshToken) {
+    }
+
+    record Device(UUID id, String name, String type, OffsetDateTime createdAt, OffsetDateTime lastUsedAt) {
+    }
+
+    private static final SecureRandom RANDOM = new SecureRandom();
+
+    private final JdbcClient jdbc;
+    private final PasswordEncoder encoder;
+    private final Clock clock;
+    private final Duration refreshLifetime;
+    private final String dummyHash;
+
+    Sessions(JdbcClient jdbc, PasswordEncoder encoder, Clock clock, @Value(&quot;${streamo.refresh-lifetime}&quot;) Duration refreshLifetime) {
+        this.jdbc = jdbc;
+        this.encoder = encoder;
+        this.clock = clock;
+        this.refreshLifetime = refreshLifetime;
+        this.dummyHash = encoder.encode(&quot;no-such-member&quot;);
+    }
+
+    /** A TV in a living room can play, but only a phone or a browser may see and remove devices. */
+    static String scopeFor(String deviceType) {
+        return deviceType.equals(&quot;tv&quot;) ? &quot;playback&quot; : &quot;playback devices&quot;;
+    }
+
+    @Transactional
+    Optional&lt;Issued&gt; signIn(String email, String password, String deviceName, String deviceType) {
+        Optional&lt;Member&gt; member = jdbc.sql(&quot;SELECT id, password_hash FROM members WHERE email = ?&quot;)
+                .param(email.strip().toLowerCase(Locale.ROOT)).query(Member.class).optional();
+        // Unknown email: still pay for one bcrypt check, so the answer takes as long as a wrong password.
+        boolean matches = encoder.matches(password, member.map(Member::passwordHash).orElse(dummyHash));
+        if (member.isEmpty() || !matches) {
+            return Optional.empty();
+        }
+        UUID session = UUID.randomUUID();
+        jdbc.sql(&quot;INSERT INTO device_sessions (id, member_id, device_name, device_type, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?)&quot;)
+                .params(session, member.get().id(), deviceName.strip(), deviceType, now(), now()).update();
+        return Optional.of(new Issued(member.get().id(), session, scopeFor(deviceType), newRefreshToken(session)));
+    }
+
+    /**
+     * Gives a new access token for a valid refresh token. The refresh token itself stays the same, so a phone on a
+     * flaky network that retries never signs itself out.
+     */
+    @Transactional
+    Optional&lt;Issued&gt; refresh(String refreshToken) {
+        Optional&lt;UUID&gt; session = jdbc.sql(&quot;SELECT session_id FROM refresh_tokens WHERE token_hash = ? AND expires_at &gt; ?&quot;)
+                .params(sha256(refreshToken), now()).query(UUID.class).optional();
+        if (session.isEmpty()) {
+            return Optional.empty();
+        }
+        Optional&lt;ActiveSession&gt; active = jdbc.sql(&quot;UPDATE device_sessions SET last_used_at = ? WHERE id = ? AND revoked_at IS NULL RETURNING member_id, device_type&quot;)
+                .params(now(), session.get()).query(ActiveSession.class).optional();
+        return active.map(a -&gt; new Issued(a.memberId(), session.get(), scopeFor(a.deviceType()), refreshToken));
+    }
+
+    boolean isActive(String sessionId) {
+        try {
+            return sessionId != null &amp;&amp; jdbc.sql(&quot;SELECT EXISTS (SELECT 1 FROM device_sessions WHERE id = ? AND revoked_at IS NULL)&quot;)
+                    .param(UUID.fromString(sessionId)).query(Boolean.class).single();
+        } catch (IllegalArgumentException notAUuid) {
+            return false;
+        }
+    }
+
+    List&lt;Device&gt; devices(long memberId) {
+        return jdbc.sql(&quot;SELECT id, device_name AS name, device_type AS type, created_at, last_used_at FROM device_sessions WHERE member_id = ? AND revoked_at IS NULL ORDER BY created_at, id&quot;)
+                .param(memberId).query(Device.class).list();
+    }
+
+    /** Device ids are random UUIDs: nobody can guess another member&#x27;s. */
+    boolean remove(long memberId, UUID deviceId, String reason) {
+        return jdbc.sql(&quot;UPDATE device_sessions SET revoked_at = ?, revoked_reason = ? WHERE id = ? AND revoked_at IS NULL&quot;)
+                .params(now(), reason, deviceId).update() == 1;
+    }
+
+    /** 32 random bytes for the device; only their SHA-256 is stored, so a copy of the table opens nothing. */
+    private String newRefreshToken(UUID session) {
+        byte[] bytes = new byte[32];
+        RANDOM.nextBytes(bytes);
+        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        OffsetDateTime created = now();   // one clock read: two would put expiry a few microseconds past the 30-day CHECK
+        jdbc.sql(&quot;INSERT INTO refresh_tokens (token_hash, session_id, created_at, expires_at) VALUES (?, ?, ?, ?)&quot;)
+                .params(sha256(token), session, created, created.plus(refreshLifetime)).update();
+        return token;
+    }
+
+    private OffsetDateTime now() {
+        return OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
+    }
+
+    static String sha256(String token) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance(&quot;SHA-256&quot;).digest(token.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private record Member(long id, String passwordHash) {
+    }
+
+    private record ActiveSession(long memberId, String deviceType) {
+    }
+}</code></pre>
+<p class="path">review/JwtConfig.java</p>
+<pre class="code"><code class="language-java">package com.streamo.devices;
+
+import com.nimbusds.jose.jwk.source.ImmutableSecret;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtIssuerValidator;
+import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+import java.time.Clock;
+import java.time.Duration;
+import java.util.Base64;
+import java.util.List;
+
+/** Short-lived access tokens, signed with one shared key. Each names its device session. */
+@Configuration
+class JwtConfig {
+
+    @Bean
+    SecretKey jwtKey(@Value(&quot;${streamo.jwt.secret}&quot;) String secret) {
+        return new SecretKeySpec(Base64.getUrlDecoder().decode(secret), &quot;HmacSHA256&quot;);
+    }
+
+    @Bean
+    JwtEncoder jwtEncoder(SecretKey key) {
+        return new NimbusJwtEncoder(new ImmutableSecret&lt;&gt;(key));
+    }
+
+    /** Signature (HS256 only), expiry, issuer and audience: all local, so no database call on every request. */
+    @Bean
+    JwtDecoder jwtDecoder(SecretKey key, Clock clock, @Value(&quot;${streamo.jwt.issuer}&quot;) String issuer,
+                          @Value(&quot;${streamo.jwt.audience}&quot;) String audience, @Value(&quot;${streamo.jwt.clock-skew}&quot;) Duration skew) {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(key).macAlgorithm(MacAlgorithm.HS256).build();
+        JwtTimestampValidator timestamps = new JwtTimestampValidator(skew);
+        timestamps.setClock(clock);
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator&lt;&gt;(timestamps, new JwtIssuerValidator(issuer),
+                new JwtClaimValidator&lt;List&lt;String&gt;&gt;(JwtClaimNames.AUD, aud -&gt; aud != null &amp;&amp; aud.contains(audience))));
+        return decoder;
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>The refresh token is never replaced</summary><p>"So a retry never signs a phone out" brings the original incident back: the same refresh token works for 30 days, a copy is never noticed, and two holders can refresh forever.</p><p class="evidence"><b>Test evidence:</b> <code>refreshGivesANewPairAndTheOldRefreshTokenIsUsedUp</code>, <code>aStolenRefreshTokenUsedAfterTheOwnerEndsTheWholeDevice</code>, <code>theThiefRefreshingFirstIsCaughtWhenTheOwnerRefreshes</code> and <code>tenParallelRefreshesWithOneTokenGiveOnePairAndEndTheDevice</code> fail; <code>aRotationThatFailsHalfWayLeavesTheOldTokenUsable</code> fails too, because there is no rotation to fail.</p></details><details class="finding"><summary><span class="sev">2</span>No device check on access tokens</summary><p>"No database call on every request" saves one primary-key lookup, and a removed device keeps its access for up to 10 more minutes.</p><p class="evidence"><b>Test evidence:</b> <code>removingADeviceStopsItsAccessTokenAtOnce</code> fails.</p></details><details class="finding"><summary><span class="sev">3</span>Remove by id only</summary><p>"UUIDs cannot be guessed" is not access control: ids appear in logs, screenshots and support tickets. Any member could sign out anyone's device.</p><p class="evidence"><b>Test evidence:</b> <code>anotherMembersDeviceIs404AndStaysSignedIn</code> fails.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the two flawed files copied over the real ones, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>DeviceContractTest</code></td><td><span class="pill ok">6 / 6</span></td><td><span class="pill bad">5 / 6</span></td></tr><tr><td><code>DeviceDatabaseTest</code></td><td><span class="pill ok">4 / 4</span></td><td><span class="pill bad">3 / 4</span></td></tr><tr><td><code>DeviceSecurityTest</code></td><td><span class="pill ok">6 / 6</span></td><td><span class="pill bad">4 / 6</span></td></tr><tr><td><code>NeverRotatingTokenTrapTest</code></td><td><span class="pill ok">5 / 5</span></td><td><span class="pill bad">2 / 5</span></td></tr></tbody></table></div>
+<p class="note">The complaint was real: strict rotation does sign out a phone that retries. The fix for that is a short grace window, not a token that never changes.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
