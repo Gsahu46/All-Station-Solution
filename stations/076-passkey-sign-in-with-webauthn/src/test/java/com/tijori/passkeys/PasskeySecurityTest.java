@@ -64,7 +64,9 @@ class PasskeySecurityTest extends ApiTest {
     @Test
     void aCounterThatGoesBackwardsLooksLikeACloneAndIsRefused() throws Exception {
         Device key = passkeyOn(Device.securityKey(), "zoya");
+        long atRegistration = jdbc.sql("SELECT sign_count FROM passkeys").query(Long.class).single();
         authenticate(key.get(authenticationOptions())).andExpect(status().isOk());
+        assertThat(jdbc.sql("SELECT sign_count FROM passkeys").query(Long.class).single()).isGreaterThan(atRegistration);   // the key's new count is kept
         jdbc.sql("UPDATE passkeys SET sign_count = 1000").update();   // as if the real key had signed 1000 times: this one is a copy
         authenticate(key.get(authenticationOptions())).andExpect(status().isUnauthorized());
     }

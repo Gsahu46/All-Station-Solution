@@ -1,0 +1,2572 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 076 · Passkey sign-in with WebAuthn</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 076</span>
+    <h1>Passkey sign-in with WebAuthn</h1>
+    <p class="scenario">Phished passwords and SIM-swapped SMS codes drained 14 accounts; customers want to sign in with a fingerprint or face.</p>
+    <p class="sim"><b>Simulation</b><span>Customers and balances are demo rows in a table, not Tijori's; no bank is involved. In the tests, webauthn4j's emulator plays the phone's authenticator and browser, with real keys and real signatures. The TOTP secret is RFC 6238's published test secret, demo only.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Fintech</li>
+      <li><b>Types</b>Database · Security</li>
+      <li><b>Reviewer view</b>Yes</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>073 Login with JWT for a fitness app</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · WebAuthn with webauthn4j 0.31.9 · TOTP (RFC 6238) · Spring Security 7 resource server · JdbcClient · PostgreSQL 17 · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Phished and SIM-swapped</strong><p>Fake Tijori pages collected passwords, and attackers moved customers' numbers to new SIM cards to receive their SMS codes. Fourteen accounts were drained.</p></li><li><strong>Passkeys, half done</strong><p>The first passkey code only checked the signature. A sign-in recorded once could be sent again, and an answer made for a look-alike page was accepted.</p></li><li><strong>The fix</strong><p>Every sign-in signs a fresh challenge from Tijori, on Tijori's page, for Tijori's domain, with the customer's fingerprint or face. The server checks all of it. The fallback is a password with an authenticator-app code, never SMS.</p></li></ol>
+<p class="lesson">A signature only proves the key signed something. What it signed, and for whom, is the server's to check.</p>
+
+<h2>What are we building?</h2>
+<p>Passkey registration and sign-in (two ceremonies, each with options and an answer), a password-plus-code fallback, and an account page.</p>
+
+<h2>An everyday analogy</h2>
+<p>A notary stamps a letter only after reading today's date and the addressee aloud. A stamped letter dated last week, or addressed to the shop next door, is worth nothing here, however real the stamp.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Options</strong>: Tijori sends a fresh challenge and its domain.</li>
+<li><strong>Phone</strong>: the customer touches the sensor; the phone signs the challenge together with the page's origin and the domain.</li>
+<li><strong>Check</strong>: Tijori uses up the challenge, then checks origin, domain, fingerprint flag, signature and counter.</li>
+<li><strong>Token</strong>: a 10-minute access token that records how the customer signed in.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: why can a fake page not simply pass the customer's passkey answer on to Tijori?</summary><p>The answer names the page that asked it, inside the signed data. Tijori accepts only its own origin, so an answer made on <code>tijori-login.example</code> is refused, as <code>aSignInAnsweredForAPhishingPageIsRefused</code> shows. (Real browsers also refuse to use a Tijori passkey on another domain at all.)</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No real phone in the tests.</strong> webauthn4j's emulator plays it, with real keys.</li>
+<li><strong>No attestation checks.</strong> Tijori does not ask which model of authenticator made the key (<code>attestation: none</code>).</li>
+<li><strong>No account recovery.</strong> Losing every passkey and the code app is a support process (Practice, challenge 3).</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Passkey</strong></td><td>A key pair made by the phone for one website. The private key never leaves the phone; the site keeps the public key.</td><td>A house key cut for one door only.</td><td><code>passkeys</code> table</td></tr><tr><td><strong>Relying party (RP) id</strong></td><td>The website domain a passkey belongs to. The phone will not use it for another domain.</td><td>The address engraved on the key.</td><td><code>tijori.example</code></td></tr><tr><td><strong>Challenge</strong></td><td>Random bytes the server sends for one sign-in; the phone signs them.</td><td>A one-time password the guard says out loud.</td><td><code>webauthn_challenges</code></td></tr><tr><td><strong>Origin</strong></td><td>The exact web address of the page that asked the phone, written into what it signs.</td><td>The return address on a letter.</td><td><code>https://app.tijori.example</code></td></tr><tr><td><strong>User verification</strong></td><td>The phone checked a fingerprint, face or PIN before signing.</td><td>The guard checks the face matches the badge.</td><td><code>userVerification: required</code></td></tr><tr><td><strong>TOTP</strong></td><td>A six-digit code from an app, made from a shared secret and the time, new every 30 seconds.</td><td>A safe whose code changes every half minute.</td><td><code>POST /2fa/totp</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Tijori</strong> (a fictional bank) lost 14 accounts to phished passwords and SIM-swapped SMS codes; customers want to sign in with a fingerprint or face.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo data: customers zoya and dev, with passwords and the same demo TOTP secret.</p>
+<ol class="gwt">
+<li><b>Given</b> the right password and the current code, <b>then</b> <code>200</code> with a token; the same code again is <code>401</code>.</li>
+<li><b>Given</b> a sign-in from the last 5 minutes, <b>then</b> a passkey can be registered; with an older token, <code>403</code>.</li>
+<li><b>Given</b> a registered passkey and a fresh challenge on Tijori's page, <b>then</b> sign-in works without a password.</li>
+<li><b>Given</b> a sign-in answer sent twice, made for another page, or made for another domain, <b>then</b> it is refused.</li>
+<li><b>Given</b> a passkey answer claiming another customer, or a registration on another customer's challenge, <b>then</b> refused.</li>
+<li><b>Given</b> ten sign-ins with one code at once, <b>then</b> exactly one token.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>The challenge, origin and RP id come from the server, never from the request.</li>
+<li>Challenges are single-use and last 5 minutes; the database enforces their shape and lifetime.</li>
+<li>No SMS anywhere. A password is never enough on its own.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Run both WebAuthn ceremonies and name every server-side check.</li>
+<li>Explain what makes passkeys resistant to phishing, and what the server still has to do.</li>
+<li>Implement TOTP with single use and a small time window.</li>
+<li>Test with an authenticator emulator instead of a phone.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/2fa/totp</code></td><td>The fallback: <code>{email, password, code}</code>. A token with <code>signedInWith</code> <code>pwd otp mfa</code>.</td></tr><tr><td><code>POST</code></td><td><code>/webauthn/registration/options</code></td><td>Needs a token from the last 5 minutes. The options for <code>navigator.credentials.create()</code>.</td></tr><tr><td><code>POST</code></td><td><code>/webauthn/registration</code></td><td><code>{label, credential}</code>: the browser's answer. <code>201</code>.</td></tr><tr><td><code>POST</code></td><td><code>/webauthn/authentication/options</code></td><td>Open. The options for <code>navigator.credentials.get()</code>. (Not in the roadmap's list: a sign-in needs its challenge from somewhere.)</td></tr><tr><td><code>POST</code></td><td><code>/webauthn/authentication</code></td><td>The browser's answer. A token with <code>signedInWith</code> <code>hwk user</code>.</td></tr><tr><td><code>GET</code></td><td><code>/accounts/me</code></td><td>Name and balance (in paise) of the signed-in customer.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span> / <span class="pill ok">201</span></td><td>Signed in, options given / passkey registered</td></tr><tr><td><span class="pill warn">400</span></td><td>A body of the wrong shape; a registration answer that fails a check</td></tr><tr><td><span class="pill warn">401</span></td><td>Wrong email, password or code (one answer); a sign-in answer that fails any check; no token</td></tr><tr><td><span class="pill warn">403</span></td><td>Adding a passkey with a sign-in older than 5 minutes</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 21 Oct 2026. curl has no authenticator, so the two passkey ceremonies themselves run in the tests, with webauthn4j's emulator; here are the code sign-in, both option documents, and what is refused. <code>Date</code>, connection and standard security headers are left out; the token and the code are shown by name.</p>
+<section class="example"><h3>Case 1: password and the current code</h3><p><b>Why:</b> both factors in one request; the token records them.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /2fa/totp HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;email&quot;: &quot;zoya@example.com&quot;,
+  &quot;password&quot;: &quot;zoya-demo-pass&quot;,
+  &quot;code&quot;: &quot;&lt;current code&gt;&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 349
+
+{
+  &quot;accessToken&quot;: &quot;&lt;access token&gt;&quot;,
+  &quot;tokenType&quot;: &quot;Bearer&quot;,
+  &quot;expiresIn&quot;: 600,
+  &quot;signedInWith&quot;: [
+    &quot;pwd&quot;,
+    &quot;otp&quot;,
+    &quot;mfa&quot;
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 2: the same code again</h3><p><b>Why:</b> a code works once: <code>401</code>, the same answer as a wrong code.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /2fa/totp HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;email&quot;: &quot;zoya@example.com&quot;,
+  &quot;password&quot;: &quot;zoya-demo-pass&quot;,
+  &quot;code&quot;: &quot;&lt;current code&gt;&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 401 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Wrong email, password or code&quot;,
+  &quot;instance&quot;: &quot;/2fa/totp&quot;,
+  &quot;status&quot;: 401,
+  &quot;title&quot;: &quot;Unauthorized&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: the account</h3><p><b>Why:</b> the token's customer; the balance is in paise.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /accounts/me HTTP/1.1
+Authorization: Bearer &lt;access token&gt;</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 78
+
+{
+  &quot;name&quot;: &quot;Zoya Khan&quot;,
+  &quot;balancePaise&quot;: 4250000,
+  &quot;signedInWith&quot;: [
+    &quot;pwd&quot;,
+    &quot;otp&quot;,
+    &quot;mfa&quot;
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 4: options to add a passkey</h3><p><b>Why:</b> a fresh challenge, Tijori's domain, a random user id (not the email), a passkey that stays on the device, a fingerprint or face required.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /webauthn/registration/options HTTP/1.1
+Authorization: Bearer &lt;access token&gt;</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 445
+
+{
+  &quot;challenge&quot;: &quot;a8DFkXlE-bKVZfor_VhF4MFBUnwCSbAIBCJghTTtOoA&quot;,
+  &quot;rp&quot;: {
+    &quot;id&quot;: &quot;tijori.example&quot;,
+    &quot;name&quot;: &quot;Tijori&quot;
+  },
+  &quot;user&quot;: {
+    &quot;id&quot;: &quot;CSzmQsYzRE7x2vLTFwU-MX6q8wBIQKFxryil8HbqPS8&quot;,
+    &quot;name&quot;: &quot;zoya@example.com&quot;,
+    &quot;displayName&quot;: &quot;Zoya Khan&quot;
+  },
+  &quot;pubKeyCredParams&quot;: [
+    {
+      &quot;alg&quot;: -7,
+      &quot;type&quot;: &quot;public-key&quot;
+    },
+    {
+      &quot;alg&quot;: -257,
+      &quot;type&quot;: &quot;public-key&quot;
+    }
+  ],
+  &quot;timeout&quot;: 300000,
+  &quot;excludeCredentials&quot;: [],
+  &quot;authenticatorSelection&quot;: {
+    &quot;residentKey&quot;: &quot;required&quot;,
+    &quot;userVerification&quot;: &quot;required&quot;
+  },
+  &quot;attestation&quot;: &quot;none&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: options to sign in</h3><p><b>Why:</b> no user named: the passkey says whose it is.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /webauthn/authentication/options HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 152
+
+{
+  &quot;challenge&quot;: &quot;L5kPdgqsjxnE7D-xhrr6E_2lMnzwBNrQLne1Oz2mktQ&quot;,
+  &quot;rpId&quot;: &quot;tijori.example&quot;,
+  &quot;timeout&quot;: 300000,
+  &quot;allowCredentials&quot;: [],
+  &quot;userVerification&quot;: &quot;required&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: a made-up passkey answers case 5's challenge, from another page</h3><p><b>Why:</b> <code>401</code>, and the challenge is now used up (below).</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /webauthn/authentication HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;id&quot;: &quot;AAAAAAAAAAAAAAAAAAAAAA&quot;,
+  &quot;rawId&quot;: &quot;AAAAAAAAAAAAAAAAAAAAAA&quot;,
+  &quot;type&quot;: &quot;public-key&quot;,
+  &quot;response&quot;: {
+    &quot;clientDataJSON&quot;: &quot;&lt;clientDataJSON naming tijori-login.example&gt;&quot;,
+    &quot;authenticatorData&quot;: &quot;AA&quot;,
+    &quot;signature&quot;: &quot;AA&quot;,
+    &quot;userHandle&quot;: &quot;AA&quot;
+  }
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 401 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;The passkey check failed. Try again.&quot;,
+  &quot;instance&quot;: &quot;/webauthn/authentication&quot;,
+  &quot;status&quot;: 401,
+  &quot;title&quot;: &quot;Unauthorized&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: adding a passkey without signing in</h3><p><b>Why:</b> <code>401</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /webauthn/registration/options HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 401 
+WWW-Authenticate: Bearer
+Content-Type: application/problem+json
+Content-Length: 149
+
+{
+  &quot;title&quot;: &quot;Sign-in required&quot;,
+  &quot;status&quot;: 401,
+  &quot;detail&quot;: &quot;Send a valid access token: sign in again to get one.&quot;,
+  &quot;instance&quot;: &quot;/webauthn/registration/options&quot;
+}</code></pre></div></div></section>
+<h2>What the database holds afterwards</h2>
+<p class="muted">From <code>psql</code> in <code>docs/capture.sh</code>.</p>
+<pre class="code"><code class="language-text">    purpose     | for_a_customer | valid_for | used 
+----------------+----------------+-----------+------
+ registration   | t              | 00:05:00  | f
+ authentication | f              | 00:05:00  | t
+(2 rows)</code></pre><pre class="code"><code class="language-text">      email       | user_handle_bytes | a_code_was_used | balance_paise 
+------------------+-------------------+-----------------+---------------
+ zoya@example.com |                32 | t               |       4250000
+ dev@example.com  |                32 | f               |       1890050
+(2 rows)</code></pre>
+<p>The sign-in challenge was used up by the made-up answer in case 6, so it can never be answered again. The registration challenge from case 4 is still open; it expires 5 minutes after it was made. Zoya's used code is recorded as a time step, not as the code.</p></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>Password and code</td><td>A token that opens the account</td><td><code>passwordAndCodeGiveATokenThatOpensTheAccount</code></td></tr><tr><td>Registration options</td><td>Tijori's domain, a random user id, passkey and fingerprint required</td><td><code>registrationOptionsNameThisSiteAndAskForAPasskeyWithUserVerification</code></td></tr><tr><td>Register, then sign in</td><td>No password needed</td><td><code>aRegisteredPasskeySignsInWithoutAPassword</code></td></tr><tr><td>Wrong password, wrong code, unknown email</td><td>The same <code>401</code></td><td><code>wrongPasswordWrongCodeOrUnknownEmailAreTheSame401</code></td></tr><tr><td>Bad bodies</td><td><code>400</code></td><td><code>badBodiesAre400</code></td></tr><tr><td>No token</td><td><code>401</code></td><td><code>noTokenIs401</code></td></tr><tr><td>A sign-in older than 5 minutes adds a passkey</td><td><code>403</code></td><td><code>addingAPasskeyNeedsASignInFromTheLastFiveMinutes</code></td></tr><tr><td>A registration on another customer's challenge</td><td><code>400</code>, nothing stored</td><td><code>aChallengeIssuedToAnotherCustomerCannotAddAPasskeyHere</code></td></tr><tr><td>A passkey answer claiming another customer</td><td><code>401</code></td><td><code>aPasskeyCannotSayItBelongsToAnotherCustomer</code></td></tr><tr><td>A challenge after 5 minutes</td><td><code>401</code></td><td><code>aChallengeExpiresAfterFiveMinutes</code></td></tr><tr><td>A counter lower than the stored one</td><td><code>401</code>: it looks like a copied key</td><td><code>aCounterThatGoesBackwardsLooksLikeACloneAndIsRefused</code></td></tr><tr><td>A code twice; one step late; two steps late</td><td><code>401</code>; accepted; <code>401</code></td><td><code>aCodeWorksOnceAndOnlyNearItsTime</code></td></tr><tr><td>Ten sign-ins with one code at once</td><td>Exactly one token</td><td><code>tenParallelSignInsWithOneCodeGiveOneToken</code></td></tr><tr><td>Odd answers</td><td><code>400</code> or <code>401</code>, never an error</td><td><code>oddAnswersAre400Or401NeverAnError</code></td></tr><tr><td>Rules written by plain SQL</td><td>Refused by named constraints</td><td><code>challengeRulesHoldWithoutJava</code>, <code>passkeyAndCustomerRulesHoldWithoutJava</code></td></tr><tr><td>A save that fails; a check that fails</td><td>Rolled back, retry works; the challenge is used up</td><td><code>aSaveThatFailsRollsBackAndTheSameAnswerCanBeSentAgain</code>, <code>aFailedCheckUsesUpTheChallenge</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Not checking the challenge, origin and relying-party id, so a phishing site can replay a sign-in.</p>
+<p>The old code checked only that the signature matched the stored public key. Each test makes one answer it accepted:</p>
+<ul>
+<li><strong>Replayed.</strong> A real sign-in, sent again a minute later: the signature is still valid. The API refuses it, because its challenge was used up. The test device keeps its counter at 0, as synced passkeys commonly do, so only the challenge stops this.</li>
+<li><strong>Answered for a phishing page.</strong> <code>tijori-login.example</code> fetches a real challenge and gets the passkey to answer it on its own page: valid signature, wrong origin. Refused.</li>
+<li><strong>Made for another site.</strong> A look-alike page asks for a passkey for its own domain and hands it to Tijori. The old code stored any key it could parse. Refused.</li>
+<li><strong>The control.</strong> A fresh challenge on Tijori's page signs in.</li>
+</ul>
+<p>While building, each check was undone once: the sign-in challenge taken from the request turned 3 tests red; any origin 1; no userHandle comparison 1; no owner check on the registration challenge 1; registration without its transaction 1, or rolling back on every failure 1; no recent sign-in check 1; a reusable code 2; no one-step window 1; the counter not stored 1. Not requiring user verification turned nothing red: the emulator always reports it.</p>
+</div>
+<pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import com.webauthn4j.WebAuthnManager;
+import com.webauthn4j.converter.AttestedCredentialDataConverter;
+import com.webauthn4j.converter.util.ObjectConverter;
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
+
+import java.io.ByteArrayOutputStream;
+import java.security.MessageDigest;
+import java.security.Signature;
+import java.util.Base64;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Written first. The old passkey code checked only the signature with the stored public key: not which challenge was
+ * signed, not which page asked, not which site the passkey was made for. Each test builds one answer the old code
+ * accepted, then sends it to the real API.
+ */
+class UncheckedCeremonyTrapTest extends ApiTest {
+
+    static final Base64.Decoder UNB64 = Base64.getUrlDecoder();
+
+    /** The old sign-in check, as it was: is this a valid signature by the stored key? */
+    boolean oldSignatureOnlyCheck(JsonNode assertion) throws Exception {
+        byte[] stored = jdbc.sql(&quot;SELECT attested_credential_data FROM passkeys WHERE credential_id = ?&quot;)
+                .param(UNB64.decode(assertion.path(&quot;rawId&quot;).asString())).query(byte[].class).single();
+        var key = new AttestedCredentialDataConverter(new ObjectConverter()).convert(stored).getCOSEKey().getPublicKey();
+        JsonNode r = assertion.path(&quot;response&quot;);
+        ByteArrayOutputStream signed = new ByteArrayOutputStream();
+        signed.write(UNB64.decode(r.path(&quot;authenticatorData&quot;).asString()));
+        signed.write(MessageDigest.getInstance(&quot;SHA-256&quot;).digest(UNB64.decode(r.path(&quot;clientDataJSON&quot;).asString())));
+        Signature verifier = Signature.getInstance(&quot;SHA256withECDSA&quot;);
+        verifier.initVerify(key);
+        verifier.update(signed.toByteArray());
+        return verifier.verify(UNB64.decode(r.path(&quot;signature&quot;).asString()));
+    }
+
+    @Test
+    void aSignInCapturedOnceAndSentAgainIsRefused() throws Exception {
+        Device phone = passkeyFor(&quot;zoya&quot;);
+        ObjectNode signIn = phone.get(authenticationOptions());
+        authenticate(signIn).andExpect(status().isOk());
+        // Captured from a log or a proxy: the very same answer, a minute later. A synced passkey&#x27;s counter stays 0,
+        // so only the used-up challenge stops it.
+        later(java.time.Duration.ofMinutes(1));
+        assertThat(oldSignatureOnlyCheck(signIn)).isTrue();             // the old code: signed in again
+        authenticate(signIn).andExpect(status().isUnauthorized());      // its challenge was used up
+    }
+
+    @Test
+    void aSignInAnsweredForAPhishingPageIsRefused() throws Exception {
+        Device phone = passkeyFor(&quot;zoya&quot;);
+        // tijori-login.example fetches a real challenge from Tijori and gets the passkey to answer it on its own page.
+        ObjectNode relayed = phone.at(&quot;https://tijori-login.example&quot;).get(authenticationOptions());
+        assertThat(oldSignatureOnlyCheck(relayed)).isTrue();
+        authenticate(relayed).andExpect(status().isUnauthorized());     // clientDataJSON names the page that asked
+    }
+
+    @Test
+    void aPasskeyMadeForAnotherSiteIsNotRegistered() throws Exception {
+        String token = codeToken(&quot;zoya&quot;);
+        // A look-alike page asks for a passkey for its own relying party, then hands the result to Tijori.
+        ObjectNode forOtherSite = new Device().create(registrationOptions(token), &quot;tijori-login.example&quot;);
+        assertThat(WebAuthnManager.createNonStrictWebAuthnManager().parseRegistrationResponseJSON(forOtherSite.toString())).isNotNull();   // the old code stored any parsable key
+        register(token, &quot;Zoya&#x27;s phone&quot;, forOtherSite).andExpect(status().isBadRequest());
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM passkeys&quot;).query(Long.class).single()).isZero();
+    }
+
+    @Test
+    void theRightAnswerSignsIn() throws Exception {
+        // The control: same passkey, Tijori&#x27;s own page, a fresh challenge.
+        Device phone = passkeyFor(&quot;zoya&quot;);
+        authenticate(phone.get(authenticationOptions())).andExpect(status().isOk());
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 22 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Make the current code from the demo secret and sign in with it, twice:</p>
+<pre class="code"><code class="language-bash">CODE=$(python3 -c &#x27;import hmac,hashlib,struct,time; h=hmac.new(b&quot;12345678901234567890&quot;,struct.pack(&quot;&gt;Q&quot;,int(time.time())//30),hashlib.sha1).digest(); o=h[-1]&amp;15; print(&quot;%06d&quot;%((int.from_bytes(h[o:o+4],&quot;big&quot;)&amp;0x7fffffff)%1000000))&#x27;)
+for i in 1 2; do curl -s -o /dev/null -w &#x27;%{http_code}\n&#x27; -X POST http://localhost:8080/2fa/totp -H &#x27;Content-Type: application/json&#x27; \
+  -d &quot;{\&quot;email\&quot;: \&quot;dev@example.com\&quot;, \&quot;password\&quot;: \&quot;dev-demo-pass\&quot;, \&quot;code\&quot;: \&quot;$CODE\&quot;}&quot;; done</code></pre>
+<p>The first prints 200, the second 401. Any authenticator app set up with the base32 secret <code>GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ</code> shows the same codes. A real passkey needs a browser on HTTPS at the configured origin; to see the ceremonies, run <code>./mvnw test -Dtest=PasskeyContractTest</code>.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>Every passkey sign-in is <code>401</code>, the log says <code>BadOriginException</code></td><td>The page's origin differs from <code>tijori.webauthn.origin</code> (port, http against https, another subdomain).</td><td>Configure the exact origin; list every real one, never all.</td></tr><tr><td><code>BadRpIdException</code></td><td>The passkey was made for another RP id.</td><td>The RP id is the registrable domain the passkeys were created for; changing it later orphans them.</td></tr><tr><td>Codes are always wrong</td><td>The server clock is off by more than 30 seconds.</td><td>Keep server clocks in sync (NTP).</td></tr><tr><td><code>MaliciousCounterValueException</code></td><td>The counter went backwards: a copied key, or a restored backup of the table.</td><td>Treat it as a warning about that passkey; ask the customer.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/076-passkey-sign-in-with-webauthn/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/tijori/passkeys/
+│   ├── SecurityConfig.java   ├── SignInController.java   ├── Passkeys.java
+│   ├── CodeSignIn.java   ├── Totp.java   ├── TokenService.java   ├── JwtConfig.java
+│   ├── AccountController.java   ├── ProblemResponses.java   └── PasskeysApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__customers_passkeys_challenges.sql, V2__demo_customers.sql
+├── src/test/java/com/tijori/passkeys/   Device.java (the emulated phone) and the tests
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the database behind it.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">SecurityConfig.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">SignInController.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">Passkeys.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">CodeSignIn.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">Totp.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">TokenService.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">JwtConfig.java</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">AccountController.java</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">ProblemResponses.java</button><button class="file-btn" role="tab" id="code-9-b" aria-controls="code-9" aria-selected="false" data-group="code">V1__customers_passkeys_challenges.sql</button><button class="file-btn" role="tab" id="code-10-b" aria-controls="code-10" aria-selected="false" data-group="code">V2__demo_customers.sql</button><button class="file-btn" role="tab" id="code-11-b" aria-controls="code-11" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-12-b" aria-controls="code-12" aria-selected="false" data-group="code">compose.yaml</button><button class="file-btn" role="tab" id="code-13-b" aria-controls="code-13" aria-selected="false" data-group="code">PasskeysApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/tijori/passkeys/SecurityConfig.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Who may call what.</dd><dt>Why</dt><dd>The sign-in ceremonies and the code sign-in are open (they are the proof); adding a passkey and the account need a token; everything else refused.</dd><dt>Without it</dt><dd>A passkey added by someone who is not signed in, or a new endpoint open by default.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+class SecurityConfig {
+
+    /** The sign-in ceremonies are open (they are the proof); adding a passkey and the account need a token. */
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems) throws Exception {
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(HttpMethod.POST, &quot;/2fa/totp&quot;, &quot;/webauthn/authentication/options&quot;, &quot;/webauthn/authentication&quot;).permitAll()
+                        .requestMatchers(HttpMethod.POST, &quot;/webauthn/registration/options&quot;, &quot;/webauthn/registration&quot;).hasAuthority(&quot;SCOPE_accounts&quot;)
+                        .requestMatchers(HttpMethod.GET, &quot;/accounts/me&quot;).hasAuthority(&quot;SCOPE_accounts&quot;)
+                        .requestMatchers(&quot;/error&quot;).permitAll()   // otherwise a server error is forwarded here and shown as a 401
+                        .anyRequest().denyAll())
+                .oauth2ResourceServer(o -&gt; o.jwt(jwt -&gt; {}).authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable());   // no cookies: the token travels in a header the browser never adds by itself
+        return http.build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/tijori/passkeys/SignInController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The five sign-in endpoints.</dd><dt>Why</dt><dd>Password and code together, never apart; adding a passkey needs a sign-in from the last 5 minutes; one answer for every failed ceremony.</dd><dt>Without it</dt><dd>A stolen token planting the attacker's own passkey, or errors that tell which check failed.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+import tools.jackson.databind.JsonNode;
+
+import java.net.URI;
+import java.time.Clock;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+class SignInController {
+
+    record CodeLogin(@NotBlank @Email @Size(max = 254) String email, @NotNull @Size(min = 1, max = 64) String password,
+                     @NotNull @Pattern(regexp = &quot;\\d{6}&quot;) String code) {
+    }
+
+    record NewPasskey(@NotBlank @Size(max = 60) String label, @NotNull JsonNode credential) {
+    }
+
+    /** Demo rule: adding a passkey needs a sign-in from the last 5 minutes, so a stolen token cannot plant one. */
+    static final Duration RECENT_SIGN_IN = Duration.ofMinutes(5);
+
+    private final CodeSignIn codes;
+    private final Passkeys passkeys;
+    private final TokenService tokens;
+    private final Clock clock;
+
+    SignInController(CodeSignIn codes, Passkeys passkeys, TokenService tokens, Clock clock) {
+        this.codes = codes;
+        this.passkeys = passkeys;
+        this.tokens = tokens;
+        this.clock = clock;
+    }
+
+    @PostMapping(&quot;/2fa/totp&quot;)
+    TokenService.AccessToken codeSignIn(@Valid @RequestBody CodeLogin body) {
+        long customer = codes.signIn(body.email(), body.password(), body.code())
+                .orElseThrow(() -&gt; new ResponseStatusException(HttpStatus.UNAUTHORIZED, &quot;Wrong email, password or code&quot;));
+        return tokens.issue(customer, List.of(&quot;pwd&quot;, &quot;otp&quot;, &quot;mfa&quot;));
+    }
+
+    @PostMapping(&quot;/webauthn/registration/options&quot;)
+    Map&lt;String, Object&gt; registrationOptions(@AuthenticationPrincipal Jwt jwt) {
+        return passkeys.registrationOptions(recentlySignedIn(jwt));
+    }
+
+    @PostMapping(&quot;/webauthn/registration&quot;)
+    ResponseEntity&lt;Map&lt;String, String&gt;&gt; register(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody NewPasskey body) {
+        String id = passkeys.register(recentlySignedIn(jwt), body.label(), body.credential());
+        return ResponseEntity.created(URI.create(&quot;/webauthn/passkeys/&quot; + id)).body(Map.of(&quot;id&quot;, id, &quot;label&quot;, body.label().strip()));
+    }
+
+    @PostMapping(&quot;/webauthn/authentication/options&quot;)
+    Map&lt;String, Object&gt; authenticationOptions() {
+        return passkeys.authenticationOptions();
+    }
+
+    @PostMapping(&quot;/webauthn/authentication&quot;)
+    TokenService.AccessToken authenticate(@RequestBody JsonNode credential) {
+        return tokens.issue(passkeys.authenticate(credential), List.of(&quot;hwk&quot;, &quot;user&quot;));
+    }
+
+    /** One answer for every failed ceremony; the reason goes to the log. Registration is 400: the caller is known. */
+    @ExceptionHandler(Passkeys.CeremonyFailed.class)
+    ResponseEntity&lt;ProblemDetail&gt; ceremonyFailed(Passkeys.CeremonyFailed e, HttpServletRequest request) {
+        HttpStatus status = request.getRequestURI().startsWith(&quot;/webauthn/registration&quot;) ? HttpStatus.BAD_REQUEST : HttpStatus.UNAUTHORIZED;
+        return ResponseEntity.status(status).body(ProblemDetail.forStatusAndDetail(status, &quot;The passkey check failed. Try again.&quot;));
+    }
+
+    private long recentlySignedIn(Jwt jwt) {
+        if (jwt.getIssuedAt() == null || jwt.getIssuedAt().plus(RECENT_SIGN_IN).isBefore(clock.instant())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, &quot;Sign in again to add a passkey&quot;);
+        }
+        return Long.parseLong(jwt.getSubject());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/tijori/passkeys/Passkeys.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Both WebAuthn ceremonies.</dd><dt>Why</dt><dd>The challenge is ours and used up in one conditional <code>UPDATE</code>; then webauthn4j checks it with our origin and our RP id, user verification, the signature and the counter; the server compares <code>userHandle</code> itself.</dd><dt>Without it</dt><dd>Replays, answers made for other pages or other sites, and one customer's passkey speaking for another.</dd></dl><ul><li>The signature covers the authenticator data and a hash of clientDataJSON, not <code>userHandle</code>: a changed <code>userHandle</code> keeps the signature valid. Found while building.</li><li>Synced passkeys commonly report a counter of 0, so the counter cannot be relied on to stop replays: the challenge does. Found while building, when the replay test first stayed green.</li><li>Both ceremonies are transactions with <code>noRollbackFor = CeremonyFailed</code>: a failed check still uses up its challenge, a failed save does not.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import com.webauthn4j.WebAuthnManager;
+import com.webauthn4j.converter.AttestedCredentialDataConverter;
+import com.webauthn4j.converter.util.ObjectConverter;
+import com.webauthn4j.credential.CredentialRecordImpl;
+import com.webauthn4j.data.AuthenticationData;
+import com.webauthn4j.data.AuthenticationParameters;
+import com.webauthn4j.data.PublicKeyCredentialParameters;
+import com.webauthn4j.data.PublicKeyCredentialType;
+import com.webauthn4j.data.RegistrationData;
+import com.webauthn4j.data.RegistrationParameters;
+import com.webauthn4j.data.attestation.authenticator.AttestedCredentialData;
+import com.webauthn4j.data.attestation.statement.COSEAlgorithmIdentifier;
+import com.webauthn4j.data.attestation.statement.NoneAttestationStatement;
+import com.webauthn4j.data.client.Origin;
+import com.webauthn4j.data.client.challenge.DefaultChallenge;
+import com.webauthn4j.data.extension.authenticator.AuthenticationExtensionsAuthenticatorOutputs;
+import com.webauthn4j.data.extension.client.AuthenticationExtensionsClientOutputs;
+import com.webauthn4j.server.ServerProperty;
+import com.webauthn4j.verifier.exception.VerificationException;
+import com.webauthn4j.converter.exception.DataConversionException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * The two WebAuthn ceremonies. Each starts with a challenge from this server and ends with webauthn4j checking the
+ * browser&#x27;s answer against three values that come from here, never from the request: the challenge we issued, our
+ * origin, and our relying-party id. Then the signature, user verification and the signature counter.
+ */
+@Service
+class Passkeys {
+
+    private static final Logger log = LoggerFactory.getLogger(Passkeys.class);
+    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+    private static final Base64.Encoder B64 = Base64.getUrlEncoder().withoutPadding();
+    private static final Base64.Decoder UNB64 = Base64.getUrlDecoder();
+    /** ES256 and RS256: what platform authenticators and security keys offer. */
+    static final List&lt;PublicKeyCredentialParameters&gt; ALGORITHMS = List.of(
+            new PublicKeyCredentialParameters(PublicKeyCredentialType.PUBLIC_KEY, COSEAlgorithmIdentifier.ES256),
+            new PublicKeyCredentialParameters(PublicKeyCredentialType.PUBLIC_KEY, COSEAlgorithmIdentifier.RS256));
+
+    /** The browser&#x27;s answer failed a check. Which one is logged, not told. */
+    static final class CeremonyFailed extends RuntimeException {
+        CeremonyFailed(String reason) {
+            super(reason);
+        }
+    }
+
+    private final JdbcClient jdbc;
+    private final Clock clock;
+    private final String rpId;
+    private final String rpName;
+    private final Origin origin;
+    private final Duration challengeLifetime;
+    private final ObjectConverter converter = new ObjectConverter();
+    private final WebAuthnManager webAuthn = WebAuthnManager.createNonStrictWebAuthnManager(converter);
+    private final AttestedCredentialDataConverter credentialData = new AttestedCredentialDataConverter(converter);
+
+    Passkeys(JdbcClient jdbc, Clock clock, @Value(&quot;${tijori.webauthn.rp-id}&quot;) String rpId, @Value(&quot;${tijori.webauthn.rp-name}&quot;) String rpName,
+             @Value(&quot;${tijori.webauthn.origin}&quot;) String origin, @Value(&quot;${tijori.webauthn.challenge-lifetime}&quot;) Duration challengeLifetime) {
+        this.jdbc = jdbc;
+        this.clock = clock;
+        this.rpId = rpId;
+        this.rpName = rpName;
+        this.origin = new Origin(origin);
+        this.challengeLifetime = challengeLifetime;
+    }
+
+    private record Customer(String email, String name, byte[] userHandle) {
+    }
+
+    /** What the browser passes to navigator.credentials.create(), as JSON. */
+    Map&lt;String, Object&gt; registrationOptions(long customerId) {
+        Customer c = jdbc.sql(&quot;SELECT email, name, user_handle FROM customers WHERE id = ?&quot;).param(customerId).query(Customer.class).single();
+        List&lt;Map&lt;String, String&gt;&gt; existing = jdbc.sql(&quot;SELECT credential_id FROM passkeys WHERE customer_id = ?&quot;).param(customerId)
+                .query(byte[].class).list().stream().map(id -&gt; Map.of(&quot;type&quot;, &quot;public-key&quot;, &quot;id&quot;, B64.encodeToString(id))).toList();
+        Map&lt;String, Object&gt; options = new LinkedHashMap&lt;&gt;();
+        options.put(&quot;challenge&quot;, newChallenge(&quot;registration&quot;, customerId));
+        options.put(&quot;rp&quot;, Map.of(&quot;id&quot;, rpId, &quot;name&quot;, rpName));
+        options.put(&quot;user&quot;, Map.of(&quot;id&quot;, B64.encodeToString(c.userHandle()), &quot;name&quot;, c.email(), &quot;displayName&quot;, c.name()));
+        options.put(&quot;pubKeyCredParams&quot;, ALGORITHMS.stream().map(p -&gt; Map.of(&quot;type&quot;, &quot;public-key&quot;, &quot;alg&quot;, p.getAlg().getValue())).toList());
+        options.put(&quot;timeout&quot;, challengeLifetime.toMillis());
+        options.put(&quot;excludeCredentials&quot;, existing);   // the same authenticator is not registered twice
+        options.put(&quot;authenticatorSelection&quot;, Map.of(&quot;residentKey&quot;, &quot;required&quot;, &quot;userVerification&quot;, &quot;required&quot;));
+        options.put(&quot;attestation&quot;, &quot;none&quot;);
+        return options;
+    }
+
+    /**
+     * Checks the new passkey and stores its public key. Returns its credential id. One transaction: a failed check
+     * still uses up the challenge (no second try with it), but a failed save rolls back, so the same answer can be sent again.
+     */
+    @Transactional(noRollbackFor = CeremonyFailed.class)
+    String register(long customerId, String label, JsonNode credential) {
+        byte[] challenge = useChallenge(credential, &quot;registration&quot;)
+                .filter(owner -&gt; owner == customerId)   // a challenge issued to someone else proves nothing for this customer
+                .map(owner -&gt; clientChallenge(credential)).orElseThrow(() -&gt; new CeremonyFailed(&quot;unknown, used, expired or someone else&#x27;s challenge&quot;));
+        RegistrationData data;
+        try {
+            data = webAuthn.verifyRegistrationResponseJSON(credential.toString(),
+                    new RegistrationParameters(server(challenge), ALGORITHMS, true, true));
+        } catch (VerificationException | DataConversionException e) {
+            log.info(&quot;Passkey registration refused: {}&quot;, e.getClass().getSimpleName());
+            throw new CeremonyFailed(e.getClass().getSimpleName());
+        }
+        AttestedCredentialData acd = data.getAttestationObject().getAuthenticatorData().getAttestedCredentialData();
+        jdbc.sql(&quot;INSERT INTO passkeys (credential_id, customer_id, attested_credential_data, sign_count, label, created_at) VALUES (?, ?, ?, ?, ?, ?)&quot;)
+                .params(acd.getCredentialId(), customerId, credentialData.convert(acd), data.getAttestationObject().getAuthenticatorData().getSignCount(),
+                        label.strip(), now()).update();
+        return B64.encodeToString(acd.getCredentialId());
+    }
+
+    /** What the browser passes to navigator.credentials.get(): no user named, the passkey says who it is. */
+    Map&lt;String, Object&gt; authenticationOptions() {
+        Map&lt;String, Object&gt; options = new LinkedHashMap&lt;&gt;();
+        options.put(&quot;challenge&quot;, newChallenge(&quot;authentication&quot;, null));
+        options.put(&quot;rpId&quot;, rpId);
+        options.put(&quot;timeout&quot;, challengeLifetime.toMillis());
+        options.put(&quot;allowCredentials&quot;, List.of());
+        options.put(&quot;userVerification&quot;, &quot;required&quot;);
+        return options;
+    }
+
+    private record Stored(long customerId, byte[] userHandle, byte[] attestedCredentialData, long signCount) {
+    }
+
+    /** The customer whose passkey this is, after every check. One transaction, as for registration. */
+    @Transactional(noRollbackFor = CeremonyFailed.class)
+    long authenticate(JsonNode credential) {
+        byte[] challenge = useChallenge(credential, &quot;authentication&quot;).map(any -&gt; clientChallenge(credential))
+                .orElseThrow(() -&gt; new CeremonyFailed(&quot;unknown, used or expired challenge&quot;));
+        byte[] credentialId = UNB64.decode(text(credential, &quot;rawId&quot;));
+        Stored stored = jdbc.sql(&quot;&quot;&quot;
+                        SELECT p.customer_id, c.user_handle, p.attested_credential_data, p.sign_count
+                        FROM passkeys p JOIN customers c ON c.id = p.customer_id WHERE p.credential_id = ?&quot;&quot;&quot;)
+                .param(credentialId).query(Stored.class).optional().orElseThrow(() -&gt; new CeremonyFailed(&quot;unknown passkey&quot;));
+        // The passkey must also say it belongs to that customer (WebAuthn&#x27;s userHandle check).
+        if (!Arrays.equals(UNB64.decode(text(credential.path(&quot;response&quot;), &quot;userHandle&quot;)), stored.userHandle())) {
+            throw new CeremonyFailed(&quot;userHandle does not match the passkey&#x27;s customer&quot;);
+        }
+        CredentialRecordImpl record = new CredentialRecordImpl(new NoneAttestationStatement(), null, null, null, stored.signCount(),
+                credentialData.convert(stored.attestedCredentialData()), new AuthenticationExtensionsAuthenticatorOutputs&lt;&gt;(), null,
+                new AuthenticationExtensionsClientOutputs&lt;&gt;(), null);
+        AuthenticationData data;
+        try {
+            data = webAuthn.verifyAuthenticationResponseJSON(credential.toString(),
+                    new AuthenticationParameters(server(challenge), record, null, true, true));
+        } catch (VerificationException | DataConversionException e) {
+            log.info(&quot;Passkey sign-in refused: {}&quot;, e.getClass().getSimpleName());
+            throw new CeremonyFailed(e.getClass().getSimpleName());
+        }
+        // A counter that goes backwards can mean a cloned authenticator; webauthn4j refuses it above. Store the new one.
+        jdbc.sql(&quot;UPDATE passkeys SET sign_count = ?, last_used_at = ? WHERE credential_id = ?&quot;)
+                .params(data.getAuthenticatorData().getSignCount(), now(), credentialId).update();
+        return stored.customerId();
+    }
+
+    /** Our values, never the request&#x27;s: the challenge we issued, our origin, our relying-party id. */
+    private ServerProperty server(byte[] challenge) {
+        return new ServerProperty(origin, rpId, new DefaultChallenge(challenge));
+    }
+
+    private String newChallenge(String purpose, Long customerId) {
+        byte[] challenge = new byte[32];
+        RANDOM.nextBytes(challenge);
+        OffsetDateTime created = now();   // one clock read: two would break the 5-minute CHECK
+        jdbc.sql(&quot;INSERT INTO webauthn_challenges (challenge, purpose, customer_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)&quot;)
+                .params(challenge, purpose, customerId, created, created.plus(challengeLifetime)).update();
+        return B64.encodeToString(challenge);
+    }
+
+    /**
+     * Marks the challenge in the browser&#x27;s clientDataJSON as used, if this server issued it for this purpose and it
+     * is unused and in time: one conditional UPDATE, so a challenge works for exactly one answer. Returns its owner
+     * (0 for sign-in challenges, which have none).
+     */
+    private Optional&lt;Long&gt; useChallenge(JsonNode credential, String purpose) {
+        byte[] challenge;
+        try {
+            challenge = clientChallenge(credential);
+        } catch (RuntimeException notOurShape) {
+            return Optional.empty();
+        }
+        OffsetDateTime now = now();
+        return jdbc.sql(&quot;UPDATE webauthn_challenges SET used_at = ? WHERE challenge = ? AND purpose = ? AND used_at IS NULL AND expires_at &gt; ? RETURNING coalesce(customer_id, 0)&quot;)
+                .params(now, challenge, purpose, now).query(Long.class).optional();
+    }
+
+    private static byte[] clientChallenge(JsonNode credential) {
+        JsonNode clientData = JSON.readTree(UNB64.decode(text(credential.path(&quot;response&quot;), &quot;clientDataJSON&quot;)));
+        return UNB64.decode(text(clientData, &quot;challenge&quot;));
+    }
+
+    private static String text(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        if (!value.isString()) {
+            throw new CeremonyFailed(&quot;missing &quot; + field);
+        }
+        return value.asString();
+    }
+
+    private OffsetDateTime now() {
+        return OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/tijori/passkeys/CodeSignIn.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The fallback: password and an authenticator-app code.</dd><dt>Why</dt><dd>RFC 6238 codes for the current and the previous 30 seconds, compared in constant time, each accepted once (<code>totp_last_step</code> moves forward in one conditional UPDATE).</dd><dt>Without it</dt><dd>A code read over a shoulder being used again, or two requests with one code both getting in.</dd></dl><p>No attempt limit yet: a six-digit code has a million values. Challenge 2 adds one.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+import java.security.MessageDigest;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.util.Locale;
+import java.util.Optional;
+
+/** The fallback: password and a code from an authenticator app. Never a password alone, never an SMS. */
+@Service
+class CodeSignIn {
+
+    private final JdbcClient jdbc;
+    private final PasswordEncoder encoder;
+    private final Clock clock;
+    private final String dummyHash;
+
+    CodeSignIn(JdbcClient jdbc, PasswordEncoder encoder, Clock clock) {
+        this.jdbc = jdbc;
+        this.encoder = encoder;
+        this.clock = clock;
+        this.dummyHash = encoder.encode(&quot;no-such-customer&quot;);
+    }
+
+    private record Customer(long id, String passwordHash, byte[] totpSecret) {
+    }
+
+    /**
+     * The customer&#x27;s id if the password is right and the code is the current one (or the one before, for a slow
+     * phone clock) and has not been used yet. Using it moves totp_last_step forward in one conditional UPDATE, so
+     * of two requests with the same code exactly one gets through.
+     */
+    Optional&lt;Long&gt; signIn(String email, String password, String code) {
+        Optional&lt;Customer&gt; customer = jdbc.sql(&quot;SELECT id, password_hash, totp_secret FROM customers WHERE email = ?&quot;)
+                .param(email.strip().toLowerCase(Locale.ROOT)).query(Customer.class).optional();
+        boolean passwordOk = encoder.matches(password, customer.map(Customer::passwordHash).orElse(dummyHash));
+        if (customer.isEmpty() || !passwordOk) {
+            return Optional.empty();
+        }
+        long now = Totp.step(clock.instant().getEpochSecond());
+        for (long step = now; step &gt;= now - 1; step--) {
+            if (MessageDigest.isEqual(Totp.code(customer.get().totpSecret(), step).getBytes(StandardCharsets.US_ASCII), code.getBytes(StandardCharsets.US_ASCII))) {
+                return jdbc.sql(&quot;UPDATE customers SET totp_last_step = ? WHERE id = ? AND (totp_last_step IS NULL OR totp_last_step &lt; ?) RETURNING id&quot;)
+                        .params(step, customer.get().id(), step).query(Long.class).optional();
+            }
+        }
+        return Optional.empty();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/tijori/passkeys/Totp.java</p><div class="notes"><p>The code itself: HMAC-SHA1 over the step number, dynamic truncation, six digits.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
+
+/** Time-based one-time codes, RFC 6238: HMAC-SHA1 over the 30-second step number, 6 digits. */
+final class Totp {
+
+    static final long STEP_SECONDS = 30;
+
+    private Totp() {
+    }
+
+    static long step(long epochSecond) {
+        return Math.floorDiv(epochSecond, STEP_SECONDS);
+    }
+
+    static String code(byte[] secret, long step) {
+        try {
+            Mac mac = Mac.getInstance(&quot;HmacSHA1&quot;);
+            mac.init(new SecretKeySpec(secret, &quot;HmacSHA1&quot;));
+            byte[] h = mac.doFinal(ByteBuffer.allocate(8).putLong(step).array());
+            int offset = h[h.length - 1] &amp; 0x0f;   // RFC 4226 dynamic truncation
+            int binary = ((h[offset] &amp; 0x7f) &lt;&lt; 24) | ((h[offset + 1] &amp; 0xff) &lt;&lt; 16) | ((h[offset + 2] &amp; 0xff) &lt;&lt; 8) | (h[offset + 3] &amp; 0xff);
+            return String.format(&quot;%06d&quot;, binary % 1_000_000);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/tijori/passkeys/TokenService.java</p><div class="notes"><p>10-minute tokens; <code>amr</code> (RFC 8176 values) records how the customer signed in.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.stereotype.Service;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+
+/** 10-minute access tokens. &quot;amr&quot; (RFC 8176 values) records how the customer signed in. */
+@Service
+class TokenService {
+
+    record AccessToken(String accessToken, String tokenType, long expiresIn, List&lt;String&gt; signedInWith) {
+    }
+
+    private final JwtEncoder encoder;
+    private final Clock clock;
+    private final String issuer;
+    private final String audience;
+    private final Duration lifetime;
+
+    TokenService(JwtEncoder encoder, Clock clock, @Value(&quot;${tijori.jwt.issuer}&quot;) String issuer,
+                 @Value(&quot;${tijori.jwt.audience}&quot;) String audience, @Value(&quot;${tijori.jwt.access-lifetime}&quot;) Duration lifetime) {
+        this.encoder = encoder;
+        this.clock = clock;
+        this.issuer = issuer;
+        this.audience = audience;
+        this.lifetime = lifetime;
+    }
+
+    AccessToken issue(long customerId, List&lt;String&gt; amr) {
+        Instant now = clock.instant();
+        JwtClaimsSet claims = JwtClaimsSet.builder()
+                .issuer(issuer).subject(Long.toString(customerId)).audience(List.of(audience))
+                .issuedAt(now).expiresAt(now.plus(lifetime))
+                .claim(&quot;scope&quot;, &quot;accounts&quot;).claim(&quot;amr&quot;, amr)
+                .build();
+        String token = encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims)).getTokenValue();
+        return new AccessToken(token, &quot;Bearer&quot;, lifetime.toSeconds(), amr);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/tijori/passkeys/JwtConfig.java</p><div class="notes"><p>The token checks, as in station 073.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import com.nimbusds.jose.jwk.source.ImmutableSecret;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtIssuerValidator;
+import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+import java.time.Clock;
+import java.time.Duration;
+import java.util.Base64;
+import java.util.List;
+
+/** One HMAC key signs the access tokens issued after a passkey or a password and code, and checks them. */
+@Configuration
+class JwtConfig {
+
+    @Bean
+    SecretKey jwtKey(@Value(&quot;${tijori.jwt.secret}&quot;) String secret) {
+        return new SecretKeySpec(Base64.getUrlDecoder().decode(secret), &quot;HmacSHA256&quot;);
+    }
+
+    @Bean
+    JwtEncoder jwtEncoder(SecretKey key) {
+        return new NimbusJwtEncoder(new ImmutableSecret&lt;&gt;(key));
+    }
+
+    /**
+     * Checks, for every request: the signature with this key and only HS256 (no &quot;none&quot;, no other algorithm), the
+     * expiry and not-before times with a small allowance for clocks that differ, the issuer and the audience.
+     */
+    @Bean
+    JwtDecoder jwtDecoder(SecretKey key, Clock clock, @Value(&quot;${tijori.jwt.issuer}&quot;) String issuer,
+                          @Value(&quot;${tijori.jwt.audience}&quot;) String audience, @Value(&quot;${tijori.jwt.clock-skew}&quot;) Duration skew) {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(key).macAlgorithm(MacAlgorithm.HS256).build();
+        JwtTimestampValidator timestamps = new JwtTimestampValidator(skew);
+        timestamps.setClock(clock);
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator&lt;&gt;(timestamps, new JwtIssuerValidator(issuer),
+                new JwtClaimValidator&lt;List&lt;String&gt;&gt;(JwtClaimNames.AUD, aud -&gt; aud != null &amp;&amp; aud.contains(audience))));
+        return decoder;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/java/com/tijori/passkeys/AccountController.java</p><div class="notes"><p>The account from the token's subject.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+class AccountController {
+
+    record Me(String name, long balancePaise, List&lt;String&gt; signedInWith) {
+    }
+
+    private final JdbcClient jdbc;
+
+    AccountController(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    /** Simulated balance. The customer is the token&#x27;s subject: nothing in the request can choose another. */
+    @GetMapping(&quot;/accounts/me&quot;)
+    Me me(@AuthenticationPrincipal Jwt jwt) {
+        return jdbc.sql(&quot;SELECT name, balance_paise FROM customers WHERE id = ?&quot;).param(Long.parseLong(jwt.getSubject()))
+                .query((rs, n) -&gt; new Me(rs.getString(&quot;name&quot;), rs.getLong(&quot;balance_paise&quot;), jwt.getClaimAsStringList(&quot;amr&quot;))).single();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">src/main/java/com/tijori/passkeys/ProblemResponses.java</p><div class="notes"><p>401 and 403 in the same problem JSON as every other error.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/** 401 and 403 from Spring Security&#x27;s filters, in the same problem shape as every other error. */
+@Component
+class ProblemResponses {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    /** 401: who are you? No token, or one that is not valid: forged, expired, for another API. One answer for all. */
+    void unauthenticated(HttpServletRequest req, HttpServletResponse res, AuthenticationException e) throws IOException {
+        res.setHeader(&quot;WWW-Authenticate&quot;, &quot;Bearer&quot;);
+        write(req, res, HttpStatus.UNAUTHORIZED, &quot;Sign-in required&quot;, &quot;Send a valid access token: sign in again to get one.&quot;);
+    }
+
+    /** 403: we know who you are, and you may not do this. */
+    void forbidden(HttpServletRequest req, HttpServletResponse res, AccessDeniedException e) throws IOException {
+        write(req, res, HttpStatus.FORBIDDEN, &quot;Not allowed&quot;, &quot;Sign in again to do this.&quot;);
+    }
+
+    private static void write(HttpServletRequest req, HttpServletResponse res, HttpStatus status, String title, String detail) throws IOException {
+        Map&lt;String, Object&gt; body = new LinkedHashMap&lt;&gt;();
+        body.put(&quot;title&quot;, title);
+        body.put(&quot;status&quot;, status.value());
+        body.put(&quot;detail&quot;, detail);
+        body.put(&quot;instance&quot;, req.getRequestURI());
+        res.setStatus(status.value());
+        res.setContentType(&quot;application/problem+json&quot;);
+        JSON.writeValue(res.getOutputStream(), body);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-9" aria-labelledby="code-9-b" hidden><p class="path">src/main/resources/db/migration/V1__customers_passkeys_challenges.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Customers, passkeys and challenges, with their rules.</dd><dt>Why</dt><dd>32-byte challenges for 5 minutes at most; a registration challenge always belongs to a customer; a counter within 32 bits; a random 32-byte user id.</dd><dt>Without it</dt><dd>A script storing eternal challenges, or a passkey whose owner could be guessed from its user id.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">CREATE TABLE customers (
+    id             bigint GENERATED ALWAYS AS IDENTITY CONSTRAINT customers_pk PRIMARY KEY,
+    email          text NOT NULL,
+    name           text NOT NULL,
+    -- WebAuthn&#x27;s user.id: random bytes, never the email, so a passkey reveals nothing about who it belongs to.
+    user_handle    bytea NOT NULL,
+    password_hash  text NOT NULL,
+    totp_secret    bytea NOT NULL,
+    -- The last 30-second step whose code was accepted: a code works once.
+    totp_last_step bigint,
+    balance_paise  bigint NOT NULL,
+    CONSTRAINT customers_email_lower CHECK (email = lower(email)),
+    CONSTRAINT customers_email_unique UNIQUE (email),
+    CONSTRAINT customers_user_handle_unique UNIQUE (user_handle),
+    CONSTRAINT customers_user_handle_length CHECK (octet_length(user_handle) = 32),
+    CONSTRAINT customers_password_hash_shape CHECK (password_hash ~ &#x27;^\{bcrypt\}\$2[aby]\$(1[0-9]|2[0-9]|3[01])\$[./A-Za-z0-9]{53}$&#x27;),
+    CONSTRAINT customers_totp_secret_length CHECK (octet_length(totp_secret) &gt;= 20),
+    CONSTRAINT customers_balance_nonnegative CHECK (balance_paise &gt;= 0)
+);
+
+CREATE TABLE passkeys (
+    credential_id            bytea CONSTRAINT passkeys_pk PRIMARY KEY,
+    customer_id              bigint NOT NULL CONSTRAINT passkeys_customer_fk REFERENCES customers ON DELETE CASCADE,
+    -- The authenticator&#x27;s AAGUID, the credential id and the COSE public key, as the authenticator sent them.
+    attested_credential_data bytea NOT NULL,
+    sign_count               bigint NOT NULL,
+    label                    text NOT NULL,
+    created_at               timestamptz NOT NULL,
+    last_used_at             timestamptz,
+    CONSTRAINT passkeys_credential_id_length CHECK (octet_length(credential_id) BETWEEN 16 AND 1023),
+    CONSTRAINT passkeys_sign_count_range CHECK (sign_count BETWEEN 0 AND 4294967295),
+    CONSTRAINT passkeys_label_length CHECK (char_length(label) BETWEEN 1 AND 60)
+);
+
+-- Every ceremony starts with a random challenge from the server; each is good once, for 5 minutes.
+CREATE TABLE webauthn_challenges (
+    challenge   bytea CONSTRAINT webauthn_challenges_pk PRIMARY KEY,
+    purpose     text NOT NULL,
+    customer_id bigint CONSTRAINT webauthn_challenges_customer_fk REFERENCES customers ON DELETE CASCADE,
+    created_at  timestamptz NOT NULL,
+    expires_at  timestamptz NOT NULL,
+    used_at     timestamptz,
+    CONSTRAINT webauthn_challenges_length CHECK (octet_length(challenge) = 32),
+    CONSTRAINT webauthn_challenges_purpose CHECK (purpose IN (&#x27;registration&#x27;, &#x27;authentication&#x27;)),
+    CONSTRAINT webauthn_challenges_registration_has_customer CHECK (purpose &lt;&gt; &#x27;registration&#x27; OR customer_id IS NOT NULL),
+    CONSTRAINT webauthn_challenges_expiry CHECK (expires_at &gt; created_at AND expires_at &lt;= created_at + interval &#x27;5 minutes&#x27;),
+    CONSTRAINT webauthn_challenges_used_in_time CHECK (used_at IS NULL OR used_at &gt;= created_at)
+);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-10" aria-labelledby="code-10-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_customers.sql</p><div class="notes"><p>Two demo customers, bcrypt hashes made by pgcrypto, and RFC 6238's public test secret.</p></div><div class="src"><pre class="code"><code class="language-sql">-- Demo customers. bcrypt by pgcrypto (the format Spring reads). The TOTP secret is RFC 6238&#x27;s published test secret,
+-- &quot;12345678901234567890&quot; (base32 GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ): demo only, so anyone can compute the codes.
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+INSERT INTO customers (email, name, user_handle, password_hash, totp_secret, balance_paise) VALUES
+    (&#x27;zoya@example.com&#x27;, &#x27;Zoya Khan&#x27;, gen_random_bytes(32), &#x27;{bcrypt}&#x27; || crypt(&#x27;zoya-demo-pass&#x27;, gen_salt(&#x27;bf&#x27;, 10)), convert_to(&#x27;12345678901234567890&#x27;, &#x27;UTF8&#x27;), 4250000),
+    (&#x27;dev@example.com&#x27;, &#x27;Dev Patel&#x27;, gen_random_bytes(32), &#x27;{bcrypt}&#x27; || crypt(&#x27;dev-demo-pass&#x27;, gen_salt(&#x27;bf&#x27;, 10)), convert_to(&#x27;12345678901234567890&#x27;, &#x27;UTF8&#x27;), 1890050);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-11" aria-labelledby="code-11-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>The RP id, the one allowed origin, lifetimes, and a demo signing key.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: tijori-passkeys
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/tijori
+    username: tijori
+    password: tijori
+tijori:
+  webauthn:
+    # The relying party: passkeys are bound to this domain, and only this web origin may use them.
+    rp-id: tijori.example
+    rp-name: Tijori
+    origin: https://app.tijori.example
+    challenge-lifetime: 5m
+  jwt:
+    issuer: https://auth.tijori.example
+    audience: tijori-api
+    access-lifetime: 10m
+    clock-skew: 30s
+    # Demo only: in production from a secret store. Overridden in tests.
+    secret: ZGVtby1vbmx5LXRpam9yaS1hY2Nlc3MtdG9rZW4ta2V5LTI1Ni1iaXRzLW9yLW1vcmU</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-12" aria-labelledby="code-12-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: tijori
+      POSTGRES_USER: tijori
+      POSTGRES_PASSWORD: tijori
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U tijori -d tijori&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-13" aria-labelledby="code-13-b" hidden><p class="path">src/main/java/com/tijori/passkeys/PasskeysApplication.java</p><div class="notes"><p>Entry point, and the <code>Clock</code> every time check uses.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+import java.time.Clock;
+
+@SpringBootApplication
+public class PasskeysApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(PasskeysApplication.class, args);
+    }
+
+    /** Issuing and checking tokens both read the time from here, so tests can move it past an expiry. */
+    @Bean
+    Clock clock() {
+        return Clock.systemUTC();
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>PasskeyContractTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>UncheckedCeremonyTrapTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>PasskeyDatabaseTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Security</td><td>401, 403, one user accessing another user's data, malicious input</td><td><code>PasskeySecurityTest</code> (9)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">"Not found" here is the unknown email and the unknown passkey, both answered like a wrong one on purpose. "Another user's data": a passkey claiming another customer, and a registration on another customer's challenge. <code>Device</code> wraps webauthn4j's emulator: a <code>NoneAttestationAuthenticator</code> behind a <code>ClientPlatform</code> at an origin, turning the server's options into the JSON a browser sends.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, webauthn4j 0.31.9, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0 -- in com.tijori.passkeys.PasskeySecurityTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.tijori.passkeys.PasskeyDatabaseTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.tijori.passkeys.UncheckedCeremonyTrapTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.tijori.passkeys.PasskeyContractTest
+[INFO] Tests run: 22, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">UncheckedCeremonyTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">PasskeySecurityTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">PasskeyDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">PasskeyContractTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">Device.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-6-b" aria-controls="tests-6" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/tijori/passkeys/UncheckedCeremonyTrapTest.java</p><div class="notes"><p>Written first: three answers the signature-only check accepted, each refused by the API, and the control.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import com.webauthn4j.WebAuthnManager;
+import com.webauthn4j.converter.AttestedCredentialDataConverter;
+import com.webauthn4j.converter.util.ObjectConverter;
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
+
+import java.io.ByteArrayOutputStream;
+import java.security.MessageDigest;
+import java.security.Signature;
+import java.util.Base64;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Written first. The old passkey code checked only the signature with the stored public key: not which challenge was
+ * signed, not which page asked, not which site the passkey was made for. Each test builds one answer the old code
+ * accepted, then sends it to the real API.
+ */
+class UncheckedCeremonyTrapTest extends ApiTest {
+
+    static final Base64.Decoder UNB64 = Base64.getUrlDecoder();
+
+    /** The old sign-in check, as it was: is this a valid signature by the stored key? */
+    boolean oldSignatureOnlyCheck(JsonNode assertion) throws Exception {
+        byte[] stored = jdbc.sql(&quot;SELECT attested_credential_data FROM passkeys WHERE credential_id = ?&quot;)
+                .param(UNB64.decode(assertion.path(&quot;rawId&quot;).asString())).query(byte[].class).single();
+        var key = new AttestedCredentialDataConverter(new ObjectConverter()).convert(stored).getCOSEKey().getPublicKey();
+        JsonNode r = assertion.path(&quot;response&quot;);
+        ByteArrayOutputStream signed = new ByteArrayOutputStream();
+        signed.write(UNB64.decode(r.path(&quot;authenticatorData&quot;).asString()));
+        signed.write(MessageDigest.getInstance(&quot;SHA-256&quot;).digest(UNB64.decode(r.path(&quot;clientDataJSON&quot;).asString())));
+        Signature verifier = Signature.getInstance(&quot;SHA256withECDSA&quot;);
+        verifier.initVerify(key);
+        verifier.update(signed.toByteArray());
+        return verifier.verify(UNB64.decode(r.path(&quot;signature&quot;).asString()));
+    }
+
+    @Test
+    void aSignInCapturedOnceAndSentAgainIsRefused() throws Exception {
+        Device phone = passkeyFor(&quot;zoya&quot;);
+        ObjectNode signIn = phone.get(authenticationOptions());
+        authenticate(signIn).andExpect(status().isOk());
+        // Captured from a log or a proxy: the very same answer, a minute later. A synced passkey&#x27;s counter stays 0,
+        // so only the used-up challenge stops it.
+        later(java.time.Duration.ofMinutes(1));
+        assertThat(oldSignatureOnlyCheck(signIn)).isTrue();             // the old code: signed in again
+        authenticate(signIn).andExpect(status().isUnauthorized());      // its challenge was used up
+    }
+
+    @Test
+    void aSignInAnsweredForAPhishingPageIsRefused() throws Exception {
+        Device phone = passkeyFor(&quot;zoya&quot;);
+        // tijori-login.example fetches a real challenge from Tijori and gets the passkey to answer it on its own page.
+        ObjectNode relayed = phone.at(&quot;https://tijori-login.example&quot;).get(authenticationOptions());
+        assertThat(oldSignatureOnlyCheck(relayed)).isTrue();
+        authenticate(relayed).andExpect(status().isUnauthorized());     // clientDataJSON names the page that asked
+    }
+
+    @Test
+    void aPasskeyMadeForAnotherSiteIsNotRegistered() throws Exception {
+        String token = codeToken(&quot;zoya&quot;);
+        // A look-alike page asks for a passkey for its own relying party, then hands the result to Tijori.
+        ObjectNode forOtherSite = new Device().create(registrationOptions(token), &quot;tijori-login.example&quot;);
+        assertThat(WebAuthnManager.createNonStrictWebAuthnManager().parseRegistrationResponseJSON(forOtherSite.toString())).isNotNull();   // the old code stored any parsable key
+        register(token, &quot;Zoya&#x27;s phone&quot;, forOtherSite).andExpect(status().isBadRequest());
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM passkeys&quot;).query(Long.class).single()).isZero();
+    }
+
+    @Test
+    void theRightAnswerSignsIn() throws Exception {
+        // The control: same passkey, Tijori&#x27;s own page, a fresh challenge.
+        Device phone = passkeyFor(&quot;zoya&quot;);
+        authenticate(phone.get(authenticationOptions())).andExpect(status().isOk());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/tijori/passkeys/PasskeySecurityTest.java</p><div class="notes"><p>401, 403, other customers, expiry, a copied key, codes once and near their time, ten parallel sign-ins, odd answers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class PasskeySecurityTest extends ApiTest {
+
+    @Test
+    void noTokenIs401() throws Exception {
+        mvc.perform(get(&quot;/accounts/me&quot;)).andExpect(status().isUnauthorized()).andExpect(header().string(&quot;WWW-Authenticate&quot;, &quot;Bearer&quot;));
+        send(&quot;/webauthn/registration/options&quot;, null, &quot;{}&quot;).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void addingAPasskeyNeedsASignInFromTheLastFiveMinutes() throws Exception {
+        String token = codeToken(&quot;zoya&quot;);
+        later(Duration.ofMinutes(5));   // the token itself is still valid for 10 minutes
+        send(&quot;/webauthn/registration/options&quot;, token, &quot;{}&quot;).andExpect(status().isForbidden()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Sign in again to add a passkey&quot;));
+        me(token).andExpect(status().isOk());
+    }
+
+    @Test
+    void aChallengeIssuedToAnotherCustomerCannotAddAPasskeyHere() throws Exception {
+        String dev = codeToken(&quot;dev&quot;);
+        String zoya = codeToken(&quot;zoya&quot;);
+        ObjectNode madeOnDevsChallenge = new Device().create(registrationOptions(dev));
+        register(zoya, &quot;Not mine&quot;, madeOnDevsChallenge).andExpect(status().isBadRequest());
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM passkeys&quot;).query(Long.class).single()).isZero();
+    }
+
+    @Test
+    void aPasskeyCannotSayItBelongsToAnotherCustomer() throws Exception {
+        Device devsPhone = passkeyFor(&quot;dev&quot;);
+        ObjectNode signIn = devsPhone.get(authenticationOptions());
+        byte[] zoyasHandle = jdbc.sql(&quot;SELECT user_handle FROM customers WHERE email = &#x27;zoya@example.com&#x27;&quot;).query(byte[].class).single();
+        ((ObjectNode) signIn.path(&quot;response&quot;)).put(&quot;userHandle&quot;, Base64.getUrlEncoder().withoutPadding().encodeToString(zoyasHandle));
+        authenticate(signIn).andExpect(status().isUnauthorized());   // the signature does not cover userHandle: the server must compare it
+    }
+
+    @Test
+    void aChallengeExpiresAfterFiveMinutes() throws Exception {
+        Device phone = passkeyFor(&quot;zoya&quot;);
+        JsonNode options = authenticationOptions();
+        later(Duration.ofMinutes(5).plusSeconds(1));
+        authenticate(phone.get(options)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void aCounterThatGoesBackwardsLooksLikeACloneAndIsRefused() throws Exception {
+        Device key = passkeyOn(Device.securityKey(), &quot;zoya&quot;);
+        long atRegistration = jdbc.sql(&quot;SELECT sign_count FROM passkeys&quot;).query(Long.class).single();
+        authenticate(key.get(authenticationOptions())).andExpect(status().isOk());
+        assertThat(jdbc.sql(&quot;SELECT sign_count FROM passkeys&quot;).query(Long.class).single()).isGreaterThan(atRegistration);   // the key&#x27;s new count is kept
+        jdbc.sql(&quot;UPDATE passkeys SET sign_count = 1000&quot;).update();   // as if the real key had signed 1000 times: this one is a copy
+        authenticate(key.get(authenticationOptions())).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void aCodeWorksOnceAndOnlyNearItsTime() throws Exception {
+        String code = currentCode();
+        codeSignIn(&quot;zoya@example.com&quot;, &quot;zoya-demo-pass&quot;, code).andExpect(status().isOk());
+        codeSignIn(&quot;zoya@example.com&quot;, &quot;zoya-demo-pass&quot;, code).andExpect(status().isUnauthorized());     // already used
+        later(Duration.ofSeconds(30));
+        String previous = Totp.code(TOTP_SECRET, Totp.step(CLOCK.now.getEpochSecond()) - 1);
+        assertThat(previous).isEqualTo(code);
+        String now = currentCode();
+        later(Duration.ofSeconds(30));
+        codeSignIn(&quot;zoya@example.com&quot;, &quot;zoya-demo-pass&quot;, now).andExpect(status().isOk());              // one step late: a slow phone clock
+        String old = Totp.code(TOTP_SECRET, Totp.step(CLOCK.now.getEpochSecond()) - 2);
+        codeSignIn(&quot;dev@example.com&quot;, &quot;dev-demo-pass&quot;, old).andExpect(status().isUnauthorized());     // two steps late: no
+    }
+
+    @Test
+    void tenParallelSignInsWithOneCodeGiveOneToken() throws Exception {
+        String code = currentCode();
+        CountDownLatch start = new CountDownLatch(1);
+        List&lt;Future&lt;Integer&gt;&gt; results = new ArrayList&lt;&gt;();
+        try (ExecutorService threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; 10; i++) {
+                results.add(threads.submit(() -&gt; {
+                    start.await();
+                    return codeSignIn(&quot;zoya@example.com&quot;, &quot;zoya-demo-pass&quot;, code).andReturn().getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+        }
+        List&lt;Integer&gt; statuses = new ArrayList&lt;&gt;();
+        for (Future&lt;Integer&gt; f : results) {
+            statuses.add(f.get());
+        }
+        assertThat(statuses).containsOnly(200, 401).filteredOn(s -&gt; s == 200).hasSize(1);
+    }
+
+    @Test
+    void oddAnswersAre400Or401NeverAnError() throws Exception {
+        passkeyFor(&quot;zoya&quot;);
+        for (String body : new String[]{&quot;{}&quot;, &quot;{\&quot;rawId\&quot;:\&quot;!!\&quot;,\&quot;response\&quot;:{}}&quot;, &quot;{\&quot;rawId\&quot;:\&quot;&#x27; OR &#x27;1&#x27;=&#x27;1\&quot;,\&quot;response\&quot;:{\&quot;clientDataJSON\&quot;:\&quot;x\&quot;}}&quot;,
+                &quot;{\&quot;rawId\&quot;:\&quot;&quot; + &quot;a&quot;.repeat(5000) + &quot;\&quot;,\&quot;response\&quot;:{\&quot;clientDataJSON\&quot;:\&quot;&quot; + &quot;b&quot;.repeat(5000) + &quot;\&quot;}}&quot;, &quot;[]&quot;}) {
+            int s = send(&quot;/webauthn/authentication&quot;, null, body).andReturn().getResponse().getStatus();
+            assertThat(s).as(body.length() &gt; 60 ? body.substring(0, 60) : body).isIn(400, 401);
+        }
+        send(&quot;/webauthn/authentication&quot;, null, &quot;not json&quot;).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/tijori/passkeys/PasskeyDatabaseTest.java</p><div class="notes"><p>Every named constraint with plain SQL; a save that fails rolls back, a check that fails uses the challenge up.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
+import tools.jackson.databind.node.ObjectNode;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The rules hold for every writer, not only this app: plain SQL straight to PostgreSQL, no Java checks on the way. */
+class PasskeyDatabaseTest extends ApiTest {
+
+    void violates(String constraint, String sql) {
+        assertThatThrownBy(() -&gt; jdbc.sql(sql).update()).isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining(constraint);
+    }
+
+    static final String ZOYA = &quot;(SELECT id FROM customers WHERE email = &#x27;zoya@example.com&#x27;)&quot;;
+
+    @Test
+    void challengeRulesHoldWithoutJava() {
+        violates(&quot;webauthn_challenges_length&quot;, &quot;INSERT INTO webauthn_challenges (challenge, purpose, created_at, expires_at) VALUES (&#x27;\\x0102&#x27;, &#x27;authentication&#x27;, now(), now() + interval &#x27;1 minute&#x27;)&quot;);
+        violates(&quot;webauthn_challenges_purpose&quot;, &quot;INSERT INTO webauthn_challenges (challenge, purpose, created_at, expires_at) VALUES (gen_random_bytes(32), &#x27;payment&#x27;, now(), now() + interval &#x27;1 minute&#x27;)&quot;);
+        violates(&quot;webauthn_challenges_registration_has_customer&quot;, &quot;INSERT INTO webauthn_challenges (challenge, purpose, created_at, expires_at) VALUES (gen_random_bytes(32), &#x27;registration&#x27;, now(), now() + interval &#x27;1 minute&#x27;)&quot;);
+        violates(&quot;webauthn_challenges_expiry&quot;, &quot;INSERT INTO webauthn_challenges (challenge, purpose, created_at, expires_at) VALUES (gen_random_bytes(32), &#x27;authentication&#x27;, now(), now() + interval &#x27;1 day&#x27;)&quot;);
+        violates(&quot;webauthn_challenges_used_in_time&quot;, &quot;INSERT INTO webauthn_challenges (challenge, purpose, created_at, expires_at, used_at) VALUES (gen_random_bytes(32), &#x27;authentication&#x27;, now(), now() + interval &#x27;1 minute&#x27;, now() - interval &#x27;1 hour&#x27;)&quot;);
+    }
+
+    @Test
+    void passkeyAndCustomerRulesHoldWithoutJava() {
+        String passkey = &quot;INSERT INTO passkeys (credential_id, customer_id, attested_credential_data, sign_count, label, created_at) VALUES &quot;;
+        violates(&quot;passkeys_credential_id_length&quot;, passkey + &quot;(&#x27;\\x01&#x27;, &quot; + ZOYA + &quot;, &#x27;\\x00&#x27;, 0, &#x27;Phone&#x27;, now())&quot;);
+        violates(&quot;passkeys_sign_count_range&quot;, passkey + &quot;(gen_random_bytes(16), &quot; + ZOYA + &quot;, &#x27;\\x00&#x27;, -1, &#x27;Phone&#x27;, now())&quot;);
+        violates(&quot;passkeys_label_length&quot;, passkey + &quot;(gen_random_bytes(16), &quot; + ZOYA + &quot;, &#x27;\\x00&#x27;, 0, &#x27;&#x27;, now())&quot;);
+        violates(&quot;customers_user_handle_length&quot;, &quot;UPDATE customers SET user_handle = &#x27;zoya@example.com&#x27; WHERE email = &#x27;zoya@example.com&#x27;&quot;);
+        violates(&quot;customers_totp_secret_length&quot;, &quot;UPDATE customers SET totp_secret = &#x27;\\x0102&#x27; WHERE email = &#x27;zoya@example.com&#x27;&quot;);
+        violates(&quot;customers_balance_nonnegative&quot;, &quot;UPDATE customers SET balance_paise = -1 WHERE email = &#x27;zoya@example.com&#x27;&quot;);
+        violates(&quot;customers_email_lower&quot;, &quot;UPDATE customers SET email = &#x27;Zoya@Example.com&#x27; WHERE email = &#x27;zoya@example.com&#x27;&quot;);
+    }
+
+    /**
+     * Registration is one transaction. If the passkey cannot be saved, the challenge is not used up either, so the
+     * customer&#x27;s phone can send the same answer again. (A failed check, by contrast, does use it up: see Security.)
+     */
+    @Test
+    void aSaveThatFailsRollsBackAndTheSameAnswerCanBeSentAgain() throws Exception {
+        String token = codeToken(&quot;zoya&quot;);
+        ObjectNode answer = new Device().create(registrationOptions(token));
+        jdbc.sql(&quot;&quot;&quot;
+                CREATE FUNCTION refuse_passkeys() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION &#x27;storage is down&#x27;; END $$ LANGUAGE plpgsql;
+                CREATE TRIGGER refuse_passkeys BEFORE INSERT ON passkeys FOR EACH ROW EXECUTE FUNCTION refuse_passkeys()&quot;&quot;&quot;).update();
+        try {
+            assertThatThrownBy(() -&gt; register(token, &quot;Zoya&#x27;s phone&quot;, answer)).hasRootCauseMessage(&quot;ERROR: storage is down\n  Where: PL/pgSQL function refuse_passkeys() line 1 at RAISE&quot;);
+        } finally {
+            jdbc.sql(&quot;DROP TRIGGER refuse_passkeys ON passkeys; DROP FUNCTION refuse_passkeys()&quot;).update();
+        }
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM webauthn_challenges WHERE used_at IS NULL&quot;).query(Long.class).single()).isEqualTo(1);
+        register(token, &quot;Zoya&#x27;s phone&quot;, answer).andExpect(status().isCreated());
+    }
+
+    @Test
+    void aFailedCheckUsesUpTheChallenge() throws Exception {
+        String token = codeToken(&quot;zoya&quot;);
+        Device phone = new Device();
+        ObjectNode forOtherSite = phone.create(registrationOptions(token), &quot;tijori-login.example&quot;);
+        register(token, &quot;Zoya&#x27;s phone&quot;, forOtherSite).andExpect(status().isBadRequest());
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM webauthn_challenges WHERE used_at IS NULL&quot;).query(Long.class).single()).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/tijori/passkeys/PasskeyContractTest.java</p><div class="notes"><p>Code sign-in, both ceremonies, wrong answers, bad bodies.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.matchesPattern;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class PasskeyContractTest extends ApiTest {
+
+    @Test
+    void passwordAndCodeGiveATokenThatOpensTheAccount() throws Exception {
+        String token = body(codeSignIn(&quot;Zoya@Example.com&quot;, &quot;zoya-demo-pass&quot;, currentCode()).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.signedInWith&quot;, contains(&quot;pwd&quot;, &quot;otp&quot;, &quot;mfa&quot;))).andExpect(jsonPath(&quot;$.expiresIn&quot;).value(600))).get(&quot;accessToken&quot;).asString();
+        me(token).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.name&quot;).value(&quot;Zoya Khan&quot;)).andExpect(jsonPath(&quot;$.balancePaise&quot;).value(4250000));
+    }
+
+    @Test
+    void registrationOptionsNameThisSiteAndAskForAPasskeyWithUserVerification() throws Exception {
+        JsonNode o = registrationOptions(codeToken(&quot;zoya&quot;));
+        assertThat(o.path(&quot;rp&quot;).path(&quot;id&quot;).asString()).isEqualTo(&quot;tijori.example&quot;);
+        assertThat(o.path(&quot;challenge&quot;).asString()).matches(&quot;[\\w-]{43}&quot;);
+        assertThat(o.path(&quot;user&quot;).path(&quot;name&quot;).asString()).isEqualTo(&quot;zoya@example.com&quot;);
+        assertThat(o.path(&quot;user&quot;).path(&quot;id&quot;).asString()).matches(&quot;[\\w-]{43}&quot;).doesNotContain(&quot;zoya&quot;);
+        assertThat(o.path(&quot;authenticatorSelection&quot;).path(&quot;userVerification&quot;).asString()).isEqualTo(&quot;required&quot;);
+        assertThat(o.path(&quot;authenticatorSelection&quot;).path(&quot;residentKey&quot;).asString()).isEqualTo(&quot;required&quot;);
+    }
+
+    @Test
+    void aRegisteredPasskeySignsInWithoutAPassword() throws Exception {
+        String token = codeToken(&quot;zoya&quot;);
+        Device phone = new Device();
+        register(token, &quot;Zoya&#x27;s phone&quot;, phone.create(registrationOptions(token))).andExpect(status().isCreated())
+                .andExpect(header().string(&quot;Location&quot;, matchesPattern(&quot;/webauthn/passkeys/[\\w-]+&quot;))).andExpect(jsonPath(&quot;$.label&quot;).value(&quot;Zoya&#x27;s phone&quot;));
+        String passkeyToken = body(authenticate(phone.get(authenticationOptions())).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.signedInWith&quot;, contains(&quot;hwk&quot;, &quot;user&quot;)))).get(&quot;accessToken&quot;).asString();
+        me(passkeyToken).andExpect(jsonPath(&quot;$.name&quot;).value(&quot;Zoya Khan&quot;));
+    }
+
+    @Test
+    void wrongPasswordWrongCodeOrUnknownEmailAreTheSame401() throws Exception {
+        codeSignIn(&quot;zoya@example.com&quot;, &quot;not-her-password&quot;, currentCode()).andExpect(status().isUnauthorized()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Wrong email, password or code&quot;));
+        codeSignIn(&quot;zoya@example.com&quot;, &quot;zoya-demo-pass&quot;, &quot;000000&quot;.equals(currentCode()) ? &quot;111111&quot; : &quot;000000&quot;).andExpect(status().isUnauthorized()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Wrong email, password or code&quot;));
+        codeSignIn(&quot;nobody@example.com&quot;, &quot;any-password&quot;, currentCode()).andExpect(status().isUnauthorized()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Wrong email, password or code&quot;));
+    }
+
+    @Test
+    void badBodiesAre400() throws Exception {
+        codeSignIn(&quot;zoya@example.com&quot;, &quot;zoya-demo-pass&quot;, &quot;12345&quot;).andExpect(status().isBadRequest());
+        codeSignIn(&quot;not-an-email&quot;, &quot;zoya-demo-pass&quot;, &quot;123456&quot;).andExpect(status().isBadRequest());
+        String token = codeToken(&quot;zoya&quot;);
+        send(&quot;/webauthn/registration&quot;, token, &quot;{\&quot;label\&quot;:\&quot;\&quot;,\&quot;credential\&quot;:{}}&quot;).andExpect(status().isBadRequest());
+        send(&quot;/webauthn/registration&quot;, token, &quot;{\&quot;label\&quot;:\&quot;x\&quot;}&quot;).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/tijori/passkeys/Device.java</p><div class="notes"><p>The emulated phone: authenticator and browser, at an origin.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import com.webauthn4j.data.AttestationConveyancePreference;
+import com.webauthn4j.data.AuthenticatorAssertionResponse;
+import com.webauthn4j.data.AuthenticatorAttestationResponse;
+import com.webauthn4j.data.AuthenticatorSelectionCriteria;
+import com.webauthn4j.data.PublicKeyCredential;
+import com.webauthn4j.data.PublicKeyCredentialCreationOptions;
+import com.webauthn4j.data.PublicKeyCredentialDescriptor;
+import com.webauthn4j.data.PublicKeyCredentialParameters;
+import com.webauthn4j.data.PublicKeyCredentialRequestOptions;
+import com.webauthn4j.data.PublicKeyCredentialRpEntity;
+import com.webauthn4j.data.PublicKeyCredentialType;
+import com.webauthn4j.data.PublicKeyCredentialUserEntity;
+import com.webauthn4j.data.ResidentKeyRequirement;
+import com.webauthn4j.data.UserVerificationRequirement;
+import com.webauthn4j.data.attestation.statement.COSEAlgorithmIdentifier;
+import com.webauthn4j.data.client.Origin;
+import com.webauthn4j.data.client.challenge.DefaultChallenge;
+import com.webauthn4j.test.authenticator.webauthn.NoneAttestationAuthenticator;
+import com.webauthn4j.test.authenticator.webauthn.WebAuthnAuthenticatorAdaptor;
+import com.webauthn4j.test.client.ClientPlatform;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
+
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.List;
+
+/**
+ * A phone: an authenticator (webauthn4j&#x27;s emulator, with real keys and real signatures) and the browser in front of
+ * it, at a web origin. It turns the server&#x27;s options JSON into the JSON a browser would send back. By default its
+ * signature counter stays 0, as synced passkeys commonly report; securityKey() counts up like a hardware key.
+ */
+final class Device {
+
+    static final String TIJORI = &quot;https://app.tijori.example&quot;;
+    static final JsonMapper JSON = JsonMapper.builder().build();
+    private static final Base64.Encoder B64 = Base64.getUrlEncoder().withoutPadding();
+    private static final Base64.Decoder UNB64 = Base64.getUrlDecoder();
+
+    final ClientPlatform browser;
+
+    Device() {
+        this(false);
+    }
+
+    private Device(boolean counting) {
+        NoneAttestationAuthenticator authenticator = new NoneAttestationAuthenticator();
+        authenticator.setCountUpEnabled(counting);
+        browser = new ClientPlatform(new Origin(TIJORI), new WebAuthnAuthenticatorAdaptor(authenticator));
+    }
+
+    static Device securityKey() {
+        return new Device(true);
+    }
+
+    /** The same authenticator, but the page asking is at another origin (a phishing page, or a client that lies). */
+    Device at(String origin) {
+        browser.setOrigin(new Origin(origin));
+        return this;
+    }
+
+    /** navigator.credentials.create(options), as JSON. rpIdOverride plays a page that asks for another relying party. */
+    ObjectNode create(JsonNode o, String rpIdOverride) {
+        List&lt;PublicKeyCredentialParameters&gt; algs = new ArrayList&lt;&gt;();
+        o.path(&quot;pubKeyCredParams&quot;).forEach(p -&gt; algs.add(new PublicKeyCredentialParameters(PublicKeyCredentialType.PUBLIC_KEY, COSEAlgorithmIdentifier.create(p.path(&quot;alg&quot;).asLong()))));
+        List&lt;PublicKeyCredentialDescriptor&gt; exclude = new ArrayList&lt;&gt;();
+        o.path(&quot;excludeCredentials&quot;).forEach(c -&gt; exclude.add(new PublicKeyCredentialDescriptor(PublicKeyCredentialType.PUBLIC_KEY, UNB64.decode(c.path(&quot;id&quot;).asString()), null)));
+        PublicKeyCredentialCreationOptions options = new PublicKeyCredentialCreationOptions(
+                new PublicKeyCredentialRpEntity(rpIdOverride != null ? rpIdOverride : o.path(&quot;rp&quot;).path(&quot;id&quot;).asString(), o.path(&quot;rp&quot;).path(&quot;name&quot;).asString()),
+                new PublicKeyCredentialUserEntity(UNB64.decode(o.path(&quot;user&quot;).path(&quot;id&quot;).asString()), o.path(&quot;user&quot;).path(&quot;name&quot;).asString(), o.path(&quot;user&quot;).path(&quot;displayName&quot;).asString()),
+                new DefaultChallenge(UNB64.decode(o.path(&quot;challenge&quot;).asString())), algs, o.path(&quot;timeout&quot;).asLong(), exclude,
+                new AuthenticatorSelectionCriteria(null, ResidentKeyRequirement.REQUIRED, UserVerificationRequirement.REQUIRED),
+                AttestationConveyancePreference.NONE, null);
+        PublicKeyCredential&lt;AuthenticatorAttestationResponse, ?&gt; credential = browser.create(options);
+        ObjectNode json = base(credential.getRawId());
+        json.putObject(&quot;response&quot;).put(&quot;clientDataJSON&quot;, B64.encodeToString(credential.getResponse().getClientDataJSON()))
+                .put(&quot;attestationObject&quot;, B64.encodeToString(credential.getResponse().getAttestationObject())).putArray(&quot;transports&quot;).add(&quot;internal&quot;);
+        return json;
+    }
+
+    ObjectNode create(JsonNode options) {
+        return create(options, null);
+    }
+
+    /** navigator.credentials.get(options), as JSON. */
+    ObjectNode get(JsonNode o) {
+        PublicKeyCredentialRequestOptions options = new PublicKeyCredentialRequestOptions(new DefaultChallenge(UNB64.decode(o.path(&quot;challenge&quot;).asString())),
+                o.path(&quot;timeout&quot;).asLong(), o.path(&quot;rpId&quot;).asString(), List.of(), UserVerificationRequirement.REQUIRED, null);
+        PublicKeyCredential&lt;AuthenticatorAssertionResponse, ?&gt; credential = browser.get(options);
+        ObjectNode json = base(credential.getRawId());
+        json.putObject(&quot;response&quot;).put(&quot;clientDataJSON&quot;, B64.encodeToString(credential.getResponse().getClientDataJSON()))
+                .put(&quot;authenticatorData&quot;, B64.encodeToString(credential.getResponse().getAuthenticatorData()))
+                .put(&quot;signature&quot;, B64.encodeToString(credential.getResponse().getSignature()))
+                .put(&quot;userHandle&quot;, B64.encodeToString(credential.getResponse().getUserHandle()));
+        return json;
+    }
+
+    private static ObjectNode base(byte[] rawId) {
+        ObjectNode json = JSON.createObjectNode().put(&quot;id&quot;, B64.encodeToString(rawId)).put(&quot;rawId&quot;, B64.encodeToString(rawId)).put(&quot;type&quot;, &quot;public-key&quot;);
+        json.putObject(&quot;clientExtensionResults&quot;);
+        return json;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/tijori/passkeys/ApiTest.java</p><div class="notes"><p>Shared setup: the test clock, a test key, a clean slate before each test, ceremony helpers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.bean.override.convention.TestBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
+
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Shared setup: the whole app on a real PostgreSQL, a test signing key, a clock the tests move, and before each test
+ * the two demo customers with no passkeys, no challenges and no used codes.
+ */
+@SpringBootTest(properties = &quot;tijori.jwt.secret=&quot; + ApiTest.SECRET)
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    static final String SECRET = &quot;dGVzdC1vbmx5LXRpam9yaS1hY2Nlc3MtdG9rZW4ta2V5LTI1Ni1iaXRzLW9yLW1vcmU&quot;;
+    static final byte[] TOTP_SECRET = &quot;12345678901234567890&quot;.getBytes(StandardCharsets.US_ASCII);   // RFC 6238&#x27;s test secret, as in V2
+    static final Instant START = Instant.parse(&quot;2026-10-19T06:00:00Z&quot;);
+    static final JsonMapper JSON = JsonMapper.builder().build();
+
+    static final class TestClock extends Clock {
+        Instant now = START;
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return now;
+        }
+    }
+
+    static final TestClock CLOCK = new TestClock();
+
+    @TestBean
+    Clock clock;
+
+    static Clock clock() {
+        return CLOCK;
+    }
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+
+    @BeforeEach
+    void cleanSlate() {
+        CLOCK.now = START;
+        jdbc.sql(&quot;DELETE FROM passkeys&quot;).update();
+        jdbc.sql(&quot;DELETE FROM webauthn_challenges&quot;).update();
+        jdbc.sql(&quot;UPDATE customers SET totp_last_step = NULL&quot;).update();
+    }
+
+    void later(Duration d) {
+        CLOCK.now = CLOCK.now.plus(d);
+    }
+
+    /** The code the customer&#x27;s authenticator app shows right now. */
+    static String currentCode() {
+        return Totp.code(TOTP_SECRET, Totp.step(CLOCK.now.getEpochSecond()));
+    }
+
+    ResultActions codeSignIn(String email, String password, String code) throws Exception {
+        return mvc.perform(post(&quot;/2fa/totp&quot;).contentType(MediaType.APPLICATION_JSON)
+                .content(&quot;{\&quot;email\&quot;:\&quot;%s\&quot;,\&quot;password\&quot;:\&quot;%s\&quot;,\&quot;code\&quot;:\&quot;%s\&quot;}&quot;.formatted(email, password, code)));
+    }
+
+    /** A sign-in with password and code that must work; then the clock moves past that code&#x27;s 30 seconds. */
+    String codeToken(String member) throws Exception {
+        String token = body(codeSignIn(member + &quot;@example.com&quot;, member + &quot;-demo-pass&quot;, currentCode()).andExpect(status().isOk())).get(&quot;accessToken&quot;).asString();
+        later(Duration.ofSeconds(30));
+        return token;
+    }
+
+    ResultActions send(String path, String token, String json) throws Exception {
+        var request = org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path).contentType(MediaType.APPLICATION_JSON).content(json);
+        return mvc.perform(token == null ? request : request.header(&quot;Authorization&quot;, &quot;Bearer &quot; + token));
+    }
+
+    JsonNode registrationOptions(String token) throws Exception {
+        return body(send(&quot;/webauthn/registration/options&quot;, token, &quot;{}&quot;).andExpect(status().isOk()));
+    }
+
+    ResultActions register(String token, String label, ObjectNode credential) throws Exception {
+        ObjectNode body = JSON.createObjectNode().put(&quot;label&quot;, label);
+        body.set(&quot;credential&quot;, credential);
+        return send(&quot;/webauthn/registration&quot;, token, body.toString());
+    }
+
+    /** A passkey on this device for this customer, through the real registration. */
+    Device passkeyFor(String member) throws Exception {
+        return passkeyOn(new Device(), member);
+    }
+
+    Device passkeyOn(Device phone, String member) throws Exception {
+        String token = codeToken(member);
+        register(token, member + &quot;&#x27;s phone&quot;, phone.create(registrationOptions(token))).andExpect(status().isCreated());
+        return phone;
+    }
+
+    JsonNode authenticationOptions() throws Exception {
+        return body(send(&quot;/webauthn/authentication/options&quot;, null, &quot;{}&quot;).andExpect(status().isOk()));
+    }
+
+    ResultActions authenticate(ObjectNode assertion) throws Exception {
+        return send(&quot;/webauthn/authentication&quot;, null, assertion.toString());
+    }
+
+    ResultActions me(String token) throws Exception {
+        return mvc.perform(get(&quot;/accounts/me&quot;).header(&quot;Authorization&quot;, &quot;Bearer &quot; + token));
+    }
+
+    static JsonNode body(ResultActions result) throws Exception {
+        return JSON.readTree(result.andReturn().getResponse().getContentAsString());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-6" aria-labelledby="tests-6-b" hidden><p class="path">src/test/java/com/tijori/passkeys/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker: the CHECK constraints on passkeys, challenges and codes behave exactly as in production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/tijori/passkeys/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=ManagePasskeysChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 22 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 26 tests pass (22 station tests and 4 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 25 minutes</p><h2>List and remove passkeys</h2><p><code>GET /webauthn/passkeys</code> lists the customer's own passkeys (id, label); <code>DELETE /webauthn/passkeys/{id}</code> removes one (<code>204</code>), after which it cannot sign in. Another customer's passkey is <code>404</code> and stays.</p><p><b>Done when:</b> both tests in <code>ManagePasskeysChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Put the customer in the <code>DELETE</code>'s <code>WHERE</code>: another customer's id then finds no row.</li><li>The filter chain refuses new paths until they have a rule.</li></ul></details><p class="path">challenge/ManagePasskeysChallengeTest.java</p><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: GET /webauthn/passkeys lists the customer&#x27;s own passkeys (id, label); DELETE /webauthn/passkeys/{id}
+ * removes one (204), after which it cannot sign in. Another customer&#x27;s passkey is 404 and stays.
+ */
+class ManagePasskeysChallengeTest extends ApiTest {
+
+    @Test
+    void aCustomerListsAndRemovesTheirOwnPasskey() throws Exception {
+        Device phone = passkeyFor(&quot;zoya&quot;);
+        String token = codeToken(&quot;zoya&quot;);
+        String id = body(mvc.perform(get(&quot;/webauthn/passkeys&quot;).header(&quot;Authorization&quot;, &quot;Bearer &quot; + token))
+                .andExpect(status().isOk()).andExpect(jsonPath(&quot;$[*].label&quot;, contains(&quot;zoya&#x27;s phone&quot;)))).get(0).get(&quot;id&quot;).asString();
+        mvc.perform(delete(&quot;/webauthn/passkeys/{id}&quot;, id).header(&quot;Authorization&quot;, &quot;Bearer &quot; + token)).andExpect(status().isNoContent());
+        authenticate(phone.get(authenticationOptions())).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void anotherCustomersPasskeyIs404AndStays() throws Exception {
+        Device zoyasPhone = passkeyFor(&quot;zoya&quot;);
+        String zoyasId = body(mvc.perform(get(&quot;/webauthn/passkeys&quot;).header(&quot;Authorization&quot;, &quot;Bearer &quot; + codeToken(&quot;zoya&quot;)))).get(0).get(&quot;id&quot;).asString();
+        mvc.perform(delete(&quot;/webauthn/passkeys/{id}&quot;, zoyasId).header(&quot;Authorization&quot;, &quot;Bearer &quot; + codeToken(&quot;dev&quot;))).andExpect(status().isNotFound());
+        authenticate(zoyasPhone.get(authenticationOptions())).andExpect(status().isOk());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/PasskeyListController.java</p><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.Base64;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+class PasskeyListController {
+
+    private final JdbcClient jdbc;
+
+    PasskeyListController(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    @GetMapping(&quot;/webauthn/passkeys&quot;)
+    List&lt;Map&lt;String, String&gt;&gt; list(@AuthenticationPrincipal Jwt jwt) {
+        return jdbc.sql(&quot;SELECT credential_id, label FROM passkeys WHERE customer_id = ? ORDER BY created_at&quot;).param(Long.parseLong(jwt.getSubject()))
+                .query((rs, n) -&gt; Map.of(&quot;id&quot;, Base64.getUrlEncoder().withoutPadding().encodeToString(rs.getBytes(1)), &quot;label&quot;, rs.getString(2))).list();
+    }
+
+    /** The customer is part of the query: another customer&#x27;s passkey finds no row, like an unknown one. */
+    @DeleteMapping(&quot;/webauthn/passkeys/{id}&quot;)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void remove(@AuthenticationPrincipal Jwt jwt, @PathVariable String id) {
+        byte[] credentialId;
+        try {
+            credentialId = Base64.getUrlDecoder().decode(id);
+        } catch (IllegalArgumentException notBase64) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;No such passkey&quot;);
+        }
+        if (jdbc.sql(&quot;DELETE FROM passkeys WHERE credential_id = ? AND customer_id = ?&quot;).params(credentialId, Long.parseLong(jwt.getSubject())).update() == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, &quot;No such passkey&quot;);
+        }
+    }
+}</code></pre></div><p class="path">challenge/solution/SecurityConfig.java</p><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+class SecurityConfig {
+
+    /** The sign-in ceremonies are open (they are the proof); adding a passkey and the account need a token. */
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems) throws Exception {
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(HttpMethod.POST, &quot;/2fa/totp&quot;, &quot;/webauthn/authentication/options&quot;, &quot;/webauthn/authentication&quot;).permitAll()
+                        .requestMatchers(HttpMethod.POST, &quot;/webauthn/registration/options&quot;, &quot;/webauthn/registration&quot;).hasAuthority(&quot;SCOPE_accounts&quot;)
+                        .requestMatchers(HttpMethod.GET, &quot;/accounts/me&quot;, &quot;/webauthn/passkeys&quot;).hasAuthority(&quot;SCOPE_accounts&quot;)
+                        .requestMatchers(HttpMethod.DELETE, &quot;/webauthn/passkeys/*&quot;).hasAuthority(&quot;SCOPE_accounts&quot;)
+                        .requestMatchers(&quot;/error&quot;).permitAll()   // otherwise a server error is forwarded here and shown as a 401
+                        .anyRequest().denyAll())
+                .oauth2ResourceServer(o -&gt; o.jwt(jwt -&gt; {}).authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable());   // no cookies: the token travels in a header the browser never adds by itself
+        return http.build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 40 minutes</p><h2>Lock code sign-in after five wrong codes</h2><p>After 5 wrong codes in a row (with the right password), code sign-in is locked for 15 minutes; even the right code then gets the same <code>401</code>. A good sign-in resets the count.</p><p><b>Done when:</b> both tests in <code>CodeLockoutChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Two columns in a V3 migration, with a CHECK on the count.</li><li>Lock the customer row (<code>SELECT ... FOR UPDATE</code>) so parallel guesses are counted one by one.</li><li>A code that was already used is a replay, not a guess: do not count it, or ten parallel requests lock the account.</li></ul></details><p class="path">challenge/CodeLockoutChallengeTest.java</p><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: a six-digit code has a million values. After 5 wrong codes in a row (with the right password), code
+ * sign-in is locked for 15 minutes: even the right code is refused with the same 401. A good sign-in resets the count.
+ */
+class CodeLockoutChallengeTest extends ApiTest {
+
+    @org.junit.jupiter.api.BeforeEach
+    void noFailedCodes() {
+        jdbc.sql(&quot;UPDATE customers SET failed_codes = 0, codes_locked_until = NULL&quot;).update();   // other tests may have tried a wrong code
+    }
+
+    static String wrong(String right) {
+        return right.equals(&quot;000000&quot;) ? &quot;111111&quot; : &quot;000000&quot;;
+    }
+
+    @Test
+    void fiveWrongCodesLockCodeSignInForFifteenMinutes() throws Exception {
+        for (int i = 0; i &lt; 5; i++) {
+            codeSignIn(&quot;dev@example.com&quot;, &quot;dev-demo-pass&quot;, wrong(currentCode())).andExpect(status().isUnauthorized());
+        }
+        codeSignIn(&quot;dev@example.com&quot;, &quot;dev-demo-pass&quot;, currentCode()).andExpect(status().isUnauthorized());
+        later(Duration.ofMinutes(15).plusSeconds(1));
+        codeSignIn(&quot;dev@example.com&quot;, &quot;dev-demo-pass&quot;, currentCode()).andExpect(status().isOk());
+    }
+
+    @Test
+    void aGoodSignInResetsTheCount() throws Exception {
+        for (int i = 0; i &lt; 4; i++) {
+            codeSignIn(&quot;dev@example.com&quot;, &quot;dev-demo-pass&quot;, wrong(currentCode())).andExpect(status().isUnauthorized());
+        }
+        codeSignIn(&quot;dev@example.com&quot;, &quot;dev-demo-pass&quot;, currentCode()).andExpect(status().isOk());
+        later(Duration.ofSeconds(30));
+        codeSignIn(&quot;dev@example.com&quot;, &quot;dev-demo-pass&quot;, wrong(currentCode())).andExpect(status().isUnauthorized());
+        codeSignIn(&quot;dev@example.com&quot;, &quot;dev-demo-pass&quot;, currentCode()).andExpect(status().isOk());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/V3__code_lockout.sql</p><div class="src"><pre class="code"><code class="language-sql">ALTER TABLE customers ADD COLUMN failed_codes integer NOT NULL DEFAULT 0;
+ALTER TABLE customers ADD COLUMN codes_locked_until timestamptz;
+ALTER TABLE customers ADD CONSTRAINT customers_failed_codes_range CHECK (failed_codes BETWEEN 0 AND 5);</code></pre></div><p class="path">challenge/solution/CodeSignIn.java</p><div class="src"><pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.security.MessageDigest;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Locale;
+import java.util.Optional;
+
+/** The fallback: password and a code from an authenticator app. Never a password alone, never an SMS. */
+@Service
+class CodeSignIn {
+
+    private final JdbcClient jdbc;
+    private final PasswordEncoder encoder;
+    private final Clock clock;
+    private final String dummyHash;
+
+    CodeSignIn(JdbcClient jdbc, PasswordEncoder encoder, Clock clock) {
+        this.jdbc = jdbc;
+        this.encoder = encoder;
+        this.clock = clock;
+        this.dummyHash = encoder.encode(&quot;no-such-customer&quot;);
+    }
+
+    private record Customer(long id, String passwordHash, byte[] totpSecret) {
+    }
+
+    /** Demo rule: 5 wrong codes in a row lock code sign-in for 15 minutes. */
+    static final int MAX_WRONG_CODES = 5;
+    static final Duration LOCK = Duration.ofMinutes(15);
+
+    /**
+     * The customer&#x27;s id if the password is right, code sign-in is not locked, and the code is the current one (or
+     * the one before) and unused. A wrong code counts (a used one does not: it is a replay, not a guess); the fifth locks; a good sign-in resets the count.
+     */
+    @Transactional
+    Optional&lt;Long&gt; signIn(String email, String password, String code) {
+        Optional&lt;Customer&gt; customer = jdbc.sql(&quot;SELECT id, password_hash, totp_secret FROM customers WHERE email = ? FOR UPDATE&quot;)
+                .param(email.strip().toLowerCase(Locale.ROOT)).query(Customer.class).optional();
+        boolean passwordOk = encoder.matches(password, customer.map(Customer::passwordHash).orElse(dummyHash));
+        if (customer.isEmpty() || !passwordOk) {
+            return Optional.empty();
+        }
+        long id = customer.get().id();
+        OffsetDateTime now = OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
+        if (jdbc.sql(&quot;SELECT codes_locked_until &gt; ? FROM customers WHERE id = ?&quot;).params(now, id).query(Boolean.class).optional().orElse(false)) {
+            return Optional.empty();   // the same answer as a wrong code: nothing tells a guesser they are locked out
+        }
+        long step = Totp.step(now.toEpochSecond());
+        for (long s = step; s &gt;= step - 1; s--) {
+            if (MessageDigest.isEqual(Totp.code(customer.get().totpSecret(), s).getBytes(StandardCharsets.US_ASCII), code.getBytes(StandardCharsets.US_ASCII))) {
+                Optional&lt;Long&gt; ok = jdbc.sql(&quot;UPDATE customers SET totp_last_step = ?, failed_codes = 0, codes_locked_until = NULL WHERE id = ? AND (totp_last_step IS NULL OR totp_last_step &lt; ?) RETURNING id&quot;)
+                        .params(s, id, s).query(Long.class).optional();
+                return ok;   // empty if already used: a replay, not a guess, so it does not count
+            }
+        }
+        jdbc.sql(&quot;&quot;&quot;
+                UPDATE customers SET failed_codes = CASE WHEN failed_codes + 1 &gt;= ? THEN 0 ELSE failed_codes + 1 END,
+                                     codes_locked_until = CASE WHEN failed_codes + 1 &gt;= ? THEN ? ELSE codes_locked_until END
+                WHERE id = ?&quot;&quot;&quot;).params(MAX_WRONG_CODES, MAX_WRONG_CODES, now.plus(LOCK), id).update();
+        return Optional.empty();
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Lost phone, and the apps</h2>
+<p>A customer loses the only phone with their passkey and their code app. Design recovery without SMS: what identity checks, what waiting period, and what the customer is told. Then: Tijori's Android app sends <code>android:apk-key-hash:...</code> as its origin. How do you accept it without accepting every origin?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: answers a signature-only check accepted, made with an emulated phone.</li>
+<li>Store challenges in the database, single-use, with their purpose and owner.</li>
+<li>Let webauthn4j check the answers against our challenge, our origin and our RP id.</li>
+<li>Add the password-plus-code fallback, with single-use codes.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Own endpoints on webauthn4j, challenges in PostgreSQL</td><td>More code than a built-in; every check visible.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Check only the signature</td><td>Replays and answers for other pages pass.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Spring Security's <code>webAuthn()</code> DSL</td><td>Little code; its own endpoint names and session-based options.</td><td><span class="pill warn">Good for a web app with sessions</span></td></tr><tr><td>SMS codes as the fallback</td><td>SIM swaps; the original incident.</td><td><span class="pill bad">Not here</span></td></tr><tr><td>Ask for attestation and trust only certain authenticators</td><td>Metadata service, privacy prompts; for regulated keys.</td><td><span class="pill warn">When the authenticator model matters</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Object</th><th>What</th><th>Why</th></tr></thead><tbody><tr><td><code>webauthn_challenges_length</code>, <code>_expiry</code></td><td>CHECKs: 32 bytes, at most 5 minutes</td><td>No guessable or eternal challenges from any writer.</td></tr><tr><td><code>webauthn_challenges_registration_has_customer</code></td><td>CHECK</td><td>A registration challenge always belongs to one customer.</td></tr><tr><td><code>passkeys_sign_count_range</code>, <code>_credential_id_length</code></td><td>CHECKs</td><td>What WebAuthn allows: a 32-bit counter, ids of 16 to 1023 bytes.</td></tr><tr><td><code>customers_user_handle_length</code>, <code>_unique</code></td><td>CHECK and UNIQUE</td><td>A random 32-byte id per customer, never the email.</td></tr><tr><td><code>customers_totp_secret_length</code></td><td>CHECK: at least 20 bytes</td><td>RFC 4226's minimum of 128 bits, recommended 160.</td></tr></tbody></table></div>
+<p><strong>Transaction boundary:</strong> one ceremony is one transaction. A failed check commits (the challenge stays used); a failed save rolls back (the same answer can be sent again).</p>
+<pre class="code"><code class="language-sql">CREATE TABLE customers (
+    id             bigint GENERATED ALWAYS AS IDENTITY CONSTRAINT customers_pk PRIMARY KEY,
+    email          text NOT NULL,
+    name           text NOT NULL,
+    -- WebAuthn&#x27;s user.id: random bytes, never the email, so a passkey reveals nothing about who it belongs to.
+    user_handle    bytea NOT NULL,
+    password_hash  text NOT NULL,
+    totp_secret    bytea NOT NULL,
+    -- The last 30-second step whose code was accepted: a code works once.
+    totp_last_step bigint,
+    balance_paise  bigint NOT NULL,
+    CONSTRAINT customers_email_lower CHECK (email = lower(email)),
+    CONSTRAINT customers_email_unique UNIQUE (email),
+    CONSTRAINT customers_user_handle_unique UNIQUE (user_handle),
+    CONSTRAINT customers_user_handle_length CHECK (octet_length(user_handle) = 32),
+    CONSTRAINT customers_password_hash_shape CHECK (password_hash ~ &#x27;^\{bcrypt\}\$2[aby]\$(1[0-9]|2[0-9]|3[01])\$[./A-Za-z0-9]{53}$&#x27;),
+    CONSTRAINT customers_totp_secret_length CHECK (octet_length(totp_secret) &gt;= 20),
+    CONSTRAINT customers_balance_nonnegative CHECK (balance_paise &gt;= 0)
+);
+
+CREATE TABLE passkeys (
+    credential_id            bytea CONSTRAINT passkeys_pk PRIMARY KEY,
+    customer_id              bigint NOT NULL CONSTRAINT passkeys_customer_fk REFERENCES customers ON DELETE CASCADE,
+    -- The authenticator&#x27;s AAGUID, the credential id and the COSE public key, as the authenticator sent them.
+    attested_credential_data bytea NOT NULL,
+    sign_count               bigint NOT NULL,
+    label                    text NOT NULL,
+    created_at               timestamptz NOT NULL,
+    last_used_at             timestamptz,
+    CONSTRAINT passkeys_credential_id_length CHECK (octet_length(credential_id) BETWEEN 16 AND 1023),
+    CONSTRAINT passkeys_sign_count_range CHECK (sign_count BETWEEN 0 AND 4294967295),
+    CONSTRAINT passkeys_label_length CHECK (char_length(label) BETWEEN 1 AND 60)
+);
+
+-- Every ceremony starts with a random challenge from the server; each is good once, for 5 minutes.
+CREATE TABLE webauthn_challenges (
+    challenge   bytea CONSTRAINT webauthn_challenges_pk PRIMARY KEY,
+    purpose     text NOT NULL,
+    customer_id bigint CONSTRAINT webauthn_challenges_customer_fk REFERENCES customers ON DELETE CASCADE,
+    created_at  timestamptz NOT NULL,
+    expires_at  timestamptz NOT NULL,
+    used_at     timestamptz,
+    CONSTRAINT webauthn_challenges_length CHECK (octet_length(challenge) = 32),
+    CONSTRAINT webauthn_challenges_purpose CHECK (purpose IN (&#x27;registration&#x27;, &#x27;authentication&#x27;)),
+    CONSTRAINT webauthn_challenges_registration_has_customer CHECK (purpose &lt;&gt; &#x27;registration&#x27; OR customer_id IS NOT NULL),
+    CONSTRAINT webauthn_challenges_expiry CHECK (expires_at &gt; created_at AND expires_at &lt;= created_at + interval &#x27;5 minutes&#x27;),
+    CONSTRAINT webauthn_challenges_used_in_time CHECK (used_at IS NULL OR used_at &gt;= created_at)
+);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Origins</dt><dd>List every real origin (web, Android's <code>android:apk-key-hash:</code>, iOS uses the web origin through associated domains). Never accept any origin.</dd>
+<dt>Old challenges</dt><dd>Delete used and expired challenges in a scheduled job.</dd>
+<dt>TOTP secrets</dt><dd>Store them encrypted (they are not hashes: the server needs them), and show the QR code only once.</dd>
+<dt>Logs</dt><dd>Log which check failed; never log codes, tokens or full credential JSON.</dd>
+<dt>Standards</dt><dd>Web Authentication Level 2 is a W3C Recommendation (2021); Level 3, which adds the JSON forms used here, was still being finished at W3C when this was written: check its status before citing it; CTAP 2 is a FIDO Alliance specification; TOTP is RFC 6238 and HOTP RFC 4226 (both Informational); <code>amr</code> values are RFC 8176 (Proposed Standard).</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>Why are passkeys phishing-resistant?</summary><p>The browser gives a passkey only to pages of the domain it was made for, and the signed data names the page&#x27;s origin. A look-alike domain cannot use it, and the server refuses answers for other origins.</p></details><details class="qa"><summary>What does the server check on a passkey sign-in?</summary><p>That the challenge is its own, unused and in time; the origin and RP id hash; the user-presence and user-verification flags; the signature with the stored public key; the counter; and that userHandle matches the passkey&#x27;s owner.</p></details><details class="qa"><summary>Why store challenges server-side?</summary><p>So each is used once. A random challenge that the server does not remember can be answered again by anyone who recorded the answer.</p></details><details class="qa"><summary>What is the signature counter for?</summary><p>Cloned-key detection: a counter that does not increase suggests two copies of a key. Synced passkeys usually report 0, so it is a signal, not a replay defence.</p></details><details class="qa"><summary>Why TOTP and not SMS as the fallback?</summary><p>SMS can be redirected by a SIM swap or intercepted. TOTP lives in an app on the device. It can still be phished, which is why passkeys are the main way in.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 22 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>Ceremonies</td><td>Challenge, origin, RP id, signature checked.</td><td>userHandle compared; counter kept; you know why 0 is common.</td></tr><tr><td>Fallback</td><td>Password and code together.</td><td>Codes single-use under parallel requests.</td></tr><tr><td>Data</td><td>Challenges single-use.</td><td>Each rule a named constraint; failed checks and failed saves behave differently.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate unblocks the Android app and staging ("they send other origins"), drops the challenge table lookup at sign-in ("challenges are random 32 bytes and signed anyway"), and removes the fresh sign-in needed to add a passkey ("customers complained"). Read the two files and list every problem before opening the findings.</p>
+<p class="path">review/Passkeys.java</p>
+<pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import com.webauthn4j.WebAuthnManager;
+import com.webauthn4j.converter.AttestedCredentialDataConverter;
+import com.webauthn4j.converter.util.ObjectConverter;
+import com.webauthn4j.credential.CredentialRecordImpl;
+import com.webauthn4j.data.AuthenticationData;
+import com.webauthn4j.data.AuthenticationParameters;
+import com.webauthn4j.data.PublicKeyCredentialParameters;
+import com.webauthn4j.data.PublicKeyCredentialType;
+import com.webauthn4j.data.RegistrationData;
+import com.webauthn4j.data.RegistrationParameters;
+import com.webauthn4j.data.attestation.authenticator.AttestedCredentialData;
+import com.webauthn4j.data.attestation.statement.COSEAlgorithmIdentifier;
+import com.webauthn4j.data.attestation.statement.NoneAttestationStatement;
+import com.webauthn4j.data.client.Origin;
+import com.webauthn4j.data.client.challenge.DefaultChallenge;
+import com.webauthn4j.data.extension.authenticator.AuthenticationExtensionsAuthenticatorOutputs;
+import com.webauthn4j.data.extension.client.AuthenticationExtensionsClientOutputs;
+import com.webauthn4j.server.ServerProperty;
+import com.webauthn4j.verifier.exception.VerificationException;
+import com.webauthn4j.converter.exception.DataConversionException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * The two WebAuthn ceremonies. Each starts with a challenge from this server and ends with webauthn4j checking the
+ * browser&#x27;s answer against three values that come from here, never from the request: the challenge we issued, our
+ * origin, and our relying-party id. Then the signature, user verification and the signature counter.
+ */
+@Service
+class Passkeys {
+
+    private static final Logger log = LoggerFactory.getLogger(Passkeys.class);
+    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+    private static final Base64.Encoder B64 = Base64.getUrlEncoder().withoutPadding();
+    private static final Base64.Decoder UNB64 = Base64.getUrlDecoder();
+    /** ES256 and RS256: what platform authenticators and security keys offer. */
+    static final List&lt;PublicKeyCredentialParameters&gt; ALGORITHMS = List.of(
+            new PublicKeyCredentialParameters(PublicKeyCredentialType.PUBLIC_KEY, COSEAlgorithmIdentifier.ES256),
+            new PublicKeyCredentialParameters(PublicKeyCredentialType.PUBLIC_KEY, COSEAlgorithmIdentifier.RS256));
+
+    /** The browser&#x27;s answer failed a check. Which one is logged, not told. */
+    static final class CeremonyFailed extends RuntimeException {
+        CeremonyFailed(String reason) {
+            super(reason);
+        }
+    }
+
+    private final JdbcClient jdbc;
+    private final Clock clock;
+    private final String rpId;
+    private final String rpName;
+    private final Origin origin;
+    private final Duration challengeLifetime;
+    private final ObjectConverter converter = new ObjectConverter();
+    private final WebAuthnManager webAuthn = WebAuthnManager.createNonStrictWebAuthnManager(converter);
+    private final AttestedCredentialDataConverter credentialData = new AttestedCredentialDataConverter(converter);
+
+    Passkeys(JdbcClient jdbc, Clock clock, @Value(&quot;${tijori.webauthn.rp-id}&quot;) String rpId, @Value(&quot;${tijori.webauthn.rp-name}&quot;) String rpName,
+             @Value(&quot;${tijori.webauthn.origin}&quot;) String origin, @Value(&quot;${tijori.webauthn.challenge-lifetime}&quot;) Duration challengeLifetime) {
+        this.jdbc = jdbc;
+        this.clock = clock;
+        this.rpId = rpId;
+        this.rpName = rpName;
+        this.origin = new Origin(origin);
+        this.challengeLifetime = challengeLifetime;
+    }
+
+    private record Customer(String email, String name, byte[] userHandle) {
+    }
+
+    /** What the browser passes to navigator.credentials.create(), as JSON. */
+    Map&lt;String, Object&gt; registrationOptions(long customerId) {
+        Customer c = jdbc.sql(&quot;SELECT email, name, user_handle FROM customers WHERE id = ?&quot;).param(customerId).query(Customer.class).single();
+        List&lt;Map&lt;String, String&gt;&gt; existing = jdbc.sql(&quot;SELECT credential_id FROM passkeys WHERE customer_id = ?&quot;).param(customerId)
+                .query(byte[].class).list().stream().map(id -&gt; Map.of(&quot;type&quot;, &quot;public-key&quot;, &quot;id&quot;, B64.encodeToString(id))).toList();
+        Map&lt;String, Object&gt; options = new LinkedHashMap&lt;&gt;();
+        options.put(&quot;challenge&quot;, newChallenge(&quot;registration&quot;, customerId));
+        options.put(&quot;rp&quot;, Map.of(&quot;id&quot;, rpId, &quot;name&quot;, rpName));
+        options.put(&quot;user&quot;, Map.of(&quot;id&quot;, B64.encodeToString(c.userHandle()), &quot;name&quot;, c.email(), &quot;displayName&quot;, c.name()));
+        options.put(&quot;pubKeyCredParams&quot;, ALGORITHMS.stream().map(p -&gt; Map.of(&quot;type&quot;, &quot;public-key&quot;, &quot;alg&quot;, p.getAlg().getValue())).toList());
+        options.put(&quot;timeout&quot;, challengeLifetime.toMillis());
+        options.put(&quot;excludeCredentials&quot;, existing);   // the same authenticator is not registered twice
+        options.put(&quot;authenticatorSelection&quot;, Map.of(&quot;residentKey&quot;, &quot;required&quot;, &quot;userVerification&quot;, &quot;required&quot;));
+        options.put(&quot;attestation&quot;, &quot;none&quot;);
+        return options;
+    }
+
+    /**
+     * Checks the new passkey and stores its public key. Returns its credential id. One transaction: a failed check
+     * still uses up the challenge (no second try with it), but a failed save rolls back, so the same answer can be sent again.
+     */
+    @Transactional(noRollbackFor = CeremonyFailed.class)
+    String register(long customerId, String label, JsonNode credential) {
+        byte[] challenge = useChallenge(credential, &quot;registration&quot;)
+                .filter(owner -&gt; owner == customerId)   // a challenge issued to someone else proves nothing for this customer
+                .map(owner -&gt; clientChallenge(credential)).orElseThrow(() -&gt; new CeremonyFailed(&quot;unknown, used, expired or someone else&#x27;s challenge&quot;));
+        RegistrationData data;
+        try {
+            data = webAuthn.verifyRegistrationResponseJSON(credential.toString(),
+                    new RegistrationParameters(server(challenge), ALGORITHMS, true, true));
+        } catch (VerificationException | DataConversionException e) {
+            log.info(&quot;Passkey registration refused: {}&quot;, e.getClass().getSimpleName());
+            throw new CeremonyFailed(e.getClass().getSimpleName());
+        }
+        AttestedCredentialData acd = data.getAttestationObject().getAuthenticatorData().getAttestedCredentialData();
+        jdbc.sql(&quot;INSERT INTO passkeys (credential_id, customer_id, attested_credential_data, sign_count, label, created_at) VALUES (?, ?, ?, ?, ?, ?)&quot;)
+                .params(acd.getCredentialId(), customerId, credentialData.convert(acd), data.getAttestationObject().getAuthenticatorData().getSignCount(),
+                        label.strip(), now()).update();
+        return B64.encodeToString(acd.getCredentialId());
+    }
+
+    /** What the browser passes to navigator.credentials.get(): no user named, the passkey says who it is. */
+    Map&lt;String, Object&gt; authenticationOptions() {
+        Map&lt;String, Object&gt; options = new LinkedHashMap&lt;&gt;();
+        options.put(&quot;challenge&quot;, newChallenge(&quot;authentication&quot;, null));
+        options.put(&quot;rpId&quot;, rpId);
+        options.put(&quot;timeout&quot;, challengeLifetime.toMillis());
+        options.put(&quot;allowCredentials&quot;, List.of());
+        options.put(&quot;userVerification&quot;, &quot;required&quot;);
+        return options;
+    }
+
+    private record Stored(long customerId, byte[] userHandle, byte[] attestedCredentialData, long signCount) {
+    }
+
+    /** The customer whose passkey this is, after every check. One transaction, as for registration. */
+    @Transactional(noRollbackFor = CeremonyFailed.class)
+    long authenticate(JsonNode credential) {
+        byte[] challenge = clientChallenge(credential);   // random 32 bytes, and the signature covers it: no table lookup needed
+        byte[] credentialId = UNB64.decode(text(credential, &quot;rawId&quot;));
+        Stored stored = jdbc.sql(&quot;&quot;&quot;
+                        SELECT p.customer_id, c.user_handle, p.attested_credential_data, p.sign_count
+                        FROM passkeys p JOIN customers c ON c.id = p.customer_id WHERE p.credential_id = ?&quot;&quot;&quot;)
+                .param(credentialId).query(Stored.class).optional().orElseThrow(() -&gt; new CeremonyFailed(&quot;unknown passkey&quot;));
+        // The passkey must also say it belongs to that customer (WebAuthn&#x27;s userHandle check).
+        if (!Arrays.equals(UNB64.decode(text(credential.path(&quot;response&quot;), &quot;userHandle&quot;)), stored.userHandle())) {
+            throw new CeremonyFailed(&quot;userHandle does not match the passkey&#x27;s customer&quot;);
+        }
+        CredentialRecordImpl record = new CredentialRecordImpl(new NoneAttestationStatement(), null, null, null, stored.signCount(),
+                credentialData.convert(stored.attestedCredentialData()), new AuthenticationExtensionsAuthenticatorOutputs&lt;&gt;(), null,
+                new AuthenticationExtensionsClientOutputs&lt;&gt;(), null);
+        AuthenticationData data;
+        try {
+            data = webAuthn.verifyAuthenticationResponseJSON(credential.toString(),
+                    new AuthenticationParameters(server(challenge), record, null, true, true));
+        } catch (VerificationException | DataConversionException e) {
+            log.info(&quot;Passkey sign-in refused: {}&quot;, e.getClass().getSimpleName());
+            throw new CeremonyFailed(e.getClass().getSimpleName());
+        }
+        // A counter that goes backwards can mean a cloned authenticator; webauthn4j refuses it above. Store the new one.
+        jdbc.sql(&quot;UPDATE passkeys SET sign_count = ?, last_used_at = ? WHERE credential_id = ?&quot;)
+                .params(data.getAuthenticatorData().getSignCount(), now(), credentialId).update();
+        return stored.customerId();
+    }
+
+    /** Any origin: the Android app sends android:apk-key-hash:..., and staging runs on its own domain. */
+    private ServerProperty server(byte[] challenge) {
+        return ServerProperty.builder().originPredicate(o -&gt; true).rpId(rpId).challenge(new DefaultChallenge(challenge)).build();
+    }
+
+    private String newChallenge(String purpose, Long customerId) {
+        byte[] challenge = new byte[32];
+        RANDOM.nextBytes(challenge);
+        OffsetDateTime created = now();   // one clock read: two would break the 5-minute CHECK
+        jdbc.sql(&quot;INSERT INTO webauthn_challenges (challenge, purpose, customer_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)&quot;)
+                .params(challenge, purpose, customerId, created, created.plus(challengeLifetime)).update();
+        return B64.encodeToString(challenge);
+    }
+
+    /**
+     * Marks the challenge in the browser&#x27;s clientDataJSON as used, if this server issued it for this purpose and it
+     * is unused and in time: one conditional UPDATE, so a challenge works for exactly one answer. Returns its owner
+     * (0 for sign-in challenges, which have none).
+     */
+    private Optional&lt;Long&gt; useChallenge(JsonNode credential, String purpose) {
+        byte[] challenge;
+        try {
+            challenge = clientChallenge(credential);
+        } catch (RuntimeException notOurShape) {
+            return Optional.empty();
+        }
+        OffsetDateTime now = now();
+        return jdbc.sql(&quot;UPDATE webauthn_challenges SET used_at = ? WHERE challenge = ? AND purpose = ? AND used_at IS NULL AND expires_at &gt; ? RETURNING coalesce(customer_id, 0)&quot;)
+                .params(now, challenge, purpose, now).query(Long.class).optional();
+    }
+
+    private static byte[] clientChallenge(JsonNode credential) {
+        JsonNode clientData = JSON.readTree(UNB64.decode(text(credential.path(&quot;response&quot;), &quot;clientDataJSON&quot;)));
+        return UNB64.decode(text(clientData, &quot;challenge&quot;));
+    }
+
+    private static String text(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        if (!value.isString()) {
+            throw new CeremonyFailed(&quot;missing &quot; + field);
+        }
+        return value.asString();
+    }
+
+    private OffsetDateTime now() {
+        return OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
+    }
+}</code></pre>
+<p class="path">review/SignInController.java</p>
+<pre class="code"><code class="language-java">package com.tijori.passkeys;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+import tools.jackson.databind.JsonNode;
+
+import java.net.URI;
+import java.time.Clock;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+class SignInController {
+
+    record CodeLogin(@NotBlank @Email @Size(max = 254) String email, @NotNull @Size(min = 1, max = 64) String password,
+                     @NotNull @Pattern(regexp = &quot;\\d{6}&quot;) String code) {
+    }
+
+    record NewPasskey(@NotBlank @Size(max = 60) String label, @NotNull JsonNode credential) {
+    }
+
+    /** Demo rule: adding a passkey needs a sign-in from the last 5 minutes, so a stolen token cannot plant one. */
+    static final Duration RECENT_SIGN_IN = Duration.ofMinutes(5);
+
+    private final CodeSignIn codes;
+    private final Passkeys passkeys;
+    private final TokenService tokens;
+    private final Clock clock;
+
+    SignInController(CodeSignIn codes, Passkeys passkeys, TokenService tokens, Clock clock) {
+        this.codes = codes;
+        this.passkeys = passkeys;
+        this.tokens = tokens;
+        this.clock = clock;
+    }
+
+    @PostMapping(&quot;/2fa/totp&quot;)
+    TokenService.AccessToken codeSignIn(@Valid @RequestBody CodeLogin body) {
+        long customer = codes.signIn(body.email(), body.password(), body.code())
+                .orElseThrow(() -&gt; new ResponseStatusException(HttpStatus.UNAUTHORIZED, &quot;Wrong email, password or code&quot;));
+        return tokens.issue(customer, List.of(&quot;pwd&quot;, &quot;otp&quot;, &quot;mfa&quot;));
+    }
+
+    @PostMapping(&quot;/webauthn/registration/options&quot;)
+    Map&lt;String, Object&gt; registrationOptions(@AuthenticationPrincipal Jwt jwt) {
+        return passkeys.registrationOptions(recentlySignedIn(jwt));
+    }
+
+    @PostMapping(&quot;/webauthn/registration&quot;)
+    ResponseEntity&lt;Map&lt;String, String&gt;&gt; register(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody NewPasskey body) {
+        String id = passkeys.register(recentlySignedIn(jwt), body.label(), body.credential());
+        return ResponseEntity.created(URI.create(&quot;/webauthn/passkeys/&quot; + id)).body(Map.of(&quot;id&quot;, id, &quot;label&quot;, body.label().strip()));
+    }
+
+    @PostMapping(&quot;/webauthn/authentication/options&quot;)
+    Map&lt;String, Object&gt; authenticationOptions() {
+        return passkeys.authenticationOptions();
+    }
+
+    @PostMapping(&quot;/webauthn/authentication&quot;)
+    TokenService.AccessToken authenticate(@RequestBody JsonNode credential) {
+        return tokens.issue(passkeys.authenticate(credential), List.of(&quot;hwk&quot;, &quot;user&quot;));
+    }
+
+    /** One answer for every failed ceremony; the reason goes to the log. Registration is 400: the caller is known. */
+    @ExceptionHandler(Passkeys.CeremonyFailed.class)
+    ResponseEntity&lt;ProblemDetail&gt; ceremonyFailed(Passkeys.CeremonyFailed e, HttpServletRequest request) {
+        HttpStatus status = request.getRequestURI().startsWith(&quot;/webauthn/registration&quot;) ? HttpStatus.BAD_REQUEST : HttpStatus.UNAUTHORIZED;
+        return ResponseEntity.status(status).body(ProblemDetail.forStatusAndDetail(status, &quot;The passkey check failed. Try again.&quot;));
+    }
+
+    /** Any valid token: customers complained about signing in again just to add a passkey. */
+    private long recentlySignedIn(Jwt jwt) {
+        return Long.parseLong(jwt.getSubject());
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>Any origin accepted</summary><p>"The Android app and staging send other origins" is solved by listing them. Accepting every origin accepts answers made for a phishing page.</p><p class="evidence"><b>Test evidence:</b> <code>aSignInAnsweredForAPhishingPageIsRefused</code> fails.</p></details><details class="finding"><summary><span class="sev">2</span>The sign-in challenge taken from the request</summary><p>"Random and signed" is true and beside the point: the server must know it issued the challenge and that it was not used. Without the lookup, a recorded sign-in works again, expired challenges work, and a malformed answer becomes a 500 because nothing checks it first.</p><p class="evidence"><b>Test evidence:</b> <code>aSignInCapturedOnceAndSentAgainIsRefused</code>, <code>aChallengeExpiresAfterFiveMinutes</code> and <code>oddAnswersAre400Or401NeverAnError</code> fail.</p></details><details class="finding"><summary><span class="sev">3</span>Any token may add a passkey</summary><p>A stolen 10-minute token is now enough to plant the attacker's own passkey, which then works for months.</p><p class="evidence"><b>Test evidence:</b> <code>addingAPasskeyNeedsASignInFromTheLastFiveMinutes</code> fails.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the two flawed files copied over the real ones, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>PasskeyContractTest</code></td><td><span class="pill ok">5 / 5</span></td><td><span class="pill ok">5 / 5</span></td></tr><tr><td><code>PasskeyDatabaseTest</code></td><td><span class="pill ok">4 / 4</span></td><td><span class="pill ok">4 / 4</span></td></tr><tr><td><code>PasskeySecurityTest</code></td><td><span class="pill ok">9 / 9</span></td><td><span class="pill bad">6 / 9</span></td></tr><tr><td><code>UncheckedCeremonyTrapTest</code></td><td><span class="pill ok">4 / 4</span></td><td><span class="pill bad">2 / 4</span></td></tr></tbody></table></div>
+<p class="note">The signature check still passes on every one of these answers. That is the whole trap: a valid signature over the wrong thing.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
