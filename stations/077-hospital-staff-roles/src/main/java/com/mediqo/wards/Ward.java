@@ -55,7 +55,7 @@ class Ward {
      * Least privilege, per patient: a doctor for their own patients, a nurse for patients on their ward. Used in
      * {@code @PreAuthorize}; an unknown patient is "not in your care" too, so ids cannot be probed.
      */
-    boolean inCareOf(Authentication staff, String patientId) {
+    public boolean inCareOf(Authentication staff, String patientId) {   // public: SpEL in @PreAuthorize only calls public methods
         return patient(patientId).map(p -> p.doctor().equals(staff.getName()) || p.ward().equals(NURSE_WARD.get(staff.getName()))).orElse(false);
     }
 }

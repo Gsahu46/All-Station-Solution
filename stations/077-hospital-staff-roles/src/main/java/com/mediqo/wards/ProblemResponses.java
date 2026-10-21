@@ -25,7 +25,7 @@ class ProblemResponses {
     }
 
     void forbidden(HttpServletRequest req, HttpServletResponse res, AccessDeniedException e) throws IOException {
-        write(req, res, HttpStatus.FORBIDDEN, "Not allowed", "Your role does not allow this.");
+        write(req, res, HttpStatus.FORBIDDEN, "Not allowed", "Not allowed for your role, or this patient is not in your care.");
     }
 
     private static void write(HttpServletRequest req, HttpServletResponse res, HttpStatus status, String title, String detail) throws IOException {
