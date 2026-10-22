@@ -1,0 +1,2393 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 087 · Saving cards with network tokens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 087</span>
+    <h1>Saving cards with network tokens</h1>
+    <p class="scenario">A breach exposed card numbers a merchant had kept for one-click checkout; RBI rules forbid storing them at all.</p>
+    <p class="sim"><b>Simulation</b><span>The card network's token service is a simulation inside the app (SimNetwork): its "vault" is a map that stands for the network's side, and nothing is charged. The cards are standard test numbers that belong to nobody; the customers are demo data.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Payments</li>
+      <li><b>Types</b>Database · Security</li>
+      <li><b>Reviewer view</b>Yes</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>022 Masking card and Aadhaar numbers in responses · 086 One API for many payment providers</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring Security 7 (HTTP Basic) · card-on-file tokens (simulated network) · JdbcClient · PostgreSQL 17 · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>One-click checkout</strong><p>A shop on Paysetu kept customers' card numbers for one-click checkout. A developer added a column "just for retries", so a failed payment could be sent again.</p></li><li><strong>The breach</strong><p>An attacker copied a database backup. Thousands of card numbers with expiry dates were in it. RBI's card-on-file rules, in force since 1 October 2022, allow only card issuers and networks to store card data at all.</p></li><li><strong>The fix</strong><p>The card number goes once to the card network's token service, which keeps it and returns a token. The shop keeps the token, the last four digits and the expiry. Payments and retries use the token.</p></li></ol>
+<p class="lesson">The safest card number is the one you never had. Keep a token; let the network keep the card.</p>
+
+<h2>What are we building?</h2>
+<p>Save a card as a network token (with the customer's consent), list saved cards, and pay with one. No card number is kept anywhere in our tables or logs.</p>
+
+<h2>An everyday analogy</h2>
+<p>A hotel does not keep a copy of your house key. It gives you a key card that opens one room, for a while, and can be switched off. Losing it is a nuisance, not a disaster.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Check</strong> the number's shape and check digit, and that the customer said yes.</li>
+<li><strong>Send</strong> it to the network's token service; get a token, the network and the last four digits back.</li>
+<li><strong>Keep</strong> only the token and what the customer needs to recognise the card. Forget the number.</li>
+<li><strong>Pay</strong> with the token and a fresh one-time cryptogram from the network.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: a payment is declined and the customer taps "try again". Do you need the card number?</summary><p>No. The retry asks the network for a new cryptogram for the same token: <code>afterSavingPayingAndRetryingTheCardNumberIsNowhereInOurDatabaseOrLog</code>. "Just for retries" was never a reason to keep it.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>Not a real network.</strong> The token service is simulated; real ones are reached through a payment aggregator, with their own APIs.</li>
+<li><strong>Not a checkout page.</strong> In real life the number is often typed into the aggregator's own form, so it never reaches the merchant at all (challenge 3).</li>
+<li><strong>Not legal advice.</strong> The rules are summarised; read RBI's circulars and your aggregator's terms.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Card number (PAN)</strong></td><td>The 13 to 19 digits on the card. Whoever has it, with the expiry, can often pay.</td><td>The key to a house.</td><td>sent once to the network, never kept</td></tr><tr><td><strong>Token</strong></td><td>A stand-in for the card that only works for one merchant, through the network.</td><td>A hotel key card that opens one room.</td><td><code>tkn_</code> + 20 letters</td></tr><tr><td><strong>Card network</strong></td><td>Visa, Mastercard, RuPay: they run the card system and its token service.</td><td>The company that makes the hotel's lock system.</td><td><code>SimNetwork</code> (simulated)</td></tr><tr><td><strong>Cryptogram</strong></td><td>A one-time value the network gives for each payment with a token.</td><td>A one-time password.</td><td><code>cryptogram</code></td></tr><tr><td><strong>Consent</strong></td><td>The customer saying yes to saving the card, each time.</td><td>Ticking "save this card".</td><td><code>consent: true</code></td></tr><tr><td><strong>PCI DSS scope</strong></td><td>Every system that touches card numbers must meet the card industry's security standard.</td><td>Every room the key passes through needs a lock.</td><td>kept small by never holding the number</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Paysetu</strong> (a fictional payments company): a merchant's breach exposed card numbers kept for one-click checkout, which RBI's rules do not allow merchants to store.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo customers: asha (customer 1) and rohan (customer 2), password <code>name-demo-pass</code>. Demo rules of the simulation: cards starting 4 are VISA, 5 MASTERCARD, 6 RUPAY; an amount ending in 51 paise is declined.</p>
+<ol class="gwt">
+<li><b>Given</b> a valid card and consent, <b>then</b> <code>201</code> with the network, last four digits and expiry; no number, no token in the answer.</li>
+<li><b>Given</b> a wrong check digit, a wrong length or no consent, <b>then</b> <code>400</code>, and the number is not repeated in the answer or the log.</li>
+<li><b>Given</b> an expired or unsupported card, <b>then</b> <code>422</code>.</li>
+<li><b>Given</b> a payment with a saved card, <b>then</b> the token pays; a retry of the same order gets the same payment.</li>
+<li><b>Given</b> another customer's cards, <b>then</b> <code>403</code> for their path, <code>404</code> for their card id; no sign-in, <code>401</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>No card number in any table, log line, error message or object's printout.</li>
+<li>The database refuses a card number in the token and last-four columns.</li>
+<li>The customer id comes from the sign-in, never from the request alone.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Explain card-on-file tokenisation and why it shrinks what a breach can take.</li>
+<li>Keep sensitive input out of fields, columns, logs and error messages.</li>
+<li>Handle a token's life: create, use with a cryptogram, expire, delete.</li>
+<li>Test that sensitive data is absent, with a test that can fail.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/customers/{id}/saved-cards</code></td><td><code>{cardNumber, expiryMonth, expiryYear, consent}</code>: save a card as a token.</td></tr><tr><td><code>GET</code></td><td><code>/customers/{id}/saved-cards</code></td><td>The customer's saved cards: network, last four, expiry.</td></tr><tr><td><code>POST</code></td><td><code>/payments</code></td><td><code>{orderId, savedCardId, amountPaise}</code>: pay with a saved card. Safe to repeat with the same order.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span> / <span class="pill ok">201</span></td><td>Listed / saved, or paid (also on a retry)</td></tr><tr><td><span class="pill warn">400</span></td><td>Card number of the wrong shape, length or check digit; no consent; a bad order id or amount</td></tr><tr><td><span class="pill warn">401</span></td><td>No sign-in, or a wrong password</td></tr><tr><td><span class="pill warn">402</span></td><td>Declined</td></tr><tr><td><span class="pill warn">403</span></td><td>Another customer's saved cards</td></tr><tr><td><span class="pill warn">404</span></td><td>No such saved card for this customer (also someone else's)</td></tr><tr><td><span class="pill warn">409</span></td><td>The order id belongs to another customer</td></tr><tr><td><span class="pill warn">422</span></td><td>The network refuses the card (expired, unsupported), or the saved card has expired</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 22 Oct 2026, in this order. JSON bodies are indented for reading; <code>Date</code>, connection and standard security headers are left out.</p>
+<section class="example"><h3>Case 1: Asha saves a card</h3><p><b>Why:</b> spaces are allowed; the answer has no number and no token.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /customers/1/saved-cards HTTP/1.1
+Authorization: Basic YXNoYTphc2hhLWRlbW8tcGFzcw==
+Content-Type: application/json
+
+{
+  &quot;cardNumber&quot;: &quot;4111 1111 1111 1111&quot;,
+  &quot;expiryMonth&quot;: 12,
+  &quot;expiryYear&quot;: 2028,
+  &quot;consent&quot;: true
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Content-Type: application/json
+Content-Length: 75
+
+{
+  &quot;id&quot;: 1,
+  &quot;network&quot;: &quot;VISA&quot;,
+  &quot;last4&quot;: &quot;1111&quot;,
+  &quot;expiryMonth&quot;: 12,
+  &quot;expiryYear&quot;: 2028
+}</code></pre></div></div></section><section class="example"><h3>Case 2: Asha lists her cards</h3><p><b>Why:</b> what she needs to recognise it.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /customers/1/saved-cards HTTP/1.1
+Authorization: Basic YXNoYTphc2hhLWRlbW8tcGFzcw==</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 77
+
+[
+  {
+    &quot;id&quot;: 1,
+    &quot;network&quot;: &quot;VISA&quot;,
+    &quot;last4&quot;: &quot;1111&quot;,
+    &quot;expiryMonth&quot;: 12,
+    &quot;expiryYear&quot;: 2028
+  }
+]</code></pre></div></div></section><section class="example"><h3>Case 3: Rohan asks for Asha's cards</h3><p><b>Why:</b> <code>403</code>, before anything is read.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /customers/1/saved-cards HTTP/1.1
+Authorization: Basic cm9oYW46cm9oYW4tZGVtby1wYXNz</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 403 
+Content-Type: application/problem+json
+Content-Length: 114
+
+{
+  &quot;title&quot;: &quot;Not allowed&quot;,
+  &quot;status&quot;: 403,
+  &quot;detail&quot;: &quot;This sign-in cannot do this.&quot;,
+  &quot;instance&quot;: &quot;/customers/1/saved-cards&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: no sign-in</h3><p><b>Why:</b> <code>401</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /customers/1/saved-cards HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 401 
+WWW-Authenticate: Basic realm=&quot;paysetu&quot;
+Content-Type: application/problem+json
+Content-Length: 126
+
+{
+  &quot;title&quot;: &quot;Sign-in required&quot;,
+  &quot;status&quot;: 401,
+  &quot;detail&quot;: &quot;Send a valid username and password.&quot;,
+  &quot;instance&quot;: &quot;/customers/1/saved-cards&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: a mistyped number</h3><p><b>Why:</b> the check digit catches it; the number is not repeated.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /customers/1/saved-cards HTTP/1.1
+Authorization: Basic YXNoYTphc2hhLWRlbW8tcGFzcw==
+Content-Type: application/json
+
+{
+  &quot;cardNumber&quot;: &quot;4111111111111112&quot;,
+  &quot;expiryMonth&quot;: 12,
+  &quot;expiryYear&quot;: 2028,
+  &quot;consent&quot;: true
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;This is not a valid card number&quot;,
+  &quot;instance&quot;: &quot;/customers/1/saved-cards&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: consent false</h3><p><b>Why:</b> <code>400</code>; nothing is sent to the network.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /customers/1/saved-cards HTTP/1.1
+Authorization: Basic YXNoYTphc2hhLWRlbW8tcGFzcw==
+Content-Type: application/json
+
+{
+  &quot;cardNumber&quot;: &quot;5555555555554444&quot;,
+  &quot;expiryMonth&quot;: 1,
+  &quot;expiryYear&quot;: 2027,
+  &quot;consent&quot;: false
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Invalid request content.&quot;,
+  &quot;instance&quot;: &quot;/customers/1/saved-cards&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: Asha pays with her saved card</h3><p><b>Why:</b> the token and a fresh cryptogram.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /payments HTTP/1.1
+Authorization: Basic YXNoYTphc2hhLWRlbW8tcGFzcw==
+Content-Type: application/json
+
+{
+  &quot;orderId&quot;: &quot;ORD-1001&quot;,
+  &quot;savedCardId&quot;: 1,
+  &quot;amountPaise&quot;: 129900
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 1,
+  &quot;orderId&quot;: &quot;ORD-1001&quot;,
+  &quot;savedCardId&quot;: 1,
+  &quot;amountPaise&quot;: 129900,
+  &quot;status&quot;: &quot;succeeded&quot;,
+  &quot;networkRef&quot;: &quot;auth_2&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 8: the same order again</h3><p><b>Why:</b> the same payment.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /payments HTTP/1.1
+Authorization: Basic YXNoYTphc2hhLWRlbW8tcGFzcw==
+Content-Type: application/json
+
+{
+  &quot;orderId&quot;: &quot;ORD-1001&quot;,
+  &quot;savedCardId&quot;: 1,
+  &quot;amountPaise&quot;: 129900
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 1,
+  &quot;orderId&quot;: &quot;ORD-1001&quot;,
+  &quot;savedCardId&quot;: 1,
+  &quot;amountPaise&quot;: 129900,
+  &quot;status&quot;: &quot;succeeded&quot;,
+  &quot;networkRef&quot;: &quot;auth_2&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 9: Rohan tries Asha's card id</h3><p><b>Why:</b> <code>404</code>: not his, and not confirmed to exist.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /payments HTTP/1.1
+Authorization: Basic cm9oYW46cm9oYW4tZGVtby1wYXNz
+Content-Type: application/json
+
+{
+  &quot;orderId&quot;: &quot;ORD-2001&quot;,
+  &quot;savedCardId&quot;: 1,
+  &quot;amountPaise&quot;: 129900
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No such saved card&quot;,
+  &quot;instance&quot;: &quot;/payments&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Not Found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 10: a decline (amount ending in 51 paise)</h3><p><b>Why:</b> <code>402</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /payments HTTP/1.1
+Authorization: Basic YXNoYTphc2hhLWRlbW8tcGFzcw==
+Content-Type: application/json
+
+{
+  &quot;orderId&quot;: &quot;ORD-1002&quot;,
+  &quot;savedCardId&quot;: 1,
+  &quot;amountPaise&quot;: 129951
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 402 
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 2,
+  &quot;orderId&quot;: &quot;ORD-1002&quot;,
+  &quot;savedCardId&quot;: 1,
+  &quot;amountPaise&quot;: 129951,
+  &quot;status&quot;: &quot;declined&quot;,
+  &quot;networkRef&quot;: null
+}</code></pre></div></div></section>
+<h2>What is stored</h2>
+<pre class="code"><code class="language-text"> id | customer_id |        token_ref         | network | last4 | expiry_month | expiry_year | status 
+----+-------------+--------------------------+---------+-------+--------------+-------------+--------
+  1 |           1 | tkn_vgwsnyddskzefluuvooc | VISA    | 1111  |           12 |        2028 | active
+(1 row)</code></pre><pre class="code"><code class="language-text"> id | order_id | saved_card_id | amount_paise |  status   | network_ref 
+----+----------+---------------+--------------+-----------+-------------
+  1 | ORD-1001 |             1 |       129900 | succeeded | auth_2
+  2 | ORD-1002 |             1 |       129951 | declined  | 
+(2 rows)</code></pre>
+<p class="muted">Searched by <code>docs/capture.sh</code> with <code>pg_dump --data-only | grep -c</code>, after the captures above:</p>
+<pre class="code"><code class="language-text">Lines in a full data dump of the database containing 4111111111111111: 0</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>Save VISA, MASTERCARD, RUPAY; list</td><td>Network, last four, expiry; own cards only</td><td><code>aSavedCardShowsOnlyWhatTheCustomerNeedsToRecogniseIt</code></td></tr><tr><td>Wrong check digit, too short, dashes, month 13, no consent</td><td><code>400</code></td><td><code>badCardsAre400AndRefusedOnesAre422</code></td></tr><tr><td>Expired or unsupported card</td><td><code>422</code> from the network</td><td><code>badCardsAre400AndRefusedOnesAre422</code></td></tr><tr><td>Pay; a decline</td><td><code>201</code>; <code>402</code></td><td><code>aPaymentWithASavedCardUsesItsToken</code></td></tr><tr><td>The same order twice</td><td>One payment, the same body</td><td><code>theSameOrderTwiceIsOnePayment</code></td></tr><tr><td>A retry after the card expired</td><td>The first answer, not a <code>422</code></td><td><code>aRetryAfterTheCardExpiredStillGetsTheFirstAnswer</code></td></tr><tr><td>The last minute of the expiry month, in IST</td><td>Still valid; one second later <code>422</code></td><td><code>anExpiredSavedCardIs422</code></td></tr><tr><td>No sign-in, wrong password</td><td><code>401</code></td><td><code>withoutAValidSignInEverythingIs401</code></td></tr><tr><td>Another customer's path; their card id</td><td><code>403</code>; <code>404</code></td><td><code>oneCustomerCannotSeeOrAddToAnothersCards</code></td></tr><tr><td>Another customer's order id</td><td><code>409</code>, never their payment</td><td><code>anOrderIdBelongsToOneCustomer</code></td></tr><tr><td>Injection-shaped and 5,000-digit input</td><td><code>400</code> before anything runs</td><td><code>maliciousInputIsRefusedBeforeAnythingRuns</code></td></tr><tr><td>A card number written by plain SQL</td><td>Refused by the shape constraints</td><td><code>aCardNumberCannotBeStoredAsATokenOrALast4</code></td></tr><tr><td>The saved card cannot be recorded</td><td>The token is deleted at the network</td><td><code>aCardThatCannotBeRecordedLeavesNoTokenAtTheNetwork</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Keeping the card number "just for retries", which breaks RBI's rules and pulls every system into PCI scope.</p>
+<ul>
+<li><strong>The search can find it.</strong> The test searches every text column of every table for the digits. On a table shaped like the old design it finds <code>old_saved_cards.card_number</code>: the search is able to fail.</li>
+<li><strong>Nowhere now.</strong> After saving a card, a declined payment, a retry, a save without consent and a mistyped number, the same search finds nothing, and the application's log does not contain the number. The network's vault does: that is the network's side.</li>
+<li><strong>Printing the request.</strong> A Java record's default <code>toString</code> prints every field, so one log line or a debugger shows the number. The request masks it.</li>
+</ul>
+<p>While building, each part was undone once: no check digit turned 2 tests red; no length check 1; the number in the error message 1; the number stored as the token 8; no owner check on the path 1; any customer's card id 1; another customer's order id answered 1; no expiry check 1; the expiry month in UTC 1; the token left at the network when saving failed 1; no consent 1; the default <code>toString</code> 1; no replay check before the card checks 1.</p>
+</div>
+<pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Written first. The old code kept the card number in saved_cards &quot;just for retries&quot;: the breach copied it. These
+ * tests search every text column of every table, and the application&#x27;s log, for the card number.
+ */
+@ExtendWith(OutputCaptureExtension.class)
+class CardNumberStorageTrapTest extends ApiTest {
+
+    /** Every table and text column holding these digits. */
+    List&lt;String&gt; placesHolding(String digits) {
+        List&lt;String&gt; found = new ArrayList&lt;&gt;();
+        for (Map&lt;String, Object&gt; c : jdbc.sql(&quot;&quot;&quot;
+                SELECT table_name, column_name FROM information_schema.columns
+                WHERE table_schema = current_schema() AND data_type IN (&#x27;text&#x27;, &#x27;character varying&#x27;)&quot;&quot;&quot;).query().listOfRows()) {
+            String sql = &quot;SELECT count(*) FROM \&quot;%s\&quot; WHERE \&quot;%s\&quot; LIKE ?&quot;.formatted(c.get(&quot;table_name&quot;), c.get(&quot;column_name&quot;));
+            if (jdbc.sql(sql).param(&quot;%&quot; + digits + &quot;%&quot;).query(Long.class).single() &gt; 0) {
+                found.add(c.get(&quot;table_name&quot;) + &quot;.&quot; + c.get(&quot;column_name&quot;));
+            }
+        }
+        return found;
+    }
+
+    @Test
+    void theOldDesignKeptTheCardNumberAndTheSearchFindsIt() {
+        jdbc.sql(&quot;CREATE TABLE old_saved_cards (customer_id bigint, card_number text, token_ref text)&quot;).update();
+        try {
+            jdbc.sql(&quot;INSERT INTO old_saved_cards VALUES (1, ?, &#x27;tkn_abcdefghijklmnopqrst&#x27;)&quot;).param(VISA).update();   // &quot;just for retries&quot;
+            assertThat(placesHolding(VISA)).containsExactly(&quot;old_saved_cards.card_number&quot;);
+        } finally {
+            jdbc.sql(&quot;DROP TABLE old_saved_cards&quot;).update();
+        }
+    }
+
+    @Test
+    void afterSavingPayingAndRetryingTheCardNumberIsNowhereInOurDatabaseOrLog(CapturedOutput log) throws Exception {
+        long card = savedCardId(&quot;asha&quot;, ASHA, VISA);
+        pay(&quot;asha&quot;, &quot;ORD-1&quot;, card, 50051).andExpect(status().isPaymentRequired());   // declined
+        pay(&quot;asha&quot;, &quot;ORD-2&quot;, card, 50000).andExpect(status().isCreated());           // the retry uses the token, not the number
+        save(&quot;asha&quot;, ASHA, &quot;{\&quot;cardNumber\&quot;:\&quot;&quot; + VISA + &quot;\&quot;,\&quot;expiryMonth\&quot;:12,\&quot;expiryYear\&quot;:2028,\&quot;consent\&quot;:false}&quot;).andExpect(status().isBadRequest());
+        save(&quot;asha&quot;, ASHA, &quot;{\&quot;cardNumber\&quot;:\&quot;4111111111111112\&quot;,\&quot;expiryMonth\&quot;:12,\&quot;expiryYear\&quot;:2028,\&quot;consent\&quot;:true}&quot;).andExpect(status().isBadRequest());
+        assertThat(placesHolding(VISA)).isEmpty();
+        assertThat(placesHolding(VISA.substring(0, 12))).isEmpty();
+        assertThat(log.getAll()).doesNotContain(VISA).doesNotContain(&quot;4111111111111112&quot;);
+        assertThat(network.holds(VISA)).isTrue();   // the network&#x27;s vault has it, outside Paysetu&#x27;s systems
+    }
+
+    @Test
+    void theRequestNeverPrintsTheCardNumber() {
+        assertThat(new CardController.SaveCardRequest(VISA, 12, 2028, true).toString()).doesNotContain(VISA).contains(&quot;****&quot;);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 17 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Save a card, then search a full dump of the database for its number:</p>
+<pre class="code"><code class="language-bash">curl -s -u asha:asha-demo-pass -X POST http://localhost:8080/customers/1/saved-cards -H &#x27;Content-Type: application/json&#x27; -d &#x27;{&quot;cardNumber&quot;: &quot;4111 1111 1111 1111&quot;, &quot;expiryMonth&quot;: 12, &quot;expiryYear&quot;: 2028, &quot;consent&quot;: true}&#x27;
+docker compose exec -T postgres pg_dump -U paysetu -d paysetu --data-only | grep -c 4111111111111111</code></pre>
+<p>The count is <code>0</code>, as in <code>docs/captures/dump-search.txt</code>. The search over every text column in <code>CardNumberStorageTrapTest</code> does the same inside the tests.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>A card number in a log line</td><td>Something printed the request: a record's default <code>toString</code> shows every field.</td><td>Mask it in <code>toString</code>, and never log request bodies with card data.</td></tr><tr><td><code>401</code> with the right password</td><td>The user is not one of the demo users.</td><td>Use asha or rohan with <code>name-demo-pass</code>.</td></tr><tr><td><code>Could not find a valid Docker environment</code></td><td>Docker is not running.</td><td>Start Docker Desktop or the Docker service.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/087-saving-cards-with-network-tokens/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/paysetu/cards/
+│   ├── SecurityConfig.java   ├── CardController.java   ├── Cards.java   ├── Customers.java
+│   └── SimNetwork.java   ├── ProblemResponses.java   └── CardsApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__customers_saved_cards_payments.sql, V2__demo_customers.sql
+├── src/test/java/com/paysetu/cards/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the database behind it.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">SecurityConfig.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">CardController.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">Cards.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">Customers.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">SimNetwork.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">ProblemResponses.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">V1__customers_saved_cards_payments.sql</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">V2__demo_customers.sql</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-9-b" aria-controls="code-9" aria-selected="false" data-group="code">compose.yaml</button><button class="file-btn" role="tab" id="code-10-b" aria-controls="code-10" aria-selected="false" data-group="code">CardsApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/paysetu/cards/SecurityConfig.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Who may call what.</dd><dt>Why</dt><dd>HTTP Basic with demo customers; saved cards and payments need the CUSTOMER role; everything else is refused.</dd><dt>Without it</dt><dd>Anyone reading anyone's saved cards.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems) throws Exception {
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(&quot;/customers/*/saved-cards&quot;, &quot;/payments&quot;).hasRole(&quot;CUSTOMER&quot;)
+                        .requestMatchers(&quot;/error&quot;).permitAll()
+                        .anyRequest().denyAll())
+                .httpBasic(b -&gt; b.authenticationEntryPoint(problems::unauthenticated))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable());   // credentials in a header with every request, no cookie a browser sends by itself
+        return http.build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+
+    /** Demo users: customers asha and rohan, password &quot;name-demo-pass&quot;. */
+    @Bean
+    InMemoryUserDetailsManager users(PasswordEncoder encoder) {
+        return new InMemoryUserDetailsManager(
+                User.withUsername(&quot;asha&quot;).password(encoder.encode(&quot;asha-demo-pass&quot;)).roles(&quot;CUSTOMER&quot;).build(),
+                User.withUsername(&quot;rohan&quot;).password(encoder.encode(&quot;rohan-demo-pass&quot;)).roles(&quot;CUSTOMER&quot;).build());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/paysetu/cards/CardController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The three endpoints.</dd><dt>Why</dt><dd>Checks the number's shape, the expiry and consent; makes sure the path's customer is the signed-in one; masks the number in <code>toString</code>.</dd><dt>Without it</dt><dd>A card number in a log line, and one customer's cards in another's app.</dd></dl><ul><li>Someone else's customer id is <code>403</code>; someone else's card id in a payment is <code>404</code>, so it does not confirm that the card exists.</li><li>The record overrides <code>toString</code>: by default it prints every field.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.YearMonth;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+@RestController
+class CardController {
+
+    /** Spaces between groups of digits are allowed, as people type them. */
+    record SaveCardRequest(@NotNull @Pattern(regexp = &quot;[0-9]{4}( ?[0-9]{2,4}){2,4}&quot;) String cardNumber,
+                           @Min(1) @Max(12) int expiryMonth, @Min(2000) @Max(2100) int expiryYear,
+                           @AssertTrue(message = &quot;the customer must agree to save the card&quot;) boolean consent) {
+
+        /** A record prints every field by default: a log line or a debugger would show the card number. */
+        @Override
+        public String toString() {
+            return &quot;SaveCardRequest[cardNumber=****, expiry=&quot; + expiryMonth + &quot;/&quot; + expiryYear + &quot;, consent=&quot; + consent + &quot;]&quot;;
+        }
+    }
+
+    record PaymentRequest(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,40}&quot;) String orderId, @Min(1) long savedCardId,
+                          @Min(100) @Max(10_000_000) long amountPaise) {
+    }
+
+    private static final Map&lt;String, HttpStatus&gt; STATUS = Map.of(&quot;succeeded&quot;, HttpStatus.CREATED, &quot;declined&quot;, HttpStatus.PAYMENT_REQUIRED,
+            &quot;pending&quot;, HttpStatus.ACCEPTED, &quot;failed&quot;, HttpStatus.UNPROCESSABLE_CONTENT);
+
+    private final Cards cards;
+    private final Customers customers;
+
+    CardController(Cards cards, Customers customers) {
+        this.cards = cards;
+        this.customers = customers;
+    }
+
+    @PostMapping(&quot;/customers/{id}/saved-cards&quot;)
+    @ResponseStatus(HttpStatus.CREATED)
+    Cards.SavedCard save(@PathVariable long id, @Valid @RequestBody SaveCardRequest body, Authentication who) {
+        own(id, who);
+        return cards.save(id, body.cardNumber().replace(&quot; &quot;, &quot;&quot;), YearMonth.of(body.expiryYear(), body.expiryMonth()));
+    }
+
+    @GetMapping(&quot;/customers/{id}/saved-cards&quot;)
+    List&lt;Cards.SavedCard&gt; list(@PathVariable long id, Authentication who) {
+        own(id, who);
+        return cards.list(id);
+    }
+
+    /** Pays as the signed-in customer, with one of their saved cards. Safe to repeat with the same order id. */
+    @PostMapping(&quot;/payments&quot;)
+    ResponseEntity&lt;Cards.Payment&gt; pay(@Valid @RequestBody PaymentRequest body, Authentication who) {
+        Cards.Payment p = cards.pay(customers.idOf(who), body.savedCardId(), body.orderId().toUpperCase(Locale.ROOT), body.amountPaise());
+        return ResponseEntity.status(STATUS.get(p.status())).body(p);
+    }
+
+    /** A customer&#x27;s own cards only: someone else&#x27;s customer id is refused (403) before anything is read. */
+    private void own(long customerId, Authentication who) {
+        if (customers.idOf(who) != customerId) {
+            throw new AccessDeniedException(&quot;not this customer&#x27;s cards&quot;);
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/paysetu/cards/Cards.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Saving, listing and paying.</dd><dt>Why</dt><dd>The number is a parameter that goes to the network and nowhere else; the payment row is written before the network is called; expiry is checked by the month in IST.</dd><dt>Without it</dt><dd>Card numbers in the database, double charges on a double tap.</dd></dl><ul><li>If the saved card cannot be recorded, the token is deleted at the network, so nothing usable is left behind.</li><li>A retry of an order is answered before the card checks: the payment happened, whatever the card's state is now.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponseException;
+
+import java.time.Clock;
+import java.time.OffsetDateTime;
+import java.time.YearMonth;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.Optional;
+
+@Service
+class Cards {
+
+    static final ZoneId IST = ZoneId.of(&quot;Asia/Kolkata&quot;);
+
+    record SavedCard(long id, String network, String last4, int expiryMonth, int expiryYear) {
+    }
+
+    record Payment(long id, String orderId, long savedCardId, long amountPaise, String status, String networkRef) {
+    }
+
+    private record Stored(long id, long customerId, String tokenRef, int expiryMonth, int expiryYear, String status) {
+    }
+
+    private final JdbcClient jdbc;
+    private final SimNetwork network;
+    private final Clock clock;
+
+    Cards(JdbcClient jdbc, SimNetwork network, Clock clock) {
+        this.jdbc = jdbc;
+        this.network = network;
+        this.clock = clock;
+    }
+
+    /**
+     * The card number goes to the network&#x27;s token service and is then forgotten: it is a parameter here, never a
+     * field, a column, a log line or part of an error. Only the token reference and what the customer needs to
+     * recognise the card are kept.
+     */
+    SavedCard save(long customerId, String cardNumber, YearMonth expiry) {
+        if (cardNumber.length() &lt; 13 || cardNumber.length() &gt; 19 || !luhn(cardNumber)) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;This is not a valid card number&quot;);   // never echo the number
+        }
+        SimNetwork.Token t;
+        try {
+            t = network.provision(cardNumber, expiry);
+        } catch (SimNetwork.Refused e) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());
+        }
+        long id;
+        try {
+            id = jdbc.sql(&quot;&quot;&quot;
+                            INSERT INTO saved_cards (customer_id, token_ref, network, last4, expiry_month, expiry_year, consent_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id&quot;&quot;&quot;)
+                    .params(customerId, t.tokenRef(), t.network(), t.last4(), expiry.getMonthValue(), expiry.getYear(), OffsetDateTime.now(clock))
+                    .query(Long.class).single();
+        } catch (DataAccessException e) {
+            network.delete(t.tokenRef());   // a token nobody can find again should not stay usable at the network
+            throw e;
+        }
+        return new SavedCard(id, t.network(), t.last4(), expiry.getMonthValue(), expiry.getYear());
+    }
+
+    List&lt;SavedCard&gt; list(long customerId) {
+        return jdbc.sql(&quot;SELECT id, network, last4, expiry_month, expiry_year FROM saved_cards WHERE customer_id = ? AND status = &#x27;active&#x27; ORDER BY id&quot;)
+                .param(customerId).query(SavedCard.class).list();
+    }
+
+    /**
+     * Pays with a saved card&#x27;s token and a fresh cryptogram. One payment per order id: the row is written before the
+     * network is called, so a retry or a double tap finds it and nothing is charged twice.
+     */
+    Payment pay(long customerId, long savedCardId, String orderId, long amountPaise) {
+        Optional&lt;Payment&gt; earlier = byOrder(customerId, orderId);
+        if (earlier.isPresent()) {
+            return earlier.get();
+        }
+        // Someone else&#x27;s card is &quot;no such card&quot;: a 403 would confirm that the id exists.
+        Stored card = jdbc.sql(&quot;SELECT id, customer_id, token_ref, expiry_month, expiry_year, status FROM saved_cards WHERE id = ? AND customer_id = ? AND status = &#x27;active&#x27;&quot;)
+                .params(savedCardId, customerId).query(Stored.class).optional()
+                .orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such saved card&quot;));
+        if (YearMonth.of(card.expiryYear(), card.expiryMonth()).isBefore(YearMonth.now(clock.withZone(IST)))) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;This saved card has expired; save the new card&quot;);
+        }
+        long id;
+        try {
+            id = jdbc.sql(&quot;INSERT INTO payments (customer_id, saved_card_id, order_id, amount_paise, status) VALUES (?, ?, ?, ?, &#x27;pending&#x27;) RETURNING id&quot;)
+                    .params(customerId, savedCardId, orderId, amountPaise).query(Long.class).single();
+        } catch (DuplicateKeyException e) {
+            return byOrder(customerId, orderId).orElseThrow();   // the same order, sent twice at once
+        }
+        String ref;
+        try {
+            ref = network.authorise(card.tokenRef(), network.cryptogram(card.tokenRef()), amountPaise);
+        } catch (SimNetwork.Refused e) {
+            jdbc.sql(&quot;UPDATE payments SET status = &#x27;failed&#x27; WHERE id = ?&quot;).param(id).update();
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());
+        }
+        return jdbc.sql(&quot;UPDATE payments SET status = ?, network_ref = ? WHERE id = ? RETURNING id, order_id, saved_card_id, amount_paise, status, network_ref&quot;)
+                .params(ref == null ? &quot;declined&quot; : &quot;succeeded&quot;, ref, id).query(Payment.class).single();
+    }
+
+    /** An order id belongs to one customer: someone else&#x27;s is a conflict, never their payment. */
+    private Optional&lt;Payment&gt; byOrder(long customerId, String orderId) {
+        Optional&lt;Long&gt; owner = jdbc.sql(&quot;SELECT customer_id FROM payments WHERE order_id = ?&quot;).param(orderId).query(Long.class).optional();
+        if (owner.isPresent() &amp;&amp; owner.get() != customerId) {
+            throw problem(HttpStatus.CONFLICT, &quot;This order id is already used&quot;);
+        }
+        return jdbc.sql(&quot;SELECT id, order_id, saved_card_id, amount_paise, status, network_ref FROM payments WHERE order_id = ?&quot;)
+                .param(orderId).query(Payment.class).optional();
+    }
+
+    /** The check digit every card number carries: catches typos before anything is sent to the network. */
+    static boolean luhn(String digits) {
+        int sum = 0;
+        for (int i = 0; i &lt; digits.length(); i++) {
+            int d = digits.charAt(digits.length() - 1 - i) - &#x27;0&#x27;;
+            if (i % 2 == 1) {
+                d = d * 2 &gt; 9 ? d * 2 - 9 : d * 2;
+            }
+            sum += d;
+        }
+        return sum % 10 == 0;
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/paysetu/cards/Customers.java</p><div class="notes"><p>The customer id of the signed-in user, from the database.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.core.Authentication;
+import org.springframework.stereotype.Component;
+
+/** Which customer a sign-in is. The customer id never comes from the request alone. */
+@Component
+class Customers {
+
+    private final JdbcClient jdbc;
+
+    Customers(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    long idOf(Authentication who) {
+        return jdbc.sql(&quot;SELECT id FROM customers WHERE username = ?&quot;).param(who.getName()).query(Long.class).single();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/paysetu/cards/SimNetwork.java</p><div class="notes"><p>The simulated network's token service: provisions tokens, issues one-time cryptograms, authorises. Its vault stands for the network's side. Nothing is charged.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.springframework.stereotype.Component;
+
+import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.YearMonth;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * The simulated card network&#x27;s token service. In real life this is Visa, Mastercard or RuPay (often reached through a
+ * payment aggregator): it keeps the card number in its own vault and gives the merchant a token. Here the &quot;vault&quot; is a
+ * map inside the app, standing for the network&#x27;s side; Paysetu&#x27;s own code and database never keep the number.
+ * Nothing is charged. Demo rules of the simulation: 4... is VISA, 5... MASTERCARD, 6... RUPAY; an amount ending in
+ * 51 paise is declined.
+ */
+@Component
+class SimNetwork {
+
+    record Token(String tokenRef, String network, String last4) {
+    }
+
+    static final class Refused extends RuntimeException {
+        Refused(String message) {
+            super(message);
+        }
+    }
+
+    private record Vaulted(String cardNumber, YearMonth expiry) {
+    }
+
+    private final Clock clock;
+    private final SecureRandom random = new SecureRandom();
+    private final Map&lt;String, Vaulted&gt; vault = new ConcurrentHashMap&lt;&gt;();
+    private final Set&lt;String&gt; unusedCryptograms = ConcurrentHashMap.newKeySet();
+    private final AtomicInteger ids = new AtomicInteger();
+
+    SimNetwork(Clock clock) {
+        this.clock = clock;
+    }
+
+    Token provision(String cardNumber, YearMonth expiry) {
+        String network = switch (cardNumber.charAt(0)) {
+            case &#x27;4&#x27; -&gt; &quot;VISA&quot;;
+            case &#x27;5&#x27; -&gt; &quot;MASTERCARD&quot;;
+            case &#x27;6&#x27; -&gt; &quot;RUPAY&quot;;
+            default -&gt; throw new Refused(&quot;This card network is not supported&quot;);
+        };
+        if (expiry.isBefore(YearMonth.now(clock.withZone(Cards.IST)))) {
+            throw new Refused(&quot;This card has expired&quot;);
+        }
+        StringBuilder ref = new StringBuilder(&quot;tkn_&quot;);
+        for (int i = 0; i &lt; 20; i++) {
+            ref.append((char) (&#x27;a&#x27; + random.nextInt(26)));
+        }
+        vault.put(ref.toString(), new Vaulted(cardNumber, expiry));
+        return new Token(ref.toString(), network, cardNumber.substring(cardNumber.length() - 4));
+    }
+
+    /** A one-time value proving this payment comes from the token&#x27;s owner, through its merchant. */
+    String cryptogram(String tokenRef) {
+        if (!vault.containsKey(tokenRef)) {
+            throw new Refused(&quot;Unknown or deleted token&quot;);
+        }
+        String c = &quot;cg_&quot; + ids.incrementAndGet();
+        unusedCryptograms.add(c);
+        return c;
+    }
+
+    /** Returns the network&#x27;s reference for an approved payment, or null for a decline. */
+    String authorise(String tokenRef, String cryptogram, long amountPaise) {
+        if (!vault.containsKey(tokenRef) || !unusedCryptograms.remove(cryptogram)) {
+            throw new Refused(&quot;Token or cryptogram not valid&quot;);
+        }
+        return amountPaise % 100 == 51 ? null : &quot;auth_&quot; + ids.incrementAndGet();
+    }
+
+    void delete(String tokenRef) {
+        vault.remove(tokenRef);
+    }
+
+    /** For tests: whether the network holds this card number (the network&#x27;s side, not Paysetu&#x27;s). */
+    boolean holds(String cardNumber) {
+        return vault.values().stream().anyMatch(v -&gt; v.cardNumber().equals(cardNumber));
+    }
+
+    void reset() {
+        vault.clear();
+        unusedCryptograms.clear();
+        ids.set(0);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/paysetu/cards/ProblemResponses.java</p><div class="notes"><p><code>401</code> and <code>403</code> in the same problem shape as other errors.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/** 401 and 403 are decided in Spring Security&#x27;s filters, before any controller: written here in the same problem shape. */
+@Component
+class ProblemResponses {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    void unauthenticated(HttpServletRequest req, HttpServletResponse res, AuthenticationException e) throws IOException {
+        // The same answer for an unknown username and a wrong password: nothing tells an attacker which accounts exist.
+        res.setHeader(&quot;WWW-Authenticate&quot;, &quot;Basic realm=\&quot;paysetu\&quot;&quot;);
+        write(req, res, HttpStatus.UNAUTHORIZED, &quot;Sign-in required&quot;, &quot;Send a valid username and password.&quot;);
+    }
+
+    void forbidden(HttpServletRequest req, HttpServletResponse res, AccessDeniedException e) throws IOException {
+        write(req, res, HttpStatus.FORBIDDEN, &quot;Not allowed&quot;, &quot;This sign-in cannot do this.&quot;);
+    }
+
+    private static void write(HttpServletRequest req, HttpServletResponse res, HttpStatus status, String title, String detail) throws IOException {
+        Map&lt;String, Object&gt; body = new LinkedHashMap&lt;&gt;();
+        body.put(&quot;title&quot;, title);
+        body.put(&quot;status&quot;, status.value());
+        body.put(&quot;detail&quot;, detail);
+        body.put(&quot;instance&quot;, req.getRequestURI());
+        res.setStatus(status.value());
+        res.setContentType(&quot;application/problem+json&quot;);
+        JSON.writeValue(res.getOutputStream(), body);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/resources/db/migration/V1__customers_saved_cards_payments.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Customers, saved cards and payments.</dd><dt>Why</dt><dd>Shape rules on the token and the last four digits make a card number impossible to store in them.</dd><dt>Without it</dt><dd>A "temporary" column or a script putting the number back.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">CREATE TABLE customers (
+    id       bigint CONSTRAINT customers_pk PRIMARY KEY,
+    username text NOT NULL CONSTRAINT customers_username_unique UNIQUE
+);
+
+-- What a merchant may keep: the token service&#x27;s reference, and what the customer needs to recognise the card.
+-- No card number, no CVV, ever. The shape rules make a card number impossible to store in any of these columns.
+CREATE TABLE saved_cards (
+    id           bigint GENERATED ALWAYS AS IDENTITY CONSTRAINT saved_cards_pk PRIMARY KEY,
+    customer_id  bigint NOT NULL CONSTRAINT saved_cards_customer_fk REFERENCES customers,
+    token_ref    text NOT NULL CONSTRAINT saved_cards_token_unique UNIQUE,
+    network      text NOT NULL,
+    last4        text NOT NULL,
+    expiry_month smallint NOT NULL,
+    expiry_year  smallint NOT NULL,
+    status       text NOT NULL DEFAULT &#x27;active&#x27;,
+    consent_at   timestamptz NOT NULL,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT saved_cards_token_shape CHECK (token_ref ~ &#x27;^tkn_[a-z]{20}$&#x27;),
+    CONSTRAINT saved_cards_last4_shape CHECK (last4 ~ &#x27;^[0-9]{4}$&#x27;),
+    CONSTRAINT saved_cards_network CHECK (network IN (&#x27;VISA&#x27;, &#x27;MASTERCARD&#x27;, &#x27;RUPAY&#x27;)),
+    CONSTRAINT saved_cards_expiry CHECK (expiry_month BETWEEN 1 AND 12 AND expiry_year BETWEEN 2000 AND 2100),
+    CONSTRAINT saved_cards_status CHECK (status IN (&#x27;active&#x27;, &#x27;deleted&#x27;))
+);
+
+CREATE TABLE payments (
+    id            bigint GENERATED ALWAYS AS IDENTITY CONSTRAINT payments_pk PRIMARY KEY,
+    customer_id   bigint NOT NULL CONSTRAINT payments_customer_fk REFERENCES customers,
+    saved_card_id bigint NOT NULL CONSTRAINT payments_saved_card_fk REFERENCES saved_cards,
+    order_id      text NOT NULL CONSTRAINT payments_order_once UNIQUE,
+    amount_paise  bigint NOT NULL,
+    status        text NOT NULL,
+    network_ref   text,
+    created_at    timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT payments_amount_positive CHECK (amount_paise &gt; 0),
+    -- pending: sent to the network; failed: the network refused the token, nothing was charged.
+    CONSTRAINT payments_status CHECK (status IN (&#x27;pending&#x27;, &#x27;succeeded&#x27;, &#x27;declined&#x27;, &#x27;failed&#x27;)),
+    CONSTRAINT payments_succeeded_has_ref CHECK (status &lt;&gt; &#x27;succeeded&#x27; OR network_ref IS NOT NULL)
+);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_customers.sql</p><div class="notes"><p>Two customers.</p></div><div class="src"><pre class="code"><code class="language-sql">INSERT INTO customers (id, username) VALUES (1, &#x27;asha&#x27;), (2, &#x27;rohan&#x27;);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Database connection; fractions refused for whole-number fields.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: paysetu-saved-cards
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/paysetu
+    username: paysetu
+    password: paysetu
+  jackson:
+    deserialization:
+      accept-float-as-int: false</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-9" aria-labelledby="code-9-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: paysetu
+      POSTGRES_USER: paysetu
+      POSTGRES_PASSWORD: paysetu
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U paysetu -d paysetu&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-10" aria-labelledby="code-10-b" hidden><p class="path">src/main/java/com/paysetu/cards/CardsApplication.java</p><div class="notes"><p>Entry point, and the <code>Clock</code> expiry is checked against.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+import java.time.Clock;
+
+@SpringBootApplication
+public class CardsApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(CardsApplication.class, args);
+    }
+
+    /** Card expiry is checked against this clock, so tests can move past a card&#x27;s last month. */
+    @Bean
+    Clock clock() {
+        return Clock.systemUTC();
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>SavedCardContractTest</code> (2), <code>TokenPaymentTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>CardNumberStorageTrapTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>CardDatabaseTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Security</td><td>401, 403, one user accessing another user's data, malicious input</td><td><code>CardSecurityTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">Two tests were corrected while building. The "too short" card number first failed its check digit, so removing the length check changed nothing; it is now a short number with a valid check digit. Removing the replay check before the card checks changed nothing either, because the unique order id returned the same payment; a retry after the card expired now shows the difference.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.paysetu.cards.CardDatabaseTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.paysetu.cards.TokenPaymentTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.paysetu.cards.SavedCardContractTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.paysetu.cards.CardSecurityTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.paysetu.cards.CardNumberStorageTrapTest
+[INFO] Tests run: 17, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">CardNumberStorageTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">SavedCardContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">TokenPaymentTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">CardSecurityTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">CardDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-6-b" aria-controls="tests-6" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/paysetu/cards/CardNumberStorageTrapTest.java</p><div class="notes"><p>Written first: the search over every text column, and the log.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Written first. The old code kept the card number in saved_cards &quot;just for retries&quot;: the breach copied it. These
+ * tests search every text column of every table, and the application&#x27;s log, for the card number.
+ */
+@ExtendWith(OutputCaptureExtension.class)
+class CardNumberStorageTrapTest extends ApiTest {
+
+    /** Every table and text column holding these digits. */
+    List&lt;String&gt; placesHolding(String digits) {
+        List&lt;String&gt; found = new ArrayList&lt;&gt;();
+        for (Map&lt;String, Object&gt; c : jdbc.sql(&quot;&quot;&quot;
+                SELECT table_name, column_name FROM information_schema.columns
+                WHERE table_schema = current_schema() AND data_type IN (&#x27;text&#x27;, &#x27;character varying&#x27;)&quot;&quot;&quot;).query().listOfRows()) {
+            String sql = &quot;SELECT count(*) FROM \&quot;%s\&quot; WHERE \&quot;%s\&quot; LIKE ?&quot;.formatted(c.get(&quot;table_name&quot;), c.get(&quot;column_name&quot;));
+            if (jdbc.sql(sql).param(&quot;%&quot; + digits + &quot;%&quot;).query(Long.class).single() &gt; 0) {
+                found.add(c.get(&quot;table_name&quot;) + &quot;.&quot; + c.get(&quot;column_name&quot;));
+            }
+        }
+        return found;
+    }
+
+    @Test
+    void theOldDesignKeptTheCardNumberAndTheSearchFindsIt() {
+        jdbc.sql(&quot;CREATE TABLE old_saved_cards (customer_id bigint, card_number text, token_ref text)&quot;).update();
+        try {
+            jdbc.sql(&quot;INSERT INTO old_saved_cards VALUES (1, ?, &#x27;tkn_abcdefghijklmnopqrst&#x27;)&quot;).param(VISA).update();   // &quot;just for retries&quot;
+            assertThat(placesHolding(VISA)).containsExactly(&quot;old_saved_cards.card_number&quot;);
+        } finally {
+            jdbc.sql(&quot;DROP TABLE old_saved_cards&quot;).update();
+        }
+    }
+
+    @Test
+    void afterSavingPayingAndRetryingTheCardNumberIsNowhereInOurDatabaseOrLog(CapturedOutput log) throws Exception {
+        long card = savedCardId(&quot;asha&quot;, ASHA, VISA);
+        pay(&quot;asha&quot;, &quot;ORD-1&quot;, card, 50051).andExpect(status().isPaymentRequired());   // declined
+        pay(&quot;asha&quot;, &quot;ORD-2&quot;, card, 50000).andExpect(status().isCreated());           // the retry uses the token, not the number
+        save(&quot;asha&quot;, ASHA, &quot;{\&quot;cardNumber\&quot;:\&quot;&quot; + VISA + &quot;\&quot;,\&quot;expiryMonth\&quot;:12,\&quot;expiryYear\&quot;:2028,\&quot;consent\&quot;:false}&quot;).andExpect(status().isBadRequest());
+        save(&quot;asha&quot;, ASHA, &quot;{\&quot;cardNumber\&quot;:\&quot;4111111111111112\&quot;,\&quot;expiryMonth\&quot;:12,\&quot;expiryYear\&quot;:2028,\&quot;consent\&quot;:true}&quot;).andExpect(status().isBadRequest());
+        assertThat(placesHolding(VISA)).isEmpty();
+        assertThat(placesHolding(VISA.substring(0, 12))).isEmpty();
+        assertThat(log.getAll()).doesNotContain(VISA).doesNotContain(&quot;4111111111111112&quot;);
+        assertThat(network.holds(VISA)).isTrue();   // the network&#x27;s vault has it, outside Paysetu&#x27;s systems
+    }
+
+    @Test
+    void theRequestNeverPrintsTheCardNumber() {
+        assertThat(new CardController.SaveCardRequest(VISA, 12, 2028, true).toString()).doesNotContain(VISA).contains(&quot;****&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/paysetu/cards/SavedCardContractTest.java</p><div class="notes"><p>Saving and listing through HTTP; bad and refused cards.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class SavedCardContractTest extends ApiTest {
+
+    @Test
+    void aSavedCardShowsOnlyWhatTheCustomerNeedsToRecogniseIt() throws Exception {
+        save(&quot;asha&quot;, ASHA, &quot;4111 1111 1111 1111&quot;, 12, 2028).andExpect(status().isCreated()).andExpect(jsonPath(&quot;$.id&quot;).value(1))
+                .andExpect(jsonPath(&quot;$.network&quot;).value(&quot;VISA&quot;)).andExpect(jsonPath(&quot;$.last4&quot;).value(&quot;1111&quot;))
+                .andExpect(jsonPath(&quot;$.expiryMonth&quot;).value(12)).andExpect(jsonPath(&quot;$.expiryYear&quot;).value(2028))
+                .andExpect(jsonPath(&quot;$.tokenRef&quot;).doesNotExist()).andExpect(jsonPath(&quot;$.cardNumber&quot;).doesNotExist());
+        save(&quot;asha&quot;, ASHA, MASTERCARD, 1, 2027).andExpect(jsonPath(&quot;$.network&quot;).value(&quot;MASTERCARD&quot;));
+        save(&quot;asha&quot;, ASHA, RUPAY, 1, 2027).andExpect(jsonPath(&quot;$.network&quot;).value(&quot;RUPAY&quot;));
+        list(&quot;asha&quot;, ASHA).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.length()&quot;).value(3)).andExpect(jsonPath(&quot;$[2].last4&quot;).value(&quot;0015&quot;));
+        list(&quot;rohan&quot;, ROHAN).andExpect(status().isOk()).andExpect(content().json(&quot;[]&quot;));
+    }
+
+    @Test
+    void badCardsAre400AndRefusedOnesAre422() throws Exception {
+        save(&quot;asha&quot;, ASHA, &quot;4111111111111112&quot;, 12, 2028).andExpect(status().isBadRequest())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;This is not a valid card number&quot;));
+        save(&quot;asha&quot;, ASHA, &quot;41111113&quot;, 12, 2028).andExpect(status().isBadRequest());   // passes the check digit, far too short
+        save(&quot;asha&quot;, ASHA, &quot;4111-1111-1111-1111&quot;, 12, 2028).andExpect(status().isBadRequest());
+        save(&quot;asha&quot;, ASHA, VISA, 13, 2028).andExpect(status().isBadRequest());
+        save(&quot;asha&quot;, ASHA, &quot;{\&quot;cardNumber\&quot;:\&quot;&quot; + VISA + &quot;\&quot;,\&quot;expiryMonth\&quot;:12,\&quot;expiryYear\&quot;:2028}&quot;).andExpect(status().isBadRequest());   // no consent
+        save(&quot;asha&quot;, ASHA, VISA, 9, 2026).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;This card has expired&quot;));
+        save(&quot;asha&quot;, ASHA, &quot;378282246310005&quot;, 12, 2028).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;This card network is not supported&quot;));
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM saved_cards&quot;).query(Long.class).single()).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/paysetu/cards/TokenPaymentTest.java</p><div class="notes"><p>Paying with a token, retries, expiry at the IST month boundary.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Instant;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class TokenPaymentTest extends ApiTest {
+
+    @Test
+    void aPaymentWithASavedCardUsesItsToken() throws Exception {
+        long card = savedCardId(&quot;asha&quot;, ASHA, VISA);
+        pay(&quot;asha&quot;, &quot;ord-100&quot;, card, 129900).andExpect(status().isCreated()).andExpect(jsonPath(&quot;$.orderId&quot;).value(&quot;ORD-100&quot;))
+                .andExpect(jsonPath(&quot;$.status&quot;).value(&quot;succeeded&quot;)).andExpect(jsonPath(&quot;$.networkRef&quot;).value(&quot;auth_2&quot;));
+        pay(&quot;asha&quot;, &quot;ORD-101&quot;, card, 129951).andExpect(status().isPaymentRequired()).andExpect(jsonPath(&quot;$.status&quot;).value(&quot;declined&quot;));
+    }
+
+    @Test
+    void theSameOrderTwiceIsOnePayment() throws Exception {
+        long card = savedCardId(&quot;asha&quot;, ASHA, VISA);
+        String first = pay(&quot;asha&quot;, &quot;ORD-200&quot;, card, 50000).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String again = pay(&quot;asha&quot;, &quot;ORD-200&quot;, card, 50000).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        assertThat(again).isEqualTo(first);
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM payments&quot;).query(Long.class).single()).isOne();
+    }
+
+    @Test
+    void aRetryAfterTheCardExpiredStillGetsTheFirstAnswer() throws Exception {
+        long card = savedCardId(&quot;asha&quot;, ASHA, VISA);
+        String first = pay(&quot;asha&quot;, &quot;ORD-250&quot;, card, 50000).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        CLOCK.now = Instant.parse(&quot;2029-02-01T00:00:00Z&quot;);
+        String again = pay(&quot;asha&quot;, &quot;ORD-250&quot;, card, 50000).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        assertThat(again).isEqualTo(first);   // the payment happened; the card&#x27;s later state does not change that answer
+    }
+
+    @Test
+    void anExpiredSavedCardIs422() throws Exception {
+        long card = savedCardId(&quot;asha&quot;, ASHA, VISA);   // expires 12/2028
+        CLOCK.now = Instant.parse(&quot;2028-12-31T18:29:59Z&quot;);   // 23:59:59 IST on 31 Dec 2028: still valid
+        pay(&quot;asha&quot;, &quot;ORD-300&quot;, card, 50000).andExpect(status().isCreated());
+        CLOCK.now = Instant.parse(&quot;2028-12-31T18:30:00Z&quot;);   // 00:00 IST on 1 Jan 2029
+        pay(&quot;asha&quot;, &quot;ORD-301&quot;, card, 50000).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;This saved card has expired; save the new card&quot;));
+    }
+
+    @Test
+    void badPaymentRequestsAre400() throws Exception {
+        long card = savedCardId(&quot;asha&quot;, ASHA, VISA);
+        pay(&quot;asha&quot;, &quot;OR&quot;, card, 50000).andExpect(status().isBadRequest());
+        pay(&quot;asha&quot;, &quot;ORD-400&quot;, card, 99).andExpect(status().isBadRequest());
+        pay(&quot;asha&quot;, &quot;ORD-400&quot;, 0, 50000).andExpect(status().isBadRequest());
+        pay(&quot;asha&quot;, &quot;ORD-400&quot;, 99, 50000).andExpect(status().isNotFound()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;No such saved card&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/paysetu/cards/CardSecurityTest.java</p><div class="notes"><p>401, 403, other customers' cards and orders, malicious input.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class CardSecurityTest extends ApiTest {
+
+    @Test
+    void withoutAValidSignInEverythingIs401() throws Exception {
+        mvc.perform(get(&quot;/customers/1/saved-cards&quot;)).andExpect(status().isUnauthorized()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Sign-in required&quot;));
+        mvc.perform(get(&quot;/customers/1/saved-cards&quot;).with(httpBasic(&quot;asha&quot;, &quot;wrong&quot;))).andExpect(status().isUnauthorized());
+        mvc.perform(post(&quot;/payments&quot;).contentType(MediaType.APPLICATION_JSON).content(&quot;{}&quot;)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void oneCustomerCannotSeeOrAddToAnothersCards() throws Exception {
+        long ashasCard = savedCardId(&quot;asha&quot;, ASHA, VISA);
+        list(&quot;rohan&quot;, ASHA).andExpect(status().isForbidden()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Not allowed&quot;));
+        save(&quot;rohan&quot;, ASHA, MASTERCARD, 1, 2027).andExpect(status().isForbidden());
+        pay(&quot;rohan&quot;, &quot;ORD-500&quot;, ashasCard, 50000).andExpect(status().isNotFound());   // not &quot;forbidden&quot;: that would confirm the card exists
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM saved_cards&quot;).query(Long.class).single()).isOne();
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM payments&quot;).query(Long.class).single()).isZero();
+    }
+
+    @Test
+    void anOrderIdBelongsToOneCustomer() throws Exception {
+        long ashasCard = savedCardId(&quot;asha&quot;, ASHA, VISA);
+        long rohansCard = savedCardId(&quot;rohan&quot;, ROHAN, MASTERCARD);
+        pay(&quot;asha&quot;, &quot;ORD-600&quot;, ashasCard, 50000).andExpect(status().isCreated());
+        pay(&quot;rohan&quot;, &quot;ORD-600&quot;, rohansCard, 50000).andExpect(status().isConflict());   // never Asha&#x27;s payment in Rohan&#x27;s answer
+    }
+
+    @Test
+    void maliciousInputIsRefusedBeforeAnythingRuns() throws Exception {
+        save(&quot;asha&quot;, ASHA, &quot;{\&quot;cardNumber\&quot;:\&quot;4111&#x27; OR &#x27;1&#x27;=&#x27;1\&quot;,\&quot;expiryMonth\&quot;:12,\&quot;expiryYear\&quot;:2028,\&quot;consent\&quot;:true}&quot;).andExpect(status().isBadRequest());
+        save(&quot;asha&quot;, ASHA, &quot;{\&quot;cardNumber\&quot;:\&quot;&quot; + &quot;4&quot;.repeat(5000) + &quot;\&quot;,\&quot;expiryMonth\&quot;:12,\&quot;expiryYear\&quot;:2028,\&quot;consent\&quot;:true}&quot;).andExpect(status().isBadRequest());
+        pay(&quot;asha&quot;, &quot;ORD-1;DROP TABLE payments&quot;, 1, 50000).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/customers/1/saved-cards/../../payments&quot;).with(httpBasic(&quot;asha&quot;, password(&quot;asha&quot;)))).andExpect(status().is4xxClientError());
+        assertThat(network.holds(&quot;4&quot;.repeat(5000))).isFalse();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/paysetu/cards/CardDatabaseTest.java</p><div class="notes"><p>Shape rules and named constraints with plain SQL; a card that cannot be recorded.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The rules hold for any writer, not only this API: plain SQL, no Java in between. */
+class CardDatabaseTest extends ApiTest {
+
+    void violates(String constraint, String sql) {
+        assertThatThrownBy(() -&gt; jdbc.sql(sql).update()).hasMessageContaining(constraint);
+    }
+
+    static String card(String token, String last4) {
+        return &quot;INSERT INTO saved_cards (customer_id, token_ref, network, last4, expiry_month, expiry_year, consent_at) VALUES (1, &#x27;%s&#x27;, &#x27;VISA&#x27;, &#x27;%s&#x27;, 12, 2028, now())&quot;.formatted(token, last4);
+    }
+
+    @Test
+    void aCardNumberCannotBeStoredAsATokenOrALast4() {
+        violates(&quot;saved_cards_token_shape&quot;, card(VISA, &quot;1111&quot;));
+        violates(&quot;saved_cards_token_shape&quot;, card(&quot;tkn_&quot; + VISA, &quot;1111&quot;));
+        violates(&quot;saved_cards_last4_shape&quot;, card(&quot;tkn_abcdefghijklmnopqrst&quot;, VISA));
+    }
+
+    @Test
+    void otherRulesHoldWithoutJava() {
+        jdbc.sql(card(&quot;tkn_abcdefghijklmnopqrst&quot;, &quot;1111&quot;)).update();
+        violates(&quot;saved_cards_token_unique&quot;, card(&quot;tkn_abcdefghijklmnopqrst&quot;, &quot;1111&quot;));
+        violates(&quot;saved_cards_network&quot;, &quot;UPDATE saved_cards SET network = &#x27;AMEX&#x27;&quot;);
+        violates(&quot;saved_cards_expiry&quot;, &quot;UPDATE saved_cards SET expiry_month = 13&quot;);
+        violates(&quot;saved_cards_status&quot;, &quot;UPDATE saved_cards SET status = &#x27;gone&#x27;&quot;);
+        violates(&quot;saved_cards_customer_fk&quot;, &quot;UPDATE saved_cards SET customer_id = 99&quot;);
+        violates(&quot;payments_amount_positive&quot;, &quot;INSERT INTO payments (customer_id, saved_card_id, order_id, amount_paise, status) VALUES (1, 1, &#x27;ORD-1&#x27;, 0, &#x27;pending&#x27;)&quot;);
+        violates(&quot;payments_succeeded_has_ref&quot;, &quot;INSERT INTO payments (customer_id, saved_card_id, order_id, amount_paise, status) VALUES (1, 1, &#x27;ORD-1&#x27;, 100, &#x27;succeeded&#x27;)&quot;);
+        violates(&quot;payments_status&quot;, &quot;INSERT INTO payments (customer_id, saved_card_id, order_id, amount_paise, status) VALUES (1, 1, &#x27;ORD-1&#x27;, 100, &#x27;charged&#x27;)&quot;);
+        jdbc.sql(&quot;INSERT INTO payments (customer_id, saved_card_id, order_id, amount_paise, status) VALUES (1, 1, &#x27;ORD-1&#x27;, 100, &#x27;pending&#x27;)&quot;).update();
+        violates(&quot;payments_order_once&quot;, &quot;INSERT INTO payments (customer_id, saved_card_id, order_id, amount_paise, status) VALUES (1, 1, &#x27;ORD-1&#x27;, 100, &#x27;pending&#x27;)&quot;);
+    }
+
+    @Test
+    void aCardThatCannotBeRecordedLeavesNoTokenAtTheNetwork() {
+        jdbc.sql(&quot;&quot;&quot;
+                CREATE FUNCTION refuse_cards() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION &#x27;saved cards full&#x27;; END $$ LANGUAGE plpgsql;
+                CREATE TRIGGER refuse_cards BEFORE INSERT ON saved_cards FOR EACH ROW EXECUTE FUNCTION refuse_cards()&quot;&quot;&quot;).update();
+        try {
+            assertThatThrownBy(() -&gt; save(&quot;asha&quot;, ASHA, VISA, 12, 2028)).hasRootCauseMessage(&quot;ERROR: saved cards full\n  Where: PL/pgSQL function refuse_cards() line 1 at RAISE&quot;);
+        } finally {
+            jdbc.sql(&quot;DROP TRIGGER refuse_cards ON saved_cards; DROP FUNCTION refuse_cards()&quot;).update();
+        }
+        assertThat(network.holds(VISA)).isFalse();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/paysetu/cards/ApiTest.java</p><div class="notes"><p>Shared setup: the test clock, the network simulation and customers before each test, request helpers, test card numbers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.bean.override.convention.TestBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/** Shared setup: the whole app on a real PostgreSQL, a clock the tests move, the network simulation empty, the demo customers. */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    /** Standard test card numbers: they pass the check digit and belong to nobody. */
+    static final String VISA = &quot;4111111111111111&quot;;
+    static final String MASTERCARD = &quot;5555555555554444&quot;;
+    static final String RUPAY = &quot;6521000000000015&quot;;
+    static final long ASHA = 1;
+    static final long ROHAN = 2;
+    static final Instant NOW = Instant.parse(&quot;2026-10-30T06:30:00Z&quot;);
+
+    static final class TestClock extends Clock {
+        volatile Instant now = NOW;
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            TestClock outer = this;
+            return new Clock() {
+                public ZoneId getZone() {
+                    return zone;
+                }
+
+                public Clock withZone(ZoneId z) {
+                    return outer.withZone(z);
+                }
+
+                public Instant instant() {
+                    return outer.now;
+                }
+            };
+        }
+
+        @Override
+        public Instant instant() {
+            return now;
+        }
+    }
+
+    static final TestClock CLOCK = new TestClock();
+
+    @TestBean
+    Clock clock;
+
+    static Clock clock() {
+        return CLOCK;
+    }
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+    @Autowired
+    SimNetwork network;
+
+    @BeforeEach
+    void clean() throws Exception {
+        CLOCK.now = NOW;
+        network.reset();
+        jdbc.sql(&quot;TRUNCATE customers, saved_cards, payments RESTART IDENTITY&quot;).update();
+        jdbc.sql(Files.readString(Path.of(&quot;src/main/resources/db/migration/V2__demo_customers.sql&quot;))).update();
+    }
+
+    static String password(String user) {
+        return user + &quot;-demo-pass&quot;;
+    }
+
+    ResultActions save(String user, long customer, String json) throws Exception {
+        return mvc.perform(post(&quot;/customers/{id}/saved-cards&quot;, customer).with(httpBasic(user, password(user))).contentType(MediaType.APPLICATION_JSON).content(json));
+    }
+
+    ResultActions save(String user, long customer, String cardNumber, int month, int year) throws Exception {
+        return save(user, customer, &quot;{\&quot;cardNumber\&quot;:\&quot;%s\&quot;,\&quot;expiryMonth\&quot;:%d,\&quot;expiryYear\&quot;:%d,\&quot;consent\&quot;:true}&quot;.formatted(cardNumber, month, year));
+    }
+
+    long savedCardId(String user, long customer, String cardNumber) throws Exception {
+        String body = save(user, customer, cardNumber, 12, 2028).andReturn().getResponse().getContentAsString();
+        return JsonMapper.builder().build().readTree(body).get(&quot;id&quot;).asLong();
+    }
+
+    ResultActions list(String user, long customer) throws Exception {
+        return mvc.perform(get(&quot;/customers/{id}/saved-cards&quot;, customer).with(httpBasic(user, password(user))));
+    }
+
+    ResultActions pay(String user, String orderId, long savedCardId, long amountPaise) throws Exception {
+        return mvc.perform(post(&quot;/payments&quot;).with(httpBasic(user, password(user))).contentType(MediaType.APPLICATION_JSON)
+                .content(&quot;{\&quot;orderId\&quot;:\&quot;%s\&quot;,\&quot;savedCardId\&quot;:%d,\&quot;amountPaise\&quot;:%d}&quot;.formatted(orderId, savedCardId, amountPaise)));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-6" aria-labelledby="tests-6-b" hidden><p class="path">src/test/java/com/paysetu/cards/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker: constraints and row locks behave exactly as in production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/paysetu/cards/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=DeleteSavedCardChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 17 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 22 tests pass (17 station tests and 5 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 25 minutes</p><h2>Delete a saved card</h2><p><code>DELETE /customers/{id}/saved-cards/{cardId}</code>: the token is deleted at the network, the card leaves the list and cannot pay. Deleting it again is still <code>204</code>; another customer's path <code>403</code>; an unknown card <code>404</code>.</p><p><b>Done when:</b> both tests in <code>DeleteSavedCardChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>The security rules match paths: <code>/customers/*/saved-cards/*</code> needs adding.</li><li>Mark the row deleted rather than removing it: payments still point at it.</li></ul></details><p class="path">challenge/DeleteSavedCardChallengeTest.java</p><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.test.web.servlet.ResultActions;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: DELETE /customers/{id}/saved-cards/{cardId}. The token is deleted at the network too, the card leaves the
+ * list and cannot pay; deleting it again is still 204. Another customer&#x27;s card is 403, an unknown one 404.
+ */
+class DeleteSavedCardChallengeTest extends ApiTest {
+
+    ResultActions remove(String user, long customer, long card) throws Exception {
+        return mvc.perform(delete(&quot;/customers/{id}/saved-cards/{card}&quot;, customer, card).with(httpBasic(user, password(user))));
+    }
+
+    @Test
+    void aDeletedCardIsGoneEverywhere() throws Exception {
+        long card = savedCardId(&quot;asha&quot;, ASHA, VISA);
+        remove(&quot;asha&quot;, ASHA, card).andExpect(status().isNoContent());
+        remove(&quot;asha&quot;, ASHA, card).andExpect(status().isNoContent());
+        list(&quot;asha&quot;, ASHA).andExpect(jsonPath(&quot;$.length()&quot;).value(0));
+        pay(&quot;asha&quot;, &quot;ORD-1&quot;, card, 50000).andExpect(status().isNotFound());
+        assertThat(network.holds(VISA)).isFalse();
+    }
+
+    @Test
+    void onlyTheOwnerCanDeleteAndUnknownCardsAre404() throws Exception {
+        long card = savedCardId(&quot;asha&quot;, ASHA, VISA);
+        remove(&quot;rohan&quot;, ASHA, card).andExpect(status().isForbidden());
+        remove(&quot;rohan&quot;, ROHAN, card).andExpect(status().isNotFound());   // Asha&#x27;s card through Rohan&#x27;s own path
+        remove(&quot;asha&quot;, ASHA, 99).andExpect(status().isNotFound());
+        assertThat(network.holds(VISA)).isTrue();
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/Cards.java</p><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponseException;
+
+import java.time.Clock;
+import java.time.OffsetDateTime;
+import java.time.YearMonth;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.Optional;
+
+@Service
+class Cards {
+
+    static final ZoneId IST = ZoneId.of(&quot;Asia/Kolkata&quot;);
+
+    record SavedCard(long id, String network, String last4, int expiryMonth, int expiryYear) {
+    }
+
+    record Payment(long id, String orderId, long savedCardId, long amountPaise, String status, String networkRef) {
+    }
+
+    private record Stored(long id, long customerId, String tokenRef, int expiryMonth, int expiryYear, String status) {
+    }
+
+    private final JdbcClient jdbc;
+    private final SimNetwork network;
+    private final Clock clock;
+
+    Cards(JdbcClient jdbc, SimNetwork network, Clock clock) {
+        this.jdbc = jdbc;
+        this.network = network;
+        this.clock = clock;
+    }
+
+    /**
+     * The card number goes to the network&#x27;s token service and is then forgotten: it is a parameter here, never a
+     * field, a column, a log line or part of an error. Only the token reference and what the customer needs to
+     * recognise the card are kept.
+     */
+    SavedCard save(long customerId, String cardNumber, YearMonth expiry) {
+        if (cardNumber.length() &lt; 13 || cardNumber.length() &gt; 19 || !luhn(cardNumber)) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;This is not a valid card number&quot;);   // never echo the number
+        }
+        SimNetwork.Token t;
+        try {
+            t = network.provision(cardNumber, expiry);
+        } catch (SimNetwork.Refused e) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());
+        }
+        long id;
+        try {
+            id = jdbc.sql(&quot;&quot;&quot;
+                            INSERT INTO saved_cards (customer_id, token_ref, network, last4, expiry_month, expiry_year, consent_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id&quot;&quot;&quot;)
+                    .params(customerId, t.tokenRef(), t.network(), t.last4(), expiry.getMonthValue(), expiry.getYear(), OffsetDateTime.now(clock))
+                    .query(Long.class).single();
+        } catch (DataAccessException e) {
+            network.delete(t.tokenRef());   // a token nobody can find again should not stay usable at the network
+            throw e;
+        }
+        return new SavedCard(id, t.network(), t.last4(), expiry.getMonthValue(), expiry.getYear());
+    }
+
+    List&lt;SavedCard&gt; list(long customerId) {
+        return jdbc.sql(&quot;SELECT id, network, last4, expiry_month, expiry_year FROM saved_cards WHERE customer_id = ? AND status &lt;&gt; &#x27;deleted&#x27; ORDER BY id&quot;)
+                .param(customerId).query(SavedCard.class).list();
+    }
+
+    /** Deletes the token at the network and here. Deleting a deleted card changes nothing; someone else&#x27;s is 404. */
+    void delete(long customerId, long savedCardId) {
+        String token = jdbc.sql(&quot;SELECT token_ref FROM saved_cards WHERE id = ? AND customer_id = ?&quot;).params(savedCardId, customerId)
+                .query(String.class).optional().orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such saved card&quot;));
+        network.delete(token);
+        jdbc.sql(&quot;UPDATE saved_cards SET status = &#x27;deleted&#x27; WHERE id = ?&quot;).param(savedCardId).update();
+    }
+
+    /** What the network says about a token: a new expiry after the bank re-issues the card, or a suspension. */
+    void tokenEvent(String tokenRef, String event, Integer expiryMonth, Integer expiryYear) {
+        int changed = switch (event) {
+            case &quot;UPDATED&quot; -&gt; jdbc.sql(&quot;UPDATE saved_cards SET expiry_month = ?, expiry_year = ? WHERE token_ref = ? AND status &lt;&gt; &#x27;deleted&#x27;&quot;)
+                    .params(expiryMonth, expiryYear, tokenRef).update();
+            case &quot;SUSPENDED&quot; -&gt; jdbc.sql(&quot;UPDATE saved_cards SET status = &#x27;suspended&#x27; WHERE token_ref = ? AND status &lt;&gt; &#x27;deleted&#x27;&quot;).param(tokenRef).update();
+            case &quot;RESUMED&quot; -&gt; jdbc.sql(&quot;UPDATE saved_cards SET status = &#x27;active&#x27; WHERE token_ref = ? AND status = &#x27;suspended&#x27;&quot;).param(tokenRef).update();
+            default -&gt; throw problem(HttpStatus.BAD_REQUEST, &quot;Unknown event&quot;);
+        };
+        if (changed == 0 &amp;&amp; jdbc.sql(&quot;SELECT count(*) FROM saved_cards WHERE token_ref = ?&quot;).param(tokenRef).query(Long.class).single() == 0) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;No such token&quot;);
+        }
+    }
+
+    /**
+     * Pays with a saved card&#x27;s token and a fresh cryptogram. One payment per order id: the row is written before the
+     * network is called, so a retry or a double tap finds it and nothing is charged twice.
+     */
+    Payment pay(long customerId, long savedCardId, String orderId, long amountPaise) {
+        Optional&lt;Payment&gt; earlier = byOrder(customerId, orderId);
+        if (earlier.isPresent()) {
+            return earlier.get();
+        }
+        // Someone else&#x27;s card is &quot;no such card&quot;: a 403 would confirm that the id exists.
+        Stored card = jdbc.sql(&quot;SELECT id, customer_id, token_ref, expiry_month, expiry_year, status FROM saved_cards WHERE id = ? AND customer_id = ? AND status &lt;&gt; &#x27;deleted&#x27;&quot;)
+                .params(savedCardId, customerId).query(Stored.class).optional()
+                .orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such saved card&quot;));
+        if (&quot;suspended&quot;.equals(card.status())) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;This saved card is suspended by the bank&quot;);
+        }
+        if (YearMonth.of(card.expiryYear(), card.expiryMonth()).isBefore(YearMonth.now(clock.withZone(IST)))) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;This saved card has expired; save the new card&quot;);
+        }
+        long id;
+        try {
+            id = jdbc.sql(&quot;INSERT INTO payments (customer_id, saved_card_id, order_id, amount_paise, status) VALUES (?, ?, ?, ?, &#x27;pending&#x27;) RETURNING id&quot;)
+                    .params(customerId, savedCardId, orderId, amountPaise).query(Long.class).single();
+        } catch (DuplicateKeyException e) {
+            return byOrder(customerId, orderId).orElseThrow();   // the same order, sent twice at once
+        }
+        String ref;
+        try {
+            ref = network.authorise(card.tokenRef(), network.cryptogram(card.tokenRef()), amountPaise);
+        } catch (SimNetwork.Refused e) {
+            jdbc.sql(&quot;UPDATE payments SET status = &#x27;failed&#x27; WHERE id = ?&quot;).param(id).update();
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());
+        }
+        return jdbc.sql(&quot;UPDATE payments SET status = ?, network_ref = ? WHERE id = ? RETURNING id, order_id, saved_card_id, amount_paise, status, network_ref&quot;)
+                .params(ref == null ? &quot;declined&quot; : &quot;succeeded&quot;, ref, id).query(Payment.class).single();
+    }
+
+    /** An order id belongs to one customer: someone else&#x27;s is a conflict, never their payment. */
+    private Optional&lt;Payment&gt; byOrder(long customerId, String orderId) {
+        Optional&lt;Long&gt; owner = jdbc.sql(&quot;SELECT customer_id FROM payments WHERE order_id = ?&quot;).param(orderId).query(Long.class).optional();
+        if (owner.isPresent() &amp;&amp; owner.get() != customerId) {
+            throw problem(HttpStatus.CONFLICT, &quot;This order id is already used&quot;);
+        }
+        return jdbc.sql(&quot;SELECT id, order_id, saved_card_id, amount_paise, status, network_ref FROM payments WHERE order_id = ?&quot;)
+                .param(orderId).query(Payment.class).optional();
+    }
+
+    /** The check digit every card number carries: catches typos before anything is sent to the network. */
+    static boolean luhn(String digits) {
+        int sum = 0;
+        for (int i = 0; i &lt; digits.length(); i++) {
+            int d = digits.charAt(digits.length() - 1 - i) - &#x27;0&#x27;;
+            if (i % 2 == 1) {
+                d = d * 2 &gt; 9 ? d * 2 - 9 : d * 2;
+            }
+            sum += d;
+        }
+        return sum % 10 == 0;
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div><p class="path">challenge/solution/CardController.java</p><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.YearMonth;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+@RestController
+class CardController {
+
+    /** Spaces between groups of digits are allowed, as people type them. */
+    record SaveCardRequest(@NotNull @Pattern(regexp = &quot;[0-9]{4}( ?[0-9]{2,4}){2,4}&quot;) String cardNumber,
+                           @Min(1) @Max(12) int expiryMonth, @Min(2000) @Max(2100) int expiryYear,
+                           @AssertTrue(message = &quot;the customer must agree to save the card&quot;) boolean consent) {
+
+        /** A record prints every field by default: a log line or a debugger would show the card number. */
+        @Override
+        public String toString() {
+            return &quot;SaveCardRequest[cardNumber=****, expiry=&quot; + expiryMonth + &quot;/&quot; + expiryYear + &quot;, consent=&quot; + consent + &quot;]&quot;;
+        }
+    }
+
+    record PaymentRequest(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,40}&quot;) String orderId, @Min(1) long savedCardId,
+                          @Min(100) @Max(10_000_000) long amountPaise) {
+    }
+
+    record TokenEvent(@NotNull @Pattern(regexp = &quot;tkn_[a-z]{20}&quot;) String tokenRef, @NotNull @Pattern(regexp = &quot;UPDATED|SUSPENDED|RESUMED&quot;) String event,
+                      @Min(1) @Max(12) Integer expiryMonth, @Min(2000) @Max(2100) Integer expiryYear) {
+    }
+
+    private static final Map&lt;String, HttpStatus&gt; STATUS = Map.of(&quot;succeeded&quot;, HttpStatus.CREATED, &quot;declined&quot;, HttpStatus.PAYMENT_REQUIRED,
+            &quot;pending&quot;, HttpStatus.ACCEPTED, &quot;failed&quot;, HttpStatus.UNPROCESSABLE_CONTENT);
+
+    private final Cards cards;
+    private final Customers customers;
+
+    CardController(Cards cards, Customers customers) {
+        this.cards = cards;
+        this.customers = customers;
+    }
+
+    @PostMapping(&quot;/customers/{id}/saved-cards&quot;)
+    @ResponseStatus(HttpStatus.CREATED)
+    Cards.SavedCard save(@PathVariable long id, @Valid @RequestBody SaveCardRequest body, Authentication who) {
+        own(id, who);
+        return cards.save(id, body.cardNumber().replace(&quot; &quot;, &quot;&quot;), YearMonth.of(body.expiryYear(), body.expiryMonth()));
+    }
+
+    @GetMapping(&quot;/customers/{id}/saved-cards&quot;)
+    List&lt;Cards.SavedCard&gt; list(@PathVariable long id, Authentication who) {
+        own(id, who);
+        return cards.list(id);
+    }
+
+    @DeleteMapping(&quot;/customers/{id}/saved-cards/{cardId}&quot;)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void delete(@PathVariable long id, @PathVariable long cardId, Authentication who) {
+        own(id, who);
+        cards.delete(id, cardId);
+    }
+
+    /** Called by the network (role NETWORK), never by customers. */
+    @PostMapping(&quot;/network/token-events&quot;)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void tokenEvent(@Valid @RequestBody TokenEvent body) {
+        if (body.event().equals(&quot;UPDATED&quot;) &amp;&amp; (body.expiryMonth() == null || body.expiryYear() == null)) {
+            throw Cards.problem(HttpStatus.BAD_REQUEST, &quot;UPDATED needs the new expiry&quot;);
+        }
+        cards.tokenEvent(body.tokenRef(), body.event(), body.expiryMonth(), body.expiryYear());
+    }
+
+    /** Pays as the signed-in customer, with one of their saved cards. Safe to repeat with the same order id. */
+    @PostMapping(&quot;/payments&quot;)
+    ResponseEntity&lt;Cards.Payment&gt; pay(@Valid @RequestBody PaymentRequest body, Authentication who) {
+        Cards.Payment p = cards.pay(customers.idOf(who), body.savedCardId(), body.orderId().toUpperCase(Locale.ROOT), body.amountPaise());
+        return ResponseEntity.status(STATUS.get(p.status())).body(p);
+    }
+
+    /** A customer&#x27;s own cards only: someone else&#x27;s customer id is refused (403) before anything is read. */
+    private void own(long customerId, Authentication who) {
+        if (customers.idOf(who) != customerId) {
+            throw new AccessDeniedException(&quot;not this customer&#x27;s cards&quot;);
+        }
+    }
+}</code></pre></div><p class="path">challenge/solution/SecurityConfig.java</p><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems) throws Exception {
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(&quot;/customers/*/saved-cards&quot;, &quot;/customers/*/saved-cards/*&quot;, &quot;/payments&quot;).hasRole(&quot;CUSTOMER&quot;)
+                        .requestMatchers(&quot;/network/token-events&quot;).hasRole(&quot;NETWORK&quot;)
+                        .requestMatchers(&quot;/error&quot;).permitAll()
+                        .anyRequest().denyAll())
+                .httpBasic(b -&gt; b.authenticationEntryPoint(problems::unauthenticated))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable());   // credentials in a header with every request, no cookie a browser sends by itself
+        return http.build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+
+    /** Demo users: customers asha and rohan, and the simulated network; password &quot;name-demo-pass&quot;. */
+    @Bean
+    InMemoryUserDetailsManager users(PasswordEncoder encoder) {
+        return new InMemoryUserDetailsManager(
+                User.withUsername(&quot;asha&quot;).password(encoder.encode(&quot;asha-demo-pass&quot;)).roles(&quot;CUSTOMER&quot;).build(),
+                User.withUsername(&quot;rohan&quot;).password(encoder.encode(&quot;rohan-demo-pass&quot;)).roles(&quot;CUSTOMER&quot;).build(),
+                User.withUsername(&quot;sim-network&quot;).password(encoder.encode(&quot;sim-network-demo-pass&quot;)).roles(&quot;NETWORK&quot;).build());
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 35 minutes</p><h2>Events from the network</h2><p><code>POST /network/token-events</code>, signed in as the network (<code>sim-network</code>): <code>UPDATED</code> with a new expiry when the bank re-issues the card (the token stays, and payments work again), <code>SUSPENDED</code> and <code>RESUMED</code>. Customers get <code>403</code>.</p><p><b>Done when:</b> the three tests in <code>TokenEventsChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>A new role, <code>NETWORK</code>, and a user for it.</li><li>A V3 migration lets <code>saved_cards_status</code> hold <code>suspended</code>; a suspended card answers <code>422</code>, not <code>404</code>.</li></ul></details><p class="path">challenge/TokenEventsChallengeTest.java</p><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.ResultActions;
+
+import java.time.Instant;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: the network tells Paysetu about a token&#x27;s life. POST /network/token-events, signed in as the network
+ * (user sim-network, password sim-network-demo-pass): UPDATED with a new expiry when the bank re-issues the card (the
+ * token stays the same), SUSPENDED and RESUMED. Customers may not send events. A V3 migration allows &quot;suspended&quot;.
+ */
+class TokenEventsChallengeTest extends ApiTest {
+
+    String tokenOf(long card) {
+        return jdbc.sql(&quot;SELECT token_ref FROM saved_cards WHERE id = ?&quot;).param(card).query(String.class).single();
+    }
+
+    ResultActions event(String user, String json) throws Exception {
+        return mvc.perform(post(&quot;/network/token-events&quot;).with(httpBasic(user, password(user))).contentType(MediaType.APPLICATION_JSON).content(json));
+    }
+
+    @Test
+    void aReissuedCardKeepsItsTokenWithTheNewExpiry() throws Exception {
+        long card = savedCardId(&quot;asha&quot;, ASHA, VISA);   // 12/2028
+        CLOCK.now = Instant.parse(&quot;2029-01-10T06:30:00Z&quot;);
+        pay(&quot;asha&quot;, &quot;ORD-1&quot;, card, 50000).andExpect(status().isUnprocessableContent());
+        event(&quot;sim-network&quot;, &quot;{\&quot;tokenRef\&quot;:\&quot;%s\&quot;,\&quot;event\&quot;:\&quot;UPDATED\&quot;,\&quot;expiryMonth\&quot;:12,\&quot;expiryYear\&quot;:2033}&quot;.formatted(tokenOf(card))).andExpect(status().isNoContent());
+        pay(&quot;asha&quot;, &quot;ORD-2&quot;, card, 50000).andExpect(status().isCreated());
+        list(&quot;asha&quot;, ASHA).andExpect(jsonPath(&quot;$[0].expiryYear&quot;).value(2033));
+    }
+
+    @Test
+    void aSuspendedTokenCannotPayUntilResumed() throws Exception {
+        long card = savedCardId(&quot;asha&quot;, ASHA, VISA);
+        event(&quot;sim-network&quot;, &quot;{\&quot;tokenRef\&quot;:\&quot;%s\&quot;,\&quot;event\&quot;:\&quot;SUSPENDED\&quot;}&quot;.formatted(tokenOf(card))).andExpect(status().isNoContent());
+        pay(&quot;asha&quot;, &quot;ORD-3&quot;, card, 50000).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;This saved card is suspended by the bank&quot;));
+        event(&quot;sim-network&quot;, &quot;{\&quot;tokenRef\&quot;:\&quot;%s\&quot;,\&quot;event\&quot;:\&quot;RESUMED\&quot;}&quot;.formatted(tokenOf(card))).andExpect(status().isNoContent());
+        pay(&quot;asha&quot;, &quot;ORD-4&quot;, card, 50000).andExpect(status().isCreated());
+    }
+
+    @Test
+    void onlyTheNetworkSendsEventsAndUnknownTokensAre404() throws Exception {
+        long card = savedCardId(&quot;asha&quot;, ASHA, VISA);
+        event(&quot;asha&quot;, &quot;{\&quot;tokenRef\&quot;:\&quot;%s\&quot;,\&quot;event\&quot;:\&quot;SUSPENDED\&quot;}&quot;.formatted(tokenOf(card))).andExpect(status().isForbidden());
+        event(&quot;sim-network&quot;, &quot;{\&quot;tokenRef\&quot;:\&quot;tkn_aaaaaaaaaaaaaaaaaaaa\&quot;,\&quot;event\&quot;:\&quot;SUSPENDED\&quot;}&quot;).andExpect(status().isNotFound());
+        event(&quot;sim-network&quot;, &quot;{\&quot;tokenRef\&quot;:\&quot;%s\&quot;,\&quot;event\&quot;:\&quot;STOLEN\&quot;}&quot;.formatted(tokenOf(card))).andExpect(status().isBadRequest());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/Cards.java</p><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.web.ErrorResponseException;
+
+import java.time.Clock;
+import java.time.OffsetDateTime;
+import java.time.YearMonth;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.Optional;
+
+@Service
+class Cards {
+
+    static final ZoneId IST = ZoneId.of(&quot;Asia/Kolkata&quot;);
+
+    record SavedCard(long id, String network, String last4, int expiryMonth, int expiryYear) {
+    }
+
+    record Payment(long id, String orderId, long savedCardId, long amountPaise, String status, String networkRef) {
+    }
+
+    private record Stored(long id, long customerId, String tokenRef, int expiryMonth, int expiryYear, String status) {
+    }
+
+    private final JdbcClient jdbc;
+    private final SimNetwork network;
+    private final Clock clock;
+
+    Cards(JdbcClient jdbc, SimNetwork network, Clock clock) {
+        this.jdbc = jdbc;
+        this.network = network;
+        this.clock = clock;
+    }
+
+    /**
+     * The card number goes to the network&#x27;s token service and is then forgotten: it is a parameter here, never a
+     * field, a column, a log line or part of an error. Only the token reference and what the customer needs to
+     * recognise the card are kept.
+     */
+    SavedCard save(long customerId, String cardNumber, YearMonth expiry) {
+        if (cardNumber.length() &lt; 13 || cardNumber.length() &gt; 19 || !luhn(cardNumber)) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;This is not a valid card number&quot;);   // never echo the number
+        }
+        SimNetwork.Token t;
+        try {
+            t = network.provision(cardNumber, expiry);
+        } catch (SimNetwork.Refused e) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());
+        }
+        long id;
+        try {
+            id = jdbc.sql(&quot;&quot;&quot;
+                            INSERT INTO saved_cards (customer_id, token_ref, network, last4, expiry_month, expiry_year, consent_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id&quot;&quot;&quot;)
+                    .params(customerId, t.tokenRef(), t.network(), t.last4(), expiry.getMonthValue(), expiry.getYear(), OffsetDateTime.now(clock))
+                    .query(Long.class).single();
+        } catch (DataAccessException e) {
+            network.delete(t.tokenRef());   // a token nobody can find again should not stay usable at the network
+            throw e;
+        }
+        return new SavedCard(id, t.network(), t.last4(), expiry.getMonthValue(), expiry.getYear());
+    }
+
+    List&lt;SavedCard&gt; list(long customerId) {
+        return jdbc.sql(&quot;SELECT id, network, last4, expiry_month, expiry_year FROM saved_cards WHERE customer_id = ? AND status &lt;&gt; &#x27;deleted&#x27; ORDER BY id&quot;)
+                .param(customerId).query(SavedCard.class).list();
+    }
+
+    /** Deletes the token at the network and here. Deleting a deleted card changes nothing; someone else&#x27;s is 404. */
+    void delete(long customerId, long savedCardId) {
+        String token = jdbc.sql(&quot;SELECT token_ref FROM saved_cards WHERE id = ? AND customer_id = ?&quot;).params(savedCardId, customerId)
+                .query(String.class).optional().orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such saved card&quot;));
+        network.delete(token);
+        jdbc.sql(&quot;UPDATE saved_cards SET status = &#x27;deleted&#x27; WHERE id = ?&quot;).param(savedCardId).update();
+    }
+
+    /** What the network says about a token: a new expiry after the bank re-issues the card, or a suspension. */
+    void tokenEvent(String tokenRef, String event, Integer expiryMonth, Integer expiryYear) {
+        int changed = switch (event) {
+            case &quot;UPDATED&quot; -&gt; jdbc.sql(&quot;UPDATE saved_cards SET expiry_month = ?, expiry_year = ? WHERE token_ref = ? AND status &lt;&gt; &#x27;deleted&#x27;&quot;)
+                    .params(expiryMonth, expiryYear, tokenRef).update();
+            case &quot;SUSPENDED&quot; -&gt; jdbc.sql(&quot;UPDATE saved_cards SET status = &#x27;suspended&#x27; WHERE token_ref = ? AND status &lt;&gt; &#x27;deleted&#x27;&quot;).param(tokenRef).update();
+            case &quot;RESUMED&quot; -&gt; jdbc.sql(&quot;UPDATE saved_cards SET status = &#x27;active&#x27; WHERE token_ref = ? AND status = &#x27;suspended&#x27;&quot;).param(tokenRef).update();
+            default -&gt; throw problem(HttpStatus.BAD_REQUEST, &quot;Unknown event&quot;);
+        };
+        if (changed == 0 &amp;&amp; jdbc.sql(&quot;SELECT count(*) FROM saved_cards WHERE token_ref = ?&quot;).param(tokenRef).query(Long.class).single() == 0) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;No such token&quot;);
+        }
+    }
+
+    /**
+     * Pays with a saved card&#x27;s token and a fresh cryptogram. One payment per order id: the row is written before the
+     * network is called, so a retry or a double tap finds it and nothing is charged twice.
+     */
+    Payment pay(long customerId, long savedCardId, String orderId, long amountPaise) {
+        Optional&lt;Payment&gt; earlier = byOrder(customerId, orderId);
+        if (earlier.isPresent()) {
+            return earlier.get();
+        }
+        // Someone else&#x27;s card is &quot;no such card&quot;: a 403 would confirm that the id exists.
+        Stored card = jdbc.sql(&quot;SELECT id, customer_id, token_ref, expiry_month, expiry_year, status FROM saved_cards WHERE id = ? AND customer_id = ? AND status &lt;&gt; &#x27;deleted&#x27;&quot;)
+                .params(savedCardId, customerId).query(Stored.class).optional()
+                .orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such saved card&quot;));
+        if (&quot;suspended&quot;.equals(card.status())) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;This saved card is suspended by the bank&quot;);
+        }
+        if (YearMonth.of(card.expiryYear(), card.expiryMonth()).isBefore(YearMonth.now(clock.withZone(IST)))) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;This saved card has expired; save the new card&quot;);
+        }
+        long id;
+        try {
+            id = jdbc.sql(&quot;INSERT INTO payments (customer_id, saved_card_id, order_id, amount_paise, status) VALUES (?, ?, ?, ?, &#x27;pending&#x27;) RETURNING id&quot;)
+                    .params(customerId, savedCardId, orderId, amountPaise).query(Long.class).single();
+        } catch (DuplicateKeyException e) {
+            return byOrder(customerId, orderId).orElseThrow();   // the same order, sent twice at once
+        }
+        String ref;
+        try {
+            ref = network.authorise(card.tokenRef(), network.cryptogram(card.tokenRef()), amountPaise);
+        } catch (SimNetwork.Refused e) {
+            jdbc.sql(&quot;UPDATE payments SET status = &#x27;failed&#x27; WHERE id = ?&quot;).param(id).update();
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());
+        }
+        return jdbc.sql(&quot;UPDATE payments SET status = ?, network_ref = ? WHERE id = ? RETURNING id, order_id, saved_card_id, amount_paise, status, network_ref&quot;)
+                .params(ref == null ? &quot;declined&quot; : &quot;succeeded&quot;, ref, id).query(Payment.class).single();
+    }
+
+    /** An order id belongs to one customer: someone else&#x27;s is a conflict, never their payment. */
+    private Optional&lt;Payment&gt; byOrder(long customerId, String orderId) {
+        Optional&lt;Long&gt; owner = jdbc.sql(&quot;SELECT customer_id FROM payments WHERE order_id = ?&quot;).param(orderId).query(Long.class).optional();
+        if (owner.isPresent() &amp;&amp; owner.get() != customerId) {
+            throw problem(HttpStatus.CONFLICT, &quot;This order id is already used&quot;);
+        }
+        return jdbc.sql(&quot;SELECT id, order_id, saved_card_id, amount_paise, status, network_ref FROM payments WHERE order_id = ?&quot;)
+                .param(orderId).query(Payment.class).optional();
+    }
+
+    /** The check digit every card number carries: catches typos before anything is sent to the network. */
+    static boolean luhn(String digits) {
+        int sum = 0;
+        for (int i = 0; i &lt; digits.length(); i++) {
+            int d = digits.charAt(digits.length() - 1 - i) - &#x27;0&#x27;;
+            if (i % 2 == 1) {
+                d = d * 2 &gt; 9 ? d * 2 - 9 : d * 2;
+            }
+            sum += d;
+        }
+        return sum % 10 == 0;
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div><p class="path">challenge/solution/CardController.java</p><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.YearMonth;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+@RestController
+class CardController {
+
+    /** Spaces between groups of digits are allowed, as people type them. */
+    record SaveCardRequest(@NotNull @Pattern(regexp = &quot;[0-9]{4}( ?[0-9]{2,4}){2,4}&quot;) String cardNumber,
+                           @Min(1) @Max(12) int expiryMonth, @Min(2000) @Max(2100) int expiryYear,
+                           @AssertTrue(message = &quot;the customer must agree to save the card&quot;) boolean consent) {
+
+        /** A record prints every field by default: a log line or a debugger would show the card number. */
+        @Override
+        public String toString() {
+            return &quot;SaveCardRequest[cardNumber=****, expiry=&quot; + expiryMonth + &quot;/&quot; + expiryYear + &quot;, consent=&quot; + consent + &quot;]&quot;;
+        }
+    }
+
+    record PaymentRequest(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,40}&quot;) String orderId, @Min(1) long savedCardId,
+                          @Min(100) @Max(10_000_000) long amountPaise) {
+    }
+
+    record TokenEvent(@NotNull @Pattern(regexp = &quot;tkn_[a-z]{20}&quot;) String tokenRef, @NotNull @Pattern(regexp = &quot;UPDATED|SUSPENDED|RESUMED&quot;) String event,
+                      @Min(1) @Max(12) Integer expiryMonth, @Min(2000) @Max(2100) Integer expiryYear) {
+    }
+
+    private static final Map&lt;String, HttpStatus&gt; STATUS = Map.of(&quot;succeeded&quot;, HttpStatus.CREATED, &quot;declined&quot;, HttpStatus.PAYMENT_REQUIRED,
+            &quot;pending&quot;, HttpStatus.ACCEPTED, &quot;failed&quot;, HttpStatus.UNPROCESSABLE_CONTENT);
+
+    private final Cards cards;
+    private final Customers customers;
+
+    CardController(Cards cards, Customers customers) {
+        this.cards = cards;
+        this.customers = customers;
+    }
+
+    @PostMapping(&quot;/customers/{id}/saved-cards&quot;)
+    @ResponseStatus(HttpStatus.CREATED)
+    Cards.SavedCard save(@PathVariable long id, @Valid @RequestBody SaveCardRequest body, Authentication who) {
+        own(id, who);
+        return cards.save(id, body.cardNumber().replace(&quot; &quot;, &quot;&quot;), YearMonth.of(body.expiryYear(), body.expiryMonth()));
+    }
+
+    @GetMapping(&quot;/customers/{id}/saved-cards&quot;)
+    List&lt;Cards.SavedCard&gt; list(@PathVariable long id, Authentication who) {
+        own(id, who);
+        return cards.list(id);
+    }
+
+    @DeleteMapping(&quot;/customers/{id}/saved-cards/{cardId}&quot;)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void delete(@PathVariable long id, @PathVariable long cardId, Authentication who) {
+        own(id, who);
+        cards.delete(id, cardId);
+    }
+
+    /** Called by the network (role NETWORK), never by customers. */
+    @PostMapping(&quot;/network/token-events&quot;)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void tokenEvent(@Valid @RequestBody TokenEvent body) {
+        if (body.event().equals(&quot;UPDATED&quot;) &amp;&amp; (body.expiryMonth() == null || body.expiryYear() == null)) {
+            throw Cards.problem(HttpStatus.BAD_REQUEST, &quot;UPDATED needs the new expiry&quot;);
+        }
+        cards.tokenEvent(body.tokenRef(), body.event(), body.expiryMonth(), body.expiryYear());
+    }
+
+    /** Pays as the signed-in customer, with one of their saved cards. Safe to repeat with the same order id. */
+    @PostMapping(&quot;/payments&quot;)
+    ResponseEntity&lt;Cards.Payment&gt; pay(@Valid @RequestBody PaymentRequest body, Authentication who) {
+        Cards.Payment p = cards.pay(customers.idOf(who), body.savedCardId(), body.orderId().toUpperCase(Locale.ROOT), body.amountPaise());
+        return ResponseEntity.status(STATUS.get(p.status())).body(p);
+    }
+
+    /** A customer&#x27;s own cards only: someone else&#x27;s customer id is refused (403) before anything is read. */
+    private void own(long customerId, Authentication who) {
+        if (customers.idOf(who) != customerId) {
+            throw new AccessDeniedException(&quot;not this customer&#x27;s cards&quot;);
+        }
+    }
+}</code></pre></div><p class="path">challenge/solution/SecurityConfig.java</p><div class="src"><pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems) throws Exception {
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(&quot;/customers/*/saved-cards&quot;, &quot;/customers/*/saved-cards/*&quot;, &quot;/payments&quot;).hasRole(&quot;CUSTOMER&quot;)
+                        .requestMatchers(&quot;/network/token-events&quot;).hasRole(&quot;NETWORK&quot;)
+                        .requestMatchers(&quot;/error&quot;).permitAll()
+                        .anyRequest().denyAll())
+                .httpBasic(b -&gt; b.authenticationEntryPoint(problems::unauthenticated))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable());   // credentials in a header with every request, no cookie a browser sends by itself
+        return http.build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+
+    /** Demo users: customers asha and rohan, and the simulated network; password &quot;name-demo-pass&quot;. */
+    @Bean
+    InMemoryUserDetailsManager users(PasswordEncoder encoder) {
+        return new InMemoryUserDetailsManager(
+                User.withUsername(&quot;asha&quot;).password(encoder.encode(&quot;asha-demo-pass&quot;)).roles(&quot;CUSTOMER&quot;).build(),
+                User.withUsername(&quot;rohan&quot;).password(encoder.encode(&quot;rohan-demo-pass&quot;)).roles(&quot;CUSTOMER&quot;).build(),
+                User.withUsername(&quot;sim-network&quot;).password(encoder.encode(&quot;sim-network-demo-pass&quot;)).roles(&quot;NETWORK&quot;).build());
+    }
+}</code></pre></div><p class="path">challenge/solution/V3__suspended_tokens.sql</p><div class="src"><pre class="code"><code class="language-sql">-- The network can suspend a token (for example while the bank checks a fraud report) and resume it later.
+ALTER TABLE saved_cards DROP CONSTRAINT saved_cards_status;
+ALTER TABLE saved_cards ADD CONSTRAINT saved_cards_status CHECK (status IN (&#x27;active&#x27;, &#x27;suspended&#x27;, &#x27;deleted&#x27;));</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Never even seeing the number</h2>
+<p>Here the card number still passes through Paysetu's API on its way to the network. Redesign checkout so it never does: the customer types it into the aggregator's own form or SDK, and Paysetu only receives a token. What changes for PCI DSS scope, for logs and for support? And for guest checkout without saving: what may be kept, and for how long?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: a search over every text column, shown to find a number in an old-design table.</li>
+<li>Save: check shape, check digit and consent; send to the network; keep the token and display data only.</li>
+<li>Pay: write the payment row, get a cryptogram, authorise, record.</li>
+<li>Lock down who sees what, and make the database refuse a number in the card columns.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Network tokens; keep token, last four, expiry</td><td>Depends on the network and aggregator for every payment.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Keep the card number "just for retries"</td><td>Breaks RBI's rules; a breach takes the cards; every system in PCI scope.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Keep it encrypted</td><td>Still card data stored by the merchant; the key is one more secret to lose.</td><td><span class="pill bad">Not allowed for merchants</span></td></tr><tr><td>Aggregator's hosted form or SDK</td><td>The number never reaches Paysetu; less control over the page.</td><td><span class="pill ok">Better still (challenge 3)</span></td></tr><tr><td>Ask for the card every time</td><td>Safe, but no one-click checkout.</td><td><span class="pill warn">Fine for guests</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Object</th><th>What</th><th>Why</th></tr></thead><tbody><tr><td><code>saved_cards_token_shape</code>, <code>saved_cards_last4_shape</code></td><td>CHECKs</td><td>A card number cannot be written into these columns by any writer.</td></tr><tr><td><code>saved_cards_token_unique</code></td><td>UNIQUE</td><td>One saved card per token.</td></tr><tr><td><code>payments_order_once</code></td><td>UNIQUE</td><td>One payment per order, written before the network is called.</td></tr><tr><td><code>payments_succeeded_has_ref</code></td><td>CHECK</td><td>A succeeded payment can be found at the network.</td></tr></tbody></table></div>
+<p><strong>Transaction boundaries:</strong> no transaction is open while the network is called. A saved card is one insert after the token exists; if it fails, the token is deleted at the network.</p>
+<pre class="code"><code class="language-sql">CREATE TABLE customers (
+    id       bigint CONSTRAINT customers_pk PRIMARY KEY,
+    username text NOT NULL CONSTRAINT customers_username_unique UNIQUE
+);
+
+-- What a merchant may keep: the token service&#x27;s reference, and what the customer needs to recognise the card.
+-- No card number, no CVV, ever. The shape rules make a card number impossible to store in any of these columns.
+CREATE TABLE saved_cards (
+    id           bigint GENERATED ALWAYS AS IDENTITY CONSTRAINT saved_cards_pk PRIMARY KEY,
+    customer_id  bigint NOT NULL CONSTRAINT saved_cards_customer_fk REFERENCES customers,
+    token_ref    text NOT NULL CONSTRAINT saved_cards_token_unique UNIQUE,
+    network      text NOT NULL,
+    last4        text NOT NULL,
+    expiry_month smallint NOT NULL,
+    expiry_year  smallint NOT NULL,
+    status       text NOT NULL DEFAULT &#x27;active&#x27;,
+    consent_at   timestamptz NOT NULL,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT saved_cards_token_shape CHECK (token_ref ~ &#x27;^tkn_[a-z]{20}$&#x27;),
+    CONSTRAINT saved_cards_last4_shape CHECK (last4 ~ &#x27;^[0-9]{4}$&#x27;),
+    CONSTRAINT saved_cards_network CHECK (network IN (&#x27;VISA&#x27;, &#x27;MASTERCARD&#x27;, &#x27;RUPAY&#x27;)),
+    CONSTRAINT saved_cards_expiry CHECK (expiry_month BETWEEN 1 AND 12 AND expiry_year BETWEEN 2000 AND 2100),
+    CONSTRAINT saved_cards_status CHECK (status IN (&#x27;active&#x27;, &#x27;deleted&#x27;))
+);
+
+CREATE TABLE payments (
+    id            bigint GENERATED ALWAYS AS IDENTITY CONSTRAINT payments_pk PRIMARY KEY,
+    customer_id   bigint NOT NULL CONSTRAINT payments_customer_fk REFERENCES customers,
+    saved_card_id bigint NOT NULL CONSTRAINT payments_saved_card_fk REFERENCES saved_cards,
+    order_id      text NOT NULL CONSTRAINT payments_order_once UNIQUE,
+    amount_paise  bigint NOT NULL,
+    status        text NOT NULL,
+    network_ref   text,
+    created_at    timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT payments_amount_positive CHECK (amount_paise &gt; 0),
+    -- pending: sent to the network; failed: the network refused the token, nothing was charged.
+    CONSTRAINT payments_status CHECK (status IN (&#x27;pending&#x27;, &#x27;succeeded&#x27;, &#x27;declined&#x27;, &#x27;failed&#x27;)),
+    CONSTRAINT payments_succeeded_has_ref CHECK (status &lt;&gt; &#x27;succeeded&#x27; OR network_ref IS NOT NULL)
+);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Rules</dt><dd>RBI's card-on-file tokenisation rules, in force since 1 October 2022, allow only card issuers and networks to store card data; merchants keep tokens, with the customer's consent. Read the circulars themselves and your aggregator's terms.</dd>
+<dt>Logs and tools</dt><dd>Request logging, error trackers, APM and support tools copy bodies by default in many setups. Mask card fields before anything leaves the process.</dd>
+<dt>Token life</dt><dd>Networks tell you when a card is re-issued or a token suspended (challenge 2); a token outlives the plastic card, which is part of why checkout keeps working.</dd>
+<dt>Scope</dt><dd>Every system the number passes through is in PCI DSS scope. Fewer systems, smaller audits, smaller breaches.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>What is a network token?</summary><p>A stand-in for a card number, issued by the card network for one merchant. It is useless elsewhere, can be suspended or deleted, and survives a card re-issue.</p></details><details class="qa"><summary>Why not keep the card number encrypted?</summary><p>In India, RBI&#x27;s rules do not allow merchants to store card data at all. Elsewhere it keeps you in PCI scope, and a breach of the key exposes everything.</p></details><details class="qa"><summary>How do you retry a declined payment without the card number?</summary><p>With the token: ask the network for a new one-time cryptogram and send the payment again.</p></details><details class="qa"><summary>How do you prove card numbers are not stored or logged?</summary><p>Search every text column and the captured log for the digits in a test, and show the search finds them in a table built the old way.</p></details><details class="qa"><summary>Why 404 for someone else&#x27;s card id but 403 for their path?</summary><p>The path names the customer, which the caller already knows. A card id they do not own should not be confirmed to exist.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 17 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>Card data</td><td>No card number column.</td><td>Not in logs, errors, toString or any table, proven by a search that can fail.</td></tr><tr><td>Access</td><td>401 and 403.</td><td>404 for others' card ids; the customer from the sign-in only.</td></tr><tr><td>Lifecycle</td><td>Save and pay.</td><td>Expiry in IST, retries with tokens, tokens cleaned up when saving fails.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate helps support: a log line when a card is saved, and the masking <code>toString</code> removed as "noise". They also drop the owner check from listing cards, since it is read-only and shows only the last four digits. Read the file and list every problem before opening the findings.</p>
+<p class="path">review/CardController.java</p>
+<pre class="code"><code class="language-java">package com.paysetu.cards;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.YearMonth;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+@RestController
+class CardController {
+
+    /** Spaces between groups of digits are allowed, as people type them. */
+    record SaveCardRequest(@NotNull @Pattern(regexp = &quot;[0-9]{4}( ?[0-9]{2,4}){2,4}&quot;) String cardNumber,
+                           @Min(1) @Max(12) int expiryMonth, @Min(2000) @Max(2100) int expiryYear,
+                           @AssertTrue(message = &quot;the customer must agree to save the card&quot;) boolean consent) {
+    }
+
+    record PaymentRequest(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,40}&quot;) String orderId, @Min(1) long savedCardId,
+                          @Min(100) @Max(10_000_000) long amountPaise) {
+    }
+
+    private static final Map&lt;String, HttpStatus&gt; STATUS = Map.of(&quot;succeeded&quot;, HttpStatus.CREATED, &quot;declined&quot;, HttpStatus.PAYMENT_REQUIRED,
+            &quot;pending&quot;, HttpStatus.ACCEPTED, &quot;failed&quot;, HttpStatus.UNPROCESSABLE_CONTENT);
+
+    private static final Logger log = LoggerFactory.getLogger(CardController.class);
+
+    private final Cards cards;
+    private final Customers customers;
+
+    CardController(Cards cards, Customers customers) {
+        this.cards = cards;
+        this.customers = customers;
+    }
+
+    @PostMapping(&quot;/customers/{id}/saved-cards&quot;)
+    @ResponseStatus(HttpStatus.CREATED)
+    Cards.SavedCard save(@PathVariable long id, @Valid @RequestBody SaveCardRequest body, Authentication who) {
+        own(id, who);
+        log.info(&quot;Saving a card for customer {}: {}&quot;, id, body);   // support needs this to debug failed saves
+        return cards.save(id, body.cardNumber().replace(&quot; &quot;, &quot;&quot;), YearMonth.of(body.expiryYear(), body.expiryMonth()));
+    }
+
+    @GetMapping(&quot;/customers/{id}/saved-cards&quot;)
+    List&lt;Cards.SavedCard&gt; list(@PathVariable long id, Authentication who) {
+        return cards.list(id);   // read-only, and it shows only the last 4 digits
+    }
+
+    /** Pays as the signed-in customer, with one of their saved cards. Safe to repeat with the same order id. */
+    @PostMapping(&quot;/payments&quot;)
+    ResponseEntity&lt;Cards.Payment&gt; pay(@Valid @RequestBody PaymentRequest body, Authentication who) {
+        Cards.Payment p = cards.pay(customers.idOf(who), body.savedCardId(), body.orderId().toUpperCase(Locale.ROOT), body.amountPaise());
+        return ResponseEntity.status(STATUS.get(p.status())).body(p);
+    }
+
+    /** A customer&#x27;s own cards only: someone else&#x27;s customer id is refused (403) before anything is read. */
+    private void own(long customerId, Authentication who) {
+        if (customers.idOf(who) != customerId) {
+            throw new AccessDeniedException(&quot;not this customer&#x27;s cards&quot;);
+        }
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>Logging the request</summary><p>"Support needs this to debug failed saves": the log line prints the request record, and without the masking <code>toString</code> that is the full card number, in every log store and backup it reaches.</p><p class="evidence"><b>Test evidence:</b> <code>afterSavingPayingAndRetryingTheCardNumberIsNowhereInOurDatabaseOrLog</code> and <code>theRequestNeverPrintsTheCardNumber</code> fail.</p></details><details class="finding"><summary><span class="sev">2</span>No owner check on listing</summary><p>"Read-only, and it shows only the last 4 digits": any signed-in customer can list anyone's saved cards by changing the id in the path, and the card ids they learn are what payments ask for.</p><p class="evidence"><b>Test evidence:</b> <code>oneCustomerCannotSeeOrAddToAnothersCards</code> fails.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the flawed file copied over the real one, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>CardDatabaseTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill ok">3 / 3</span></td></tr><tr><td><code>SavedCardContractTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill ok">2 / 2</span></td></tr><tr><td><code>TokenPaymentTest</code></td><td><span class="pill ok">5 / 5</span></td><td><span class="pill ok">5 / 5</span></td></tr><tr><td><code>CardNumberStorageTrapTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill bad">1 / 3</span></td></tr><tr><td><code>CardSecurityTest</code></td><td><span class="pill ok">4 / 4</span></td><td><span class="pill bad">3 / 4</span></td></tr></tbody></table></div>
+<p class="note">The database is clean in the flawed version: the card number leaks through the log, which no database constraint can see. Only a test that reads the log catches it.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
