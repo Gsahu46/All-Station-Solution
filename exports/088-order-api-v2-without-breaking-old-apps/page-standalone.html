@@ -1,0 +1,1325 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 088 · Order API v2 without breaking old apps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 088</span>
+    <h1>Order API v2 without breaking old apps</h1>
+    <p class="scenario">Renaming a field broke 30% of users on old app versions for two days.</p>
+    <p class="sim"><b>Simulation</b><span>The orders are two demo orders kept in memory, not Kartwala's; the "old app" is a model class in the tests that reads JSON the way an app release would. The migration guide link is an example address.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>E-commerce</li>
+      <li><b>Types</b>None</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>006 One error shape for a banking API</p>
+      <p><span class="eyebrow">Builds toward</span><br>089 App config with HTTP caching</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring Framework 7 API versioning · Deprecation (RFC 9745) and Sunset (RFC 8594) headers · Jackson 3</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>A tidy rename</strong><p>Kartwala's team cleaned up the order API: customerName became customer.name, qty became quantity, the total moved to paise. The new app used the new names. It shipped on a Friday.</p></li><li><strong>Two days of broken orders</strong><p>30% of users still had app 5.x. Its order screen read the old names, found nothing, and crashed. Users cannot be forced to update, and app store reviews take days.</p></li><li><strong>The fix</strong><p>The old shape comes back as v1, frozen, and the new shape is v2 beside it. v1 tells clients it is deprecated and when it ends. Old apps keep working until that date.</p></li></ol>
+<p class="lesson">You cannot update the apps in people's pockets. Never rename, remove or change the meaning of a field in place: add a version.</p>
+
+<h2>What are we building?</h2>
+<p>One order, two shapes: <code>/v1</code> exactly as old apps read it, <code>/v2</code> with the new names, side by side, with v1 announcing its end date.</p>
+
+<h2>An everyday analogy</h2>
+<p>A city changes its bus numbers. It does not repaint every stop overnight: old and new numbers are shown together for months, with a notice saying when the old ones go.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Freeze v1</strong>: its names, types and values stay as old apps read them.</li>
+<li><strong>Add v2</strong> beside it with the new shape; both read the same order.</li>
+<li><strong>Announce</strong> on every v1 answer: deprecated since, ends on, where to read how to move.</li>
+<li><strong>Only add</strong> to a version afterwards, never rename or remove; clients ignore what they do not know.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: v1 sends total as rupees (1299.50). Is sending it in paise (129950) under the same name a compatible change?</summary><p>No. The name and the type look the same, but the meaning changed: old apps would show ₹1,29,950 without any error. That is the flawed version in the Review tab.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No database.</strong> Two demo orders in memory: this station is about the API's shape.</li>
+<li><strong>No writes.</strong> Only reading orders; versioning a write is challenge 3.</li>
+<li><strong>No real app.</strong> The "old app" is a model class in the tests that reads JSON like the app did.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>API version</strong></td><td>A fixed shape of answers that clients can rely on.</td><td>An edition of a timetable.</td><td><code>/v1</code>, <code>/v2</code></td></tr><tr><td><strong>Breaking change</strong></td><td>A change that makes an existing client fail or show wrong data: renaming, removing, changing a type or meaning.</td><td>Renumbering every bus route overnight.</td><td><code>customerName</code> to <code>customer.name</code></td></tr><tr><td><strong>Compatible change</strong></td><td>A change existing clients do not notice, such as a new field, if they ignore fields they do not know.</td><td>A new bus stop on the route.</td><td><code>trackingUrl</code> added to v1</td></tr><tr><td><strong>Tolerant reader</strong></td><td>A client that reads only the fields it needs and ignores the rest.</td><td>Reading only your own stop on the timetable.</td><td><code>@JsonIgnoreProperties(ignoreUnknown = true)</code></td></tr><tr><td><strong>Deprecation</strong></td><td>A notice that a version will go away; it still works.</td><td>"This timetable ends in April."</td><td><code>Deprecation</code> header</td></tr><tr><td><strong>Sunset</strong></td><td>The date a version stops working.</td><td>The last day the old timetable runs.</td><td><code>Sunset</code> header</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Kartwala</strong> (a fictional shopping app): renaming a field broke 30% of users on old app versions for two days.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo dates: v1 deprecated from 1 Oct 2026 and ends on 1 Apr 2027 (midnight IST).</p>
+<ol class="gwt">
+<li><b>Given</b> <code>/v1/orders/{id}</code>, <b>then</b> exactly the fields, types and values app 5.x reads, plus fields added since.</li>
+<li><b>Given</b> <code>/v2/orders/{id}</code>, <b>then</b> the new shape: customer object, paise, lower-case states.</li>
+<li><b>Given</b> any v1 answer, <b>then</b> <code>Deprecation</code>, <code>Sunset</code> and a <code>Link</code> to the migration guide; v2 has none.</li>
+<li><b>Given</b> an unknown order, <b>then</b> <code>404</code>; a non-numeric id or an unknown version, <code>400</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>One order model; one response shape per version, built from it.</li>
+<li>A test reads v1 the way the old app does.</li>
+<li>Money in v1 stays an exact decimal of rupees, from paise, never through a <code>double</code>.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Tell breaking changes from compatible ones, including changes of meaning.</li>
+<li>Use Spring Framework 7's API versioning on paths.</li>
+<li>Announce deprecation and sunset with standard headers, citing their status.</li>
+<li>Write clients and tests as tolerant readers.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/v1/orders/{id}</code></td><td>The frozen v1 shape, deprecated, with its end date.</td></tr><tr><td><code>GET</code></td><td><code>/v2/orders/{id}</code></td><td>The new shape.</td></tr></tbody></table></div>
+<h2>Headers on v1</h2>
+<div class="scroll"><table class=""><thead><tr><th>Header</th><th>Meaning</th><th>Standard</th></tr></thead><tbody><tr><td><code>Deprecation: @1790793000</code></td><td>Deprecated since this moment (seconds since 1970: 1 Oct 2026, 00:00 IST).</td><td>RFC 9745, Proposed Standard (2025)</td></tr><tr><td><code>Sunset: Wed, 31 Mar 2027 18:30:00 GMT</code></td><td>Stops working at this moment (1 Apr 2027, 00:00 IST).</td><td>RFC 8594, Informational (2019)</td></tr><tr><td><code>Link: &lt;...&gt;; rel="deprecation"</code></td><td>Where to read how to move to v2.</td><td>RFC 9745</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>The order, in the version asked for</td></tr><tr><td><span class="pill warn">400</span></td><td>An id that is not a number; a version that does not exist</td></tr><tr><td><span class="pill warn">404</span></td><td>No such order; a path that does not exist</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 22 Oct 2026, in this order. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: v1</h3><p><b>Why:</b> the old names, rupees as an exact decimal, and the three deprecation headers.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /v1/orders/1001 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Deprecation: @1790793000
+Link: &lt;https://developer.kartwala.example/orders/v1-to-v2&gt;; rel=&quot;deprecation&quot;; type=&quot;text/html&quot;
+Sunset: Wed, 31 Mar 2027 18:30:00 GMT
+Content-Type: application/json
+Content-Length: 215
+
+{
+  &quot;id&quot;: 1001,
+  &quot;customerName&quot;: &quot;Meera Iyer&quot;,
+  &quot;total&quot;: 1299.5,
+  &quot;status&quot;: &quot;SHIPPED&quot;,
+  &quot;items&quot;: [
+    {
+      &quot;sku&quot;: &quot;KW-TEE-01&quot;,
+      &quot;qty&quot;: 2,
+      &quot;price&quot;: 499.75
+    },
+    {
+      &quot;sku&quot;: &quot;KW-CAP-07&quot;,
+      &quot;qty&quot;: 1,
+      &quot;price&quot;: 300.0
+    }
+  ],
+  &quot;trackingUrl&quot;: &quot;https://track.example/KW1001&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: v2</h3><p><b>Why:</b> the same order in the new shape; no deprecation headers.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /v2/orders/1001 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 325
+
+{
+  &quot;id&quot;: 1001,
+  &quot;customer&quot;: {
+    &quot;name&quot;: &quot;Meera Iyer&quot;,
+    &quot;phone&quot;: &quot;+919800000001&quot;
+  },
+  &quot;items&quot;: [
+    {
+      &quot;sku&quot;: &quot;KW-TEE-01&quot;,
+      &quot;quantity&quot;: 2,
+      &quot;unitPricePaise&quot;: 49975
+    },
+    {
+      &quot;sku&quot;: &quot;KW-CAP-07&quot;,
+      &quot;quantity&quot;: 1,
+      &quot;unitPricePaise&quot;: 30000
+    }
+  ],
+  &quot;totalPaise&quot;: 129950,
+  &quot;currency&quot;: &quot;INR&quot;,
+  &quot;status&quot;: &quot;shipped&quot;,
+  &quot;placedAt&quot;: &quot;2026-10-20T09:15:00Z&quot;,
+  &quot;trackingUrl&quot;: &quot;https://track.example/KW1001&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: v2, an order not shipped yet</h3><p><b>Why:</b> <code>trackingUrl</code> is <code>null</code>: present, so clients can rely on the field.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /v2/orders/1002 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 240
+
+{
+  &quot;id&quot;: 1002,
+  &quot;customer&quot;: {
+    &quot;name&quot;: &quot;Arjun Rao&quot;,
+    &quot;phone&quot;: &quot;+919800000002&quot;
+  },
+  &quot;items&quot;: [
+    {
+      &quot;sku&quot;: &quot;KW-MUG-03&quot;,
+      &quot;quantity&quot;: 4,
+      &quot;unitPricePaise&quot;: 24900
+    }
+  ],
+  &quot;totalPaise&quot;: 99600,
+  &quot;currency&quot;: &quot;INR&quot;,
+  &quot;status&quot;: &quot;placed&quot;,
+  &quot;placedAt&quot;: &quot;2026-10-21T14:40:00Z&quot;,
+  &quot;trackingUrl&quot;: null
+}</code></pre></div></div></section><section class="example"><h3>Case 4: /v3</h3><p><b>Why:</b> Spring answers <code>400</code> for a version no endpoint has.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /v3/orders/1001 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Invalid API version: &#x27;3.0.0&#x27;.&quot;,
+  &quot;instance&quot;: &quot;/v3/orders/1001&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: v1, an unknown order</h3><p><b>Why:</b> <code>404</code>, still with the deprecation headers.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /v1/orders/9 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Deprecation: @1790793000
+Link: &lt;https://developer.kartwala.example/orders/v1-to-v2&gt;; rel=&quot;deprecation&quot;; type=&quot;text/html&quot;
+Sunset: Wed, 31 Mar 2027 18:30:00 GMT
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No such order&quot;,
+  &quot;instance&quot;: &quot;/v1/orders/9&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Not Found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: v2, a non-numeric id</h3><p><b>Why:</b> <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /v2/orders/abc HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Failed to convert &#x27;id&#x27; with value: &#x27;abc&#x27;&quot;,
+  &quot;instance&quot;: &quot;/v2/orders/abc&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: /v1.0</h3><p><b>Why:</b> Spring's version parser reads <code>v1</code>, <code>1</code> and <code>v1.0</code> as the same version.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /v1.0/orders/1001 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Deprecation: @1790793000
+Link: &lt;https://developer.kartwala.example/orders/v1-to-v2&gt;; rel=&quot;deprecation&quot;; type=&quot;text/html&quot;
+Sunset: Wed, 31 Mar 2027 18:30:00 GMT
+Content-Type: application/json
+Content-Length: 215
+
+{
+  &quot;id&quot;: 1001,
+  &quot;customerName&quot;: &quot;Meera Iyer&quot;,
+  &quot;total&quot;: 1299.5,
+  &quot;status&quot;: &quot;SHIPPED&quot;,
+  &quot;items&quot;: [
+    {
+      &quot;sku&quot;: &quot;KW-TEE-01&quot;,
+      &quot;qty&quot;: 2,
+      &quot;price&quot;: 499.75
+    },
+    {
+      &quot;sku&quot;: &quot;KW-CAP-07&quot;,
+      &quot;qty&quot;: 1,
+      &quot;price&quot;: 300.0
+    }
+  ],
+  &quot;trackingUrl&quot;: &quot;https://track.example/KW1001&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>v1, field by field</td><td>Exactly the old shape</td><td><code>v1KeepsTheShapeOldAppsParse</code></td></tr><tr><td>v2, field by field; an order not shipped</td><td>The new shape; <code>trackingUrl</code> null</td><td><code>v2HasTheNewShape</code></td></tr><tr><td>Deprecation headers</td><td>On v1 only, with the dates in standard form</td><td><code>v1IsMarkedDeprecatedWithItsEndDateAndV2IsNot</code></td></tr><tr><td>Unknown order, bad id, /v3, a trailing slash</td><td><code>404</code>, <code>400</code>, <code>400</code>, <code>404</code></td><td><code>unknownOrdersAre404AndBadIdsOrVersionsAre400</code></td></tr><tr><td>The old app reads the renamed shape</td><td>It fails; a lenient reader shows no customer, no total</td><td><code>theRenamedShapeIsWhatBrokeTheOldApp</code></td></tr><tr><td>The old app reads v1</td><td>Every field it knows, exactly</td><td><code>theOldAppStillReadsV1Completely</code></td></tr><tr><td>A field added to v1</td><td>Fine for a tolerant reader, fatal for a strict one</td><td><code>anAddedFieldIsCompatibleOnlyForATolerantReader</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Renaming or removing fields in place, breaking old app versions.</p>
+<ul>
+<li><strong>The rename.</strong> The test reads the new shape with app 5.x's own model. Jackson 3 refuses it: <code>qty</code> became <code>quantity</code>, and a missing <code>int</code> is an error. That is the crash. Even a reader that lets it pass shows an order with no customer and no total.</li>
+<li><strong>v1 today.</strong> The same model reads <code>/v1</code> completely, value for value.</li>
+<li><strong>Adding is compatible, for tolerant readers.</strong> <code>trackingUrl</code> was added to v1 later. A model that ignores unknown fields reads it; a strict one fails. Write clients the first way.</li>
+</ul>
+<p>While building, each part was undone once: a v1 field renamed turned 3 tests red; v1's total in paise 2; v1's status in lower case 2; a v1 field removed 1; no deprecation headers 1; the Sunset date in IST 1; v2's status in upper case 1.</p>
+</div>
+<pre class="code"><code class="language-java">package com.kartwala.orders;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.exc.MismatchedInputException;
+import tools.jackson.databind.exc.UnrecognizedPropertyException;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+
+/**
+ * Written first. The old release renamed customerName to customer.name in place. Apps up to 5.x read orders with
+ * the model below: reading the new shape failed and the order screen crashed for 30% of users. These tests read today&#x27;s
+ * answers the way that app does.
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+class RenameInPlaceTrapTest {
+
+    /** What app 5.x reads, written like its own model class. It knows nothing of fields added later. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record OldAppOrder(long id, String customerName, BigDecimal total, String status, List&lt;OldAppItem&gt; items) {
+    }
+
+    record OldAppItem(String sku, int qty, BigDecimal price) {
+    }
+
+    /** The same model without ignoreUnknown, for a mapper that fails on unknown fields. */
+    record StrictOldAppOrder(long id, String customerName, BigDecimal total, String status, List&lt;OldAppItem&gt; items) {
+    }
+
+    @Autowired
+    MockMvc mvc;
+
+    final JsonMapper json = JsonMapper.builder().build();
+
+    String body(String path) throws Exception {
+        return mvc.perform(get(path)).andReturn().getResponse().getContentAsString();
+    }
+
+    @Test
+    void theRenamedShapeIsWhatBrokeTheOldApp() throws Exception {
+        String renamed = body(&quot;/v2/orders/1001&quot;);   // the new shape, as if served where v1 was
+        // Jackson 3 refuses a missing int (qty was renamed to quantity): the old app&#x27;s screen crashes.
+        assertThatThrownBy(() -&gt; json.readValue(renamed, OldAppOrder.class)).isInstanceOf(MismatchedInputException.class)
+                .hasMessageContaining(&quot;Cannot map `null` into type `int`&quot;);
+        // Even a reader that lets that pass shows an order with no customer and no total.
+        OldAppOrder seen = JsonMapper.builder().disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES).build().readValue(renamed, OldAppOrder.class);
+        assertThat(seen.customerName()).isNull();
+        assertThat(seen.total()).isNull();
+    }
+
+    @Test
+    void theOldAppStillReadsV1Completely() throws Exception {
+        OldAppOrder seen = json.readValue(body(&quot;/v1/orders/1001&quot;), OldAppOrder.class);
+        assertThat(seen).isEqualTo(new OldAppOrder(1001, &quot;Meera Iyer&quot;, new BigDecimal(&quot;1299.50&quot;), &quot;SHIPPED&quot;,
+                List.of(new OldAppItem(&quot;KW-TEE-01&quot;, 2, new BigDecimal(&quot;499.75&quot;)), new OldAppItem(&quot;KW-CAP-07&quot;, 1, new BigDecimal(&quot;300.00&quot;)))));
+    }
+
+    @Test
+    void anAddedFieldIsCompatibleOnlyForATolerantReader() throws Exception {
+        String v1 = body(&quot;/v1/orders/1001&quot;);   // trackingUrl was added to v1 after app 5.x shipped
+        JsonMapper strict = JsonMapper.builder().enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
+        assertThatThrownBy(() -&gt; strict.readValue(v1, StrictOldAppOrder.class)).isInstanceOf(UnrecognizedPropertyException.class);
+        assertThat(json.readValue(v1, OldAppOrder.class).customerName()).isEqualTo(&quot;Meera Iyer&quot;);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 7 tests</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Ask for the same order in both versions and compare:</p>
+<pre class="code"><code class="language-bash">curl -s http://localhost:8080/v1/orders/1002; echo
+curl -s http://localhost:8080/v2/orders/1002; echo</code></pre>
+<p>The answers, as <code>docs/capture.sh</code> saved them: the same order, the old names and rupees in v1, the new shape in v2.</p>
+<pre class="code"><code class="language-text">v1 says: {&quot;id&quot;:1002,&quot;customerName&quot;:&quot;Arjun Rao&quot;,&quot;total&quot;:996.00,&quot;status&quot;:&quot;PLACED&quot;,&quot;items&quot;:[{&quot;sku&quot;:&quot;KW-MUG-03&quot;,&quot;qty&quot;:4,&quot;price&quot;:249.00}],&quot;trackingUrl&quot;:null}
+v2 says: {&quot;id&quot;:1002,&quot;customer&quot;:{&quot;name&quot;:&quot;Arjun Rao&quot;,&quot;phone&quot;:&quot;+919800000002&quot;},&quot;items&quot;:[{&quot;sku&quot;:&quot;KW-MUG-03&quot;,&quot;quantity&quot;:4,&quot;unitPricePaise&quot;:24900}],&quot;totalPaise&quot;:99600,&quot;currency&quot;:&quot;INR&quot;,&quot;status&quot;:&quot;placed&quot;,&quot;placedAt&quot;:&quot;2026-10-21T14:40:00Z&quot;,&quot;trackingUrl&quot;:null}</code></pre>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>Invalid API version: '3.0.0'.</code></td><td>No endpoint declares that version.</td><td>Use <code>/v1</code> or <code>/v2</code>.</td></tr><tr><td><code>Sunset</code> with <code>+0530</code> in it</td><td>The sunset date was given with a time zone; Spring prints its offset.</td><td>Give the date in UTC, as <code>ApiVersions</code> does.</td></tr><tr><td>An old client fails on a new field</td><td>It is a strict reader.</td><td>Ignore unknown fields in clients (<code>@JsonIgnoreProperties(ignoreUnknown = true)</code>).</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/088-order-api-v2-without-breaking-old-apps/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/kartwala/orders/
+│   ├── ApiVersions.java   ├── OrderController.java   ├── Orders.java   └── OrdersApplication.java
+├── src/main/resources/application.yaml
+├── src/test/java/com/kartwala/orders/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">Configuration first, then the request's path.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">ApiVersions.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">OrderController.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">Orders.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">OrdersApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/kartwala/orders/ApiVersions.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Versioning and deprecation, in one place.</dd><dt>Why</dt><dd>The version is the first path segment; v1 gets Deprecation, Sunset and Link headers from Spring's <code>StandardApiVersionDeprecationHandler</code>.</dd><dt>Without it</dt><dd>Version checks spread through controllers; deprecation only in a blog post.</dd></dl><p>The Sunset date is configured in UTC. Given in IST, Spring wrote <code>+0530</code> into the header, but an HTTP date is written in GMT. Found while building.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.orders;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.accept.StandardApiVersionDeprecationHandler;
+import org.springframework.web.servlet.config.annotation.ApiVersionConfigurer;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import java.net.URI;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+
+/**
+ * Spring Framework 7&#x27;s API versioning: the version is the first path segment (/v1, /v2), and every v1 answer says
+ * that v1 is deprecated and when it ends, in Deprecation (RFC 9745), Sunset (RFC 8594) and Link headers.
+ * Demo dates: deprecated from 1 Oct 2026, ends 1 Apr 2027 (IST).
+ */
+@Configuration
+class ApiVersions implements WebMvcConfigurer {
+
+    static final ZonedDateTime V1_DEPRECATED = ZonedDateTime.of(2026, 10, 1, 0, 0, 0, 0, ZoneId.of(&quot;Asia/Kolkata&quot;));
+    static final ZonedDateTime V1_SUNSET = ZonedDateTime.of(2027, 4, 1, 0, 0, 0, 0, ZoneId.of(&quot;Asia/Kolkata&quot;));
+    static final URI MIGRATION_GUIDE = URI.create(&quot;https://developer.kartwala.example/orders/v1-to-v2&quot;);
+
+    @Override
+    public void configureApiVersioning(ApiVersionConfigurer configurer) {
+        StandardApiVersionDeprecationHandler deprecation = new StandardApiVersionDeprecationHandler();
+        // In UTC: Spring prints the date with its own offset (+0530), but an HTTP date (RFC 9110) is written in GMT.
+        deprecation.configureVersion(&quot;1&quot;).setDeprecationDate(V1_DEPRECATED).setSunsetDate(V1_SUNSET.withZoneSameInstant(ZoneOffset.UTC))
+                .setDeprecationLink(MIGRATION_GUIDE);
+        configurer.usePathSegment(0).setDeprecationHandler(deprecation);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/kartwala/orders/OrderController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>One record per version, built from one order.</dd><dt>Why</dt><dd><code>@GetMapping(..., version = "1")</code> and <code>version = "2"</code> on the same path pattern.</dd><dt>Without it</dt><dd>One shape changed for everyone at once.</dd></dl><ul><li>v1 is frozen: it may gain fields, never lose, rename or change one.</li><li>v1's rupees are <code>BigDecimal.valueOf(paise, 2)</code>: exact.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.orders;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * Two versions of one resource, side by side. v1 is frozen: its field names, types and values are what old app
+ * versions parse, so it only ever gains fields. v2 is where the new shape lives. Both read the same Order.
+ */
+@RestController
+class OrderController {
+
+    /** The shape apps up to 5.x parse. Do not rename, retype or remove anything here. */
+    record OrderV1(long id, String customerName, BigDecimal total, String status, List&lt;ItemV1&gt; items, String trackingUrl) {
+    }
+
+    record ItemV1(String sku, int qty, BigDecimal price) {
+    }
+
+    /** The new shape: money in paise, the customer as an object, lower-case states. */
+    record OrderV2(long id, CustomerV2 customer, List&lt;ItemV2&gt; items, long totalPaise, String currency, String status, Instant placedAt, String trackingUrl) {
+    }
+
+    record CustomerV2(String name, String phone) {
+    }
+
+    record ItemV2(String sku, int quantity, long unitPricePaise) {
+    }
+
+    private final Orders orders;
+
+    OrderController(Orders orders) {
+        this.orders = orders;
+    }
+
+    @GetMapping(path = &quot;/{version}/orders/{id}&quot;, version = &quot;1&quot;)
+    OrderV1 v1(@PathVariable long id) {
+        Orders.Order o = orders.get(id);
+        // v1 sent rupees as a decimal number; kept exactly (BigDecimal from paise), never through a double.
+        return new OrderV1(o.id(), o.customerName(), BigDecimal.valueOf(o.totalPaise(), 2), o.status().name(),
+                o.lines().stream().map(l -&gt; new ItemV1(l.sku(), l.quantity(), BigDecimal.valueOf(l.unitPricePaise(), 2))).toList(),
+                o.trackingUrl());
+    }
+
+    @GetMapping(path = &quot;/{version}/orders/{id}&quot;, version = &quot;2&quot;)
+    OrderV2 v2(@PathVariable long id) {
+        Orders.Order o = orders.get(id);
+        return new OrderV2(o.id(), new CustomerV2(o.customerName(), o.customerPhone()),
+                o.lines().stream().map(l -&gt; new ItemV2(l.sku(), l.quantity(), l.unitPricePaise())).toList(),
+                o.totalPaise(), &quot;INR&quot;, o.status().name().toLowerCase(Locale.ROOT), o.placedAt(), o.trackingUrl());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/kartwala/orders/Orders.java</p><div class="notes"><p>The order model and two demo orders, shared by both versions.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.orders;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Component;
+import org.springframework.web.ErrorResponseException;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
+/** The orders themselves, one model for every API version. Demo data in memory: this station is about the API. */
+@Component
+class Orders {
+
+    enum Status { PLACED, SHIPPED, DELIVERED }
+
+    record Line(String sku, int quantity, long unitPricePaise) {
+    }
+
+    record Order(long id, String customerName, String customerPhone, List&lt;Line&gt; lines, Status status, Instant placedAt, String trackingUrl) {
+        long totalPaise() {
+            return lines.stream().mapToLong(l -&gt; l.quantity() * l.unitPricePaise()).sum();
+        }
+    }
+
+    private final Map&lt;Long, Order&gt; orders = Map.of(
+            1001L, new Order(1001, &quot;Meera Iyer&quot;, &quot;+919800000001&quot;,
+                    List.of(new Line(&quot;KW-TEE-01&quot;, 2, 49975), new Line(&quot;KW-CAP-07&quot;, 1, 30000)),
+                    Status.SHIPPED, Instant.parse(&quot;2026-10-20T09:15:00Z&quot;), &quot;https://track.example/KW1001&quot;),
+            1002L, new Order(1002, &quot;Arjun Rao&quot;, &quot;+919800000002&quot;,
+                    List.of(new Line(&quot;KW-MUG-03&quot;, 4, 24900)), Status.PLACED, Instant.parse(&quot;2026-10-21T14:40:00Z&quot;), null));
+
+    Order get(long id) {
+        Order o = orders.get(id);
+        if (o == null) {
+            throw new ErrorResponseException(HttpStatus.NOT_FOUND, ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No such order&quot;), null);
+        }
+        return o;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Problem details for errors.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: kartwala-orders
+  mvc:
+    problemdetails:
+      enabled: true</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/kartwala/orders/OrdersApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.orders;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class OrdersApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(OrdersApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>OrderContractTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>RenameInPlaceTrapTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">The contract tests compare whole bodies in strict mode, so a removed or renamed field fails them. The trap test was first written expecting an empty name; the real old-app model failed harder, on the renamed <code>qty</code>, and the test now checks that. Found while building.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.orders.OrderContractTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.orders.RenameInPlaceTrapTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">RenameInPlaceTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">OrderContractTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/kartwala/orders/RenameInPlaceTrapTest.java</p><div class="notes"><p>Written first: the old app's model reading the renamed shape, v1, and a field added later.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.orders;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.exc.MismatchedInputException;
+import tools.jackson.databind.exc.UnrecognizedPropertyException;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+
+/**
+ * Written first. The old release renamed customerName to customer.name in place. Apps up to 5.x read orders with
+ * the model below: reading the new shape failed and the order screen crashed for 30% of users. These tests read today&#x27;s
+ * answers the way that app does.
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+class RenameInPlaceTrapTest {
+
+    /** What app 5.x reads, written like its own model class. It knows nothing of fields added later. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record OldAppOrder(long id, String customerName, BigDecimal total, String status, List&lt;OldAppItem&gt; items) {
+    }
+
+    record OldAppItem(String sku, int qty, BigDecimal price) {
+    }
+
+    /** The same model without ignoreUnknown, for a mapper that fails on unknown fields. */
+    record StrictOldAppOrder(long id, String customerName, BigDecimal total, String status, List&lt;OldAppItem&gt; items) {
+    }
+
+    @Autowired
+    MockMvc mvc;
+
+    final JsonMapper json = JsonMapper.builder().build();
+
+    String body(String path) throws Exception {
+        return mvc.perform(get(path)).andReturn().getResponse().getContentAsString();
+    }
+
+    @Test
+    void theRenamedShapeIsWhatBrokeTheOldApp() throws Exception {
+        String renamed = body(&quot;/v2/orders/1001&quot;);   // the new shape, as if served where v1 was
+        // Jackson 3 refuses a missing int (qty was renamed to quantity): the old app&#x27;s screen crashes.
+        assertThatThrownBy(() -&gt; json.readValue(renamed, OldAppOrder.class)).isInstanceOf(MismatchedInputException.class)
+                .hasMessageContaining(&quot;Cannot map `null` into type `int`&quot;);
+        // Even a reader that lets that pass shows an order with no customer and no total.
+        OldAppOrder seen = JsonMapper.builder().disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES).build().readValue(renamed, OldAppOrder.class);
+        assertThat(seen.customerName()).isNull();
+        assertThat(seen.total()).isNull();
+    }
+
+    @Test
+    void theOldAppStillReadsV1Completely() throws Exception {
+        OldAppOrder seen = json.readValue(body(&quot;/v1/orders/1001&quot;), OldAppOrder.class);
+        assertThat(seen).isEqualTo(new OldAppOrder(1001, &quot;Meera Iyer&quot;, new BigDecimal(&quot;1299.50&quot;), &quot;SHIPPED&quot;,
+                List.of(new OldAppItem(&quot;KW-TEE-01&quot;, 2, new BigDecimal(&quot;499.75&quot;)), new OldAppItem(&quot;KW-CAP-07&quot;, 1, new BigDecimal(&quot;300.00&quot;)))));
+    }
+
+    @Test
+    void anAddedFieldIsCompatibleOnlyForATolerantReader() throws Exception {
+        String v1 = body(&quot;/v1/orders/1001&quot;);   // trackingUrl was added to v1 after app 5.x shipped
+        JsonMapper strict = JsonMapper.builder().enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
+        assertThatThrownBy(() -&gt; strict.readValue(v1, StrictOldAppOrder.class)).isInstanceOf(UnrecognizedPropertyException.class);
+        assertThat(json.readValue(v1, OldAppOrder.class).customerName()).isEqualTo(&quot;Meera Iyer&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/kartwala/orders/OrderContractTest.java</p><div class="notes"><p>Both versions field by field, the deprecation headers, errors.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.orders;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+class OrderContractTest {
+
+    @Autowired
+    MockMvc mvc;
+
+    @Test
+    void v1KeepsTheShapeOldAppsParse() throws Exception {
+        mvc.perform(get(&quot;/v1/orders/1001&quot;)).andExpect(status().isOk()).andExpect(content().json(&quot;&quot;&quot;
+                {&quot;id&quot;:1001,&quot;customerName&quot;:&quot;Meera Iyer&quot;,&quot;total&quot;:1299.50,&quot;status&quot;:&quot;SHIPPED&quot;,
+                 &quot;items&quot;:[{&quot;sku&quot;:&quot;KW-TEE-01&quot;,&quot;qty&quot;:2,&quot;price&quot;:499.75},{&quot;sku&quot;:&quot;KW-CAP-07&quot;,&quot;qty&quot;:1,&quot;price&quot;:300.00}],
+                 &quot;trackingUrl&quot;:&quot;https://track.example/KW1001&quot;}&quot;&quot;&quot;, true));
+    }
+
+    @Test
+    void v2HasTheNewShape() throws Exception {
+        mvc.perform(get(&quot;/v2/orders/1001&quot;)).andExpect(status().isOk()).andExpect(content().json(&quot;&quot;&quot;
+                {&quot;id&quot;:1001,&quot;customer&quot;:{&quot;name&quot;:&quot;Meera Iyer&quot;,&quot;phone&quot;:&quot;+919800000001&quot;},
+                 &quot;items&quot;:[{&quot;sku&quot;:&quot;KW-TEE-01&quot;,&quot;quantity&quot;:2,&quot;unitPricePaise&quot;:49975},{&quot;sku&quot;:&quot;KW-CAP-07&quot;,&quot;quantity&quot;:1,&quot;unitPricePaise&quot;:30000}],
+                 &quot;totalPaise&quot;:129950,&quot;currency&quot;:&quot;INR&quot;,&quot;status&quot;:&quot;shipped&quot;,&quot;placedAt&quot;:&quot;2026-10-20T09:15:00Z&quot;,&quot;trackingUrl&quot;:&quot;https://track.example/KW1001&quot;}&quot;&quot;&quot;, true));
+        mvc.perform(get(&quot;/v2/orders/1002&quot;)).andExpect(jsonPath(&quot;$.trackingUrl&quot;).isEmpty()).andExpect(jsonPath(&quot;$.status&quot;).value(&quot;placed&quot;));
+    }
+
+    @Test
+    void v1IsMarkedDeprecatedWithItsEndDateAndV2IsNot() throws Exception {
+        mvc.perform(get(&quot;/v1/orders/1001&quot;))
+                .andExpect(header().string(&quot;Deprecation&quot;, &quot;@1790793000&quot;))                    // 1 Oct 2026, 00:00 IST
+                .andExpect(header().string(&quot;Sunset&quot;, &quot;Wed, 31 Mar 2027 18:30:00 GMT&quot;))         // 1 Apr 2027, 00:00 IST
+                .andExpect(header().string(&quot;Link&quot;, &quot;&lt;https://developer.kartwala.example/orders/v1-to-v2&gt;; rel=\&quot;deprecation\&quot;; type=\&quot;text/html\&quot;&quot;));
+        mvc.perform(get(&quot;/v2/orders/1001&quot;)).andExpect(header().doesNotExist(&quot;Deprecation&quot;)).andExpect(header().doesNotExist(&quot;Sunset&quot;));
+    }
+
+    @Test
+    void unknownOrdersAre404AndBadIdsOrVersionsAre400() throws Exception {
+        mvc.perform(get(&quot;/v1/orders/9&quot;)).andExpect(status().isNotFound()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;No such order&quot;));
+        mvc.perform(get(&quot;/v2/orders/9&quot;)).andExpect(status().isNotFound());
+        mvc.perform(get(&quot;/v2/orders/abc&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/v3/orders/1001&quot;)).andExpect(status().isBadRequest()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Invalid API version: &#x27;3.0.0&#x27;.&quot;));
+        mvc.perform(get(&quot;/v2/orders/1001/&quot;)).andExpect(status().isNotFound());   // no trailing-slash matching
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/kartwala/orders/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=SunsetChallengeTest</code>.</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 7 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 10 tests pass (7 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>After the sunset</h2><p>From 1 Apr 2027, 00:00 IST, <code>/v1</code> answers <code>410 Gone</code> with a link to the migration guide; <code>/v2</code> carries on.</p><p><b>Done when:</b> the test in <code>SunsetChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>Add a <code>Clock</code> bean and compare with <code>ApiVersions.V1_SUNSET</code>.</li><li>The deprecation handler still adds its <code>Link</code> header to the <code>410</code>.</li></ul></details><p class="path">challenge/SunsetChallengeTest.java</p><pre class="code"><code class="language-java">package com.kartwala.orders;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.context.bean.override.convention.TestBean;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Challenge 1: from the sunset date (1 Apr 2027, IST), v1 answers 410 Gone with a link to the migration guide. v2 is unaffected. */
+@SpringBootTest
+@AutoConfigureMockMvc
+class SunsetChallengeTest {
+
+    static volatile Instant now = Instant.parse(&quot;2027-03-31T18:29:59Z&quot;);   // 23:59:59 IST on 31 Mar 2027
+
+    @TestBean
+    Clock clock;
+
+    static Clock clock() {
+        return new Clock() {
+            public java.time.ZoneId getZone() {
+                return ZoneOffset.UTC;
+            }
+
+            public Clock withZone(java.time.ZoneId zone) {
+                return this;
+            }
+
+            public Instant instant() {
+                return now;
+            }
+        };
+    }
+
+    @Autowired
+    MockMvc mvc;
+
+    @Test
+    void v1WorksUntilItsSunsetAndIsGoneFromThen() throws Exception {
+        now = Instant.parse(&quot;2027-03-31T18:29:59Z&quot;);
+        mvc.perform(get(&quot;/v1/orders/1001&quot;)).andExpect(status().isOk());
+        now = Instant.parse(&quot;2027-03-31T18:30:00Z&quot;);   // 00:00 IST on 1 Apr 2027
+        mvc.perform(get(&quot;/v1/orders/1001&quot;)).andExpect(status().isGone())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Orders API v1 ended on 1 Apr 2027. Use v2: https://developer.kartwala.example/orders/v1-to-v2&quot;))
+                .andExpect(header().string(&quot;Link&quot;, &quot;&lt;https://developer.kartwala.example/orders/v1-to-v2&gt;; rel=\&quot;deprecation\&quot;; type=\&quot;text/html\&quot;&quot;));
+        mvc.perform(get(&quot;/v2/orders/1001&quot;)).andExpect(status().isOk());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/OrderController.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.orders;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * Two versions of one resource, side by side. v1 is frozen: its field names, types and values are what old app
+ * versions parse, so it only ever gains fields. v2 is where the new shape lives. Both read the same Order.
+ */
+@RestController
+class OrderController {
+
+    /** The shape apps up to 5.x parse. Do not rename, retype or remove anything here. */
+    record OrderV1(long id, String customerName, BigDecimal total, String status, List&lt;ItemV1&gt; items, String trackingUrl) {
+    }
+
+    record ItemV1(String sku, int qty, BigDecimal price) {
+    }
+
+    /** The new shape: money in paise, the customer as an object, lower-case states. */
+    record OrderV2(long id, CustomerV2 customer, List&lt;ItemV2&gt; items, long totalPaise, String currency, String status, Instant placedAt, String trackingUrl) {
+    }
+
+    record CustomerV2(String name, String phone) {
+    }
+
+    record ItemV2(String sku, int quantity, long unitPricePaise) {
+    }
+
+    /** The day the v2 shape was released: dated versions before it get the v1 shape. */
+    static final LocalDate V2_RELEASED = LocalDate.of(2026, 10, 1);
+
+    private final Orders orders;
+    private final Clock clock;
+
+    OrderController(Orders orders, Clock clock) {
+        this.orders = orders;
+        this.clock = clock;
+    }
+
+    @GetMapping(path = &quot;/{version}/orders/{id}&quot;, version = &quot;1&quot;)
+    OrderV1 v1(@PathVariable long id) {
+        if (!clock.instant().isBefore(ApiVersions.V1_SUNSET.toInstant())) {
+            ProblemDetail gone = ProblemDetail.forStatusAndDetail(HttpStatus.GONE, &quot;Orders API v1 ended on 1 Apr 2027. Use v2: &quot; + ApiVersions.MIGRATION_GUIDE);
+            throw new ErrorResponseException(HttpStatus.GONE, gone, null);
+        }
+        return v1Shape(id);
+    }
+
+    /** Stripe-style dated versions: the shape that was current on the date in the header. */
+    @GetMapping(&quot;/orders/{id}&quot;)
+    Object dated(@PathVariable long id, @RequestHeader(&quot;Kartwala-Version&quot;) String version) {
+        LocalDate date;
+        try {
+            date = LocalDate.parse(version);
+        } catch (DateTimeParseException e) {
+            throw new ErrorResponseException(HttpStatus.BAD_REQUEST, ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, &quot;Kartwala-Version must be a date like 2026-10-01&quot;), e);
+        }
+        return date.isBefore(V2_RELEASED) ? v1Shape(id) : v2(id);
+    }
+
+    private OrderV1 v1Shape(long id) {
+        Orders.Order o = orders.get(id);
+        // v1 sent rupees as a decimal number; kept exactly (BigDecimal from paise), never through a double.
+        return new OrderV1(o.id(), o.customerName(), BigDecimal.valueOf(o.totalPaise(), 2), o.status().name(),
+                o.lines().stream().map(l -&gt; new ItemV1(l.sku(), l.quantity(), BigDecimal.valueOf(l.unitPricePaise(), 2))).toList(),
+                o.trackingUrl());
+    }
+
+    @GetMapping(path = &quot;/{version}/orders/{id}&quot;, version = &quot;2&quot;)
+    OrderV2 v2(@PathVariable long id) {
+        Orders.Order o = orders.get(id);
+        return new OrderV2(o.id(), new CustomerV2(o.customerName(), o.customerPhone()),
+                o.lines().stream().map(l -&gt; new ItemV2(l.sku(), l.quantity(), l.unitPricePaise())).toList(),
+                o.totalPaise(), &quot;INR&quot;, o.status().name().toLowerCase(Locale.ROOT), o.placedAt(), o.trackingUrl());
+    }
+}</code></pre></div><p class="path">challenge/solution/OrdersApplication.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.orders;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+import java.time.Clock;
+
+@SpringBootApplication
+public class OrdersApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(OrdersApplication.class, args);
+    }
+
+    /** The sunset is checked against this clock, so tests can stand just before and after it. */
+    @Bean
+    Clock clock() {
+        return Clock.systemUTC();
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 35 minutes</p><h2>Dated versions</h2><p><code>GET /orders/{id}</code> with <code>Kartwala-Version: 2026-10-01</code>: the shape current on that date, as Stripe names its versions. Before 1 Oct 2026, the v1 shape; from then, v2. No date, or not a date, <code>400</code>.</p><p><b>Done when:</b> both tests in <code>DatedVersionChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>The path versioning must now apply only to paths starting with <code>/v</code>: <code>usePathSegment(0, predicate)</code>, and a version is no longer required everywhere.</li><li>Reuse the v1 and v2 shapes; the date only picks one.</li></ul></details><p class="path">challenge/DatedVersionChallengeTest.java</p><pre class="code"><code class="language-java">package com.kartwala.orders;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: dated versions, the way Stripe names them. GET /orders/{id} with a Kartwala-Version header holding a
+ * date: the answer has the shape that was current on that date. The v2 shape was released on 2026-10-01.
+ * The /v1 and /v2 paths keep working.
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+class DatedVersionChallengeTest {
+
+    @Autowired
+    MockMvc mvc;
+
+    @Test
+    void theDateChoosesTheShape() throws Exception {
+        mvc.perform(get(&quot;/orders/1001&quot;).header(&quot;Kartwala-Version&quot;, &quot;2025-06-01&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.customerName&quot;).value(&quot;Meera Iyer&quot;)).andExpect(jsonPath(&quot;$.total&quot;).value(1299.50));
+        mvc.perform(get(&quot;/orders/1001&quot;).header(&quot;Kartwala-Version&quot;, &quot;2026-09-30&quot;)).andExpect(jsonPath(&quot;$.customerName&quot;).value(&quot;Meera Iyer&quot;));
+        mvc.perform(get(&quot;/orders/1001&quot;).header(&quot;Kartwala-Version&quot;, &quot;2026-10-01&quot;)).andExpect(jsonPath(&quot;$.customer.name&quot;).value(&quot;Meera Iyer&quot;))
+                .andExpect(jsonPath(&quot;$.totalPaise&quot;).value(129950));
+        mvc.perform(get(&quot;/v2/orders/1001&quot;)).andExpect(jsonPath(&quot;$.totalPaise&quot;).value(129950));
+    }
+
+    @Test
+    void aMissingOrBadDateIs400() throws Exception {
+        mvc.perform(get(&quot;/orders/1001&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/orders/1001&quot;).header(&quot;Kartwala-Version&quot;, &quot;yesterday&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/orders/1001&quot;).header(&quot;Kartwala-Version&quot;, &quot;2026-13-01&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/OrderController.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.orders;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * Two versions of one resource, side by side. v1 is frozen: its field names, types and values are what old app
+ * versions parse, so it only ever gains fields. v2 is where the new shape lives. Both read the same Order.
+ */
+@RestController
+class OrderController {
+
+    /** The shape apps up to 5.x parse. Do not rename, retype or remove anything here. */
+    record OrderV1(long id, String customerName, BigDecimal total, String status, List&lt;ItemV1&gt; items, String trackingUrl) {
+    }
+
+    record ItemV1(String sku, int qty, BigDecimal price) {
+    }
+
+    /** The new shape: money in paise, the customer as an object, lower-case states. */
+    record OrderV2(long id, CustomerV2 customer, List&lt;ItemV2&gt; items, long totalPaise, String currency, String status, Instant placedAt, String trackingUrl) {
+    }
+
+    record CustomerV2(String name, String phone) {
+    }
+
+    record ItemV2(String sku, int quantity, long unitPricePaise) {
+    }
+
+    /** The day the v2 shape was released: dated versions before it get the v1 shape. */
+    static final LocalDate V2_RELEASED = LocalDate.of(2026, 10, 1);
+
+    private final Orders orders;
+    private final Clock clock;
+
+    OrderController(Orders orders, Clock clock) {
+        this.orders = orders;
+        this.clock = clock;
+    }
+
+    @GetMapping(path = &quot;/{version}/orders/{id}&quot;, version = &quot;1&quot;)
+    OrderV1 v1(@PathVariable long id) {
+        if (!clock.instant().isBefore(ApiVersions.V1_SUNSET.toInstant())) {
+            ProblemDetail gone = ProblemDetail.forStatusAndDetail(HttpStatus.GONE, &quot;Orders API v1 ended on 1 Apr 2027. Use v2: &quot; + ApiVersions.MIGRATION_GUIDE);
+            throw new ErrorResponseException(HttpStatus.GONE, gone, null);
+        }
+        return v1Shape(id);
+    }
+
+    /** Stripe-style dated versions: the shape that was current on the date in the header. */
+    @GetMapping(&quot;/orders/{id}&quot;)
+    Object dated(@PathVariable long id, @RequestHeader(&quot;Kartwala-Version&quot;) String version) {
+        LocalDate date;
+        try {
+            date = LocalDate.parse(version);
+        } catch (DateTimeParseException e) {
+            throw new ErrorResponseException(HttpStatus.BAD_REQUEST, ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, &quot;Kartwala-Version must be a date like 2026-10-01&quot;), e);
+        }
+        return date.isBefore(V2_RELEASED) ? v1Shape(id) : v2(id);
+    }
+
+    private OrderV1 v1Shape(long id) {
+        Orders.Order o = orders.get(id);
+        // v1 sent rupees as a decimal number; kept exactly (BigDecimal from paise), never through a double.
+        return new OrderV1(o.id(), o.customerName(), BigDecimal.valueOf(o.totalPaise(), 2), o.status().name(),
+                o.lines().stream().map(l -&gt; new ItemV1(l.sku(), l.quantity(), BigDecimal.valueOf(l.unitPricePaise(), 2))).toList(),
+                o.trackingUrl());
+    }
+
+    @GetMapping(path = &quot;/{version}/orders/{id}&quot;, version = &quot;2&quot;)
+    OrderV2 v2(@PathVariable long id) {
+        Orders.Order o = orders.get(id);
+        return new OrderV2(o.id(), new CustomerV2(o.customerName(), o.customerPhone()),
+                o.lines().stream().map(l -&gt; new ItemV2(l.sku(), l.quantity(), l.unitPricePaise())).toList(),
+                o.totalPaise(), &quot;INR&quot;, o.status().name().toLowerCase(Locale.ROOT), o.placedAt(), o.trackingUrl());
+    }
+}</code></pre></div><p class="path">challenge/solution/ApiVersions.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.orders;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.accept.StandardApiVersionDeprecationHandler;
+import org.springframework.web.servlet.config.annotation.ApiVersionConfigurer;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import java.net.URI;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+
+/**
+ * Spring Framework 7&#x27;s API versioning: the version is the first path segment (/v1, /v2), and every v1 answer says
+ * that v1 is deprecated and when it ends, in Deprecation (RFC 9745), Sunset (RFC 8594) and Link headers.
+ * Demo dates: deprecated from 1 Oct 2026, ends 1 Apr 2027 (IST).
+ */
+@Configuration
+class ApiVersions implements WebMvcConfigurer {
+
+    static final ZonedDateTime V1_DEPRECATED = ZonedDateTime.of(2026, 10, 1, 0, 0, 0, 0, ZoneId.of(&quot;Asia/Kolkata&quot;));
+    static final ZonedDateTime V1_SUNSET = ZonedDateTime.of(2027, 4, 1, 0, 0, 0, 0, ZoneId.of(&quot;Asia/Kolkata&quot;));
+    static final URI MIGRATION_GUIDE = URI.create(&quot;https://developer.kartwala.example/orders/v1-to-v2&quot;);
+
+    @Override
+    public void configureApiVersioning(ApiVersionConfigurer configurer) {
+        StandardApiVersionDeprecationHandler deprecation = new StandardApiVersionDeprecationHandler();
+        // In UTC: Spring prints the date with its own offset (+0530), but an HTTP date (RFC 9110) is written in GMT.
+        deprecation.configureVersion(&quot;1&quot;).setDeprecationDate(V1_DEPRECATED).setSunsetDate(V1_SUNSET.withZoneSameInstant(ZoneOffset.UTC))
+                .setDeprecationLink(MIGRATION_GUIDE);
+        // Only /v1/... and /v2/... carry a version in the path; /orders/{id} is versioned by date in its own header.
+        configurer.usePathSegment(0, path -&gt; path.value().startsWith(&quot;/v&quot;)).setVersionRequired(false).setDeprecationHandler(deprecation);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Writes, and the end of v1</h2>
+<p>Add <code>POST /v2/orders</code>. What does an old app sending a v1-shaped body need: a separate v1 endpoint, or a translation into the one model? Then plan v1's end: how do you learn who still calls it (logs by app version), when is it safe to switch it off, and what should the app show users who never update?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: the old app's model against the renamed shape and against v1.</li>
+<li>Configure path-segment versioning and the deprecation handler.</li>
+<li>Write one record per version, both built from the same order.</li>
+<li>Compare whole bodies strictly in contract tests, so any rename shows.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Version in the path (<code>/v1</code>, <code>/v2</code>)</td><td>Visible, easy to cache and log; URLs change between versions.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Version in a header (<code>API-Version: 2</code>)</td><td>Clean URLs; easy to forget, harder to see in logs.</td><td><span class="pill warn">Also fine</span></td></tr><tr><td>Version in the media type (<code>application/json;v=2</code>)</td><td>Fits HTTP content negotiation; clumsy for most clients.</td><td><span class="pill warn">Rarely worth it</span></td></tr><tr><td>Dated versions (Stripe)</td><td>Many small changes, each with a date; a translation layer to keep.</td><td><span class="pill warn">Challenge 2</span></td></tr><tr><td>Rename in place</td><td>Old apps break the day it ships.</td><td><span class="pill bad">The trap</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>This station has no database: the versions are a question of the API's shape, not of storage. The point that carries over: a database column can be renamed in one migration; an API field cannot, because its readers are outside your control.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Who still calls v1</dt><dd>Log requests by version and app version; switch v1 off when its traffic is small enough to accept, not on a date alone.</dd>
+<dt>Force updates carefully</dt><dd>A minimum supported app version (station 089) lets the app tell users to update before v1 ends.</dd>
+<dt>Contract tests</dt><dd>Keep a copy of what each released app reads, and test v1 against it on every build.</dd>
+<dt>Standards</dt><dd>RFC 9745 (Deprecation, Proposed Standard, 2025) and RFC 8594 (Sunset, Informational, 2019). Many clients ignore these headers: they help tools and partners, not users.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>Which changes are breaking?</summary><p>Renaming or removing a field, changing its type, changing its meaning (rupees to paise under one name), changing allowed values, and making an optional input required.</p></details><details class="qa"><summary>Is adding a field safe for every client?</summary><p>Only for tolerant readers that ignore unknown fields. A strict client fails on it, which is why clients should be tolerant.</p></details><details class="qa"><summary>How does Spring Framework 7 version APIs?</summary><p>A version attribute on mappings and an ApiVersionConfigurer that reads the version from a path segment, a header, a query parameter or a media type, with a deprecation handler for headers.</p></details><details class="qa"><summary>What do Deprecation and Sunset say?</summary><p>Deprecation: since when the version is deprecated (RFC 9745). Sunset: when it stops working (RFC 8594). A Link with rel=&quot;deprecation&quot; points to the guide.</p></details><details class="qa"><summary>How long do you keep v1?</summary><p>Until the apps and partners that use it have moved, measured by traffic, with a date announced well ahead.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 7 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>Compatibility</td><td>v1 unchanged.</td><td>You can name changes of meaning that look compatible.</td></tr><tr><td>Deprecation</td><td>Headers on v1.</td><td>Dates in the right format, the standards with their status.</td></tr><tr><td>Tests</td><td>Contract tests.</td><td>A test that reads answers the way an old app does.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate makes the versions consistent: money as integer paise in both, and states written in lower case in both, "so we have one rule". No field is renamed or removed. Read the file and list every problem before opening the findings.</p>
+<p class="path">review/OrderController.java</p>
+<pre class="code"><code class="language-java">package com.kartwala.orders;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * Two versions of one resource, side by side. v1 is frozen: its field names, types and values are what old app
+ * versions parse, so it only ever gains fields. v2 is where the new shape lives. Both read the same Order.
+ */
+@RestController
+class OrderController {
+
+    /** The shape apps up to 5.x parse. Do not rename, retype or remove anything here. */
+    record OrderV1(long id, String customerName, long total, String status, List&lt;ItemV1&gt; items, String trackingUrl) {
+    }
+
+    record ItemV1(String sku, int qty, long price) {
+    }
+
+    /** The new shape: money in paise, the customer as an object, lower-case states. */
+    record OrderV2(long id, CustomerV2 customer, List&lt;ItemV2&gt; items, long totalPaise, String currency, String status, Instant placedAt, String trackingUrl) {
+    }
+
+    record CustomerV2(String name, String phone) {
+    }
+
+    record ItemV2(String sku, int quantity, long unitPricePaise) {
+    }
+
+    private final Orders orders;
+
+    OrderController(Orders orders) {
+        this.orders = orders;
+    }
+
+    @GetMapping(path = &quot;/{version}/orders/{id}&quot;, version = &quot;1&quot;)
+    OrderV1 v1(@PathVariable long id) {
+        Orders.Order o = orders.get(id);
+        // Money is integer paise everywhere now, and states are written one way in every version: no more decimals.
+        return new OrderV1(o.id(), o.customerName(), o.totalPaise(), status(o),
+                o.lines().stream().map(l -&gt; new ItemV1(l.sku(), l.quantity(), l.unitPricePaise())).toList(),
+                o.trackingUrl());
+    }
+
+    @GetMapping(path = &quot;/{version}/orders/{id}&quot;, version = &quot;2&quot;)
+    OrderV2 v2(@PathVariable long id) {
+        Orders.Order o = orders.get(id);
+        return new OrderV2(o.id(), new CustomerV2(o.customerName(), o.customerPhone()),
+                o.lines().stream().map(l -&gt; new ItemV2(l.sku(), l.quantity(), l.unitPricePaise())).toList(),
+                o.totalPaise(), &quot;INR&quot;, status(o), o.placedAt(), o.trackingUrl());
+    }
+
+    private static String status(Orders.Order o) {
+        return o.status().name().toLowerCase(Locale.ROOT);
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>v1's total in paise, under the same name</summary><p>"Money is integer paise everywhere" is right for new APIs, wrong for a frozen one. The name and the JSON type (a number) are unchanged, so nothing fails: app 5.x shows ₹1,29,950 for a ₹1,299.50 order. Item prices too.</p><p class="evidence"><b>Test evidence:</b> <code>v1KeepsTheShapeOldAppsParse</code> and <code>theOldAppStillReadsV1Completely</code> fail.</p></details><details class="finding"><summary><span class="sev">2</span>v1's states in lower case</summary><p>"One way to write states": app 5.x compares <code>status</code> with <code>SHIPPED</code>, so every order now looks like an unknown state.</p><p class="evidence"><b>Test evidence:</b> The same two tests fail on <code>status</code> as well.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the flawed file copied over the real one, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>OrderContractTest</code></td><td><span class="pill ok">4 / 4</span></td><td><span class="pill bad">3 / 4</span></td></tr><tr><td><code>RenameInPlaceTrapTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill bad">2 / 3</span></td></tr></tbody></table></div>
+<p class="note">No field was renamed, so a check of names alone passes. The breakage is in the values: worse than a crash, because the old app shows a wrong price without any error.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
