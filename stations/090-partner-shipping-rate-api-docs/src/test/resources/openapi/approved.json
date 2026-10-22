@@ -1,0 +1,282 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "Dakroute shipping rates",
+    "description" : "Prices for parcels between Indian PIN codes, for partners. Demo tariff.",
+    "contact" : {
+      "name" : "Dakroute partner support",
+      "email" : "partners@dakroute.example"
+    },
+    "version" : "3.0"
+  },
+  "servers" : [ {
+    "url" : "https://api.dakroute.example",
+    "description" : "Partner API (example address)"
+  } ],
+  "paths" : {
+    "/rate-quotes" : {
+      "post" : {
+        "tags" : [ "rate-quote-controller" ],
+        "summary" : "Quote a shipping rate",
+        "description" : "Prices one parcel between two PIN codes. Nothing is booked: a quote is a price, not a shipment.",
+        "operationId" : "quote",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/QuoteRequest"
+              },
+              "examples" : {
+                "parcel" : {
+                  "summary" : "A 1.2 kg parcel, Bengaluru to Delhi (200)",
+                  "description" : "parcel",
+                  "value" : {
+                    "fromPincode" : "560001",
+                    "toPincode" : "110001",
+                    "weightGrams" : 1200,
+                    "lengthCm" : 30,
+                    "widthCm" : 20,
+                    "heightCm" : 10,
+                    "service" : "STANDARD"
+                  }
+                },
+                "light-but-bulky" : {
+                  "summary" : "Volumetric weight counts (200)",
+                  "description" : "light-but-bulky",
+                  "value" : {
+                    "fromPincode" : "560001",
+                    "toPincode" : "560034",
+                    "weightGrams" : 800,
+                    "lengthCm" : 60,
+                    "widthCm" : 40,
+                    "heightCm" : 40,
+                    "service" : "EXPRESS"
+                  }
+                },
+                "too-heavy" : {
+                  "summary" : "62 kg (422)",
+                  "description" : "too-heavy",
+                  "value" : {
+                    "fromPincode" : "560001",
+                    "toPincode" : "110001",
+                    "weightGrams" : 62000,
+                    "lengthCm" : 80,
+                    "widthCm" : 60,
+                    "heightCm" : 60,
+                    "service" : "STANDARD"
+                  }
+                },
+                "bad-pincode" : {
+                  "summary" : "Five digits (400)",
+                  "description" : "bad-pincode",
+                  "value" : {
+                    "fromPincode" : "56001",
+                    "toPincode" : "110001",
+                    "weightGrams" : 1200,
+                    "lengthCm" : 30,
+                    "widthCm" : 20,
+                    "heightCm" : 10,
+                    "service" : "STANDARD"
+                  }
+                }
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "The quote.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Quote"
+                },
+                "examples" : {
+                  "parcel" : {
+                    "description" : "parcel",
+                    "value" : {
+                      "quoteId" : "Q-1",
+                      "zone" : "NATIONAL",
+                      "chargeableWeightGrams" : 1200,
+                      "pricePaise" : 22500,
+                      "gstPaise" : 4050,
+                      "totalPaise" : 26550,
+                      "estimatedDays" : 5
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "A field is missing, of the wrong type or out of range.",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                },
+                "examples" : {
+                  "bad-pincode" : {
+                    "description" : "bad-pincode",
+                    "value" : {
+                      "title" : "Bad Request",
+                      "status" : 400,
+                      "detail" : "Invalid request content.",
+                      "instance" : "/rate-quotes"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422" : {
+            "description" : "Valid, but the network cannot carry it: too heavy, or a PIN code not served.",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                },
+                "examples" : {
+                  "too-heavy" : {
+                    "description" : "too-heavy",
+                    "value" : {
+                      "title" : "Unprocessable Content",
+                      "status" : 422,
+                      "detail" : "Parcels above 50000 g cannot be carried",
+                      "instance" : "/rate-quotes"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "QuoteRequest" : {
+        "type" : "object",
+        "description" : "A parcel to price.",
+        "properties" : {
+          "fromPincode" : {
+            "type" : "string",
+            "description" : "Pickup PIN code: six digits, not starting with 0.",
+            "example" : "560001",
+            "pattern" : "[1-9][0-9]{5}"
+          },
+          "toPincode" : {
+            "type" : "string",
+            "description" : "Delivery PIN code.",
+            "example" : "110001",
+            "pattern" : "[1-9][0-9]{5}"
+          },
+          "weightGrams" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Actual weight in grams. Above 50,000 g the parcel service cannot carry it (422).",
+            "example" : 1200,
+            "minimum" : 1
+          },
+          "lengthCm" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Length in cm.",
+            "example" : 30,
+            "maximum" : 150,
+            "minimum" : 1
+          },
+          "widthCm" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Width in cm.",
+            "example" : 20,
+            "maximum" : 150,
+            "minimum" : 1
+          },
+          "heightCm" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Height in cm.",
+            "example" : 10,
+            "maximum" : 150,
+            "minimum" : 1
+          },
+          "service" : {
+            "type" : "string",
+            "description" : "STANDARD or EXPRESS.",
+            "enum" : [ "STANDARD", "EXPRESS" ],
+            "example" : "STANDARD"
+          }
+        },
+        "required" : [ "fromPincode", "heightCm", "lengthCm", "service", "toPincode", "weightGrams", "widthCm" ]
+      },
+      "Quote" : {
+        "type" : "object",
+        "description" : "A price for one parcel. Amounts are integer paise (₹1 = 100 paise).",
+        "properties" : {
+          "quoteId" : {
+            "type" : "string",
+            "example" : "Q-1"
+          },
+          "zone" : {
+            "type" : "string",
+            "enum" : [ "LOCAL", "REGIONAL", "NATIONAL" ]
+          },
+          "chargeableWeightGrams" : {
+            "type" : "integer",
+            "format" : "int64",
+            "description" : "The larger of actual and volumetric weight."
+          },
+          "pricePaise" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "gstPaise" : {
+            "type" : "integer",
+            "format" : "int64",
+            "description" : "GST at 18%."
+          },
+          "totalPaise" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "estimatedDays" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Working days, a demo estimate."
+          }
+        }
+      },
+      "ProblemDetail" : {
+        "type" : "object",
+        "properties" : {
+          "type" : {
+            "type" : "string",
+            "format" : "uri"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "detail" : {
+            "type" : "string"
+          },
+          "instance" : {
+            "type" : "string",
+            "format" : "uri"
+          },
+          "properties" : {
+            "type" : "object",
+            "additionalProperties" : { }
+          }
+        }
+      }
+    }
+  }
+}

@@ -56,6 +56,7 @@ if compgen -G "challenge/*Test.java" >/dev/null; then
   for f in challenge/solution/*.java; do cp "$f" "$TMP/solved/src/main/java/$(pkg_dir "$f")/"; done
   for f in challenge/solution/*.properties; do [ -f "$f" ] && cp "$f" "$TMP/solved/src/main/resources/"; done   # message bundles
   for f in challenge/solution/*.sql; do [ -f "$f" ] && cp "$f" "$TMP/solved/src/main/resources/db/migration/"; done   # new migrations
+  [ -d challenge/solution/test-resources ] && cp -r challenge/solution/test-resources/. "$TMP/solved/src/test/resources/"   # e.g. an approved API description the solution changes
   for f in challenge/*Test.java; do cp "$f" "$TMP/solved/src/test/java/$(pkg_dir "$f")/"; done
   if [ -f challenge/solution/pom-additions.xml ]; then
     python3 - "$TMP/solved/pom.xml" challenge/solution/pom-additions.xml <<'PY'
