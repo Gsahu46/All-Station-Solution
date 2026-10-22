@@ -1,0 +1,1310 @@
+<title>Station 089 · App config with HTTP caching</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 089</span>
+    <h1>App config with HTTP caching</h1>
+    <p class="scenario">20 million app launches a day download the same 40 KB config, and old app versions need a forced update.</p>
+    <p class="sim"><b>Simulation</b><span>The config is demo data in memory, not Streamo's, and much smaller than a real 40 KB config; the byte counts on this page are for the demo config. The endpoints in it are example addresses.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Streaming</li>
+      <li><b>Types</b>None</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>088 Order API v2 without breaking old apps</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · ETag and If-None-Match · 304 Not Modified · Cache-Control · minimum supported app version</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>The same bytes, millions of times</strong><p>Every launch of the Streamo app downloaded the full config: 40 KB, 20 million times a day, almost always identical to the copy already on the phone.</p></li><li><strong>And no way to retire old apps</strong><p>Old app versions with a playback bug kept being used. There was no way to tell them they must update.</p></li><li><strong>The fix</strong><p>Each answer carries a fingerprint (ETag) and a time it may be reused (max-age). The app sends its fingerprint back; if nothing changed, the answer is an empty 304. The config also says which versions must update.</p></li></ol>
+<p class="lesson">Most of what a busy endpoint sends is something the client already has. Let it ask "changed?" and answer "no" for free.</p>
+
+<h2>What are we building?</h2>
+<p>One endpoint: the config for a platform and an app version, with an ETag and Cache-Control, answering <code>304</code> when the app's copy is current, and telling old apps to update.</p>
+
+<h2>An everyday analogy</h2>
+<p>A newspaper stand that, when you show yesterday's paper, says "there is no new edition yet" instead of selling you the same paper again.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Build</strong> the answer for this platform and version, including whether it must update.</li>
+<li><strong>Fingerprint</strong> it: a hash of its JSON is the ETag.</li>
+<li><strong>Compare</strong> with the app's <code>If-None-Match</code>: the same, <code>304</code> with no body; different, <code>200</code> with the new config.</li>
+<li><strong>Say how long</strong> the app may keep it without asking: <code>max-age=300</code>.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: the minimum version is 5.9.0 and the app is 5.10.0. Must it update?</summary><p>No: 10 is more than 9. Compared as text, "5.10.0" sorts before "5.9.0" and the app would be wrongly forced to update: <code>versionsAreComparedAsNumbersNotText</code>.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No CDN.</strong> The same headers let a CDN answer for you; challenge 3 is about that.</li>
+<li><strong>No publishing API.</strong> Config changes come from the code's demo data and the tests.</li>
+<li><strong>No real 40 KB.</strong> The demo config is about 500 bytes; the saving is the same in proportion.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>App config</strong></td><td>Settings the app downloads at launch: which features are on, where the servers are, which version is needed.</td><td>The day's menu at a restaurant.</td><td><code>GET /app-config</code></td></tr><tr><td><strong>ETag</strong></td><td>A short fingerprint of an answer. Same answer, same fingerprint.</td><td>A version number printed on the menu.</td><td><code>ETag: "LFOu..."</code></td></tr><tr><td><strong>If-None-Match</strong></td><td>The app sends the fingerprint it has: "only send the answer if it changed".</td><td>"I have menu 12; anything new?"</td><td>request header</td></tr><tr><td><strong>304 Not Modified</strong></td><td>"Nothing changed, keep yours": no body.</td><td>"Still menu 12."</td><td>the answer to a match</td></tr><tr><td><strong>Cache-Control: max-age</strong></td><td>How long the app may reuse its copy without asking at all.</td><td>"This menu is good until lunch."</td><td>300 seconds (demo rule)</td></tr><tr><td><strong>Minimum supported version</strong></td><td>Apps older than this must update before they can be used.</td><td>"This card no longer works; get a new one."</td><td><code>updateRequired</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Streamo</strong> (a fictional streaming app): 20 million app launches a day download the same 40 KB config, and old app versions need a forced update.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo config: Android latest 6.2.0, minimum 5.9.0; iOS latest 6.1.3, minimum 5.8.0. Demo rule: reuse for 5 minutes.</p>
+<ol class="gwt">
+<li><b>Given</b> a launch, <b>then</b> <code>200</code> with the config, an <code>ETag</code> and <code>Cache-Control: max-age=300, public</code>.</li>
+<li><b>Given</b> <code>If-None-Match</code> with the current ETag, <b>then</b> <code>304</code>, no body, the same ETag and Cache-Control.</li>
+<li><b>Given</b> a published change, <b>then</b> the next revalidation gets <code>200</code> and a new ETag.</li>
+<li><b>Given</b> an app below the minimum, <b>then</b> <code>updateRequired: true</code>; versions compared as numbers.</li>
+<li><b>Given</b> an unknown platform or a malformed version, <b>then</b> <code>400</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>The ETag changes when the answer changes, and only then.</li>
+<li>Nothing in the answer changes on every request.</li>
+<li>A 304 repeats the caching headers.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Use ETag and If-None-Match for conditional GETs, and get 304s from Spring.</li>
+<li>Choose a max-age with its cost: how late a change can arrive.</li>
+<li>Compare versions as numbers.</li>
+<li>Measure the saving instead of assuming it.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/app-config?platform=android|ios&amp;version=x.y.z</code></td><td>The config for this app, with caching headers. Send <code>If-None-Match</code> to revalidate.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>The config: first launch, or it changed</td></tr><tr><td><span class="pill ok">304</span></td><td>If-None-Match matches: keep your copy; no body</td></tr><tr><td><span class="pill warn">400</span></td><td>Platform not android or ios; version not three numbers; a parameter missing</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 22 Oct 2026, in this order. JSON bodies are indented for reading; <code>Date</code> and connection headers are left out.</p>
+<section class="example"><h3>Case 1: an app launch</h3><p><b>Why:</b> the config, its ETag, and how long it may be reused.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /app-config?platform=android&amp;version=6.1.0 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Cache-Control: max-age=300, public
+ETag: &quot;LFOuLmFl9BsqClJ2z7-mhN&quot;
+Content-Type: application/json
+
+{
+  &quot;platform&quot;: &quot;android&quot;,
+  &quot;appVersion&quot;: &quot;6.1.0&quot;,
+  &quot;updateRequired&quot;: false,
+  &quot;updateAvailable&quot;: true,
+  &quot;latestVersion&quot;: &quot;6.2.0&quot;,
+  &quot;minSupportedVersion&quot;: &quot;5.9.0&quot;,
+  &quot;features&quot;: {
+    &quot;downloads&quot;: true,
+    &quot;liveSports&quot;: true,
+    &quot;watchParty&quot;: false
+  },
+  &quot;homeRails&quot;: [
+    &quot;continue-watching&quot;,
+    &quot;trending-in-india&quot;,
+    &quot;new-releases&quot;,
+    &quot;cricket-live&quot;,
+    &quot;kids&quot;,
+    &quot;regional-tamil&quot;,
+    &quot;regional-telugu&quot;,
+    &quot;documentaries&quot;
+  ],
+  &quot;endpoints&quot;: {
+    &quot;api&quot;: &quot;https://api.streamo.example&quot;,
+    &quot;images&quot;: &quot;https://img.streamo.example&quot;,
+    &quot;player&quot;: &quot;https://play.streamo.example&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 2: the next launch sends the ETag back</h3><p><b>Why:</b> unchanged: <code>304</code> with no body, and the same caching headers.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /app-config?platform=android&amp;version=6.1.0 HTTP/1.1
+If-None-Match: &quot;LFOuLmFl9BsqClJ2z7-mhN&quot;</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 304 
+Cache-Control: max-age=300, public
+ETag: &quot;LFOuLmFl9BsqClJ2z7-mhN&quot;</code></pre></div></div></section><section class="example"><h3>Case 3: app 5.8.9</h3><p><b>Why:</b> below 5.9.0: <code>updateRequired: true</code>. Its own ETag, since the answer differs.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /app-config?platform=android&amp;version=5.8.9 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Cache-Control: max-age=300, public
+ETag: &quot;UcCk2z774v-Hbfdwc_yjvt&quot;
+Content-Type: application/json
+
+{
+  &quot;platform&quot;: &quot;android&quot;,
+  &quot;appVersion&quot;: &quot;5.8.9&quot;,
+  &quot;updateRequired&quot;: true,
+  &quot;updateAvailable&quot;: true,
+  &quot;latestVersion&quot;: &quot;6.2.0&quot;,
+  &quot;minSupportedVersion&quot;: &quot;5.9.0&quot;,
+  &quot;features&quot;: {
+    &quot;downloads&quot;: true,
+    &quot;liveSports&quot;: true,
+    &quot;watchParty&quot;: false
+  },
+  &quot;homeRails&quot;: [
+    &quot;continue-watching&quot;,
+    &quot;trending-in-india&quot;,
+    &quot;new-releases&quot;,
+    &quot;cricket-live&quot;,
+    &quot;kids&quot;,
+    &quot;regional-tamil&quot;,
+    &quot;regional-telugu&quot;,
+    &quot;documentaries&quot;
+  ],
+  &quot;endpoints&quot;: {
+    &quot;api&quot;: &quot;https://api.streamo.example&quot;,
+    &quot;images&quot;: &quot;https://img.streamo.example&quot;,
+    &quot;player&quot;: &quot;https://play.streamo.example&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 4: app 5.10.0</h3><p><b>Why:</b> compared as numbers, it is above 5.9.0.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /app-config?platform=android&amp;version=5.10.0 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Cache-Control: max-age=300, public
+ETag: &quot;5V22jt_OOy7O0npyKMmOHx&quot;
+Content-Type: application/json
+
+{
+  &quot;platform&quot;: &quot;android&quot;,
+  &quot;appVersion&quot;: &quot;5.10.0&quot;,
+  &quot;updateRequired&quot;: false,
+  &quot;updateAvailable&quot;: true,
+  &quot;latestVersion&quot;: &quot;6.2.0&quot;,
+  &quot;minSupportedVersion&quot;: &quot;5.9.0&quot;,
+  &quot;features&quot;: {
+    &quot;downloads&quot;: true,
+    &quot;liveSports&quot;: true,
+    &quot;watchParty&quot;: false
+  },
+  &quot;homeRails&quot;: [
+    &quot;continue-watching&quot;,
+    &quot;trending-in-india&quot;,
+    &quot;new-releases&quot;,
+    &quot;cricket-live&quot;,
+    &quot;kids&quot;,
+    &quot;regional-tamil&quot;,
+    &quot;regional-telugu&quot;,
+    &quot;documentaries&quot;
+  ],
+  &quot;endpoints&quot;: {
+    &quot;api&quot;: &quot;https://api.streamo.example&quot;,
+    &quot;images&quot;: &quot;https://img.streamo.example&quot;,
+    &quot;player&quot;: &quot;https://play.streamo.example&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 5: If-None-Match: *</h3><p><b>Why:</b> Spring answers <code>200</code> here; RFC 9110 (section 13.1.2) calls for <code>304</code>. Apps never send <code>*</code>, so it is left and recorded.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /app-config?platform=android&amp;version=6.1.0 HTTP/1.1
+If-None-Match: *</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Cache-Control: max-age=300, public
+ETag: &quot;LFOuLmFl9BsqClJ2z7-mhN&quot;
+Content-Type: application/json
+
+{
+  &quot;platform&quot;: &quot;android&quot;,
+  &quot;appVersion&quot;: &quot;6.1.0&quot;,
+  &quot;updateRequired&quot;: false,
+  &quot;updateAvailable&quot;: true,
+  &quot;latestVersion&quot;: &quot;6.2.0&quot;,
+  &quot;minSupportedVersion&quot;: &quot;5.9.0&quot;,
+  &quot;features&quot;: {
+    &quot;downloads&quot;: true,
+    &quot;liveSports&quot;: true,
+    &quot;watchParty&quot;: false
+  },
+  &quot;homeRails&quot;: [
+    &quot;continue-watching&quot;,
+    &quot;trending-in-india&quot;,
+    &quot;new-releases&quot;,
+    &quot;cricket-live&quot;,
+    &quot;kids&quot;,
+    &quot;regional-tamil&quot;,
+    &quot;regional-telugu&quot;,
+    &quot;documentaries&quot;
+  ],
+  &quot;endpoints&quot;: {
+    &quot;api&quot;: &quot;https://api.streamo.example&quot;,
+    &quot;images&quot;: &quot;https://img.streamo.example&quot;,
+    &quot;player&quot;: &quot;https://play.streamo.example&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 6: platform windows</h3><p><b>Why:</b> <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /app-config?platform=windows&amp;version=6.1.0 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Validation failure&quot;,
+  &quot;instance&quot;: &quot;/app-config&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: version 6.1</h3><p><b>Why:</b> <code>400</code>: three numbers are expected.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /app-config?platform=android&amp;version=6.1 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Validation failure&quot;,
+  &quot;instance&quot;: &quot;/app-config&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section>
+<h2>What 20 launches download</h2>
+<p class="muted">Measured by <code>docs/capture.sh</code> with <code>curl -w '%{size_download}'</code> on the demo config:</p>
+<pre class="code"><code class="language-text">Body bytes: 481 for a 200, 0 for a 304. For 20 launches: 9620 without the ETag, 481 with it.</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>Below, at and above the minimum; IOS in capitals</td><td><code>updateRequired</code> only below</td><td><code>theConfigTellsTheAppWhetherItMustUpdate</code></td></tr><tr><td>5.10.0 against 5.9.0</td><td>Newer: no update needed</td><td><code>versionsAreComparedAsNumbersNotText</code></td></tr><tr><td>The same request twice; another version or platform</td><td>The same ETag; a different one</td><td><code>theETagChangesWhenAndOnlyWhenTheAnswerChanges</code></td></tr><tr><td>A published change</td><td><code>200</code> and a new ETag on the next revalidation</td><td><code>aPublishedChangeReachesAppsOnTheirNextRevalidation</code></td></tr><tr><td>A weak ETag, a list, <code>*</code>, another ETag</td><td><code>304</code>, <code>304</code>, <code>200</code> (Spring), <code>200</code></td><td><code>conditionalRequestsFollowHttpRules</code></td></tr><tr><td>Bad platform, version, missing parameter, trailing slash</td><td><code>400</code>; <code>404</code></td><td><code>badQueriesAre400</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">No ETag or Cache-Control, so every launch downloads the same config.</p>
+<ul>
+<li><strong>The old way.</strong> The test launches the app 20 times without an ETag to send: 20 full downloads of the same bytes.</li>
+<li><strong>With the ETag.</strong> The first launch downloads the config and keeps the ETag; the next 19 send it back and get <code>304</code> with an empty body. One download in 20.</li>
+</ul>
+<p>While building, each part was undone once: no ETag turned 4 tests red; no Cache-Control 2; a fixed ETag that never changes 3; versions compared as text 1; the platform not lower-cased 1; <code>&lt;=</code> instead of <code>&lt;</code> for the minimum 1.</p>
+</div>
+<pre class="code"><code class="language-java">package com.streamo.config;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletResponse;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Written first. The old endpoint sent no ETag and no Cache-Control: every app launch downloaded the whole config
+ * again, the same bytes each time. These tests count the bytes 20 launches download.
+ */
+class EveryLaunchDownloadsTrapTest extends ApiTest {
+
+    @Test
+    void anAppThatCannotRevalidateDownloadsEverythingEveryTime() throws Exception {
+        long bytes = 0;
+        for (int launch = 0; launch &lt; 20; launch++) {
+            bytes += ask(&quot;android&quot;, &quot;6.1.0&quot;, null).getContentAsByteArray().length;   // the old app: no If-None-Match to send
+        }
+        int one = ask(&quot;android&quot;, &quot;6.1.0&quot;, null).getContentAsByteArray().length;
+        assertThat(one).isGreaterThan(400);
+        assertThat(bytes).isEqualTo(20L * one);
+    }
+
+    @Test
+    void anAppThatKeepsTheETagDownloadsOnceAndThenGets304s() throws Exception {
+        MockHttpServletResponse first = ask(&quot;android&quot;, &quot;6.1.0&quot;, null);
+        String etag = first.getHeader(&quot;ETag&quot;);
+        assertThat(etag).matches(&quot;\&quot;[A-Za-z0-9_-]{22}\&quot;&quot;);
+        assertThat(first.getHeader(&quot;Cache-Control&quot;)).isEqualTo(&quot;max-age=300, public&quot;);
+        long bytes = first.getContentAsByteArray().length;
+        for (int launch = 1; launch &lt; 20; launch++) {
+            MockHttpServletResponse again = ask(&quot;android&quot;, &quot;6.1.0&quot;, etag);
+            assertThat(again.getStatus()).isEqualTo(304);
+            bytes += again.getContentAsByteArray().length;
+        }
+        assertThat(bytes).isEqualTo(first.getContentAsByteArray().length);   // 19 launches downloaded nothing
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 8 tests</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Download once, then revalidate with the ETag you got, and compare the sizes:</p>
+<pre class="code"><code class="language-bash">U=&#x27;http://localhost:8080/app-config?platform=android&amp;version=6.1.0&#x27;
+ETAG=$(curl -s -i &quot;$U&quot; | tr -d &#x27;\r&#x27; | sed -n &#x27;s/^ETag: //p&#x27;)
+curl -s -o /dev/null -w &#x27;%{http_code} %{size_download} bytes\n&#x27; &quot;$U&quot;
+curl -s -o /dev/null -w &#x27;%{http_code} %{size_download} bytes\n&#x27; &quot;$U&quot; -H &quot;If-None-Match: $ETAG&quot;</code></pre>
+<p>The first prints <code>200</code> and the size of the config, the second <code>304 0 bytes</code>: the numbers in <code>docs/captures/bytes.txt</code> come from the same two requests.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>Never a <code>304</code></td><td>Something in the answer changes on every request (a timestamp, a random id), so the ETag does too.</td><td>Keep per-request values out of cached answers; see the Review tab.</td></tr><tr><td>A <code>304</code> without Cache-Control</td><td>The headers were set only on the <code>200</code> path.</td><td>Set them on the <code>ResponseEntity</code> and let Spring answer the <code>304</code>.</td></tr><tr><td>Apps forced to update that are new enough</td><td>Versions compared as text.</td><td>Compare number by number, as <code>AppVersion</code> does.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/089-app-config-with-http-caching/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/streamo/config/
+│   ├── AppConfigController.java   ├── AppVersion.java   ├── AppConfigs.java   └── AppConfigApplication.java
+├── src/main/resources/application.yaml
+├── src/test/java/com/streamo/config/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">AppConfigController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">AppVersion.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">AppConfigs.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">AppConfigApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/streamo/config/AppConfigController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The endpoint.</dd><dt>Why</dt><dd>Builds the answer, hashes its JSON into an ETag, sets Cache-Control, and lets Spring answer <code>304</code> when If-None-Match matches.</dd><dt>Without it</dt><dd>Every launch downloading the same bytes.</dd></dl><ul><li>Spring compares If-None-Match with the ETag of a <code>ResponseEntity</code> by itself, weakly, and keeps Cache-Control on the <code>304</code>. Found while building: no <code>checkNotModified</code> code was needed.</li><li>Maps are sorted (<code>TreeMap</code>) so the same config always gives the same JSON, and the same ETag.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.config;
+
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.util.Base64;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
+
+@RestController
+class AppConfigController {
+
+    record AppConfig(String platform, String appVersion, boolean updateRequired, boolean updateAvailable, String latestVersion,
+                     String minSupportedVersion, Map&lt;String, Boolean&gt; features, List&lt;String&gt; homeRails, Map&lt;String, String&gt; endpoints) {
+    }
+
+    /** Demo rule: apps may reuse the config for 5 minutes without asking; after that they ask with If-None-Match. */
+    static final CacheControl CACHE = CacheControl.maxAge(Duration.ofMinutes(5)).cachePublic();
+
+    private final AppConfigs configs;
+    private final JsonMapper json;
+
+    AppConfigController(AppConfigs configs, JsonMapper json) {
+        this.configs = configs;
+        this.json = json;
+    }
+
+    /**
+     * The ETag is a hash of the answer&#x27;s JSON, so it changes when, and only when, the answer changes. Spring compares
+     * it with the app&#x27;s If-None-Match and, if they match, answers 304 with no body: the app keeps the copy it has.
+     */
+    @GetMapping(&quot;/app-config&quot;)
+    ResponseEntity&lt;AppConfig&gt; config(@RequestParam @NotNull @Pattern(regexp = &quot;(?i)android|ios&quot;) String platform,
+                                     @RequestParam @NotNull @Pattern(regexp = &quot;\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}&quot;) String version) {
+        String p = platform.toLowerCase(Locale.ROOT);
+        AppConfigs.Published c = configs.get(p);
+        AppVersion app = AppVersion.parse(version);
+        AppConfig body = new AppConfig(p, app.toString(), app.compareTo(AppVersion.parse(c.minSupportedVersion())) &lt; 0,
+                app.compareTo(AppVersion.parse(c.latestVersion())) &lt; 0, c.latestVersion(), c.minSupportedVersion(),
+                new TreeMap&lt;&gt;(c.features()), c.homeRails(), new TreeMap&lt;&gt;(c.endpoints()));
+        return ResponseEntity.ok().eTag(etag(json.writeValueAsBytes(body))).cacheControl(CACHE).body(body);
+    }
+
+    static String etag(byte[] bytes) {
+        try {
+            byte[] hash = MessageDigest.getInstance(&quot;SHA-256&quot;).digest(bytes);
+            return &quot;\&quot;&quot; + Base64.getUrlEncoder().withoutPadding().encodeToString(hash).substring(0, 22) + &quot;\&quot;&quot;;
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/streamo/config/AppVersion.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>An app version, compared number by number.</dd><dt>Why</dt><dd>Three integers, compared in order.</dd><dt>Without it</dt><dd>5.10.0 treated as older than 5.9.0.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.config;
+
+/** An app version like 5.10.2, compared number by number: as text, &quot;5.10.0&quot; would sort before &quot;5.9.0&quot;. */
+record AppVersion(int major, int minor, int patch) implements Comparable&lt;AppVersion&gt; {
+
+    static AppVersion parse(String text) {
+        String[] p = text.split(&quot;\\.&quot;);
+        return new AppVersion(Integer.parseInt(p[0]), Integer.parseInt(p[1]), Integer.parseInt(p[2]));
+    }
+
+    @Override
+    public int compareTo(AppVersion o) {
+        return major != o.major ? Integer.compare(major, o.major) : minor != o.minor ? Integer.compare(minor, o.minor) : Integer.compare(patch, o.patch);
+    }
+
+    @Override
+    public String toString() {
+        return major + &quot;.&quot; + minor + &quot;.&quot; + patch;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/streamo/config/AppConfigs.java</p><div class="notes"><p>The published config per platform, demo data in memory; <code>publish</code> stands for an operator publishing a change.</p></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.config;
+
+import org.springframework.stereotype.Component;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * The published config per platform. Demo data in memory; in production it would come from a config service or a
+ * table, and change a few times a week, while apps ask for it 20 million times a day.
+ */
+@Component
+class AppConfigs {
+
+    record Published(String latestVersion, String minSupportedVersion, Map&lt;String, Boolean&gt; features, List&lt;String&gt; homeRails, Map&lt;String, String&gt; endpoints) {
+    }
+
+    private final Map&lt;String, Published&gt; byPlatform = new ConcurrentHashMap&lt;&gt;();
+
+    AppConfigs() {
+        reset();
+    }
+
+    Published get(String platform) {
+        return byPlatform.get(platform);
+    }
+
+    /** What an operator does when they publish a new config (tests use it too). */
+    void publish(String platform, Published config) {
+        byPlatform.put(platform, config);
+    }
+
+    void reset() {
+        Map&lt;String, Boolean&gt; features = new LinkedHashMap&lt;&gt;();
+        features.put(&quot;downloads&quot;, true);
+        features.put(&quot;liveSports&quot;, true);
+        features.put(&quot;watchParty&quot;, false);
+        List&lt;String&gt; rails = List.of(&quot;continue-watching&quot;, &quot;trending-in-india&quot;, &quot;new-releases&quot;, &quot;cricket-live&quot;, &quot;kids&quot;, &quot;regional-tamil&quot;, &quot;regional-telugu&quot;, &quot;documentaries&quot;);
+        Map&lt;String, String&gt; endpoints = Map.of(&quot;api&quot;, &quot;https://api.streamo.example&quot;, &quot;images&quot;, &quot;https://img.streamo.example&quot;, &quot;player&quot;, &quot;https://play.streamo.example&quot;);
+        byPlatform.put(&quot;android&quot;, new Published(&quot;6.2.0&quot;, &quot;5.9.0&quot;, Map.copyOf(features), rails, endpoints));
+        byPlatform.put(&quot;ios&quot;, new Published(&quot;6.1.3&quot;, &quot;5.8.0&quot;, Map.copyOf(features), rails, endpoints));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Problem details for errors.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: streamo-app-config
+  mvc:
+    problemdetails:
+      enabled: true</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/streamo/config/AppConfigApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.config;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class AppConfigApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(AppConfigApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>AppConfigContractTest</code> (6)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>EveryLaunchDownloadsTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted"><code>conditionalRequestsFollowHttpRules</code> records one place where Spring differs from RFC 9110: <code>If-None-Match: *</code> gets <code>200</code>. It was first written expecting <code>304</code> and failed; the running app answers the same (case 5). Found while building.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 -- in com.streamo.config.AppConfigContractTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.streamo.config.EveryLaunchDownloadsTrapTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">EveryLaunchDownloadsTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">AppConfigContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/streamo/config/EveryLaunchDownloadsTrapTest.java</p><div class="notes"><p>Written first: bytes for 20 launches, without and with the ETag.</p></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.config;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletResponse;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Written first. The old endpoint sent no ETag and no Cache-Control: every app launch downloaded the whole config
+ * again, the same bytes each time. These tests count the bytes 20 launches download.
+ */
+class EveryLaunchDownloadsTrapTest extends ApiTest {
+
+    @Test
+    void anAppThatCannotRevalidateDownloadsEverythingEveryTime() throws Exception {
+        long bytes = 0;
+        for (int launch = 0; launch &lt; 20; launch++) {
+            bytes += ask(&quot;android&quot;, &quot;6.1.0&quot;, null).getContentAsByteArray().length;   // the old app: no If-None-Match to send
+        }
+        int one = ask(&quot;android&quot;, &quot;6.1.0&quot;, null).getContentAsByteArray().length;
+        assertThat(one).isGreaterThan(400);
+        assertThat(bytes).isEqualTo(20L * one);
+    }
+
+    @Test
+    void anAppThatKeepsTheETagDownloadsOnceAndThenGets304s() throws Exception {
+        MockHttpServletResponse first = ask(&quot;android&quot;, &quot;6.1.0&quot;, null);
+        String etag = first.getHeader(&quot;ETag&quot;);
+        assertThat(etag).matches(&quot;\&quot;[A-Za-z0-9_-]{22}\&quot;&quot;);
+        assertThat(first.getHeader(&quot;Cache-Control&quot;)).isEqualTo(&quot;max-age=300, public&quot;);
+        long bytes = first.getContentAsByteArray().length;
+        for (int launch = 1; launch &lt; 20; launch++) {
+            MockHttpServletResponse again = ask(&quot;android&quot;, &quot;6.1.0&quot;, etag);
+            assertThat(again.getStatus()).isEqualTo(304);
+            bytes += again.getContentAsByteArray().length;
+        }
+        assertThat(bytes).isEqualTo(first.getContentAsByteArray().length);   // 19 launches downloaded nothing
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/streamo/config/AppConfigContractTest.java</p><div class="notes"><p>The answer, versions, ETags, publishing, conditional rules, bad queries.</p></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.config;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletResponse;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class AppConfigContractTest extends ApiTest {
+
+    @Test
+    void theConfigTellsTheAppWhetherItMustUpdate() throws Exception {
+        mvc.perform(config(&quot;android&quot;, &quot;6.1.0&quot;)).andExpect(status().isOk()).andExpect(content().json(&quot;&quot;&quot;
+                {&quot;platform&quot;:&quot;android&quot;,&quot;appVersion&quot;:&quot;6.1.0&quot;,&quot;updateRequired&quot;:false,&quot;updateAvailable&quot;:true,&quot;latestVersion&quot;:&quot;6.2.0&quot;,&quot;minSupportedVersion&quot;:&quot;5.9.0&quot;,
+                 &quot;features&quot;:{&quot;downloads&quot;:true,&quot;liveSports&quot;:true,&quot;watchParty&quot;:false}}&quot;&quot;&quot;));
+        mvc.perform(config(&quot;android&quot;, &quot;5.8.9&quot;)).andExpect(jsonPath(&quot;$.updateRequired&quot;).value(true));
+        mvc.perform(config(&quot;android&quot;, &quot;6.2.0&quot;)).andExpect(jsonPath(&quot;$.updateRequired&quot;).value(false)).andExpect(jsonPath(&quot;$.updateAvailable&quot;).value(false));
+        mvc.perform(config(&quot;IOS&quot;, &quot;5.8.0&quot;)).andExpect(jsonPath(&quot;$.platform&quot;).value(&quot;ios&quot;)).andExpect(jsonPath(&quot;$.updateRequired&quot;).value(false));
+    }
+
+    @Test
+    void versionsAreComparedAsNumbersNotText() throws Exception {
+        mvc.perform(config(&quot;android&quot;, &quot;5.10.0&quot;)).andExpect(jsonPath(&quot;$.updateRequired&quot;).value(false));   // as text, &quot;5.10.0&quot; &lt; &quot;5.9.0&quot;
+        mvc.perform(config(&quot;android&quot;, &quot;5.9.10&quot;)).andExpect(jsonPath(&quot;$.updateRequired&quot;).value(false));
+        assertThat(AppVersion.parse(&quot;10.0.0&quot;)).isGreaterThan(AppVersion.parse(&quot;9.99.99&quot;));
+    }
+
+    @Test
+    void theETagChangesWhenAndOnlyWhenTheAnswerChanges() throws Exception {
+        String etag = ask(&quot;android&quot;, &quot;6.1.0&quot;, null).getHeader(&quot;ETag&quot;);
+        assertThat(ask(&quot;android&quot;, &quot;6.1.0&quot;, null).getHeader(&quot;ETag&quot;)).isEqualTo(etag);
+        assertThat(ask(&quot;android&quot;, &quot;6.0.0&quot;, null).getHeader(&quot;ETag&quot;)).isNotEqualTo(etag);   // appVersion is part of the answer
+        assertThat(ask(&quot;ios&quot;, &quot;6.1.0&quot;, null).getHeader(&quot;ETag&quot;)).isNotEqualTo(etag);
+    }
+
+    @Test
+    void aPublishedChangeReachesAppsOnTheirNextRevalidation() throws Exception {
+        String etag = ask(&quot;android&quot;, &quot;5.9.5&quot;, null).getHeader(&quot;ETag&quot;);
+        configs.publish(&quot;android&quot;, new AppConfigs.Published(&quot;6.3.0&quot;, &quot;6.0.0&quot;, Map.of(&quot;downloads&quot;, true), List.of(&quot;kids&quot;), Map.of(&quot;api&quot;, &quot;https://api.streamo.example&quot;)));
+        MockHttpServletResponse after = ask(&quot;android&quot;, &quot;5.9.5&quot;, etag);
+        assertThat(after.getStatus()).isEqualTo(200);
+        assertThat(after.getHeader(&quot;ETag&quot;)).isNotEqualTo(etag);
+        assertThat(after.getContentAsString()).contains(&quot;\&quot;updateRequired\&quot;:true&quot;);
+    }
+
+    @Test
+    void conditionalRequestsFollowHttpRules() throws Exception {
+        MockHttpServletResponse first = ask(&quot;ios&quot;, &quot;6.0.0&quot;, null);
+        String etag = first.getHeader(&quot;ETag&quot;);
+        MockHttpServletResponse weak = ask(&quot;ios&quot;, &quot;6.0.0&quot;, &quot;W/&quot; + etag);
+        assertThat(weak.getStatus()).isEqualTo(304);   // If-None-Match compares weakly
+        assertThat(weak.getHeader(&quot;ETag&quot;)).isEqualTo(etag);
+        assertThat(weak.getHeader(&quot;Cache-Control&quot;)).isEqualTo(&quot;max-age=300, public&quot;);   // a 304 repeats the caching headers
+        assertThat(ask(&quot;ios&quot;, &quot;6.0.0&quot;, &quot;\&quot;other\&quot;, &quot; + etag).getStatus()).isEqualTo(304);
+        // RFC 9110 (13.1.2) calls for 304 when If-None-Match is * and the resource exists; Spring 7.0.9 answers 200
+        // here. Apps never send *, so it is left as it is and recorded. Found while building.
+        assertThat(ask(&quot;ios&quot;, &quot;6.0.0&quot;, &quot;*&quot;).getStatus()).isEqualTo(200);
+        assertThat(ask(&quot;ios&quot;, &quot;6.0.0&quot;, &quot;\&quot;other\&quot;&quot;).getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    void badQueriesAre400() throws Exception {
+        mvc.perform(config(&quot;windows&quot;, &quot;6.1.0&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(config(&quot;android&quot;, &quot;6.1&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(config(&quot;android&quot;, &quot;6.1.0-beta&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(&quot;/app-config&quot;).param(&quot;platform&quot;, &quot;android&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(&quot;/app-config/&quot;)).andExpect(status().isNotFound());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/streamo/config/ApiTest.java</p><div class="notes"><p>Shared setup: the demo config before each test, request helpers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.streamo.config;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+
+/** Shared setup: the whole app, the demo config as published at start before each test. */
+@SpringBootTest
+@AutoConfigureMockMvc
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    AppConfigs configs;
+
+    @BeforeEach
+    void demoConfig() {
+        configs.reset();
+    }
+
+    static MockHttpServletRequestBuilder config(String platform, String version) {
+        return get(&quot;/app-config&quot;).param(&quot;platform&quot;, platform).param(&quot;version&quot;, version);
+    }
+
+    MockHttpServletResponse ask(String platform, String version, String ifNoneMatch) throws Exception {
+        MockHttpServletRequestBuilder r = config(platform, version);
+        if (ifNoneMatch != null) {
+            r.header(&quot;If-None-Match&quot;, ifNoneMatch);
+        }
+        return mvc.perform(r).andReturn().getResponse();
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/streamo/config/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=RolloutBucketChallengeTest</code>. The Last-Modified test needs a <code>Clock</code> bean before it starts.</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 8 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 11 tests pass (8 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 25 minutes</p><h2>Last-Modified</h2><p>Each answer carries <code>Last-Modified</code>: when its platform's config was published, to the second. <code>If-Modified-Since</code> with that date (and no If-None-Match) gets <code>304</code> until the next publish.</p><p><b>Done when:</b> the test in <code>LastModifiedChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>Record the publish time with a <code>Clock</code>, cut to seconds: HTTP dates have no fractions.</li><li><code>ResponseEntity.ok().lastModified(...)</code>; Spring checks If-Modified-Since too.</li></ul></details><p class="path">challenge/LastModifiedChallengeTest.java</p><pre class="code"><code class="language-java">package com.streamo.config;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.test.context.bean.override.convention.TestBean;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Challenge 1: Last-Modified. Each answer says when its platform&#x27;s config was published; an app that sends
+ * If-Modified-Since with that date (and no If-None-Match) gets 304 until the next publish.
+ */
+class LastModifiedChallengeTest extends ApiTest {
+
+    static volatile Instant now = Instant.parse(&quot;2026-10-22T10:00:00Z&quot;);
+
+    @TestBean
+    Clock clock;
+
+    static Clock clock() {
+        return new Clock() {
+            public ZoneId getZone() {
+                return ZoneOffset.UTC;
+            }
+
+            public Clock withZone(ZoneId zone) {
+                return this;
+            }
+
+            public Instant instant() {
+                return now;
+            }
+        };
+    }
+
+    MockHttpServletResponse since(String date) throws Exception {
+        return mvc.perform(config(&quot;android&quot;, &quot;6.1.0&quot;).header(&quot;If-Modified-Since&quot;, date)).andReturn().getResponse();
+    }
+
+    @Test
+    void anUnchangedConfigIs304ByDateAndAPublishMakesIt200() throws Exception {
+        now = Instant.parse(&quot;2026-10-22T10:00:00Z&quot;);
+        configs.reset();   // published at 10:00 UTC
+        MockHttpServletResponse first = mvc.perform(config(&quot;android&quot;, &quot;6.1.0&quot;)).andReturn().getResponse();
+        assertThat(first.getHeader(&quot;Last-Modified&quot;)).isEqualTo(&quot;Thu, 22 Oct 2026 10:00:00 GMT&quot;);
+        assertThat(since(&quot;Thu, 22 Oct 2026 10:00:00 GMT&quot;).getStatus()).isEqualTo(304);
+        now = Instant.parse(&quot;2026-10-22T11:30:00Z&quot;);
+        configs.publish(&quot;android&quot;, configs.get(&quot;android&quot;));   // republished at 11:30
+        MockHttpServletResponse after = since(&quot;Thu, 22 Oct 2026 10:00:00 GMT&quot;);
+        assertThat(after.getStatus()).isEqualTo(200);
+        assertThat(after.getHeader(&quot;Last-Modified&quot;)).isEqualTo(&quot;Thu, 22 Oct 2026 11:30:00 GMT&quot;);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/AppConfigs.java</p><div class="src"><pre class="code"><code class="language-java">package com.streamo.config;
+
+import org.springframework.stereotype.Component;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * The published config per platform. Demo data in memory; in production it would come from a config service or a
+ * table, and change a few times a week, while apps ask for it 20 million times a day.
+ */
+@Component
+class AppConfigs {
+
+    record Published(String latestVersion, String minSupportedVersion, Map&lt;String, Boolean&gt; features, List&lt;String&gt; homeRails, Map&lt;String, String&gt; endpoints) {
+    }
+
+    private final Map&lt;String, Published&gt; byPlatform = new ConcurrentHashMap&lt;&gt;();
+    private final Map&lt;String, Instant&gt; publishedAt = new ConcurrentHashMap&lt;&gt;();
+    private final Clock clock;
+
+    AppConfigs(Clock clock) {
+        this.clock = clock;
+        reset();
+    }
+
+    /** When this platform&#x27;s config was last published, to the second (HTTP dates have no fractions). */
+    Instant publishedAt(String platform) {
+        return publishedAt.get(platform);
+    }
+
+    Published get(String platform) {
+        return byPlatform.get(platform);
+    }
+
+    /** What an operator does when they publish a new config (tests use it too). */
+    void publish(String platform, Published config) {
+        byPlatform.put(platform, config);
+        publishedAt.put(platform, clock.instant().truncatedTo(ChronoUnit.SECONDS));
+    }
+
+    void reset() {
+        Map&lt;String, Boolean&gt; features = new LinkedHashMap&lt;&gt;();
+        features.put(&quot;downloads&quot;, true);
+        features.put(&quot;liveSports&quot;, true);
+        features.put(&quot;watchParty&quot;, false);
+        List&lt;String&gt; rails = List.of(&quot;continue-watching&quot;, &quot;trending-in-india&quot;, &quot;new-releases&quot;, &quot;cricket-live&quot;, &quot;kids&quot;, &quot;regional-tamil&quot;, &quot;regional-telugu&quot;, &quot;documentaries&quot;);
+        Map&lt;String, String&gt; endpoints = Map.of(&quot;api&quot;, &quot;https://api.streamo.example&quot;, &quot;images&quot;, &quot;https://img.streamo.example&quot;, &quot;player&quot;, &quot;https://play.streamo.example&quot;);
+        publish(&quot;android&quot;, new Published(&quot;6.2.0&quot;, &quot;5.9.0&quot;, Map.copyOf(features), rails, endpoints));
+        publish(&quot;ios&quot;, new Published(&quot;6.1.3&quot;, &quot;5.8.0&quot;, Map.copyOf(features), rails, endpoints));
+    }
+}</code></pre></div><p class="path">challenge/solution/AppConfigController.java</p><div class="src"><pre class="code"><code class="language-java">package com.streamo.config;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.util.Base64;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
+
+@RestController
+class AppConfigController {
+
+    record AppConfig(String platform, String appVersion, boolean updateRequired, boolean updateAvailable, String latestVersion,
+                     String minSupportedVersion, Map&lt;String, Boolean&gt; features, List&lt;String&gt; homeRails, Map&lt;String, String&gt; endpoints) {
+    }
+
+    /** Demo rule: apps may reuse the config for 5 minutes without asking; after that they ask with If-None-Match. */
+    static final CacheControl CACHE = CacheControl.maxAge(Duration.ofMinutes(5)).cachePublic();
+
+    /** Demo rule: watchParty is rolled out to buckets 0 to 9, 10% of installs. */
+    static final int WATCH_PARTY_BUCKETS = 10;
+
+    private final AppConfigs configs;
+    private final JsonMapper json;
+
+    AppConfigController(AppConfigs configs, JsonMapper json) {
+        this.configs = configs;
+        this.json = json;
+    }
+
+    /**
+     * The ETag is a hash of the answer&#x27;s JSON, so it changes when, and only when, the answer changes. Spring compares
+     * it with the app&#x27;s If-None-Match and, if they match, answers 304 with no body: the app keeps the copy it has.
+     */
+    @GetMapping(&quot;/app-config&quot;)
+    ResponseEntity&lt;AppConfig&gt; config(@RequestParam @NotNull @Pattern(regexp = &quot;(?i)android|ios&quot;) String platform,
+                                     @RequestParam @NotNull @Pattern(regexp = &quot;\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}&quot;) String version,
+                                     @RequestParam(required = false) @Min(0) @Max(99) Integer bucket) {
+        String p = platform.toLowerCase(Locale.ROOT);
+        AppConfigs.Published c = configs.get(p);
+        AppVersion app = AppVersion.parse(version);
+        Map&lt;String, Boolean&gt; features = new TreeMap&lt;&gt;(c.features());
+        if (bucket != null &amp;&amp; bucket &lt; WATCH_PARTY_BUCKETS) {
+            features.put(&quot;watchParty&quot;, true);   // only &quot;in or out&quot; reaches the answer, so the ETag is shared per side
+        }
+        AppConfig body = new AppConfig(p, app.toString(), app.compareTo(AppVersion.parse(c.minSupportedVersion())) &lt; 0,
+                app.compareTo(AppVersion.parse(c.latestVersion())) &lt; 0, c.latestVersion(), c.minSupportedVersion(),
+                features, c.homeRails(), new TreeMap&lt;&gt;(c.endpoints()));
+        return ResponseEntity.ok().eTag(etag(json.writeValueAsBytes(body))).lastModified(configs.publishedAt(p)).cacheControl(CACHE).body(body);
+    }
+
+    static String etag(byte[] bytes) {
+        try {
+            byte[] hash = MessageDigest.getInstance(&quot;SHA-256&quot;).digest(bytes);
+            return &quot;\&quot;&quot; + Base64.getUrlEncoder().withoutPadding().encodeToString(hash).substring(0, 22) + &quot;\&quot;&quot;;
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+}</code></pre></div><p class="path">challenge/solution/AppConfigApplication.java</p><div class="src"><pre class="code"><code class="language-java">package com.streamo.config;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+import java.time.Clock;
+
+@SpringBootApplication
+public class AppConfigApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(AppConfigApplication.class, args);
+    }
+
+    /** Publish times come from here, so tests can publish at a known second. */
+    @Bean
+    Clock clock() {
+        return Clock.systemUTC();
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 30 minutes</p><h2>A 10% rollout that stays cacheable</h2><p>The app sends <code>bucket=0..99</code>, stable per install. Demo rule: <code>watchParty</code> is on for buckets 0 to 9. Installs on the same side of the rollout share one ETag.</p><p><b>Done when:</b> both tests in <code>RolloutBucketChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Let only "in or out" reach the answer, never the bucket number itself.</li><li><code>@Min(0) @Max(99)</code> on an optional <code>Integer</code> parameter.</li></ul></details><p class="path">challenge/RolloutBucketChallengeTest.java</p><pre class="code"><code class="language-java">package com.streamo.config;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: a gradual rollout. The app sends bucket=0..99 (from a hash of its install id, stable per install).
+ * Demo rule: watchParty is on for buckets 0 to 9 (10%). Answers depend on whether the bucket is in, not on the bucket
+ * itself, so all installs on the same side share one ETag and caches stay useful.
+ */
+class RolloutBucketChallengeTest extends ApiTest {
+
+    @Test
+    void tenPercentGetTheFeature() throws Exception {
+        mvc.perform(config(&quot;android&quot;, &quot;6.1.0&quot;).param(&quot;bucket&quot;, &quot;5&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.features.watchParty&quot;).value(true));
+        mvc.perform(config(&quot;android&quot;, &quot;6.1.0&quot;).param(&quot;bucket&quot;, &quot;10&quot;)).andExpect(jsonPath(&quot;$.features.watchParty&quot;).value(false));
+        mvc.perform(config(&quot;android&quot;, &quot;6.1.0&quot;)).andExpect(jsonPath(&quot;$.features.watchParty&quot;).value(false));
+        mvc.perform(config(&quot;android&quot;, &quot;6.1.0&quot;).param(&quot;bucket&quot;, &quot;100&quot;)).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void bucketsOnTheSameSideShareOneETag() throws Exception {
+        String in3 = mvc.perform(config(&quot;android&quot;, &quot;6.1.0&quot;).param(&quot;bucket&quot;, &quot;3&quot;)).andReturn().getResponse().getHeader(&quot;ETag&quot;);
+        String in7 = mvc.perform(config(&quot;android&quot;, &quot;6.1.0&quot;).param(&quot;bucket&quot;, &quot;7&quot;)).andReturn().getResponse().getHeader(&quot;ETag&quot;);
+        String out50 = mvc.perform(config(&quot;android&quot;, &quot;6.1.0&quot;).param(&quot;bucket&quot;, &quot;50&quot;)).andReturn().getResponse().getHeader(&quot;ETag&quot;);
+        String none = mvc.perform(config(&quot;android&quot;, &quot;6.1.0&quot;)).andReturn().getResponse().getHeader(&quot;ETag&quot;);
+        assertThat(in3).isEqualTo(in7);
+        assertThat(out50).isEqualTo(none).isNotEqualTo(in3);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/AppConfigController.java</p><div class="src"><pre class="code"><code class="language-java">package com.streamo.config;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.util.Base64;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
+
+@RestController
+class AppConfigController {
+
+    record AppConfig(String platform, String appVersion, boolean updateRequired, boolean updateAvailable, String latestVersion,
+                     String minSupportedVersion, Map&lt;String, Boolean&gt; features, List&lt;String&gt; homeRails, Map&lt;String, String&gt; endpoints) {
+    }
+
+    /** Demo rule: apps may reuse the config for 5 minutes without asking; after that they ask with If-None-Match. */
+    static final CacheControl CACHE = CacheControl.maxAge(Duration.ofMinutes(5)).cachePublic();
+
+    /** Demo rule: watchParty is rolled out to buckets 0 to 9, 10% of installs. */
+    static final int WATCH_PARTY_BUCKETS = 10;
+
+    private final AppConfigs configs;
+    private final JsonMapper json;
+
+    AppConfigController(AppConfigs configs, JsonMapper json) {
+        this.configs = configs;
+        this.json = json;
+    }
+
+    /**
+     * The ETag is a hash of the answer&#x27;s JSON, so it changes when, and only when, the answer changes. Spring compares
+     * it with the app&#x27;s If-None-Match and, if they match, answers 304 with no body: the app keeps the copy it has.
+     */
+    @GetMapping(&quot;/app-config&quot;)
+    ResponseEntity&lt;AppConfig&gt; config(@RequestParam @NotNull @Pattern(regexp = &quot;(?i)android|ios&quot;) String platform,
+                                     @RequestParam @NotNull @Pattern(regexp = &quot;\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}&quot;) String version,
+                                     @RequestParam(required = false) @Min(0) @Max(99) Integer bucket) {
+        String p = platform.toLowerCase(Locale.ROOT);
+        AppConfigs.Published c = configs.get(p);
+        AppVersion app = AppVersion.parse(version);
+        Map&lt;String, Boolean&gt; features = new TreeMap&lt;&gt;(c.features());
+        if (bucket != null &amp;&amp; bucket &lt; WATCH_PARTY_BUCKETS) {
+            features.put(&quot;watchParty&quot;, true);   // only &quot;in or out&quot; reaches the answer, so the ETag is shared per side
+        }
+        AppConfig body = new AppConfig(p, app.toString(), app.compareTo(AppVersion.parse(c.minSupportedVersion())) &lt; 0,
+                app.compareTo(AppVersion.parse(c.latestVersion())) &lt; 0, c.latestVersion(), c.minSupportedVersion(),
+                features, c.homeRails(), new TreeMap&lt;&gt;(c.endpoints()));
+        return ResponseEntity.ok().eTag(etag(json.writeValueAsBytes(body))).lastModified(configs.publishedAt(p)).cacheControl(CACHE).body(body);
+    }
+
+    static String etag(byte[] bytes) {
+        try {
+            byte[] hash = MessageDigest.getInstance(&quot;SHA-256&quot;).digest(bytes);
+            return &quot;\&quot;&quot; + Base64.getUrlEncoder().withoutPadding().encodeToString(hash).substring(0, 22) + &quot;\&quot;&quot;;
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>A CDN in front, and an urgent update</h2>
+<p>Put a CDN in front of <code>/app-config</code>. With <code>max-age=300, public</code>, what does it store, and how many requests still reach the app? Now a security bug means 6.1.x must update today: how quickly can a new minimum reach every phone, and what do you add (a shorter max-age, a purge, <code>stale-while-revalidate</code>) to make it faster?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: bytes for 20 launches.</li>
+<li>Build a deterministic answer (sorted maps, no per-request values).</li>
+<li>Hash it into an ETag; set Cache-Control; let Spring answer If-None-Match.</li>
+<li>Compare versions as numbers for <code>updateRequired</code>.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>ETag from a hash of the answer + max-age</td><td>The answer is built and hashed for each request, even for a 304.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>No caching headers</td><td>Every launch downloads everything.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>ETag from a config version number</td><td>No hashing; the answer must then depend only on that version.</td><td><span class="pill warn">Faster, easier to get wrong</span></td></tr><tr><td><code>ShallowEtagHeaderFilter</code></td><td>One line; hashes every response in the app, including ones that should not be cached.</td><td><span class="pill warn">Broad</span></td></tr><tr><td>A long max-age, no revalidation</td><td>Fewest requests; a change or forced update arrives late.</td><td><span class="pill bad">Review finding</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>This station has no database: the config is demo data in memory. With a table behind it, an <code>updated_at</code> or version column could give Last-Modified (challenge 1) or the ETag without building the answer.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>max-age is a delay</dt><dd>Every minute of max-age is a minute a change may take to arrive. Pick it with the forced-update case in mind.</dd>
+<dt>CDNs and gzip</dt><dd>A CDN can answer revalidations for you. Compression changes the bytes; CDNs often turn a strong ETag weak, which If-None-Match still matches.</dd>
+<dt>Measure</dt><dd>Count <code>304</code>s against <code>200</code>s; a sudden drop in <code>304</code>s means something in the answer started changing per request.</dd>
+<dt>Clients</dt><dd>Mobile HTTP clients revalidate only if they keep a cache: make sure the app's HTTP client has one, or stores and sends the ETag itself.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>What does an ETag do?</summary><p>It identifies one version of an answer. The client sends it back in If-None-Match; if it still matches, the server answers 304 with no body.</p></details><details class="qa"><summary>max-age or ETag?</summary><p>Both: max-age says how long the client may skip asking; the ETag makes asking cheap afterwards.</p></details><details class="qa"><summary>What breaks ETags?</summary><p>Anything in the answer that changes per request: timestamps, request ids, unordered maps.</p></details><details class="qa"><summary>Strong or weak ETags?</summary><p>Strong means byte-for-byte equal; weak means equivalent. If-None-Match compares weakly, so both give 304s.</p></details><details class="qa"><summary>How do you force old apps to update?</summary><p>Send the minimum supported version (or a flag) in the config, compare versions as numbers, and keep max-age short enough for the update to arrive in time.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 8 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>Caching</td><td>ETag and 304.</td><td>Cache-Control on the 304 too; nothing per-request in the answer.</td></tr><tr><td>Versions</td><td>updateRequired works.</td><td>Compared as numbers, with the 5.10 case tested.</td></tr><tr><td>Evidence</td><td>It caches.</td><td>You measured the bytes before and after.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate adds <code>serverTime</code> to the config, so apps can warn users whose phone clock is wrong, and raises max-age to a day, since the config rarely changes. Read the file and list every problem before opening the findings.</p>
+<p class="path">review/AppConfigController.java</p>
+<pre class="code"><code class="language-java">package com.streamo.config;
+
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
+
+@RestController
+class AppConfigController {
+
+    record AppConfig(String platform, String appVersion, boolean updateRequired, boolean updateAvailable, String latestVersion,
+                     String minSupportedVersion, Map&lt;String, Boolean&gt; features, List&lt;String&gt; homeRails, Map&lt;String, String&gt; endpoints,
+                     Instant serverTime) {
+    }
+
+    /** The config rarely changes, so apps may keep it for a day: far fewer requests. */
+    static final CacheControl CACHE = CacheControl.maxAge(Duration.ofDays(1)).cachePublic();
+
+    private final AppConfigs configs;
+    private final JsonMapper json;
+
+    AppConfigController(AppConfigs configs, JsonMapper json) {
+        this.configs = configs;
+        this.json = json;
+    }
+
+    /**
+     * The ETag is a hash of the answer&#x27;s JSON, so it changes when, and only when, the answer changes. Spring compares
+     * it with the app&#x27;s If-None-Match and, if they match, answers 304 with no body: the app keeps the copy it has.
+     */
+    @GetMapping(&quot;/app-config&quot;)
+    ResponseEntity&lt;AppConfig&gt; config(@RequestParam @NotNull @Pattern(regexp = &quot;(?i)android|ios&quot;) String platform,
+                                     @RequestParam @NotNull @Pattern(regexp = &quot;\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}&quot;) String version) {
+        String p = platform.toLowerCase(Locale.ROOT);
+        AppConfigs.Published c = configs.get(p);
+        AppVersion app = AppVersion.parse(version);
+        AppConfig body = new AppConfig(p, app.toString(), app.compareTo(AppVersion.parse(c.minSupportedVersion())) &lt; 0,
+                app.compareTo(AppVersion.parse(c.latestVersion())) &lt; 0, c.latestVersion(), c.minSupportedVersion(),
+                new TreeMap&lt;&gt;(c.features()), c.homeRails(), new TreeMap&lt;&gt;(c.endpoints()),
+                Instant.now());   // apps compare it with the phone&#x27;s clock to warn about a wrong time
+        return ResponseEntity.ok().eTag(etag(json.writeValueAsBytes(body))).cacheControl(CACHE).body(body);
+    }
+
+    static String etag(byte[] bytes) {
+        try {
+            byte[] hash = MessageDigest.getInstance(&quot;SHA-256&quot;).digest(bytes);
+            return &quot;\&quot;&quot; + Base64.getUrlEncoder().withoutPadding().encodeToString(hash).substring(0, 22) + &quot;\&quot;&quot;;
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>A timestamp in a cached answer</summary><p>"Apps compare serverTime with the phone's clock" is useful, but it makes every answer different. The ETag changes on every request, no app ever gets a <code>304</code>, and every launch downloads everything again: the original problem, back.</p><p class="evidence"><b>Test evidence:</b> <code>anAppThatKeepsTheETagDownloadsOnceAndThenGets304s</code>, <code>theETagChangesWhenAndOnlyWhenTheAnswerChanges</code> and <code>conditionalRequestsFollowHttpRules</code> fail.</p></details><details class="finding"><summary><span class="sev">2</span>A one-day max-age</summary><p>"Far fewer requests": also a day before a raised minimum version, a turned-off feature or a moved server reaches the apps that already have a copy.</p><p class="evidence"><b>Test evidence:</b> The Cache-Control checks in the same tests fail; the cost shows only on the day an update is urgent.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the flawed file copied over the real one, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>AppConfigContractTest</code></td><td><span class="pill ok">6 / 6</span></td><td><span class="pill bad">4 / 6</span></td></tr><tr><td><code>EveryLaunchDownloadsTrapTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">1 / 2</span></td></tr></tbody></table></div>
+<p class="note">Every request still gets a correct config, so nothing looks broken in the app. The cost shows on the bandwidth bill, and on the day an update cannot wait.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
