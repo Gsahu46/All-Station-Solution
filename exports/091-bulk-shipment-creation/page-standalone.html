@@ -1,0 +1,1581 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 091 · Bulk shipment creation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 091</span>
+    <h1>Bulk shipment creation</h1>
+    <p class="scenario">Sellers create 500 shipments in one call; one bad address makes the whole batch fail with no hint which.</p>
+    <p class="sim"><b>Simulation</b><span>The sellers, shipments and addresses are demo data, not Dakroute's. Creating a shipment records a row; no courier is booked.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Logistics</li>
+      <li><b>Types</b>Database</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>006 One error shape for a banking API</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · batch endpoints with per-item results · Bean Validation per item · JdbcClient · PostgreSQL 17 · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>500 shipments, one call</strong><p>Sellers upload the day's orders as one batch of up to 500 shipments.</p></li><li><strong>One bad address</strong><p>Item 312 had a five-digit PIN code. The whole batch ran in one transaction: the database refused that row, everything rolled back, and the seller got a 500 with a database message. They re-sent 500 orders, one at a time, to find it.</p></li><li><strong>The fix</strong><p>Each shipment is checked and saved on its own. The answer is a report: created or failed for each item, by position and by the seller's own reference, with the field that is wrong.</p></li></ol>
+<p class="lesson">In a batch of independent items, one bad item should fail one item, and the answer should say which.</p>
+
+<h2>What are we building?</h2>
+<p>A bulk endpoint that creates every valid shipment and reports, item by item, what was created and what was wrong.</p>
+
+<h2>An everyday analogy</h2>
+<p>A good post office clerk takes the 499 letters that are fine and hands back one, with a note: "this one, the PIN code has five digits".</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Check the batch</strong>: there is a list, with 1 to 500 items.</li>
+<li><strong>Check each item</strong> on its own: every field rule, every problem listed.</li>
+<li><strong>Save each item</strong> on its own: a refusal from the database fails that item only.</li>
+<li><strong>Report</strong>: how many were created, how many failed, and one result per item in order.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: half the items fail. Should the answer be 200 or an error?</summary><p>200: the call worked, and the report says how each item went. An error status is for a call that could not be handled at all, such as an empty list or a body that is not JSON.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No courier booking.</strong> A shipment is a row.</li>
+<li><strong>No background processing.</strong> 500 items are handled in the request; 50,000 would need a job (challenge 3).</li>
+<li><strong>No sign-in.</strong> One seller, to keep the batch logic in view.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Batch endpoint</strong></td><td>One call that does many things, here creating many shipments.</td><td>Handing the post office a sack of letters.</td><td><code>POST /shipments/bulk</code></td></tr><tr><td><strong>Per-item result</strong></td><td>An answer for each item: done, or what is wrong with it.</td><td>A receipt line per letter.</td><td><code>results[]</code></td></tr><tr><td><strong>All-or-nothing</strong></td><td>Either every item is done or none is.</td><td>The clerk returns the whole sack for one bad stamp.</td><td>the old code</td></tr><tr><td><strong>Transaction</strong></td><td>A group of database changes that succeed or fail together.</td><td>One sealed envelope.</td><td><code>@Transactional</code></td></tr><tr><td><strong>207 Multi-Status</strong></td><td>An HTTP status from WebDAV for many results in one answer, in XML.</td><td>A form meant for another office.</td><td>not used here</td></tr><tr><td><strong>Batch limit</strong></td><td>The most items one call may carry.</td><td>"At most 500 letters per sack."</td><td>500 (demo rule)</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Dakroute</strong> (a fictional courier): sellers create 500 shipments in one call; one bad address makes the whole batch fail with no hint which.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo rules: 1 to 500 items per call; weight 1 to 50,000 g; PIN codes of six digits not starting with 0; a 10-digit Indian mobile number; refs of 3 to 40 letters, digits or dashes, unique.</p>
+<ol class="gwt">
+<li><b>Given</b> a batch with good and bad items, <b>then</b> <code>200</code>, the good ones created, each bad one failed by index, ref and field.</li>
+<li><b>Given</b> an item with several problems, <b>then</b> all of them listed, by field.</li>
+<li><b>Given</b> a ref used before or twice in the batch, <b>then</b> that item fails, the others do not.</li>
+<li><b>Given</b> an item the database refuses for another reason, <b>then</b> that item fails, without SQL details.</li>
+<li><b>Given</b> an empty list, more than 500 items, or a body that is not JSON of the right shape, <b>then</b> <code>400</code> and nothing saved.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>One result per item, in the order sent.</li>
+<li>No item's failure can undo another item.</li>
+<li>Every rule is also a named database constraint.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Design a batch endpoint with per-item results.</li>
+<li>Validate items one by one instead of cascading validation over the list.</li>
+<li>Know what a transaction around a batch does, in PostgreSQL in particular.</li>
+<li>Choose a status for partial success, and a batch limit.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/shipments/bulk</code></td><td><code>{shipments: [...]}</code>, 1 to 500: create each valid one; a report per item.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>The batch was handled: the report says, per item, created or failed</td></tr><tr><td><span class="pill warn">400</span></td><td>No list, an empty list, more than 500 items, or a body that is not JSON of the right shape</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 23 Oct 2026, in this order. JSON bodies are indented for reading; <code>Date</code>, connection and standard security headers are left out.</p>
+<section class="example"><h3>Case 1: three shipments, the second with a five-digit PIN code</h3><p><b>Why:</b> two created; item 1 failed, naming <code>to.pincode</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /shipments/bulk HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;shipments&quot;: [
+    {
+      &quot;ref&quot;: &quot;ORD-1001&quot;,
+      &quot;fromPincode&quot;: &quot;560001&quot;,
+      &quot;weightGrams&quot;: 1200,
+      &quot;to&quot;: {
+        &quot;name&quot;: &quot;Meera Iyer&quot;,
+        &quot;line1&quot;: &quot;14 Lodhi Road&quot;,
+        &quot;city&quot;: &quot;New Delhi&quot;,
+        &quot;pincode&quot;: &quot;110003&quot;,
+        &quot;phone&quot;: &quot;9810000001&quot;
+      }
+    },
+    {
+      &quot;ref&quot;: &quot;ORD-1002&quot;,
+      &quot;fromPincode&quot;: &quot;560001&quot;,
+      &quot;weightGrams&quot;: 800,
+      &quot;to&quot;: {
+        &quot;name&quot;: &quot;Arjun Rao&quot;,
+        &quot;line1&quot;: &quot;2 MG Road&quot;,
+        &quot;city&quot;: &quot;Pune&quot;,
+        &quot;pincode&quot;: &quot;41100&quot;,
+        &quot;phone&quot;: &quot;9820000002&quot;
+      }
+    },
+    {
+      &quot;ref&quot;: &quot;ORD-1003&quot;,
+      &quot;fromPincode&quot;: &quot;560001&quot;,
+      &quot;weightGrams&quot;: 2500,
+      &quot;to&quot;: {
+        &quot;name&quot;: &quot;Meera Iyer&quot;,
+        &quot;line1&quot;: &quot;14 Lodhi Road&quot;,
+        &quot;city&quot;: &quot;New Delhi&quot;,
+        &quot;pincode&quot;: &quot;110003&quot;,
+        &quot;phone&quot;: &quot;9810000001&quot;
+      }
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 293
+
+{
+  &quot;created&quot;: 2,
+  &quot;failed&quot;: 1,
+  &quot;results&quot;: [
+    {
+      &quot;index&quot;: 0,
+      &quot;ref&quot;: &quot;ORD-1001&quot;,
+      &quot;status&quot;: &quot;created&quot;,
+      &quot;shipmentId&quot;: 1
+    },
+    {
+      &quot;index&quot;: 1,
+      &quot;ref&quot;: &quot;ORD-1002&quot;,
+      &quot;status&quot;: &quot;failed&quot;,
+      &quot;errors&quot;: [
+        {
+          &quot;field&quot;: &quot;to.pincode&quot;,
+          &quot;message&quot;: &quot;must be 6 digits, not starting with 0&quot;
+        }
+      ]
+    },
+    {
+      &quot;index&quot;: 2,
+      &quot;ref&quot;: &quot;ORD-1003&quot;,
+      &quot;status&quot;: &quot;created&quot;,
+      &quot;shipmentId&quot;: 2
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 2: one item with three problems</h3><p><b>Why:</b> all three listed, by field.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /shipments/bulk HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;shipments&quot;: [
+    {
+      &quot;ref&quot;: &quot;ORD-1004&quot;,
+      &quot;fromPincode&quot;: &quot;560001&quot;,
+      &quot;weightGrams&quot;: 0,
+      &quot;to&quot;: {
+        &quot;name&quot;: &quot; &quot;,
+        &quot;line1&quot;: &quot;14 Lodhi Road&quot;,
+        &quot;city&quot;: &quot;New Delhi&quot;,
+        &quot;pincode&quot;: &quot;110003&quot;,
+        &quot;phone&quot;: &quot;12345&quot;
+      }
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 288
+
+{
+  &quot;created&quot;: 0,
+  &quot;failed&quot;: 1,
+  &quot;results&quot;: [
+    {
+      &quot;index&quot;: 0,
+      &quot;ref&quot;: &quot;ORD-1004&quot;,
+      &quot;status&quot;: &quot;failed&quot;,
+      &quot;errors&quot;: [
+        {
+          &quot;field&quot;: &quot;to.name&quot;,
+          &quot;message&quot;: &quot;must not be blank&quot;
+        },
+        {
+          &quot;field&quot;: &quot;to.phone&quot;,
+          &quot;message&quot;: &quot;must be a 10-digit Indian mobile number&quot;
+        },
+        {
+          &quot;field&quot;: &quot;weightGrams&quot;,
+          &quot;message&quot;: &quot;must be greater than or equal to 1&quot;
+        }
+      ]
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 3: ORD-1001 again</h3><p><b>Why:</b> the ref is unique: that item fails.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /shipments/bulk HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;shipments&quot;: [
+    {
+      &quot;ref&quot;: &quot;ORD-1001&quot;,
+      &quot;fromPincode&quot;: &quot;560001&quot;,
+      &quot;weightGrams&quot;: 900,
+      &quot;to&quot;: {
+        &quot;name&quot;: &quot;Meera Iyer&quot;,
+        &quot;line1&quot;: &quot;14 Lodhi Road&quot;,
+        &quot;city&quot;: &quot;New Delhi&quot;,
+        &quot;pincode&quot;: &quot;110003&quot;,
+        &quot;phone&quot;: &quot;9810000001&quot;
+      }
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 158
+
+{
+  &quot;created&quot;: 0,
+  &quot;failed&quot;: 1,
+  &quot;results&quot;: [
+    {
+      &quot;index&quot;: 0,
+      &quot;ref&quot;: &quot;ORD-1001&quot;,
+      &quot;status&quot;: &quot;failed&quot;,
+      &quot;errors&quot;: [
+        {
+          &quot;field&quot;: &quot;ref&quot;,
+          &quot;message&quot;: &quot;is already used by another shipment&quot;
+        }
+      ]
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 4: an empty list</h3><p><b>Why:</b> <code>400</code>: nothing to do.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /shipments/bulk HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;shipments&quot;: []
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Invalid request content.&quot;,
+  &quot;instance&quot;: &quot;/shipments/bulk&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: weightGrams "heavy"</h3><p><b>Why:</b> the body is not JSON of the right shape, so there is no item to report on: <code>400</code> for the call.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /shipments/bulk HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;shipments&quot;: [
+    {
+      &quot;ref&quot;: &quot;ORD-1005&quot;,
+      &quot;fromPincode&quot;: &quot;560001&quot;,
+      &quot;weightGrams&quot;: &quot;heavy&quot;,
+      &quot;to&quot;: {
+        &quot;name&quot;: &quot;Meera Iyer&quot;,
+        &quot;line1&quot;: &quot;14 Lodhi Road&quot;,
+        &quot;city&quot;: &quot;New Delhi&quot;,
+        &quot;pincode&quot;: &quot;110003&quot;,
+        &quot;phone&quot;: &quot;9810000001&quot;
+      }
+    }
+  ]
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Failed to read request&quot;,
+  &quot;instance&quot;: &quot;/shipments/bulk&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: 501 items</h3><p><b>Why:</b> over the limit: <code>400</code>, nothing saved. The request line is shortened here; all 501 items were sent.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /shipments/bulk HTTP/1.1
+Content-Type: application/json
+
+{&quot;shipments&quot;:[ 501 items: {&quot;ref&quot;:&quot;BIG-1&quot;, ...} to {&quot;ref&quot;:&quot;BIG-501&quot;, ...} ]}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Invalid request content.&quot;,
+  &quot;instance&quot;: &quot;/shipments/bulk&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section>
+<h2>The shipments afterwards</h2>
+<pre class="code"><code class="language-text"> id |   ref    | from_pincode |  to_city  | to_pincode | weight_grams 
+----+----------+--------------+-----------+------------+--------------
+  1 | ORD-1001 | 560001       | New Delhi | 110003     |         1200
+  2 | ORD-1003 | 560001       | New Delhi | 110003     |         2500
+(2 rows)</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>A good batch</td><td>One result per item, in order</td><td><code>aGoodBatchIsCreatedWithOneResultPerItemInOrder</code></td></tr><tr><td>Several problems in one item</td><td>All listed by field</td><td><code>everyProblemInAnItemIsListedByField</code></td></tr><tr><td>A ref used before, or twice in the batch</td><td>That item fails</td><td><code>aRefUsedBeforeOrTwiceInTheBatchFailsThatItemOnly</code></td></tr><tr><td>Empty list, no list, a wrong type, a null item</td><td><code>400</code>; a null item fails alone</td><td><code>theBatchAsAWholeMustBeUsable</code></td></tr><tr><td>500 and 501 items</td><td>Created; <code>400</code></td><td><code>fiveHundredIsTheLimit</code></td></tr><tr><td>The database refuses one item</td><td>That item fails, the others stay</td><td><code>anItemTheDatabaseRefusesFailsAloneAndTheOthersStay</code></td></tr><tr><td>Rules written by plain SQL</td><td>Refused by named constraints</td><td><code>shipmentRulesHoldWithoutJava</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">All-or-nothing batches with no per-item results.</p>
+<ul>
+<li><strong>The old way.</strong> The test inserts three shipments in one transaction; the second has a five-digit PIN code. The database refuses it, the transaction rolls back, nothing is saved, and the only message names a database constraint.</li>
+<li><strong>The API.</strong> The same three items: two created, and item 1 failed with <code>to.pincode</code>: "must be 6 digits, not starting with 0".</li>
+</ul>
+<p>While building, each part was undone once: one transaction around the loop turned 2 tests red; validation cascading over the list 2; no per-item validation 2; no specific message for a used ref 1; no batch limit 1; refs not upper-cased 2; indexes off by one 3. Trimming names changed no test, so the trimming was removed.</p>
+</div>
+<pre class="code"><code class="language-java">package com.dakroute.shipments;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Written first. The old endpoint saved the whole batch in one transaction. Item 312 of 500 had a five-digit PIN
+ * code: the database refused it, the transaction rolled back, nothing was created, and the seller got a 500 with no
+ * hint which item. Here the same thing with three items.
+ */
+class AllOrNothingTrapTest extends ApiTest {
+
+    @Autowired
+    TransactionTemplate tx;
+
+    void insert(String ref, String toPincode) {
+        jdbc.sql(&quot;&quot;&quot;
+                INSERT INTO shipments (ref, from_pincode, to_name, to_line1, to_city, to_pincode, to_phone, weight_grams)
+                VALUES (?, &#x27;560001&#x27;, &#x27;Meera Iyer&#x27;, &#x27;14 Lodhi Road&#x27;, &#x27;New Delhi&#x27;, ?, &#x27;9810000001&#x27;, 1200)&quot;&quot;&quot;).params(ref, toPincode).update();
+    }
+
+    @Test
+    void theOldWayOneBadItemCreatedNothingAndSaidNothingUseful() {
+        assertThatThrownBy(() -&gt; tx.executeWithoutResult(s -&gt; {
+            insert(&quot;ORD-1&quot;, &quot;110003&quot;);
+            insert(&quot;ORD-2&quot;, &quot;11003&quot;);    // five digits
+            insert(&quot;ORD-3&quot;, &quot;110003&quot;);
+        })).hasMessageContaining(&quot;shipments_pincodes&quot;);   // a database message, not a field a seller can fix
+        assertThat(count()).isZero();
+    }
+
+    @Test
+    void theApiCreatesTheGoodItemsAndNamesTheBadOne() throws Exception {
+        bulk(List.of(item(&quot;ORD-1&quot;), item(&quot;ORD-2&quot;).replace(&quot;110003&quot;, &quot;11003&quot;), item(&quot;ORD-3&quot;))).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.created&quot;).value(2)).andExpect(jsonPath(&quot;$.failed&quot;).value(1))
+                .andExpect(jsonPath(&quot;$.results[1].index&quot;).value(1)).andExpect(jsonPath(&quot;$.results[1].ref&quot;).value(&quot;ORD-2&quot;))
+                .andExpect(jsonPath(&quot;$.results[1].status&quot;).value(&quot;failed&quot;))
+                .andExpect(jsonPath(&quot;$.results[1].errors[0].field&quot;).value(&quot;to.pincode&quot;))
+                .andExpect(jsonPath(&quot;$.results[1].errors[0].message&quot;).value(&quot;must be 6 digits, not starting with 0&quot;));
+        assertThat(count()).isEqualTo(2);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 9 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Run <code>docs/capture.sh</code> against your running app (from the station folder, with <code>docker compose</code> up): it sends the six requests above and writes the answers to <code>docs/captures/</code>. Then edit one item in case 1 and send it again with the <code>curl</code> line from that file.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>Every item after a failed one says "could not be saved"</td><td>A transaction around the batch: PostgreSQL aborts it at the first error.</td><td>Save each item on its own, as <code>BulkShipments</code> does.</td></tr><tr><td>One bad item makes the whole call a 400</td><td><code>@Valid</code> cascades over the list's items.</td><td>Validate each item yourself and report it.</td></tr><tr><td><code>Could not find a valid Docker environment</code></td><td>Docker is not running.</td><td>Start Docker Desktop or the Docker service.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/091-bulk-shipment-creation/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/dakroute/shipments/
+│   ├── BulkShipmentController.java   ├── BulkShipments.java   └── ShipmentsApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__shipments.sql
+├── src/test/java/com/dakroute/shipments/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the database behind it.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">BulkShipmentController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">BulkShipments.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">V1__shipments.sql</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">compose.yaml</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">ShipmentsApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/dakroute/shipments/BulkShipmentController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The endpoint.</dd><dt>Why</dt><dd>Checks the list (present, 1 to 500) and hands it over; answers 200 with the report.</dd><dt>Without it</dt><dd>One bad item turning the whole call into a 400.</dd></dl><ul><li>No <code>@Valid</code> on the list's items: with it, one bad item makes the whole call a 400, the all-or-nothing answer again.</li><li>Not 207 Multi-Status: that status comes from WebDAV (RFC 4918), whose clients expect an XML body.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.shipments;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+class BulkShipmentController {
+
+    /** The list itself is checked here (present, 1 to 500). No @Valid on the items: each is checked on its own in BulkShipments. */
+    record BulkRequest(@NotNull @Size(min = 1, max = BulkShipments.MAX_BATCH) List&lt;BulkShipments.ShipmentRequest&gt; shipments) {
+    }
+
+    private final BulkShipments bulk;
+
+    BulkShipmentController(BulkShipments bulk) {
+        this.bulk = bulk;
+    }
+
+    /**
+     * 200 with a report, even when some items failed: the call worked, and each item says how it went. Not 207: that
+     * status is WebDAV&#x27;s (RFC 4918) and its clients expect an XML multistatus body.
+     */
+    @PostMapping(&quot;/shipments/bulk&quot;)
+    BulkShipments.Report create(@Valid @RequestBody BulkRequest body) {
+        return bulk.create(body.shipments());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/dakroute/shipments/BulkShipments.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Checking and saving each item on its own.</dd><dt>Why</dt><dd>A Validator per item, errors sorted by field; one INSERT per item, committed on its own; a used ref and other refusals reported as that item's failure.</dd><dt>Without it</dt><dd>One item's failure undoing or hiding the others.</dd></dl><p>No transaction around the loop: in PostgreSQL, the first refused statement aborts the whole transaction, so every later item fails and the earlier ones are rolled back at commit. See the Review tab.</p></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.shipments;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Valid;
+import jakarta.validation.Validator;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+
+@Service
+class BulkShipments {
+
+    /** Demo rule: at most this many shipments in one call. */
+    static final int MAX_BATCH = 500;
+
+    record Address(@NotBlank String name, @NotBlank String line1, @NotBlank String city,
+                   @NotNull @Pattern(regexp = &quot;[1-9][0-9]{5}&quot;, message = &quot;must be 6 digits, not starting with 0&quot;) String pincode,
+                   @NotNull @Pattern(regexp = &quot;[6-9][0-9]{9}&quot;, message = &quot;must be a 10-digit Indian mobile number&quot;) String phone) {
+    }
+
+    record ShipmentRequest(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,40}&quot;, message = &quot;must be 3 to 40 letters, digits or dashes&quot;) String ref,
+                           @NotNull @Pattern(regexp = &quot;[1-9][0-9]{5}&quot;, message = &quot;must be 6 digits, not starting with 0&quot;) String fromPincode,
+                           @NotNull @Valid Address to,
+                           @Min(1) @Max(50_000) int weightGrams) {
+    }
+
+    record FieldError(String field, String message) {
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record ItemResult(int index, String ref, String status, Long shipmentId, List&lt;FieldError&gt; errors) {
+    }
+
+    record Report(int created, int failed, List&lt;ItemResult&gt; results) {
+    }
+
+    private final JdbcClient jdbc;
+    private final Validator validator;
+
+    BulkShipments(JdbcClient jdbc, Validator validator) {
+        this.jdbc = jdbc;
+        this.validator = validator;
+    }
+
+    /**
+     * Each shipment stands alone: it is checked on its own and saved in its own statement, so one bad address fails
+     * one item, and the report says which, by its position and the seller&#x27;s reference.
+     */
+    Report create(List&lt;ShipmentRequest&gt; items) {
+        List&lt;ItemResult&gt; results = new ArrayList&lt;&gt;();
+        for (int i = 0; i &lt; items.size(); i++) {
+            results.add(createOne(i, items.get(i)));
+        }
+        int created = (int) results.stream().filter(r -&gt; r.status().equals(&quot;created&quot;)).count();
+        return new Report(created, results.size() - created, results);
+    }
+
+    private ItemResult createOne(int index, ShipmentRequest s) {
+        if (s == null) {
+            return failed(index, null, List.of(new FieldError(&quot;&quot;, &quot;must not be null&quot;)));
+        }
+        List&lt;FieldError&gt; errors = validator.validate(s).stream()
+                .sorted(Comparator.comparing((ConstraintViolation&lt;ShipmentRequest&gt; v) -&gt; v.getPropertyPath().toString()))
+                .map(v -&gt; new FieldError(v.getPropertyPath().toString(), v.getMessage())).toList();
+        if (!errors.isEmpty()) {
+            return failed(index, s.ref(), errors);
+        }
+        String ref = s.ref().toUpperCase(Locale.ROOT);
+        try {
+            // One statement, committed on its own: a failure here cannot undo the other items.
+            long id = jdbc.sql(&quot;&quot;&quot;
+                            INSERT INTO shipments (ref, from_pincode, to_name, to_line1, to_city, to_pincode, to_phone, weight_grams)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id&quot;&quot;&quot;)
+                    .params(ref, s.fromPincode(), s.to().name(), s.to().line1(), s.to().city(), s.to().pincode(), s.to().phone(), s.weightGrams())
+                    .query(Long.class).single();
+            return new ItemResult(index, ref, &quot;created&quot;, id, null);
+        } catch (DuplicateKeyException e) {
+            return failed(index, ref, List.of(new FieldError(&quot;ref&quot;, &quot;is already used by another shipment&quot;)));
+        } catch (DataAccessException e) {
+            // The database refused it for a reason Java did not check: say so, without passing on SQL details.
+            return failed(index, ref, List.of(new FieldError(&quot;&quot;, &quot;could not be saved&quot;)));
+        }
+    }
+
+    private static ItemResult failed(int index, String ref, List&lt;FieldError&gt; errors) {
+        return new ItemResult(index, ref, &quot;failed&quot;, null, errors);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/resources/db/migration/V1__shipments.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Shipments and their rules.</dd><dt>Why</dt><dd>Ref unique and shaped, PIN codes, phone, weight, address present.</dd><dt>Without it</dt><dd>A bad shipment from any writer.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">-- One row per shipment. The seller&#x27;s own reference identifies it, so a batch sent twice cannot create it twice.
+CREATE TABLE shipments (
+    id            bigint GENERATED ALWAYS AS IDENTITY CONSTRAINT shipments_pk PRIMARY KEY,
+    ref           text NOT NULL,
+    from_pincode  text NOT NULL,
+    to_name       text NOT NULL,
+    to_line1      text NOT NULL,
+    to_city       text NOT NULL,
+    to_pincode    text NOT NULL,
+    to_phone      text NOT NULL,
+    weight_grams  integer NOT NULL,
+    created_at    timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT shipments_ref_unique UNIQUE (ref),
+    CONSTRAINT shipments_ref_shape CHECK (ref ~ &#x27;^[A-Z0-9-]{3,40}$&#x27;),
+    CONSTRAINT shipments_pincodes CHECK (from_pincode ~ &#x27;^[1-9][0-9]{5}$&#x27; AND to_pincode ~ &#x27;^[1-9][0-9]{5}$&#x27;),
+    CONSTRAINT shipments_phone CHECK (to_phone ~ &#x27;^[6-9][0-9]{9}$&#x27;),
+    CONSTRAINT shipments_weight CHECK (weight_grams BETWEEN 1 AND 50000),
+    CONSTRAINT shipments_address_present CHECK (length(trim(to_name)) &gt; 0 AND length(trim(to_line1)) &gt; 0 AND length(trim(to_city)) &gt; 0)
+);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Database connection; fractions refused for whole-number fields.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: dakroute-shipments
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/dakroute
+    username: dakroute
+    password: dakroute
+  jackson:
+    deserialization:
+      accept-float-as-int: false</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: dakroute
+      POSTGRES_USER: dakroute
+      POSTGRES_PASSWORD: dakroute
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U dakroute -d dakroute&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/dakroute/shipments/ShipmentsApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.shipments;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class ShipmentsApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(ShipmentsApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>BulkContractTest</code> (5)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>AllOrNothingTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>ShipmentDatabaseTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">There is no "not found" here: a batch creates, it does not look anything up. The 400 cases stand in for invalid calls.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in com.dakroute.shipments.BulkContractTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.dakroute.shipments.ShipmentDatabaseTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.dakroute.shipments.AllOrNothingTrapTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">AllOrNothingTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">BulkContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">ShipmentDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/dakroute/shipments/AllOrNothingTrapTest.java</p><div class="notes"><p>Written first: one transaction for the batch, and the API's report.</p></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.shipments;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Written first. The old endpoint saved the whole batch in one transaction. Item 312 of 500 had a five-digit PIN
+ * code: the database refused it, the transaction rolled back, nothing was created, and the seller got a 500 with no
+ * hint which item. Here the same thing with three items.
+ */
+class AllOrNothingTrapTest extends ApiTest {
+
+    @Autowired
+    TransactionTemplate tx;
+
+    void insert(String ref, String toPincode) {
+        jdbc.sql(&quot;&quot;&quot;
+                INSERT INTO shipments (ref, from_pincode, to_name, to_line1, to_city, to_pincode, to_phone, weight_grams)
+                VALUES (?, &#x27;560001&#x27;, &#x27;Meera Iyer&#x27;, &#x27;14 Lodhi Road&#x27;, &#x27;New Delhi&#x27;, ?, &#x27;9810000001&#x27;, 1200)&quot;&quot;&quot;).params(ref, toPincode).update();
+    }
+
+    @Test
+    void theOldWayOneBadItemCreatedNothingAndSaidNothingUseful() {
+        assertThatThrownBy(() -&gt; tx.executeWithoutResult(s -&gt; {
+            insert(&quot;ORD-1&quot;, &quot;110003&quot;);
+            insert(&quot;ORD-2&quot;, &quot;11003&quot;);    // five digits
+            insert(&quot;ORD-3&quot;, &quot;110003&quot;);
+        })).hasMessageContaining(&quot;shipments_pincodes&quot;);   // a database message, not a field a seller can fix
+        assertThat(count()).isZero();
+    }
+
+    @Test
+    void theApiCreatesTheGoodItemsAndNamesTheBadOne() throws Exception {
+        bulk(List.of(item(&quot;ORD-1&quot;), item(&quot;ORD-2&quot;).replace(&quot;110003&quot;, &quot;11003&quot;), item(&quot;ORD-3&quot;))).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.created&quot;).value(2)).andExpect(jsonPath(&quot;$.failed&quot;).value(1))
+                .andExpect(jsonPath(&quot;$.results[1].index&quot;).value(1)).andExpect(jsonPath(&quot;$.results[1].ref&quot;).value(&quot;ORD-2&quot;))
+                .andExpect(jsonPath(&quot;$.results[1].status&quot;).value(&quot;failed&quot;))
+                .andExpect(jsonPath(&quot;$.results[1].errors[0].field&quot;).value(&quot;to.pincode&quot;))
+                .andExpect(jsonPath(&quot;$.results[1].errors[0].message&quot;).value(&quot;must be 6 digits, not starting with 0&quot;));
+        assertThat(count()).isEqualTo(2);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/dakroute/shipments/BulkContractTest.java</p><div class="notes"><p>The report, field errors, used refs, bad calls, the limit.</p></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.shipments;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class BulkContractTest extends ApiTest {
+
+    @Test
+    void aGoodBatchIsCreatedWithOneResultPerItemInOrder() throws Exception {
+        bulk(List.of(item(&quot;ord-1&quot;), item(&quot;ORD-2&quot;))).andExpect(status().isOk()).andExpect(content().json(&quot;&quot;&quot;
+                {&quot;created&quot;:2,&quot;failed&quot;:0,&quot;results&quot;:[
+                  {&quot;index&quot;:0,&quot;ref&quot;:&quot;ORD-1&quot;,&quot;status&quot;:&quot;created&quot;,&quot;shipmentId&quot;:1},
+                  {&quot;index&quot;:1,&quot;ref&quot;:&quot;ORD-2&quot;,&quot;status&quot;:&quot;created&quot;,&quot;shipmentId&quot;:2}]}&quot;&quot;&quot;, true));
+    }
+
+    @Test
+    void everyProblemInAnItemIsListedByField() throws Exception {
+        String bad = item(&quot;ORD-1&quot;).replace(&quot;\&quot;weightGrams\&quot;:1200&quot;, &quot;\&quot;weightGrams\&quot;:0&quot;).replace(&quot;9810000001&quot;, &quot;12345&quot;).replace(&quot;\&quot;Meera Iyer\&quot;&quot;, &quot;\&quot;  \&quot;&quot;);
+        bulk(List.of(bad)).andExpect(jsonPath(&quot;$.created&quot;).value(0)).andExpect(content().json(&quot;&quot;&quot;
+                {&quot;results&quot;:[{&quot;index&quot;:0,&quot;status&quot;:&quot;failed&quot;,&quot;errors&quot;:[
+                  {&quot;field&quot;:&quot;to.name&quot;,&quot;message&quot;:&quot;must not be blank&quot;},
+                  {&quot;field&quot;:&quot;to.phone&quot;,&quot;message&quot;:&quot;must be a 10-digit Indian mobile number&quot;},
+                  {&quot;field&quot;:&quot;weightGrams&quot;,&quot;message&quot;:&quot;must be greater than or equal to 1&quot;}]}]}&quot;&quot;&quot;));
+    }
+
+    @Test
+    void aRefUsedBeforeOrTwiceInTheBatchFailsThatItemOnly() throws Exception {
+        bulk(List.of(item(&quot;ORD-1&quot;)));
+        bulk(List.of(item(&quot;ORD-1&quot;).replace(&quot;1200&quot;, &quot;1500&quot;), item(&quot;ORD-2&quot;), item(&quot;ord-2&quot;).replace(&quot;1200&quot;, &quot;900&quot;))).andExpect(jsonPath(&quot;$.created&quot;).value(1))
+                .andExpect(jsonPath(&quot;$.results[0].errors[0].message&quot;).value(&quot;is already used by another shipment&quot;))
+                .andExpect(jsonPath(&quot;$.results[1].status&quot;).value(&quot;created&quot;))
+                .andExpect(jsonPath(&quot;$.results[2].errors[0].field&quot;).value(&quot;ref&quot;));
+        assertThat(count()).isEqualTo(2);
+    }
+
+    @Test
+    void theBatchAsAWholeMustBeUsable() throws Exception {
+        bulkBody(&quot;{\&quot;shipments\&quot;:[]}&quot;).andExpect(status().isBadRequest());
+        bulkBody(&quot;{}&quot;).andExpect(status().isBadRequest());
+        bulkBody(&quot;{\&quot;shipments\&quot;:[&quot; + item(&quot;ORD-1&quot;).replace(&quot;1200&quot;, &quot;\&quot;heavy\&quot;&quot;) + &quot;]}&quot;).andExpect(status().isBadRequest());   // not JSON of the right shape: nothing to report per item
+        bulkBody(&quot;{\&quot;shipments\&quot;:[null]}&quot;).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.results[0].errors[0].message&quot;).value(&quot;must not be null&quot;));
+        assertThat(count()).isZero();
+    }
+
+    @Test
+    void fiveHundredIsTheLimit() throws Exception {
+        List&lt;String&gt; items = new ArrayList&lt;&gt;();
+        for (int i = 0; i &lt; 500; i++) {
+            items.add(item(&quot;ORD-&quot; + i));
+        }
+        bulk(items).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.created&quot;).value(500));
+        jdbc.sql(&quot;TRUNCATE shipments RESTART IDENTITY&quot;).update();
+        items.add(item(&quot;ORD-500&quot;));
+        bulk(items).andExpect(status().isBadRequest());
+        assertThat(count()).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/dakroute/shipments/ShipmentDatabaseTest.java</p><div class="notes"><p>Named constraints with plain SQL; one item refused by the database.</p></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.shipments;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+
+/** The rules hold for any writer, not only this API: plain SQL, no Java in between. */
+class ShipmentDatabaseTest extends ApiTest {
+
+    static String row(String ref, String to, String phone, int grams, String name) {
+        return &quot;INSERT INTO shipments (ref, from_pincode, to_name, to_line1, to_city, to_pincode, to_phone, weight_grams) VALUES (&#x27;%s&#x27;, &#x27;560001&#x27;, &#x27;%s&#x27;, &#x27;14 Lodhi Road&#x27;, &#x27;New Delhi&#x27;, &#x27;%s&#x27;, &#x27;%s&#x27;, %d)&quot;
+                .formatted(ref, name, to, phone, grams);
+    }
+
+    void violates(String constraint, String sql) {
+        assertThatThrownBy(() -&gt; jdbc.sql(sql).update()).hasMessageContaining(constraint);
+    }
+
+    @Test
+    void shipmentRulesHoldWithoutJava() {
+        jdbc.sql(row(&quot;ORD-1&quot;, &quot;110003&quot;, &quot;9810000001&quot;, 1200, &quot;Meera&quot;)).update();
+        violates(&quot;shipments_ref_unique&quot;, row(&quot;ORD-1&quot;, &quot;110003&quot;, &quot;9810000001&quot;, 1200, &quot;Meera&quot;));
+        violates(&quot;shipments_ref_shape&quot;, row(&quot;ord 2&quot;, &quot;110003&quot;, &quot;9810000001&quot;, 1200, &quot;Meera&quot;));
+        violates(&quot;shipments_pincodes&quot;, row(&quot;ORD-2&quot;, &quot;011003&quot;, &quot;9810000001&quot;, 1200, &quot;Meera&quot;));
+        violates(&quot;shipments_phone&quot;, row(&quot;ORD-2&quot;, &quot;110003&quot;, &quot;5810000001&quot;, 1200, &quot;Meera&quot;));
+        violates(&quot;shipments_weight&quot;, row(&quot;ORD-2&quot;, &quot;110003&quot;, &quot;9810000001&quot;, 50001, &quot;Meera&quot;));
+        violates(&quot;shipments_address_present&quot;, row(&quot;ORD-2&quot;, &quot;110003&quot;, &quot;9810000001&quot;, 1200, &quot;  &quot;));
+    }
+
+    @Test
+    void anItemTheDatabaseRefusesFailsAloneAndTheOthersStay() throws Exception {
+        jdbc.sql(&quot;&quot;&quot;
+                CREATE FUNCTION refuse_ord_2() RETURNS trigger AS $$ BEGIN IF NEW.ref = &#x27;ORD-2&#x27; THEN RAISE EXCEPTION &#x27;disk full&#x27;; END IF; RETURN NEW; END $$ LANGUAGE plpgsql;
+                CREATE TRIGGER refuse_ord_2 BEFORE INSERT ON shipments FOR EACH ROW EXECUTE FUNCTION refuse_ord_2()&quot;&quot;&quot;).update();
+        try {
+            bulk(List.of(item(&quot;ORD-1&quot;), item(&quot;ORD-2&quot;), item(&quot;ORD-3&quot;))).andExpect(jsonPath(&quot;$.created&quot;).value(2))
+                    .andExpect(jsonPath(&quot;$.results[1].errors[0].message&quot;).value(&quot;could not be saved&quot;));
+        } finally {
+            jdbc.sql(&quot;DROP TRIGGER refuse_ord_2 ON shipments; DROP FUNCTION refuse_ord_2()&quot;).update();
+        }
+        assertThat(jdbc.sql(&quot;SELECT ref FROM shipments ORDER BY id&quot;).query(String.class).list()).containsExactly(&quot;ORD-1&quot;, &quot;ORD-3&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/dakroute/shipments/ApiTest.java</p><div class="notes"><p>Shared setup: no shipments before each test, an item builder, request helpers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.shipments;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/** Shared setup: the whole app on a real PostgreSQL, no shipments before each test, and a builder for items. */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+
+    @BeforeEach
+    void noShipments() {
+        jdbc.sql(&quot;TRUNCATE shipments RESTART IDENTITY&quot;).update();
+    }
+
+    /** A good shipment to Delhi; tests change one field with replace(). */
+    static String item(String ref) {
+        return &quot;&quot;&quot;
+                {&quot;ref&quot;:&quot;%s&quot;,&quot;fromPincode&quot;:&quot;560001&quot;,&quot;weightGrams&quot;:1200,
+                 &quot;to&quot;:{&quot;name&quot;:&quot;Meera Iyer&quot;,&quot;line1&quot;:&quot;14 Lodhi Road&quot;,&quot;city&quot;:&quot;New Delhi&quot;,&quot;pincode&quot;:&quot;110003&quot;,&quot;phone&quot;:&quot;9810000001&quot;}}&quot;&quot;&quot;.formatted(ref);
+    }
+
+    ResultActions bulk(List&lt;String&gt; items) throws Exception {
+        return bulkBody(&quot;{\&quot;shipments\&quot;:[&quot; + items.stream().collect(Collectors.joining(&quot;,&quot;)) + &quot;]}&quot;);
+    }
+
+    ResultActions bulkBody(String json) throws Exception {
+        return mvc.perform(post(&quot;/shipments/bulk&quot;).contentType(MediaType.APPLICATION_JSON).content(json));
+    }
+
+    long count() {
+        return jdbc.sql(&quot;SELECT count(*) FROM shipments&quot;).query(Long.class).single();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/dakroute/shipments/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.dakroute.shipments;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker: constraints and row locks behave exactly as in production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/dakroute/shipments/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=ValidateOnlyChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 9 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 12 tests pass (9 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>A dry run</h2><p><code>POST /shipments/bulk?validateOnly=true</code> checks a batch without saving it: good items <code>valid</code>, bad ones <code>failed</code> with the same errors as a real call, including a ref already used.</p><p><b>Done when:</b> the test in <code>ValidateOnlyChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>A <code>@RequestParam(defaultValue = "false")</code> passed down to where an item would be saved.</li><li>Checking a used ref without saving means looking it up first.</li></ul></details><p class="path">challenge/ValidateOnlyChallengeTest.java</p><pre class="code"><code class="language-java">package com.dakroute.shipments;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: POST /shipments/bulk?validateOnly=true checks a batch without saving it, so a seller can fix a file
+ * before sending it for real. Good items are &quot;valid&quot;; bad ones &quot;failed&quot; with the same errors as a real call,
+ * including a ref already used.
+ */
+class ValidateOnlyChallengeTest extends ApiTest {
+
+    @Test
+    void aDryRunReportsAndSavesNothing() throws Exception {
+        bulk(java.util.List.of(item(&quot;ORD-1&quot;)));
+        String body = &quot;{\&quot;shipments\&quot;:[&quot; + item(&quot;ORD-1&quot;).replace(&quot;1200&quot;, &quot;1500&quot;) + &quot;,&quot; + item(&quot;ORD-2&quot;) + &quot;,&quot; + item(&quot;ORD-3&quot;).replace(&quot;110003&quot;, &quot;11003&quot;) + &quot;]}&quot;;
+        mvc.perform(post(&quot;/shipments/bulk&quot;).param(&quot;validateOnly&quot;, &quot;true&quot;).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath(&quot;$.created&quot;).value(0)).andExpect(jsonPath(&quot;$.failed&quot;).value(2))
+                .andExpect(jsonPath(&quot;$.results[0].errors[0].message&quot;).value(&quot;is already used by another shipment&quot;))
+                .andExpect(jsonPath(&quot;$.results[1].status&quot;).value(&quot;valid&quot;))
+                .andExpect(jsonPath(&quot;$.results[2].errors[0].field&quot;).value(&quot;to.pincode&quot;));
+        assertThat(count()).isOne();
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/BulkShipments.java</p><div class="src"><pre class="code"><code class="language-java">package com.dakroute.shipments;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Valid;
+import jakarta.validation.Validator;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+
+@Service
+class BulkShipments {
+
+    /** Demo rule: at most this many shipments in one call. */
+    static final int MAX_BATCH = 500;
+
+    record Address(@NotBlank String name, @NotBlank String line1, @NotBlank String city,
+                   @NotNull @Pattern(regexp = &quot;[1-9][0-9]{5}&quot;, message = &quot;must be 6 digits, not starting with 0&quot;) String pincode,
+                   @NotNull @Pattern(regexp = &quot;[6-9][0-9]{9}&quot;, message = &quot;must be a 10-digit Indian mobile number&quot;) String phone) {
+    }
+
+    record ShipmentRequest(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,40}&quot;, message = &quot;must be 3 to 40 letters, digits or dashes&quot;) String ref,
+                           @NotNull @Pattern(regexp = &quot;[1-9][0-9]{5}&quot;, message = &quot;must be 6 digits, not starting with 0&quot;) String fromPincode,
+                           @NotNull @Valid Address to,
+                           @Min(1) @Max(50_000) int weightGrams) {
+    }
+
+    record FieldError(String field, String message) {
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record ItemResult(int index, String ref, String status, Long shipmentId, List&lt;FieldError&gt; errors) {
+    }
+
+    record Report(int created, @JsonInclude(JsonInclude.Include.NON_DEFAULT) int existing, int failed, List&lt;ItemResult&gt; results) {
+    }
+
+    private record Stored(long id, String fromPincode, String toName, String toLine1, String toCity, String toPincode, String toPhone, int weightGrams) {
+    }
+
+    private final JdbcClient jdbc;
+    private final Validator validator;
+
+    BulkShipments(JdbcClient jdbc, Validator validator) {
+        this.jdbc = jdbc;
+        this.validator = validator;
+    }
+
+    /**
+     * Each shipment stands alone: it is checked on its own and saved in its own statement, so one bad address fails
+     * one item, and the report says which, by its position and the seller&#x27;s reference.
+     */
+    Report create(List&lt;ShipmentRequest&gt; items, boolean validateOnly) {
+        List&lt;ItemResult&gt; results = new ArrayList&lt;&gt;();
+        for (int i = 0; i &lt; items.size(); i++) {
+            results.add(createOne(i, items.get(i), validateOnly));
+        }
+        return new Report(count(results, &quot;created&quot;), count(results, &quot;existing&quot;), count(results, &quot;failed&quot;), results);
+    }
+
+    private static int count(List&lt;ItemResult&gt; results, String status) {
+        return (int) results.stream().filter(r -&gt; r.status().equals(status)).count();
+    }
+
+    private ItemResult createOne(int index, ShipmentRequest s, boolean validateOnly) {
+        if (s == null) {
+            return failed(index, null, List.of(new FieldError(&quot;&quot;, &quot;must not be null&quot;)));
+        }
+        List&lt;FieldError&gt; errors = validator.validate(s).stream()
+                .sorted(Comparator.comparing((ConstraintViolation&lt;ShipmentRequest&gt; v) -&gt; v.getPropertyPath().toString()))
+                .map(v -&gt; new FieldError(v.getPropertyPath().toString(), v.getMessage())).toList();
+        if (!errors.isEmpty()) {
+            return failed(index, s.ref(), errors);
+        }
+        String ref = s.ref().toUpperCase(Locale.ROOT);
+        Optional&lt;Stored&gt; earlier = jdbc.sql(&quot;SELECT id, from_pincode, to_name, to_line1, to_city, to_pincode, to_phone, weight_grams FROM shipments WHERE ref = ?&quot;)
+                .param(ref).query(Stored.class).optional();
+        if (earlier.isPresent()) {
+            Stored e = earlier.get();
+            // The same shipment sent again (a retried upload) is the shipment already made; other details under its ref are a mistake.
+            if (e.equals(new Stored(e.id(), s.fromPincode(), s.to().name(), s.to().line1(), s.to().city(), s.to().pincode(), s.to().phone(), s.weightGrams()))) {
+                return new ItemResult(index, ref, &quot;existing&quot;, e.id(), null);
+            }
+            return failed(index, ref, List.of(new FieldError(&quot;ref&quot;, &quot;is already used by another shipment&quot;)));
+        }
+        if (validateOnly) {
+            return new ItemResult(index, ref, &quot;valid&quot;, null, null);
+        }
+        try {
+            // One statement, committed on its own: a failure here cannot undo the other items.
+            long id = jdbc.sql(&quot;&quot;&quot;
+                            INSERT INTO shipments (ref, from_pincode, to_name, to_line1, to_city, to_pincode, to_phone, weight_grams)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id&quot;&quot;&quot;)
+                    .params(ref, s.fromPincode(), s.to().name(), s.to().line1(), s.to().city(), s.to().pincode(), s.to().phone(), s.weightGrams())
+                    .query(Long.class).single();
+            return new ItemResult(index, ref, &quot;created&quot;, id, null);
+        } catch (DuplicateKeyException e) {
+            return failed(index, ref, List.of(new FieldError(&quot;ref&quot;, &quot;is already used by another shipment&quot;)));
+        } catch (DataAccessException e) {
+            // The database refused it for a reason Java did not check: say so, without passing on SQL details.
+            return failed(index, ref, List.of(new FieldError(&quot;&quot;, &quot;could not be saved&quot;)));
+        }
+    }
+
+    private static ItemResult failed(int index, String ref, List&lt;FieldError&gt; errors) {
+        return new ItemResult(index, ref, &quot;failed&quot;, null, errors);
+    }
+}</code></pre></div><p class="path">challenge/solution/BulkShipmentController.java</p><div class="src"><pre class="code"><code class="language-java">package com.dakroute.shipments;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+class BulkShipmentController {
+
+    /** The list itself is checked here (present, 1 to 500). No @Valid on the items: each is checked on its own in BulkShipments. */
+    record BulkRequest(@NotNull @Size(min = 1, max = BulkShipments.MAX_BATCH) List&lt;BulkShipments.ShipmentRequest&gt; shipments) {
+    }
+
+    private final BulkShipments bulk;
+
+    BulkShipmentController(BulkShipments bulk) {
+        this.bulk = bulk;
+    }
+
+    /**
+     * 200 with a report, even when some items failed: the call worked, and each item says how it went. Not 207: that
+     * status is WebDAV&#x27;s (RFC 4918) and its clients expect an XML multistatus body.
+     */
+    @PostMapping(&quot;/shipments/bulk&quot;)
+    BulkShipments.Report create(@Valid @RequestBody BulkRequest body, @RequestParam(defaultValue = &quot;false&quot;) boolean validateOnly) {
+        return bulk.create(body.shipments(), validateOnly);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 30 minutes</p><h2>The same file twice</h2><p>A seller whose upload timed out sends the same file again. An item identical to the shipment already created under its ref is <code>existing</code>, with that shipment's id; the same ref with other details still fails. The report counts <code>existing</code>.</p><p><b>Done when:</b> both tests in <code>ResubmitChallengeTest</code> pass (the second already passes: it guards the old behaviour).</p><details class="qa"><summary>Hints</summary><ul><li>Compare every stored field, not just the ref.</li><li>Leave <code>existing</code> out of the report when it is 0, so other clients see no change (<code>@JsonInclude(NON_DEFAULT)</code>).</li></ul></details><p class="path">challenge/ResubmitChallengeTest.java</p><pre class="code"><code class="language-java">package com.dakroute.shipments;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+
+/**
+ * Challenge 2: a seller whose upload timed out sends the same file again. An item identical to a shipment already
+ * created under its ref is &quot;existing&quot; with that shipment&#x27;s id, not a failure; the same ref with different details
+ * still fails, as before. The report counts them under &quot;existing&quot;.
+ */
+class ResubmitChallengeTest extends ApiTest {
+
+    @Test
+    void theSameFileTwiceCreatesEachShipmentOnce() throws Exception {
+        bulk(List.of(item(&quot;ORD-1&quot;), item(&quot;ORD-2&quot;)));
+        bulk(List.of(item(&quot;ORD-1&quot;), item(&quot;ORD-2&quot;), item(&quot;ORD-3&quot;))).andExpect(jsonPath(&quot;$.created&quot;).value(1))
+                .andExpect(jsonPath(&quot;$.existing&quot;).value(2)).andExpect(jsonPath(&quot;$.failed&quot;).value(0))
+                .andExpect(jsonPath(&quot;$.results[0].status&quot;).value(&quot;existing&quot;)).andExpect(jsonPath(&quot;$.results[0].shipmentId&quot;).value(1))
+                .andExpect(jsonPath(&quot;$.results[2].status&quot;).value(&quot;created&quot;));
+        assertThat(count()).isEqualTo(3);
+    }
+
+    @Test
+    void theSameRefWithOtherDetailsStillFails() throws Exception {
+        bulk(List.of(item(&quot;ORD-1&quot;)));
+        bulk(List.of(item(&quot;ORD-1&quot;).replace(&quot;1200&quot;, &quot;1500&quot;))).andExpect(jsonPath(&quot;$.failed&quot;).value(1))
+                .andExpect(jsonPath(&quot;$.results[0].errors[0].message&quot;).value(&quot;is already used by another shipment&quot;));
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/BulkShipments.java</p><div class="src"><pre class="code"><code class="language-java">package com.dakroute.shipments;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Valid;
+import jakarta.validation.Validator;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+
+@Service
+class BulkShipments {
+
+    /** Demo rule: at most this many shipments in one call. */
+    static final int MAX_BATCH = 500;
+
+    record Address(@NotBlank String name, @NotBlank String line1, @NotBlank String city,
+                   @NotNull @Pattern(regexp = &quot;[1-9][0-9]{5}&quot;, message = &quot;must be 6 digits, not starting with 0&quot;) String pincode,
+                   @NotNull @Pattern(regexp = &quot;[6-9][0-9]{9}&quot;, message = &quot;must be a 10-digit Indian mobile number&quot;) String phone) {
+    }
+
+    record ShipmentRequest(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,40}&quot;, message = &quot;must be 3 to 40 letters, digits or dashes&quot;) String ref,
+                           @NotNull @Pattern(regexp = &quot;[1-9][0-9]{5}&quot;, message = &quot;must be 6 digits, not starting with 0&quot;) String fromPincode,
+                           @NotNull @Valid Address to,
+                           @Min(1) @Max(50_000) int weightGrams) {
+    }
+
+    record FieldError(String field, String message) {
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record ItemResult(int index, String ref, String status, Long shipmentId, List&lt;FieldError&gt; errors) {
+    }
+
+    record Report(int created, @JsonInclude(JsonInclude.Include.NON_DEFAULT) int existing, int failed, List&lt;ItemResult&gt; results) {
+    }
+
+    private record Stored(long id, String fromPincode, String toName, String toLine1, String toCity, String toPincode, String toPhone, int weightGrams) {
+    }
+
+    private final JdbcClient jdbc;
+    private final Validator validator;
+
+    BulkShipments(JdbcClient jdbc, Validator validator) {
+        this.jdbc = jdbc;
+        this.validator = validator;
+    }
+
+    /**
+     * Each shipment stands alone: it is checked on its own and saved in its own statement, so one bad address fails
+     * one item, and the report says which, by its position and the seller&#x27;s reference.
+     */
+    Report create(List&lt;ShipmentRequest&gt; items, boolean validateOnly) {
+        List&lt;ItemResult&gt; results = new ArrayList&lt;&gt;();
+        for (int i = 0; i &lt; items.size(); i++) {
+            results.add(createOne(i, items.get(i), validateOnly));
+        }
+        return new Report(count(results, &quot;created&quot;), count(results, &quot;existing&quot;), count(results, &quot;failed&quot;), results);
+    }
+
+    private static int count(List&lt;ItemResult&gt; results, String status) {
+        return (int) results.stream().filter(r -&gt; r.status().equals(status)).count();
+    }
+
+    private ItemResult createOne(int index, ShipmentRequest s, boolean validateOnly) {
+        if (s == null) {
+            return failed(index, null, List.of(new FieldError(&quot;&quot;, &quot;must not be null&quot;)));
+        }
+        List&lt;FieldError&gt; errors = validator.validate(s).stream()
+                .sorted(Comparator.comparing((ConstraintViolation&lt;ShipmentRequest&gt; v) -&gt; v.getPropertyPath().toString()))
+                .map(v -&gt; new FieldError(v.getPropertyPath().toString(), v.getMessage())).toList();
+        if (!errors.isEmpty()) {
+            return failed(index, s.ref(), errors);
+        }
+        String ref = s.ref().toUpperCase(Locale.ROOT);
+        Optional&lt;Stored&gt; earlier = jdbc.sql(&quot;SELECT id, from_pincode, to_name, to_line1, to_city, to_pincode, to_phone, weight_grams FROM shipments WHERE ref = ?&quot;)
+                .param(ref).query(Stored.class).optional();
+        if (earlier.isPresent()) {
+            Stored e = earlier.get();
+            // The same shipment sent again (a retried upload) is the shipment already made; other details under its ref are a mistake.
+            if (e.equals(new Stored(e.id(), s.fromPincode(), s.to().name(), s.to().line1(), s.to().city(), s.to().pincode(), s.to().phone(), s.weightGrams()))) {
+                return new ItemResult(index, ref, &quot;existing&quot;, e.id(), null);
+            }
+            return failed(index, ref, List.of(new FieldError(&quot;ref&quot;, &quot;is already used by another shipment&quot;)));
+        }
+        if (validateOnly) {
+            return new ItemResult(index, ref, &quot;valid&quot;, null, null);
+        }
+        try {
+            // One statement, committed on its own: a failure here cannot undo the other items.
+            long id = jdbc.sql(&quot;&quot;&quot;
+                            INSERT INTO shipments (ref, from_pincode, to_name, to_line1, to_city, to_pincode, to_phone, weight_grams)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id&quot;&quot;&quot;)
+                    .params(ref, s.fromPincode(), s.to().name(), s.to().line1(), s.to().city(), s.to().pincode(), s.to().phone(), s.weightGrams())
+                    .query(Long.class).single();
+            return new ItemResult(index, ref, &quot;created&quot;, id, null);
+        } catch (DuplicateKeyException e) {
+            return failed(index, ref, List.of(new FieldError(&quot;ref&quot;, &quot;is already used by another shipment&quot;)));
+        } catch (DataAccessException e) {
+            // The database refused it for a reason Java did not check: say so, without passing on SQL details.
+            return failed(index, ref, List.of(new FieldError(&quot;&quot;, &quot;could not be saved&quot;)));
+        }
+    }
+
+    private static ItemResult failed(int index, String ref, List&lt;FieldError&gt; errors) {
+        return new ItemResult(index, ref, &quot;failed&quot;, null, errors);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>50,000 items</h2>
+<p>A marketplace wants to send 50,000 shipments at once. Design it as a job: upload, <code>202</code> with a job id, progress, and a downloadable report (station 098 does long-running work). How do you keep the per-item results, let the seller fix and resend only the failed ones, and stop one seller's job from slowing everyone else?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: one transaction for the batch.</li>
+<li>Check the list; check each item with a Validator; collect errors by field.</li>
+<li>Insert each item in its own statement; turn a refusal into that item's failure.</li>
+<li>Return the report: counts and one result per item.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Independent items, 200 with a report</td><td>Clients must read the report, not just the status.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>One transaction, all-or-nothing</td><td>One bad item fails all; without a report, the seller cannot tell which.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>All-or-nothing, with a report of what would fail</td><td>Right when items depend on each other (a payment and its order lines).</td><td><span class="pill warn">For dependent items</span></td></tr><tr><td>207 Multi-Status</td><td>WebDAV's status; clients expect XML.</td><td><span class="pill warn">Uncommon for JSON APIs</span></td></tr><tr><td>A JDBC batch insert</td><td>Faster; a failure in the batch is harder to tie to one item.</td><td><span class="pill warn">When speed matters more</span></td></tr></tbody></table></div>
+<p class="muted">Google's API Improvement Proposals AIP-231 to AIP-235 are Google's own design guide for batch methods, not a standard; compare their choices with this one.</p>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Object</th><th>What</th><th>Why</th></tr></thead><tbody><tr><td><code>shipments_ref_unique</code></td><td>UNIQUE</td><td>A ref is one shipment, even across batches.</td></tr><tr><td><code>shipments_pincodes</code>, <code>shipments_phone</code></td><td>CHECKs</td><td>Addresses a courier can deliver to.</td></tr><tr><td><code>shipments_weight</code></td><td>CHECK</td><td>1 to 50,000 g.</td></tr><tr><td><code>shipments_address_present</code>, <code>shipments_ref_shape</code></td><td>CHECKs</td><td>No blank names or odd refs from any writer.</td></tr></tbody></table></div>
+<p><strong>Transaction boundary:</strong> one INSERT per item, committed on its own. Nothing groups items: they do not depend on each other.</p>
+<pre class="code"><code class="language-sql">-- One row per shipment. The seller&#x27;s own reference identifies it, so a batch sent twice cannot create it twice.
+CREATE TABLE shipments (
+    id            bigint GENERATED ALWAYS AS IDENTITY CONSTRAINT shipments_pk PRIMARY KEY,
+    ref           text NOT NULL,
+    from_pincode  text NOT NULL,
+    to_name       text NOT NULL,
+    to_line1      text NOT NULL,
+    to_city       text NOT NULL,
+    to_pincode    text NOT NULL,
+    to_phone      text NOT NULL,
+    weight_grams  integer NOT NULL,
+    created_at    timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT shipments_ref_unique UNIQUE (ref),
+    CONSTRAINT shipments_ref_shape CHECK (ref ~ &#x27;^[A-Z0-9-]{3,40}$&#x27;),
+    CONSTRAINT shipments_pincodes CHECK (from_pincode ~ &#x27;^[1-9][0-9]{5}$&#x27; AND to_pincode ~ &#x27;^[1-9][0-9]{5}$&#x27;),
+    CONSTRAINT shipments_phone CHECK (to_phone ~ &#x27;^[6-9][0-9]{9}$&#x27;),
+    CONSTRAINT shipments_weight CHECK (weight_grams BETWEEN 1 AND 50000),
+    CONSTRAINT shipments_address_present CHECK (length(trim(to_name)) &gt; 0 AND length(trim(to_line1)) &gt; 0 AND length(trim(to_city)) &gt; 0)
+);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Limits</dt><dd>Limit items per call and the body size (the server's request size limit), and say so in the docs; a batch that is too big is refused before any work.</dd>
+<dt>Time</dt><dd>500 inserts take a moment; much more and the request time grows past what clients and load balancers wait. Move big batches to a job.</dd>
+<dt>Retries</dt><dd>A client that times out re-sends the batch: unique refs stop duplicates (challenge 2 makes it friendly).</dd>
+<dt>Metrics</dt><dd>Count failed items by field: a spike in one field usually means a client bug, not bad data.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>200, 207 or 400 for partial success?</summary><p>200 with a per-item report is the common choice for JSON APIs. 207 is WebDAV&#x27;s and implies an XML body. 400 is for a call that cannot be handled at all.</p></details><details class="qa"><summary>Why not one transaction for the batch?</summary><p>Items are independent, so one item&#x27;s problem should not undo the others. In PostgreSQL the first failed statement also aborts the transaction, so later items fail too.</p></details><details class="qa"><summary>How do you validate items one by one in Spring?</summary><p>Do not cascade @Valid over the list; inject a Validator and validate each item, collecting the violations.</p></details><details class="qa"><summary>How do you make a batch safe to resend?</summary><p>Give each item a client reference with a unique constraint, and answer an identical resend with the existing item.</p></details><details class="qa"><summary>When is all-or-nothing right?</summary><p>When the items depend on each other, like an order and its lines, or a transfer&#x27;s two sides.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 9 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>Results</td><td>A result per item.</td><td>Every problem by field, in order, with the client's reference.</td></tr><tr><td>Isolation</td><td>Bad items do not stop good ones.</td><td>You can explain what a transaction around the loop does in PostgreSQL.</td></tr><tr><td>Limits</td><td>A batch limit.</td><td>Limits on items, size and time, documented.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate wraps the batch in one <code>@Transactional</code>, "so a batch is consistent and 500 commits become one", and raises the limit to 5,000 for big sellers. The per-item report is kept. Read the file and list every problem before opening the findings.</p>
+<p class="path">review/BulkShipments.java</p>
+<pre class="code"><code class="language-java">package com.dakroute.shipments;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Valid;
+import jakarta.validation.Validator;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+
+@Service
+class BulkShipments {
+
+    /** Big sellers asked for bigger batches. */
+    static final int MAX_BATCH = 5000;
+
+    record Address(@NotBlank String name, @NotBlank String line1, @NotBlank String city,
+                   @NotNull @Pattern(regexp = &quot;[1-9][0-9]{5}&quot;, message = &quot;must be 6 digits, not starting with 0&quot;) String pincode,
+                   @NotNull @Pattern(regexp = &quot;[6-9][0-9]{9}&quot;, message = &quot;must be a 10-digit Indian mobile number&quot;) String phone) {
+    }
+
+    record ShipmentRequest(@NotNull @Pattern(regexp = &quot;[A-Za-z0-9-]{3,40}&quot;, message = &quot;must be 3 to 40 letters, digits or dashes&quot;) String ref,
+                           @NotNull @Pattern(regexp = &quot;[1-9][0-9]{5}&quot;, message = &quot;must be 6 digits, not starting with 0&quot;) String fromPincode,
+                           @NotNull @Valid Address to,
+                           @Min(1) @Max(50_000) int weightGrams) {
+    }
+
+    record FieldError(String field, String message) {
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record ItemResult(int index, String ref, String status, Long shipmentId, List&lt;FieldError&gt; errors) {
+    }
+
+    record Report(int created, int failed, List&lt;ItemResult&gt; results) {
+    }
+
+    private final JdbcClient jdbc;
+    private final Validator validator;
+
+    BulkShipments(JdbcClient jdbc, Validator validator) {
+        this.jdbc = jdbc;
+        this.validator = validator;
+    }
+
+    /**
+     * Each shipment stands alone: it is checked on its own and saved in its own statement, so one bad address fails
+     * one item, and the report says which, by its position and the seller&#x27;s reference.
+     */
+    @Transactional   // one transaction for the whole batch: consistent, and faster than 500 commits
+    Report create(List&lt;ShipmentRequest&gt; items) {
+        List&lt;ItemResult&gt; results = new ArrayList&lt;&gt;();
+        for (int i = 0; i &lt; items.size(); i++) {
+            results.add(createOne(i, items.get(i)));
+        }
+        int created = (int) results.stream().filter(r -&gt; r.status().equals(&quot;created&quot;)).count();
+        return new Report(created, results.size() - created, results);
+    }
+
+    private ItemResult createOne(int index, ShipmentRequest s) {
+        if (s == null) {
+            return failed(index, null, List.of(new FieldError(&quot;&quot;, &quot;must not be null&quot;)));
+        }
+        List&lt;FieldError&gt; errors = validator.validate(s).stream()
+                .sorted(Comparator.comparing((ConstraintViolation&lt;ShipmentRequest&gt; v) -&gt; v.getPropertyPath().toString()))
+                .map(v -&gt; new FieldError(v.getPropertyPath().toString(), v.getMessage())).toList();
+        if (!errors.isEmpty()) {
+            return failed(index, s.ref(), errors);
+        }
+        String ref = s.ref().toUpperCase(Locale.ROOT);
+        try {
+            long id = jdbc.sql(&quot;&quot;&quot;
+                            INSERT INTO shipments (ref, from_pincode, to_name, to_line1, to_city, to_pincode, to_phone, weight_grams)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id&quot;&quot;&quot;)
+                    .params(ref, s.fromPincode(), s.to().name(), s.to().line1(), s.to().city(), s.to().pincode(), s.to().phone(), s.weightGrams())
+                    .query(Long.class).single();
+            return new ItemResult(index, ref, &quot;created&quot;, id, null);
+        } catch (DuplicateKeyException e) {
+            return failed(index, ref, List.of(new FieldError(&quot;ref&quot;, &quot;is already used by another shipment&quot;)));
+        } catch (DataAccessException e) {
+            // The database refused it for a reason Java did not check: say so, without passing on SQL details.
+            return failed(index, ref, List.of(new FieldError(&quot;&quot;, &quot;could not be saved&quot;)));
+        }
+    }
+
+    private static ItemResult failed(int index, String ref, List&lt;FieldError&gt; errors) {
+        return new ItemResult(index, ref, &quot;failed&quot;, null, errors);
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>One transaction for the whole batch</summary><p>"Consistent, and faster than 500 commits": but in PostgreSQL the first refused statement aborts the transaction. Every later item then fails with "could not be saved", and at commit the items reported as created are rolled back. Seen while building: a report saying "created": 1 for an item that was never stored.</p><p class="evidence"><b>Test evidence:</b> <code>aRefUsedBeforeOrTwiceInTheBatchFailsThatItemOnly</code> and <code>anItemTheDatabaseRefusesFailsAloneAndTheOthersStay</code> fail.</p></details><details class="finding"><summary><span class="sev">2</span>A batch limit of 5,000</summary><p>"Big sellers asked for bigger batches": ten times the work in one request, past the time clients and load balancers wait, with nothing saying where the work stopped.</p><p class="evidence"><b>Test evidence:</b> <code>fiveHundredIsTheLimit</code> fails.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the flawed file copied over the real one, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>AllOrNothingTrapTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill ok">2 / 2</span></td></tr><tr><td><code>BulkContractTest</code></td><td><span class="pill ok">5 / 5</span></td><td><span class="pill bad">3 / 5</span></td></tr><tr><td><code>ShipmentDatabaseTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">1 / 2</span></td></tr></tbody></table></div>
+<p class="note">With only good items, the flawed version passes: one transaction commits them all. It takes one refused item to see the report lie.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
