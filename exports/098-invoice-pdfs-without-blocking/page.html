@@ -1,0 +1,1955 @@
+<title>Station 098 · Invoice PDFs without blocking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 098</span>
+    <h1>Invoice PDFs without blocking</h1>
+    <p class="scenario">Generating a 300-page invoice PDF holds a request thread for 40 seconds.</p>
+    <p class="sim"><b>Simulation</b><span>Rendering is simulated: demo invoice INV-2026-n has n pages and each page takes 130 ms of waiting; INV-2026-0013 always fails. The PDF itself is real: a minimal valid file with one line per page.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>B2B SaaS</li>
+      <li><b>Types</b>None</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>028 Library book loans in layers</p>
+      <p><span class="eyebrow">Builds toward</span><br>099 Live order status with Server-Sent Events · 101 Task queue with RabbitMQ · 122 Ingesting driver locations · 134 Flight fare aggregator</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · @Async with its own ThreadPoolTaskExecutor · CompletableFuture · 202 Accepted and an operation resource (Google AIP-151) · Awaitility</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>A 40-second click</strong><p>An accountant clicks "Download PDF" on a 300-page invoice. The server makes the PDF inside the request: 40 seconds of a request thread doing nothing else.</p></li><li><strong>Month end</strong><p>Two hundred accountants do the same. Request threads run out, and the whole app stops answering. A quick fix moves the work to @Async: now every request is accepted and queued without limit, and when one render throws, its job says "running" for ever.</p></li><li><strong>The fix</strong><p>The request answers 202 with a job's address in milliseconds. A pool of two workers with a queue of twenty does the work; when both are full the API says "busy, try later". A failure ends the job as failed, with the reason.</p></li></ol>
+<p class="lesson">Slow work leaves the request, but it still needs limits and a place to report failure.</p>
+
+<h2>What are we building?</h2>
+<p>PDF jobs: start one, get its address, check it until it is done, then download the PDF, or read why it failed.</p>
+
+<h2>An everyday analogy</h2>
+<p>A tailor's shop: you leave your cloth and get a slip with a number. Two tailors work; twenty orders can wait on the rail. When the rail is full, the shop says "come back tomorrow" instead of taking cloth it cannot sew. If the cloth tears, the slip says so.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Start</strong>: <code>POST</code> answers <code>202</code> with the job's address, at once.</li>
+<li><strong>Queue</strong>: a worker takes the job, or it waits on a bounded queue; full means <code>503</code>.</li>
+<li><strong>Follow</strong>: <code>GET</code> the job: pages done so far, then done with a PDF link or an error.</li>
+<li><strong>Download</strong> the PDF from the link.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: why refuse a job when the queue is full, instead of keeping it?</summary><p>A job that would start in an hour helps nobody: the accountant gave up long ago, and the waiting jobs use memory. A clear "busy, try in 30 s" lets the client decide; the queue's limit is how long anyone would wait.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No real PDF library.</strong> A minimal PDF written by hand; rendering time is simulated.</li>
+<li><strong>One server.</strong> Jobs live in memory (Production).</li>
+<li><strong>No sign-in.</strong> Job ids are random UUIDs; access control is another station's topic.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Request thread</strong></td><td>The server thread that answers one request; there are only so many.</td><td>A counter clerk.</td><td>Tomcat's pool</td></tr><tr><td><strong>@Async</strong></td><td>Spring runs the method on another thread and returns at once.</td><td>The clerk hands the order to the kitchen.</td><td><code>Renderer.render</code></td></tr><tr><td><strong>Executor</strong></td><td>A pool of worker threads with a queue in front.</td><td>The kitchen: cooks, and a rail of waiting orders.</td><td><code>pdfExecutor</code></td></tr><tr><td><strong>Bounded queue</strong></td><td>A queue with a size limit: when full, new work is refused.</td><td>"Kitchen full, come back in half an hour".</td><td>20</td></tr><tr><td><strong>202 Accepted</strong></td><td>"Got it, not done yet", with where to check.</td><td>An order number.</td><td><code>Location: /pdf-jobs/...</code></td></tr><tr><td><strong>Operation</strong></td><td>A resource that describes long-running work until it is done.</td><td>The order's status board.</td><td>AIP-151</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Billora</strong> (a fictional invoicing company): generating a 300-page invoice PDF holds a request thread for 40 seconds.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo rules: 2 workers, 20 waiting; INV-2026-n has n pages (1 to 500), 130 ms a page.</p>
+<ol class="gwt">
+<li><b>Given</b> an invoice, <b>then</b> <code>202</code> with <code>Location: /pdf-jobs/{uuid}</code> in milliseconds, whatever its size.</li>
+<li><b>Given</b> a running job, <b>then</b> <code>GET</code> shows <code>done: false</code> and the pages done so far.</li>
+<li><b>Given</b> a finished job, <b>then</b> <code>done: true</code> and either a response with the PDF's link or an error with the reason.</li>
+<li><b>Given</b> both workers busy and 20 waiting, <b>then</b> a new job is <code>503</code> with <code>Retry-After</code>.</li>
+<li><b>Given</b> the same invoice while its job is queued or running, <b>then</b> <code>200</code> with that job, not a second render.</li>
+<li><b>Given</b> an unknown invoice or job, <b>then</b> <code>404</code>; a malformed id <code>400</code>; the PDF before it exists <code>409</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>No PDF work on a request thread.</li>
+<li>A bounded pool and queue, owned by this feature.</li>
+<li>Every failure ends its job as failed; none is only logged.</li>
+<li>Tests never sleep for a fixed time.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Configure <code>@Async</code> with a named, bounded executor and handle rejection.</li>
+<li>Return <code>CompletableFuture</code> from <code>@Async</code> and handle its failure.</li>
+<li>Design a <code>202</code> + operation resource API for long-running work.</li>
+<li>Test asynchronous code with Awaitility.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/invoices/{id}/pdf-jobs</code></td><td>Start a PDF job; <code>202</code> and its Location.</td></tr><tr><td><code>GET</code></td><td><code>/pdf-jobs/{jobId}</code></td><td>The job as an operation: done, metadata, then response or error.</td></tr><tr><td><code>GET</code></td><td><code>/pdf-jobs/{jobId}/pdf</code></td><td>The finished PDF.</td></tr></tbody></table></div>
+<p class="muted">The operation's shape follows <a href="https://google.aip.dev/151">AIP-151</a>, Google's API design guideline for long-running operations (a guideline, not a formal standard): <code>name</code>, <code>done</code>, <code>metadata</code>, and when done exactly one of <code>response</code> or <code>error</code>.</p>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">202</span></td><td>Job started</td></tr><tr><td><span class="pill ok">200</span></td><td>The same invoice's job is still queued or running (that job); a job; the PDF</td></tr><tr><td><span class="pill warn">400</span></td><td>An invoice id that is not <code>INV-YYYY-NNNN</code>; a job id that is not a UUID</td></tr><tr><td><span class="pill warn">404</span></td><td>No such invoice or job</td></tr><tr><td><span class="pill warn">409</span></td><td>The PDF of a job that is not done, or failed</td></tr><tr><td><span class="pill warn">503</span></td><td>Both workers busy and the queue full, with <code>Retry-After: 30</code></td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 23 Oct 2026, in this order, at the configured 130 ms a page. <code>Date</code>, connection and standard security headers are left out.</p>
+<section class="example"><h3>Case 1: a three-page invoice</h3><p><b>Why:</b> <code>202</code> and the job's address; not done yet.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /invoices/INV-2026-0003/pdf-jobs HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 202 
+Location: /pdf-jobs/a906e0c9-fa57-4e94-9608-f39e61f2b40b
+Content-Type: application/json
+
+{
+  &quot;name&quot;: &quot;pdf-jobs/a906e0c9-fa57-4e94-9608-f39e61f2b40b&quot;,
+  &quot;done&quot;: false,
+  &quot;metadata&quot;: {
+    &quot;invoiceId&quot;: &quot;INV-2026-0003&quot;,
+    &quot;state&quot;: &quot;RUNNING&quot;,
+    &quot;pagesDone&quot;: 0,
+    &quot;pagesTotal&quot;: 3,
+    &quot;createdAt&quot;: &quot;2026-10-23T17:10:11.867963132Z&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 2: the same job, done</h3><p><b>Why:</b> a response with the PDF's link, size and pages.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /pdf-jobs/a906e0c9-fa57-4e94-9608-f39e61f2b40b HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 301
+
+{
+  &quot;name&quot;: &quot;pdf-jobs/a906e0c9-fa57-4e94-9608-f39e61f2b40b&quot;,
+  &quot;done&quot;: true,
+  &quot;metadata&quot;: {
+    &quot;invoiceId&quot;: &quot;INV-2026-0003&quot;,
+    &quot;state&quot;: &quot;SUCCEEDED&quot;,
+    &quot;pagesDone&quot;: 3,
+    &quot;pagesTotal&quot;: 3,
+    &quot;createdAt&quot;: &quot;2026-10-23T17:10:11.867963132Z&quot;
+  },
+  &quot;response&quot;: {
+    &quot;pdfUrl&quot;: &quot;/pdf-jobs/a906e0c9-fa57-4e94-9608-f39e61f2b40b/pdf&quot;,
+    &quot;pages&quot;: 3,
+    &quot;bytes&quot;: 1188
+  }
+}</code></pre></div></div></section>
+<p class="muted">Downloading that PDF: its headers, then what poppler's <code>pdfinfo</code>, an independent PDF reader, says about the file.</p>
+<pre class="code"><code class="language-text">Content-Disposition: attachment; filename=&quot;INV-2026-0003.pdf&quot;
+Content-Type: application/pdf
+Content-Length: 1188
+Pages:           3
+Page size:       595 x 842 pts (A4)
+PDF version:     1.4</code></pre>
+<p class="muted">Starting the 300-page invoice (about 40 s of work), timed by curl:</p>
+<pre class="code"><code class="language-text">answered 202 in 0.006362 s</code></pre><section class="example"><h3>Case 3: the 300-page job, two seconds later</h3><p><b>Why:</b> running, with its progress.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /pdf-jobs/76e7f0ed-3b1e-43f3-8395-6c999b0ab821 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 205
+
+{
+  &quot;name&quot;: &quot;pdf-jobs/76e7f0ed-3b1e-43f3-8395-6c999b0ab821&quot;,
+  &quot;done&quot;: false,
+  &quot;metadata&quot;: {
+    &quot;invoiceId&quot;: &quot;INV-2026-0300&quot;,
+    &quot;state&quot;: &quot;RUNNING&quot;,
+    &quot;pagesDone&quot;: 15,
+    &quot;pagesTotal&quot;: 300,
+    &quot;createdAt&quot;: &quot;2026-10-23T17:10:12.461026829Z&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 4: the same invoice again</h3><p><b>Why:</b> <code>200</code> with the same job: a double click does not start a second render.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /invoices/INV-2026-0300/pdf-jobs HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Location: /pdf-jobs/76e7f0ed-3b1e-43f3-8395-6c999b0ab821
+Content-Type: application/json
+
+{
+  &quot;name&quot;: &quot;pdf-jobs/76e7f0ed-3b1e-43f3-8395-6c999b0ab821&quot;,
+  &quot;done&quot;: false,
+  &quot;metadata&quot;: {
+    &quot;invoiceId&quot;: &quot;INV-2026-0300&quot;,
+    &quot;state&quot;: &quot;RUNNING&quot;,
+    &quot;pagesDone&quot;: 15,
+    &quot;pagesTotal&quot;: 300,
+    &quot;createdAt&quot;: &quot;2026-10-23T17:10:12.461026829Z&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 5: its PDF before it is ready</h3><p><b>Why:</b> <code>409</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /pdf-jobs/76e7f0ed-3b1e-43f3-8395-6c999b0ab821/pdf HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 409 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Not ready yet: the job is RUNNING.&quot;,
+  &quot;instance&quot;: &quot;/pdf-jobs/76e7f0ed-3b1e-43f3-8395-6c999b0ab821/pdf&quot;,
+  &quot;status&quot;: 409,
+  &quot;title&quot;: &quot;Conflict&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: the damaged invoice</h3><p><b>Why:</b> accepted like any other.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /invoices/INV-2026-0013/pdf-jobs HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 202 
+Location: /pdf-jobs/53d0e12d-f404-43d0-a1b5-296d852b7665
+Content-Type: application/json
+
+{
+  &quot;name&quot;: &quot;pdf-jobs/53d0e12d-f404-43d0-a1b5-296d852b7665&quot;,
+  &quot;done&quot;: false,
+  &quot;metadata&quot;: {
+    &quot;invoiceId&quot;: &quot;INV-2026-0013&quot;,
+    &quot;state&quot;: &quot;QUEUED&quot;,
+    &quot;pagesDone&quot;: 0,
+    &quot;pagesTotal&quot;: 13,
+    &quot;createdAt&quot;: &quot;2026-10-23T17:10:14.560575814Z&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 7: the failed job</h3><p><b>Why:</b> done, with an error that says why: no job stays "running" for ever.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /pdf-jobs/53d0e12d-f404-43d0-a1b5-296d852b7665 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 290
+
+{
+  &quot;name&quot;: &quot;pdf-jobs/53d0e12d-f404-43d0-a1b5-296d852b7665&quot;,
+  &quot;done&quot;: true,
+  &quot;metadata&quot;: {
+    &quot;invoiceId&quot;: &quot;INV-2026-0013&quot;,
+    &quot;state&quot;: &quot;FAILED&quot;,
+    &quot;pagesDone&quot;: 0,
+    &quot;pagesTotal&quot;: 13,
+    &quot;createdAt&quot;: &quot;2026-10-23T17:10:14.560575814Z&quot;
+  },
+  &quot;error&quot;: {
+    &quot;code&quot;: &quot;RENDER_FAILED&quot;,
+    &quot;message&quot;: &quot;The logo image of INV-2026-0013 is damaged.&quot;
+  }
+}</code></pre></div></div></section><section class="example"><h3>Case 8: no such invoice</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /invoices/INV-2026-0999/pdf-jobs HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No such invoice.&quot;,
+  &quot;instance&quot;: &quot;/invoices/INV-2026-0999/pdf-jobs&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Not Found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 9: not an invoice id</h3><p><b>Why:</b> <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /invoices/hello/pdf-jobs HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Validation failure&quot;,
+  &quot;instance&quot;: &quot;/invoices/hello/pdf-jobs&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 10: no such job</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /pdf-jobs/00000000-0000-0000-0000-000000000000 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No such job.&quot;,
+  &quot;instance&quot;: &quot;/pdf-jobs/00000000-0000-0000-0000-000000000000&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Not Found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 11: month end, the 23rd big invoice at once</h3><p><b>Why:</b> two rendering, twenty waiting: <code>503</code> with <code>Retry-After</code>, instead of a place in a queue no one would wait in.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /invoices/INV-2026-0322/pdf-jobs HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 503 
+Retry-After: 30
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Too many PDFs are being made right now. Try again in a little while.&quot;,
+  &quot;instance&quot;: &quot;/invoices/INV-2026-0322/pdf-jobs&quot;,
+  &quot;status&quot;: 503,
+  &quot;title&quot;: &quot;Service Unavailable&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>Boot's default pool, 1,000 jobs</td><td>All accepted: 8 running, 992 waiting</td><td><code>theDefaultPoolAcceptsEveryJobAndQueuesItWithoutLimit</code></td></tr><tr><td>An @Async void method that throws; the API's failing render</td><td>Stays RUNNING; FAILED with the reason</td><td><code>theOldWaySwallowsTheErrorAndTheApiReportsIt</code></td></tr><tr><td>A small invoice</td><td><code>202</code>, then a valid 3-page PDF</td><td><code>aJobIsAcceptedAndEndsWithAPdf</code></td></tr><tr><td>A 300-page invoice</td><td><code>202</code> in under 0.5 s; progress; <code>409</code> for the PDF until done</td><td><code>theRequestReturnsAtOnceAndProgressCanBeFollowed</code></td></tr><tr><td>Unknown invoices, malformed ids, unknown jobs</td><td><code>404</code>, <code>400</code></td><td><code>unknownInvoicesAndJobsAre404AndBadIds400</code></td></tr><tr><td>A render that fails</td><td>FAILED, the reason; no PDF; a new job next time</td><td><code>aFailedRenderIsAFailedJobWithItsReason</code></td></tr><tr><td>Workers and queue full</td><td><code>503</code> and <code>Retry-After</code>; accepted again later</td><td><code>whenBothWorkersAndTheQueueAreFullANewJobIs503</code></td></tr><tr><td>The same invoice twice</td><td>The same job</td><td><code>theSameInvoiceWhileItsJobRunsIsTheSameJob</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">@Async on the default executor with unbounded queues and swallowed errors.</p>
+<ul>
+<li><strong>The default pool.</strong> The test reads Spring Boot's own defaults for its task executor (8 threads, a queue of <code>Integer.MAX_VALUE</code>) and builds a pool like it. 1,000 jobs: all accepted, 8 running, 992 waiting in memory, none refused. At 40 s a render the last starts after about 83 minutes.</li>
+<li><strong>Swallowed errors.</strong> An <code>@Async void</code> method sets "RUNNING", throws, and the line that would set "DONE" never runs. Spring logs the exception; the status says running for ever. The API's own failing render ends <code>FAILED</code> with the reason.</li>
+</ul>
+<p>While building, each part was undone once: an unbounded queue turned 1 test red; no <code>@Async</code> 6; failures ignored 2; the failure not unwrapped 2; no check for a running job of the same invoice 1; a refused job left registered 1; a finished job left registered 1; no id pattern 1.</p>
+</div>
+<pre class="code"><code class="language-java">package com.billora.invoices;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.task.TaskExecutionProperties;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Import;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Written first. */
+@Import(AsyncTrapTest.OldWay.class)
+class AsyncTrapTest extends ApiTest {
+
+    /** The old way: @Async void, and the job is marked done at the end. If the render throws, the end never comes. */
+    @TestConfiguration
+    static class OldWay {
+        private final Map&lt;String, String&gt; status = new ConcurrentHashMap&lt;&gt;();
+
+        public String status(String invoiceId) {   // a method: the bean is an @Async proxy, its fields are not the real ones
+            return status.get(invoiceId);
+        }
+
+        @Async
+        public void render(String invoiceId) {
+            status.put(invoiceId, &quot;RUNNING&quot;);
+            if (invoiceId.equals(&quot;INV-2026-0013&quot;)) {
+                throw new IllegalStateException(&quot;The logo image of INV-2026-0013 is damaged.&quot;);   // to a log line, and nowhere else
+            }
+            status.put(invoiceId, &quot;DONE&quot;);
+        }
+    }
+
+    @Autowired
+    OldWay oldWay;
+
+    @Test
+    void theDefaultPoolAcceptsEveryJobAndQueuesItWithoutLimit() throws Exception {
+        // Spring Boot&#x27;s own defaults for its application task executor: 8 threads, a queue with no limit.
+        TaskExecutionProperties.Pool defaults = new TaskExecutionProperties().getPool();
+        assertThat(defaults.getCoreSize()).isEqualTo(8);
+        assertThat(defaults.getQueueCapacity()).isEqualTo(Integer.MAX_VALUE);
+
+        ThreadPoolTaskExecutor likeTheDefault = new ThreadPoolTaskExecutor();
+        likeTheDefault.setCorePoolSize(defaults.getCoreSize());
+        likeTheDefault.setQueueCapacity(defaults.getQueueCapacity());
+        likeTheDefault.initialize();
+        CountDownLatch rendering = new CountDownLatch(1);
+        try {
+            for (int i = 0; i &lt; 1000; i++) {   // a month-end rush: 1,000 people press &quot;Download PDF&quot;
+                likeTheDefault.execute(() -&gt; {
+                    try {
+                        rendering.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+            }
+            // Nobody is told &quot;busy&quot;: 8 render, 992 wait in memory. At 40 s a render, the last one starts after about 83 minutes.
+            assertThat(likeTheDefault.getActiveCount()).isEqualTo(8);
+            assertThat(likeTheDefault.getQueueSize()).isEqualTo(992);
+        } finally {
+            rendering.countDown();
+            likeTheDefault.shutdown();
+        }
+    }
+
+    @Test
+    void theOldWaySwallowsTheErrorAndTheApiReportsIt() throws Exception {
+        oldWay.render(&quot;INV-2026-0013&quot;);
+        await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(2)).until(() -&gt; &quot;RUNNING&quot;.equals(oldWay.status(&quot;INV-2026-0013&quot;)));
+
+        var job = awaitDone(location(start(&quot;INV-2026-0013&quot;).andExpect(status().isAccepted())));
+        assertThat(job.at(&quot;/metadata/state&quot;).asString()).isEqualTo(&quot;FAILED&quot;);
+        assertThat(job.at(&quot;/error/message&quot;).asString()).isEqualTo(&quot;The logo image of INV-2026-0013 is damaged.&quot;);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 8 tests</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<pre class="code"><code class="language-bash">curl -i -X POST http://localhost:8080/invoices/INV-2026-0120/pdf-jobs
+curl http://localhost:8080/pdf-jobs/&lt;the id from Location&gt;      # again every few seconds
+curl -o invoice.pdf http://localhost:8080/pdf-jobs/&lt;id&gt;/pdf      # once done</code></pre>
+<p>120 pages take about 16 s. Start 23 big ones in a loop and watch the 23rd get <code>503</code>.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>The POST still takes 40 s</td><td>The @Async method is called from its own class, so no proxy is in between.</td><td>Put it in another bean.</td></tr><tr><td>Jobs stay RUNNING after an error</td><td><code>@Async void</code>, or <code>thenAccept</code> without failure handling.</td><td>Return a future; use <code>whenComplete</code>.</td></tr><tr><td><code>No qualifying bean of type TaskExecutor</code></td><td><code>@Async("pdfExecutor")</code> names a pool that does not exist.</td><td>Define the executor bean with that name.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/098-invoice-pdfs-without-blocking/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/billora/invoices/
+│   ├── PdfJobController.java   ├── PdfJobs.java   ├── Renderer.java
+│   └── InvoicesApplication.java   └── Invoices.java
+├── src/main/resources/application.yaml
+├── src/test/java/com/billora/invoices/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">PdfJobController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">PdfJobs.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">Renderer.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">InvoicesApplication.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">Invoices.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">application.yaml</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/billora/invoices/PdfJobController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The three endpoints.</dd><dt>Why</dt><dd><code>202</code> and Location; <code>200</code> for a job already running; <code>503</code> with <code>Retry-After</code> when the pool refuses; <code>409</code> for a PDF that does not exist yet.</dd><dt>Without it</dt><dd>A request thread held for 40 s; a client told nothing when the server is full.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.billora.invoices;
+
+import jakarta.validation.constraints.Pattern;
+import org.springframework.core.task.TaskRejectedException;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.util.UUID;
+
+@RestController
+class PdfJobController {
+
+    private final Invoices invoices;
+    private final PdfJobs jobs;
+
+    PdfJobController(Invoices invoices, PdfJobs jobs) {
+        this.invoices = invoices;
+        this.jobs = jobs;
+    }
+
+    /** 202 and where to look: the request thread is back in the pool in milliseconds, whatever the invoice&#x27;s size. */
+    @PostMapping(&quot;/invoices/{id}/pdf-jobs&quot;)
+    ResponseEntity&lt;PdfJobs.Operation&gt; start(@PathVariable @Pattern(regexp = &quot;INV-\\d{4}-\\d{4}&quot;) String id) {
+        Invoices.Invoice invoice = invoices.find(id).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such invoice.&quot;));
+        PdfJobs.Submitted submitted = jobs.submit(invoice);
+        URI location = URI.create(&quot;/&quot; + submitted.operation().name());
+        return submitted.existing()
+                ? ResponseEntity.ok().location(location).body(submitted.operation())   // already queued or running: the same job
+                : ResponseEntity.accepted().location(location).body(submitted.operation());
+    }
+
+    @GetMapping(&quot;/pdf-jobs/{jobId}&quot;)
+    PdfJobs.Operation job(@PathVariable UUID jobId) {
+        return jobs.find(jobId).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such job.&quot;));
+    }
+
+    @GetMapping(&quot;/pdf-jobs/{jobId}/pdf&quot;)
+    ResponseEntity&lt;byte[]&gt; pdf(@PathVariable UUID jobId) {
+        PdfJobs.Operation job = job(jobId);
+        byte[] pdf = jobs.pdf(jobId).orElseThrow(() -&gt; problem(HttpStatus.CONFLICT,
+                job.done() ? &quot;This job failed: there is no PDF.&quot; : &quot;Not ready yet: the job is &quot; + job.metadata().state() + &quot;.&quot;));
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF)
+                .header(&quot;Content-Disposition&quot;, ContentDisposition.attachment().filename(job.metadata().invoiceId() + &quot;.pdf&quot;).build().toString())
+                .body(pdf);
+    }
+
+    /** Both workers busy and the queue full: refuse now, with a hint, rather than queue work the user will give up on. */
+    @ExceptionHandler(TaskRejectedException.class)
+    ResponseEntity&lt;ProblemDetail&gt; busy() {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header(&quot;Retry-After&quot;, &quot;30&quot;)
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, &quot;Too many PDFs are being made right now. Try again in a little while.&quot;));
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/billora/invoices/PdfJobs.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Jobs as operations.</dd><dt>Why</dt><dd>Registers a job, hands it to the renderer, and on completion records the PDF or the error.</dd><dt>Without it</dt><dd>Jobs that say "running" after their render died; two renders of one invoice.</dd></dl><ul><li><code>whenComplete</code>, not <code>thenAccept</code>: the second runs only on success.</li><li>The failure arrives wrapped in a <code>CompletionException</code>; the job keeps the render's own message. Found while building.</li><li>If the pool refuses, the job is unregistered so the invoice can be tried again.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.billora.invoices;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.task.TaskRejectedException;
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Long-running work as an operation resource, in the shape of Google&#x27;s AIP-151 (an API design guideline, not a
+ * formal standard): a name, done, metadata while it runs, then a response or an error.
+ * shortcut: jobs and finished PDFs are kept in this server&#x27;s memory and never removed; store PDFs in object storage
+ * and the jobs in a database, and expire them, before running more than one server.
+ */
+@Service
+class PdfJobs {
+
+    enum State { QUEUED, RUNNING, SUCCEEDED, FAILED }
+
+    static final class Job {
+        private final UUID id = UUID.randomUUID();
+        private final Invoices.Invoice invoice;
+        private final Instant createdAt = Instant.now();
+        private final AtomicInteger pagesDone = new AtomicInteger();
+        private volatile State state = State.QUEUED;
+        private volatile byte[] pdf;
+        private volatile String error;
+
+        Job(Invoices.Invoice invoice) {
+            this.invoice = invoice;
+        }
+
+        Invoices.Invoice invoice() {
+            return invoice;
+        }
+
+        void started() {
+            state = State.RUNNING;
+        }
+
+        void pageDone() {
+            pagesDone.incrementAndGet();
+        }
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record Operation(String name, boolean done, Metadata metadata, Result response, Error error) {
+    }
+
+    record Metadata(String invoiceId, State state, int pagesDone, int pagesTotal, Instant createdAt) {
+    }
+
+    record Result(String pdfUrl, int pages, int bytes) {
+    }
+
+    record Error(String code, String message) {
+    }
+
+    record Submitted(Operation operation, boolean existing) {
+    }
+
+    private static final Logger log = LoggerFactory.getLogger(PdfJobs.class);
+    private final Map&lt;UUID, Job&gt; jobs = new ConcurrentHashMap&lt;&gt;();
+    private final Map&lt;String, Job&gt; activeByInvoice = new ConcurrentHashMap&lt;&gt;();
+    private final Renderer renderer;
+
+    PdfJobs(Renderer renderer) {
+        this.renderer = renderer;
+    }
+
+    /**
+     * Queues a render and returns at once. The same invoice while its job is queued or running gets that job back.
+     * Throws TaskRejectedException when the pool and its queue are full.
+     */
+    Submitted submit(Invoices.Invoice invoice) {
+        Job fresh = new Job(invoice);
+        Job active = activeByInvoice.putIfAbsent(invoice.id(), fresh);
+        if (active != null) {
+            return new Submitted(view(active), true);
+        }
+        try {
+            renderer.render(fresh).whenComplete((pdf, failure) -&gt; finish(fresh, pdf, failure));
+        } catch (TaskRejectedException full) {
+            activeByInvoice.remove(invoice.id(), fresh);
+            throw full;
+        }
+        jobs.put(fresh.id, fresh);
+        return new Submitted(view(fresh), false);
+    }
+
+    private void finish(Job job, byte[] pdf, Throwable failure) {
+        if (failure != null) {
+            // The future&#x27;s stages wrap what the render threw: report the render&#x27;s own message.
+            Throwable cause = failure instanceof CompletionException &amp;&amp; failure.getCause() != null ? failure.getCause() : failure;
+            log.warn(&quot;PDF job {} for {} failed&quot;, job.id, job.invoice.id(), cause);   // logged and kept on the job
+            job.error = cause.getMessage();
+            job.state = State.FAILED;
+        } else {
+            job.pdf = pdf;
+            job.state = State.SUCCEEDED;
+        }
+        activeByInvoice.remove(job.invoice.id(), job);
+    }
+
+    Optional&lt;Operation&gt; find(UUID id) {
+        return Optional.ofNullable(jobs.get(id)).map(PdfJobs::view);
+    }
+
+    /** The PDF of a finished job; empty if there is no such job or it has not succeeded. */
+    Optional&lt;byte[]&gt; pdf(UUID id) {
+        return Optional.ofNullable(jobs.get(id)).map(j -&gt; j.pdf);
+    }
+
+    private static Operation view(Job j) {
+        State state = j.state;
+        Metadata metadata = new Metadata(j.invoice.id(), state, j.pagesDone.get(), j.invoice.pages(), j.createdAt);
+        return switch (state) {
+            case SUCCEEDED -&gt; new Operation(name(j), true, metadata, new Result(&quot;/pdf-jobs/&quot; + j.id + &quot;/pdf&quot;, j.invoice.pages(), j.pdf.length), null);
+            case FAILED -&gt; new Operation(name(j), true, metadata, null, new Error(&quot;RENDER_FAILED&quot;, j.error));
+            default -&gt; new Operation(name(j), false, metadata, null, null);
+        };
+    }
+
+    private static String name(Job j) {
+        return &quot;pdf-jobs/&quot; + j.id;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/billora/invoices/Renderer.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The slow part, on the pdf pool.</dd><dt>Why</dt><dd><code>@Async("pdfExecutor")</code>, a <code>CompletableFuture</code>, progress per page, and a minimal PDF.</dd><dt>Without it</dt><dd>Rendering on the caller's thread; failures that reach only a log.</dd></dl><ul><li>A separate bean: <code>@Async</code> works through a proxy, so calling it from the same class would run it on the caller's thread.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.billora.invoices;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Component;
+
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
+/**
+ * Renders an invoice as a PDF on the pdf pool. A separate bean on purpose: @Async works through a proxy, so a call
+ * from inside the same class would run on the caller&#x27;s thread.
+ */
+@Component
+class Renderer {
+
+    private final long msPerPage;
+
+    Renderer(@Value(&quot;${billora.pdf.ms-per-page}&quot;) long msPerPage) {
+        this.msPerPage = msPerPage;
+    }
+
+    /** Returns a future, so a failure reaches the caller as a failed future instead of a log line no one reads. */
+    @Async(&quot;pdfExecutor&quot;)
+    CompletableFuture&lt;byte[]&gt; render(PdfJobs.Job job) {
+        job.started();
+        if (job.invoice().id().equals(&quot;INV-2026-0013&quot;)) {
+            throw new IllegalStateException(&quot;The logo image of INV-2026-0013 is damaged.&quot;);
+        }
+        List&lt;String&gt; pages = new ArrayList&lt;&gt;();
+        for (int page = 1; page &lt;= job.invoice().pages(); page++) {
+            try {
+                Thread.sleep(msPerPage);   // simulated: the real work of laying out one page
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(&quot;Rendering was interrupted.&quot;, e);
+            }
+            pages.add(&quot;Invoice &quot; + job.invoice().id() + &quot; - page &quot; + page + &quot; of &quot; + job.invoice().pages());
+            job.pageDone();
+        }
+        return CompletableFuture.completedFuture(pdf(pages));
+    }
+
+    /** A minimal, valid PDF: one line of Helvetica per page. */
+    static byte[] pdf(List&lt;String&gt; lines) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        List&lt;Integer&gt; offsets = new ArrayList&lt;&gt;();
+        int pages = lines.size();
+        int font = 3 + 2 * pages;
+        StringBuilder kids = new StringBuilder();
+        for (int i = 0; i &lt; pages; i++) {
+            kids.append(3 + 2 * i).append(&quot; 0 R &quot;);
+        }
+        write(out, &quot;%PDF-1.4\n&quot;);
+        object(out, offsets, 1, &quot;&lt;&lt; /Type /Catalog /Pages 2 0 R &gt;&gt;&quot;);
+        object(out, offsets, 2, &quot;&lt;&lt; /Type /Pages /Kids [&quot; + kids.toString().strip() + &quot;] /Count &quot; + pages + &quot; &gt;&gt;&quot;);
+        for (int i = 0; i &lt; pages; i++) {
+            String text = &quot;BT /F1 12 Tf 72 770 Td (&quot; + lines.get(i) + &quot;) Tj ET&quot;;
+            object(out, offsets, 3 + 2 * i, &quot;&lt;&lt; /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents &quot; + (4 + 2 * i)
+                    + &quot; 0 R /Resources &lt;&lt; /Font &lt;&lt; /F1 &quot; + font + &quot; 0 R &gt;&gt; &gt;&gt; &gt;&gt;&quot;);
+            object(out, offsets, 4 + 2 * i, &quot;&lt;&lt; /Length &quot; + text.length() + &quot; &gt;&gt;\nstream\n&quot; + text + &quot;\nendstream&quot;);
+        }
+        object(out, offsets, font, &quot;&lt;&lt; /Type /Font /Subtype /Type1 /BaseFont /Helvetica &gt;&gt;&quot;);
+        int xref = out.size();
+        StringBuilder table = new StringBuilder(&quot;xref\n0 &quot; + (offsets.size() + 1) + &quot;\n0000000000 65535 f \n&quot;);
+        offsets.forEach(o -&gt; table.append(String.format(java.util.Locale.ROOT, &quot;%010d 00000 n \n&quot;, o)));
+        write(out, table + &quot;trailer\n&lt;&lt; /Size &quot; + (offsets.size() + 1) + &quot; /Root 1 0 R &gt;&gt;\nstartxref\n&quot; + xref + &quot;\n%%EOF\n&quot;);
+        return out.toByteArray();
+    }
+
+    private static void object(ByteArrayOutputStream out, List&lt;Integer&gt; offsets, int number, String body) {
+        offsets.add(out.size());
+        write(out, number + &quot; 0 obj\n&quot; + body + &quot;\nendobj\n&quot;);
+    }
+
+    private static void write(ByteArrayOutputStream out, String s) {
+        out.writeBytes(s.getBytes(StandardCharsets.US_ASCII));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/billora/invoices/InvoicesApplication.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The pdf pool.</dd><dt>Why</dt><dd>2 workers, a queue of 20, refuse when full, let running renders finish on shutdown.</dd><dt>Without it</dt><dd>Boot's default: a queue without limit.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.billora.invoices;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+
+@SpringBootApplication
+@EnableAsync
+public class InvoicesApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(InvoicesApplication.class, args);
+    }
+
+    /**
+     * The renders&#x27; own pool: a fixed number of workers and a bounded queue. When both are full, submitting throws
+     * (TaskRejectedException) and the API answers 503, instead of queueing work no one will wait for.
+     */
+    @Bean
+    ThreadPoolTaskExecutor pdfExecutor(@Value(&quot;${billora.pdf.workers}&quot;) int workers, @Value(&quot;${billora.pdf.queue}&quot;) int queue) {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(workers);
+        executor.setMaxPoolSize(workers);
+        executor.setQueueCapacity(queue);
+        executor.setThreadNamePrefix(&quot;pdf-&quot;);
+        executor.setWaitForTasksToCompleteOnShutdown(true);   // a deploy lets running renders finish
+        executor.setAwaitTerminationSeconds(60);
+        return executor;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/billora/invoices/Invoices.java</p><div class="notes"><p>Simulated invoices: INV-2026-n has n pages.</p></div><div class="src"><pre class="code"><code class="language-java">package com.billora.invoices;
+
+import org.springframework.stereotype.Component;
+
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Simulated: demo invoices INV-2026-0001 to INV-2026-0500, where invoice n has n pages. INV-2026-0013 has a broken
+ * logo, so rendering it fails (to show a failed job).
+ */
+@Component
+class Invoices {
+
+    record Invoice(String id, int pages) {
+    }
+
+    static final Pattern ID = Pattern.compile(&quot;INV-2026-(\\d{4})&quot;);
+
+    Optional&lt;Invoice&gt; find(String id) {
+        Matcher m = ID.matcher(id);
+        if (!m.matches()) {
+            return Optional.empty();
+        }
+        int n = Integer.parseInt(m.group(1));
+        return n &gt;= 1 &amp;&amp; n &lt;= 500 ? Optional.of(new Invoice(id, n)) : Optional.empty();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Workers, queue and the simulated speed.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: billora-invoices
+  mvc:
+    problemdetails:
+      enabled: true
+
+billora:
+  pdf:
+    # Demo rules: two renders at a time, twenty waiting; anything more is refused with 503 instead of waiting for ever.
+    workers: 2
+    queue: 20
+    # Simulated rendering speed: 300 pages take about 40 s.
+    ms-per-page: 130</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>PdfJobContractTest</code> (3), <code>FailureAndBackpressureTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>AsyncTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">Pages take 5 ms in the tests (300 pages in 1.5 s), with 2 workers and a queue of 3. Every wait is Awaitility: it checks every 20 ms and fails after a limit, so a test is as fast as the code and never flaky because a sleep was too short. To prove the old way's job stays "RUNNING", Awaitility's <code>during</code> checks it stays so for half a second.</p>
+<p class="muted">Found while building: the test's <code>@Async</code> bean is a proxy, and reading its field through the proxy gave <code>null</code>; it is read through a method now.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.billora.invoices.FailureAndBackpressureTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.billora.invoices.AsyncTrapTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.billora.invoices.PdfJobContractTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">AsyncTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">PdfJobContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">FailureAndBackpressureTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/billora/invoices/AsyncTrapTest.java</p><div class="notes"><p>Written first: Boot's default pool, and an @Async void method that throws.</p></div><div class="src"><pre class="code"><code class="language-java">package com.billora.invoices;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.task.TaskExecutionProperties;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Import;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Written first. */
+@Import(AsyncTrapTest.OldWay.class)
+class AsyncTrapTest extends ApiTest {
+
+    /** The old way: @Async void, and the job is marked done at the end. If the render throws, the end never comes. */
+    @TestConfiguration
+    static class OldWay {
+        private final Map&lt;String, String&gt; status = new ConcurrentHashMap&lt;&gt;();
+
+        public String status(String invoiceId) {   // a method: the bean is an @Async proxy, its fields are not the real ones
+            return status.get(invoiceId);
+        }
+
+        @Async
+        public void render(String invoiceId) {
+            status.put(invoiceId, &quot;RUNNING&quot;);
+            if (invoiceId.equals(&quot;INV-2026-0013&quot;)) {
+                throw new IllegalStateException(&quot;The logo image of INV-2026-0013 is damaged.&quot;);   // to a log line, and nowhere else
+            }
+            status.put(invoiceId, &quot;DONE&quot;);
+        }
+    }
+
+    @Autowired
+    OldWay oldWay;
+
+    @Test
+    void theDefaultPoolAcceptsEveryJobAndQueuesItWithoutLimit() throws Exception {
+        // Spring Boot&#x27;s own defaults for its application task executor: 8 threads, a queue with no limit.
+        TaskExecutionProperties.Pool defaults = new TaskExecutionProperties().getPool();
+        assertThat(defaults.getCoreSize()).isEqualTo(8);
+        assertThat(defaults.getQueueCapacity()).isEqualTo(Integer.MAX_VALUE);
+
+        ThreadPoolTaskExecutor likeTheDefault = new ThreadPoolTaskExecutor();
+        likeTheDefault.setCorePoolSize(defaults.getCoreSize());
+        likeTheDefault.setQueueCapacity(defaults.getQueueCapacity());
+        likeTheDefault.initialize();
+        CountDownLatch rendering = new CountDownLatch(1);
+        try {
+            for (int i = 0; i &lt; 1000; i++) {   // a month-end rush: 1,000 people press &quot;Download PDF&quot;
+                likeTheDefault.execute(() -&gt; {
+                    try {
+                        rendering.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+            }
+            // Nobody is told &quot;busy&quot;: 8 render, 992 wait in memory. At 40 s a render, the last one starts after about 83 minutes.
+            assertThat(likeTheDefault.getActiveCount()).isEqualTo(8);
+            assertThat(likeTheDefault.getQueueSize()).isEqualTo(992);
+        } finally {
+            rendering.countDown();
+            likeTheDefault.shutdown();
+        }
+    }
+
+    @Test
+    void theOldWaySwallowsTheErrorAndTheApiReportsIt() throws Exception {
+        oldWay.render(&quot;INV-2026-0013&quot;);
+        await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(2)).until(() -&gt; &quot;RUNNING&quot;.equals(oldWay.status(&quot;INV-2026-0013&quot;)));
+
+        var job = awaitDone(location(start(&quot;INV-2026-0013&quot;).andExpect(status().isAccepted())));
+        assertThat(job.at(&quot;/metadata/state&quot;).asString()).isEqualTo(&quot;FAILED&quot;);
+        assertThat(job.at(&quot;/error/message&quot;).asString()).isEqualTo(&quot;The logo image of INV-2026-0013 is damaged.&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/billora/invoices/PdfJobContractTest.java</p><div class="notes"><p>A job from start to PDF; a big one followed while it runs; bad and unknown ids.</p></div><div class="src"><pre class="code"><code class="language-java">package com.billora.invoices;
+
+import org.junit.jupiter.api.Test;
+
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.UUID;
+import java.util.regex.Pattern;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class PdfJobContractTest extends ApiTest {
+
+    @Test
+    void aJobIsAcceptedAndEndsWithAPdf() throws Exception {
+        var started = start(&quot;INV-2026-0003&quot;).andExpect(status().isAccepted())
+                .andExpect(header().string(&quot;Location&quot;, org.hamcrest.Matchers.matchesRegex(&quot;/pdf-jobs/[0-9a-f-]{36}&quot;)))
+                .andExpect(jsonPath(&quot;$.done&quot;).value(false)).andExpect(jsonPath(&quot;$.metadata.invoiceId&quot;).value(&quot;INV-2026-0003&quot;))
+                .andExpect(jsonPath(&quot;$.metadata.pagesTotal&quot;).value(3)).andExpect(jsonPath(&quot;$.response&quot;).doesNotExist());
+        String path = location(started);
+        var done = awaitDone(path);
+        assertThat(done.get(&quot;name&quot;).asString()).isEqualTo(path.substring(1));
+        assertThat(done.at(&quot;/metadata/state&quot;).asString()).isEqualTo(&quot;SUCCEEDED&quot;);
+        assertThat(done.at(&quot;/metadata/pagesDone&quot;).asInt()).isEqualTo(3);
+        assertThat(done.at(&quot;/response/pdfUrl&quot;).asString()).isEqualTo(path + &quot;/pdf&quot;);
+        assertThat(done.has(&quot;error&quot;)).isFalse();
+
+        var pdf = mvc.perform(get(path + &quot;/pdf&quot;)).andExpect(status().isOk()).andExpect(header().string(&quot;Content-Type&quot;, &quot;application/pdf&quot;))
+                .andExpect(header().string(&quot;Content-Disposition&quot;, &quot;attachment; filename=\&quot;INV-2026-0003.pdf\&quot;&quot;)).andReturn().getResponse();
+        String text = new String(pdf.getContentAsByteArray(), StandardCharsets.US_ASCII);
+        assertThat(text).startsWith(&quot;%PDF-1.4&quot;).endsWith(&quot;%%EOF\n&quot;).contains(&quot;(Invoice INV-2026-0003 - page 3 of 3)&quot;);
+        assertThat(Pattern.compile(&quot;/Type /Page &quot;).matcher(text).results().count()).isEqualTo(3);
+        assertThat(pdf.getContentAsByteArray()).hasSize(done.at(&quot;/response/bytes&quot;).asInt());
+    }
+
+    @Test
+    void theRequestReturnsAtOnceAndProgressCanBeFollowed() throws Exception {
+        awaitIdlePool();
+        long started = System.nanoTime();
+        String path = location(start(&quot;INV-2026-0300&quot;).andExpect(status().isAccepted()));
+        long millis = (System.nanoTime() - started) / 1_000_000;
+        assertThat(millis).isLessThan(500);   // the render itself takes 300 x 5 ms = 1.5 s here (40 s in production)
+
+        var halfway = await().atMost(Duration.ofSeconds(10)).pollInterval(Duration.ofMillis(10))
+                .until(() -&gt; job(path), j -&gt; j.at(&quot;/metadata/pagesDone&quot;).asInt() &gt; 0 &amp;&amp; j.at(&quot;/metadata/pagesDone&quot;).asInt() &lt; 300);
+        assertThat(halfway.at(&quot;/metadata/state&quot;).asString()).isEqualTo(&quot;RUNNING&quot;);
+        assertThat(halfway.get(&quot;done&quot;).asBoolean()).isFalse();
+        mvc.perform(get(path + &quot;/pdf&quot;)).andExpect(status().isConflict()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Not ready yet: the job is RUNNING.&quot;));
+        assertThat(awaitDone(path).at(&quot;/metadata/pagesDone&quot;).asInt()).isEqualTo(300);
+    }
+
+    @Test
+    void unknownInvoicesAndJobsAre404AndBadIds400() throws Exception {
+        start(&quot;INV-2026-0501&quot;).andExpect(status().isNotFound());
+        start(&quot;INV-2026-0000&quot;).andExpect(status().isNotFound());
+        start(&quot;not-an-invoice&quot;).andExpect(status().isBadRequest());
+        start(&quot;INV-2026-0003&#x27; OR &#x27;1&#x27;=&#x27;1&quot;).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/pdf-jobs/{id}&quot;, UUID.randomUUID())).andExpect(status().isNotFound());
+        mvc.perform(get(&quot;/pdf-jobs/{id}/pdf&quot;, UUID.randomUUID())).andExpect(status().isNotFound());
+        mvc.perform(get(&quot;/pdf-jobs/not-a-uuid&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/billora/invoices/FailureAndBackpressureTest.java</p><div class="notes"><p>A failed render; a full pool; the same invoice twice.</p></div><div class="src"><pre class="code"><code class="language-java">package com.billora.invoices;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class FailureAndBackpressureTest extends ApiTest {
+
+    @Test
+    void aFailedRenderIsAFailedJobWithItsReason() throws Exception {
+        String path = location(start(&quot;INV-2026-0013&quot;).andExpect(status().isAccepted()));
+        var failed = awaitDone(path);
+        assertThat(failed.at(&quot;/metadata/state&quot;).asString()).isEqualTo(&quot;FAILED&quot;);
+        assertThat(failed.at(&quot;/error/code&quot;).asString()).isEqualTo(&quot;RENDER_FAILED&quot;);
+        assertThat(failed.at(&quot;/error/message&quot;).asString()).isEqualTo(&quot;The logo image of INV-2026-0013 is damaged.&quot;);
+        assertThat(failed.has(&quot;response&quot;)).isFalse();
+        mvc.perform(get(path + &quot;/pdf&quot;)).andExpect(status().isConflict()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;This job failed: there is no PDF.&quot;));
+        // A failed job is finished: asking again starts a new one.
+        assertThat(location(start(&quot;INV-2026-0013&quot;).andExpect(status().isAccepted()))).isNotEqualTo(path);
+    }
+
+    @Test
+    void whenBothWorkersAndTheQueueAreFullANewJobIs503() throws Exception {
+        awaitIdlePool();
+        List&lt;String&gt; accepted = new ArrayList&lt;&gt;();
+        for (int n = 401; n &lt;= 405; n++) {   // two render, three wait
+            accepted.add(location(start(&quot;INV-2026-0&quot; + n).andExpect(status().isAccepted())));
+        }
+        start(&quot;INV-2026-0406&quot;).andExpect(status().isServiceUnavailable()).andExpect(header().string(&quot;Retry-After&quot;, &quot;30&quot;))
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Too many PDFs are being made right now. Try again in a little while.&quot;));
+        accepted.forEach(this::awaitDone);
+        start(&quot;INV-2026-0406&quot;).andExpect(status().isAccepted());   // room again
+    }
+
+    @Test
+    void theSameInvoiceWhileItsJobRunsIsTheSameJob() throws Exception {
+        awaitIdlePool();
+        String first = location(start(&quot;INV-2026-0250&quot;).andExpect(status().isAccepted()));
+        String again = location(start(&quot;INV-2026-0250&quot;).andExpect(status().isOk()));   // a double click: no second render
+        assertThat(again).isEqualTo(first);
+        awaitDone(first);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/billora/invoices/ApiTest.java</p><div class="notes"><p>Shared setup: fast pages, a small pool, Awaitility helpers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.billora.invoices;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.time.Duration;
+
+import static org.awaitility.Awaitility.await;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/**
+ * Shared setup: the whole app, rendering 5 ms a page (a 300-page invoice in 1.5 s, not 40 s), two workers and a queue
+ * of three, so a full pool is easy to reach. Waiting is done with Awaitility: it polls until true or fails, never a fixed sleep.
+ */
+@SpringBootTest(properties = {&quot;billora.pdf.ms-per-page=5&quot;, &quot;billora.pdf.workers=2&quot;, &quot;billora.pdf.queue=3&quot;})
+@AutoConfigureMockMvc
+abstract class ApiTest {
+
+    static final JsonMapper JSON = JsonMapper.builder().build();
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    ThreadPoolTaskExecutor pdfExecutor;
+
+    ResultActions start(String invoiceId) throws Exception {
+        return mvc.perform(post(&quot;/invoices/{id}/pdf-jobs&quot;, invoiceId));
+    }
+
+    JsonNode job(String path) throws Exception {
+        return JSON.readTree(mvc.perform(get(path)).andReturn().getResponse().getContentAsString());
+    }
+
+    /** Polls the job every 20 ms until it is done, at most 10 s. */
+    JsonNode awaitDone(String path) {
+        return await().atMost(Duration.ofSeconds(10)).pollInterval(Duration.ofMillis(20)).until(() -&gt; job(path), j -&gt; j.get(&quot;done&quot;).asBoolean());
+    }
+
+    void awaitIdlePool() {
+        await().atMost(Duration.ofSeconds(20)).until(() -&gt; pdfExecutor.getActiveCount() == 0 &amp;&amp; pdfExecutor.getQueueSize() == 0);
+    }
+
+    static String location(ResultActions result) {
+        return result.andReturn().getResponse().getHeader(&quot;Location&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/billora/invoices/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=RetryAfterChallengeTest</code>.</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 8 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 12 tests pass (8 station tests and 4 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>When to look again</h2><p>While a job is not done, the <code>202</code> and every <code>GET</code> of it carry <code>Retry-After</code>: the seconds its remaining pages should take, rounded up, at least 1. A done job has none. Clients stop polling every 100 ms.</p><p><b>Done when:</b> both tests in <code>RetryAfterChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Pages left times ms per page, from the operation's metadata and the configuration.</li><li>One helper used by both endpoints.</li></ul></details><p class="path">challenge/RetryAfterChallengeTest.java</p><pre class="code"><code class="language-java">package com.billora.invoices;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: tell the client when to look again. While a job is not done, its answers carry Retry-After: the
+ * seconds the pages left should take (rounded up, at least 1). A done job has none: there is nothing to wait for.
+ */
+class RetryAfterChallengeTest extends ApiTest {
+
+    @Test
+    void anUnfinishedJobSaysWhenToLookAgain() throws Exception {
+        awaitIdlePool();
+        var started = start(&quot;INV-2026-0300&quot;).andExpect(status().isAccepted()).andExpect(header().string(&quot;Retry-After&quot;, &quot;2&quot;));   // 300 x 5 ms
+        String path = location(started);
+        awaitDone(path);
+        mvc.perform(get(path)).andExpect(status().isOk()).andExpect(header().doesNotExist(&quot;Retry-After&quot;));
+    }
+
+    @Test
+    void aSmallJobSaysOneSecond() throws Exception {
+        awaitIdlePool();
+        String path = location(start(&quot;INV-2026-0003&quot;).andExpect(header().string(&quot;Retry-After&quot;, &quot;1&quot;)));
+        awaitDone(path);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/PdfJobController.java</p><div class="src"><pre class="code"><code class="language-java">package com.billora.invoices;
+
+import jakarta.validation.constraints.Pattern;
+import org.springframework.core.task.TaskRejectedException;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.util.UUID;
+
+@RestController
+class PdfJobController {
+
+    private final Invoices invoices;
+    private final PdfJobs jobs;
+    private final long msPerPage;
+
+    PdfJobController(Invoices invoices, PdfJobs jobs, @org.springframework.beans.factory.annotation.Value(&quot;${billora.pdf.ms-per-page}&quot;) long msPerPage) {
+        this.invoices = invoices;
+        this.jobs = jobs;
+        this.msPerPage = msPerPage;
+    }
+
+    /** Challenge 1: while not done, the seconds the pages left should take, rounded up, at least 1. */
+    private &lt;T&gt; ResponseEntity&lt;T&gt; withRetryAfter(ResponseEntity.BodyBuilder response, PdfJobs.Operation job, T body) {
+        if (!job.done()) {
+            long millis = (long) (job.metadata().pagesTotal() - job.metadata().pagesDone()) * msPerPage;
+            response.header(&quot;Retry-After&quot;, Long.toString(Math.max(1, (millis + 999) / 1000)));
+        }
+        return response.body(body);
+    }
+
+    /** 202 and where to look: the request thread is back in the pool in milliseconds, whatever the invoice&#x27;s size. */
+    @PostMapping(&quot;/invoices/{id}/pdf-jobs&quot;)
+    ResponseEntity&lt;PdfJobs.Operation&gt; start(@PathVariable @Pattern(regexp = &quot;INV-\\d{4}-\\d{4}&quot;) String id) {
+        Invoices.Invoice invoice = invoices.find(id).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such invoice.&quot;));
+        PdfJobs.Submitted submitted = jobs.submit(invoice);
+        URI location = URI.create(&quot;/&quot; + submitted.operation().name());
+        return withRetryAfter(submitted.existing()
+                ? ResponseEntity.ok().location(location)   // already queued or running: the same job
+                : ResponseEntity.accepted().location(location), submitted.operation(), submitted.operation());
+    }
+
+    @GetMapping(&quot;/pdf-jobs/{jobId}&quot;)
+    ResponseEntity&lt;PdfJobs.Operation&gt; get(@PathVariable UUID jobId) {
+        PdfJobs.Operation job = job(jobId);
+        return withRetryAfter(ResponseEntity.ok(), job, job);
+    }
+
+    /** Challenge 2: AIP-151&#x27;s custom method. 200 with the operation; 409 if it is already done. */
+    @org.springframework.web.bind.annotation.PostMapping(&quot;/pdf-jobs/{jobId}:cancel&quot;)
+    PdfJobs.Operation cancel(@PathVariable UUID jobId) {
+        try {
+            return jobs.cancel(jobId).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such job.&quot;));
+        } catch (IllegalStateException done) {
+            throw problem(HttpStatus.CONFLICT, done.getMessage());
+        }
+    }
+
+    private PdfJobs.Operation job(UUID jobId) {
+        return jobs.find(jobId).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such job.&quot;));
+    }
+
+    @GetMapping(&quot;/pdf-jobs/{jobId}/pdf&quot;)
+    ResponseEntity&lt;byte[]&gt; pdf(@PathVariable UUID jobId) {
+        PdfJobs.Operation job = job(jobId);
+        byte[] pdf = jobs.pdf(jobId).orElseThrow(() -&gt; problem(HttpStatus.CONFLICT,
+                job.done() ? &quot;This job failed: there is no PDF.&quot; : &quot;Not ready yet: the job is &quot; + job.metadata().state() + &quot;.&quot;));
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF)
+                .header(&quot;Content-Disposition&quot;, ContentDisposition.attachment().filename(job.metadata().invoiceId() + &quot;.pdf&quot;).build().toString())
+                .body(pdf);
+    }
+
+    /** Both workers busy and the queue full: refuse now, with a hint, rather than queue work the user will give up on. */
+    @ExceptionHandler(TaskRejectedException.class)
+    ResponseEntity&lt;ProblemDetail&gt; busy() {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header(&quot;Retry-After&quot;, &quot;30&quot;)
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, &quot;Too many PDFs are being made right now. Try again in a little while.&quot;));
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 40 minutes</p><h2>Cancel a job</h2><p><code>POST /pdf-jobs/{jobId}:cancel</code>, AIP-151's custom method. A queued job is cancelled at once and never renders; a running one stops after its current page. Both end done, with the error code <code>CANCELLED</code>. A done job is <code>409</code>.</p><p><b>Done when:</b> both tests in <code>CancelChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Threads cannot be stopped safely from outside: set a flag the renderer checks before each page.</li><li>Spring's path patterns accept <code>{jobId}:cancel</code>: a variable followed by literal text.</li><li>A queued job's render still runs once: it sees the flag and returns at once.</li></ul></details><p class="path">challenge/CancelChallengeTest.java</p><pre class="code"><code class="language-java">package com.billora.invoices;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: POST /pdf-jobs/{jobId}:cancel, AIP-151&#x27;s custom method. A queued job is cancelled at once and never
+ * renders; a running one stops after its current page. Either ends done, with the error code CANCELLED.
+ */
+class CancelChallengeTest extends ApiTest {
+
+    @Test
+    void aRunningJobStopsAfterItsCurrentPage() throws Exception {
+        awaitIdlePool();
+        String path = location(start(&quot;INV-2026-0300&quot;));
+        await().atMost(Duration.ofSeconds(5)).until(() -&gt; job(path).at(&quot;/metadata/pagesDone&quot;).asInt() &gt; 10);
+        mvc.perform(post(path + &quot;:cancel&quot;)).andExpect(status().isOk());
+        var cancelled = awaitDone(path);
+        assertThat(cancelled.at(&quot;/metadata/state&quot;).asString()).isEqualTo(&quot;CANCELLED&quot;);
+        assertThat(cancelled.at(&quot;/error/code&quot;).asString()).isEqualTo(&quot;CANCELLED&quot;);
+        assertThat(cancelled.at(&quot;/metadata/pagesDone&quot;).asInt()).isLessThan(300);
+        mvc.perform(post(path + &quot;:cancel&quot;)).andExpect(status().isConflict());   // already done
+    }
+
+    @Test
+    void aQueuedJobIsCancelledAtOnceAndNeverRuns() throws Exception {
+        awaitIdlePool();
+        String a = location(start(&quot;INV-2026-0301&quot;));
+        String b = location(start(&quot;INV-2026-0302&quot;));
+        String queued = location(start(&quot;INV-2026-0303&quot;));   // both workers busy: this one waits
+        mvc.perform(post(queued + &quot;:cancel&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.done&quot;).value(true))
+                .andExpect(jsonPath(&quot;$.metadata.state&quot;).value(&quot;CANCELLED&quot;));
+        awaitDone(a);
+        awaitDone(b);
+        awaitIdlePool();
+        assertThat(job(queued).at(&quot;/metadata/pagesDone&quot;).asInt()).isZero();
+        mvc.perform(post(&quot;/pdf-jobs/&quot; + UUID.randomUUID() + &quot;:cancel&quot;)).andExpect(status().isNotFound());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/PdfJobs.java</p><div class="src"><pre class="code"><code class="language-java">package com.billora.invoices;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.task.TaskRejectedException;
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Long-running work as an operation resource, in the shape of Google&#x27;s AIP-151 (an API design guideline, not a
+ * formal standard): a name, done, metadata while it runs, then a response or an error.
+ * shortcut: jobs and finished PDFs are kept in this server&#x27;s memory and never removed; store PDFs in object storage
+ * and the jobs in a database, and expire them, before running more than one server.
+ */
+@Service
+class PdfJobs {
+
+    enum State { QUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED }
+
+    static final class Job {
+        private final UUID id = UUID.randomUUID();
+        private final Invoices.Invoice invoice;
+        private final Instant createdAt = Instant.now();
+        private final AtomicInteger pagesDone = new AtomicInteger();
+        private volatile State state = State.QUEUED;
+        private volatile byte[] pdf;
+        private volatile String error;
+        private volatile boolean cancelRequested;
+
+        Job(Invoices.Invoice invoice) {
+            this.invoice = invoice;
+        }
+
+        Invoices.Invoice invoice() {
+            return invoice;
+        }
+
+        void started() {
+            state = State.RUNNING;
+        }
+
+        void pageDone() {
+            pagesDone.incrementAndGet();
+        }
+
+        /** Challenge 2: checked by the renderer before each page. */
+        boolean cancelRequested() {
+            return cancelRequested;
+        }
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record Operation(String name, boolean done, Metadata metadata, Result response, Error error) {
+    }
+
+    record Metadata(String invoiceId, State state, int pagesDone, int pagesTotal, Instant createdAt) {
+    }
+
+    record Result(String pdfUrl, int pages, int bytes) {
+    }
+
+    record Error(String code, String message) {
+    }
+
+    record Submitted(Operation operation, boolean existing) {
+    }
+
+    private static final Logger log = LoggerFactory.getLogger(PdfJobs.class);
+    private final Map&lt;UUID, Job&gt; jobs = new ConcurrentHashMap&lt;&gt;();
+    private final Map&lt;String, Job&gt; activeByInvoice = new ConcurrentHashMap&lt;&gt;();
+    private final Renderer renderer;
+
+    PdfJobs(Renderer renderer) {
+        this.renderer = renderer;
+    }
+
+    /**
+     * Queues a render and returns at once. The same invoice while its job is queued or running gets that job back.
+     * Throws TaskRejectedException when the pool and its queue are full.
+     */
+    Submitted submit(Invoices.Invoice invoice) {
+        Job fresh = new Job(invoice);
+        Job active = activeByInvoice.putIfAbsent(invoice.id(), fresh);
+        if (active != null) {
+            return new Submitted(view(active), true);
+        }
+        try {
+            renderer.render(fresh).whenComplete((pdf, failure) -&gt; finish(fresh, pdf, failure));
+        } catch (TaskRejectedException full) {
+            activeByInvoice.remove(invoice.id(), fresh);
+            throw full;
+        }
+        jobs.put(fresh.id, fresh);
+        return new Submitted(view(fresh), false);
+    }
+
+    private void finish(Job job, byte[] pdf, Throwable failure) {
+        if (job.cancelRequested) {
+            job.state = State.CANCELLED;
+        } else if (failure != null) {
+            // The future&#x27;s stages wrap what the render threw: report the render&#x27;s own message.
+            Throwable cause = failure instanceof CompletionException &amp;&amp; failure.getCause() != null ? failure.getCause() : failure;
+            log.warn(&quot;PDF job {} for {} failed&quot;, job.id, job.invoice.id(), cause);   // logged and kept on the job
+            job.error = cause.getMessage();
+            job.state = State.FAILED;
+        } else {
+            job.pdf = pdf;
+            job.state = State.SUCCEEDED;
+        }
+        activeByInvoice.remove(job.invoice.id(), job);
+    }
+
+    /** Challenge 2. Empty if there is no such job; throws IllegalStateException if it is already done. */
+    Optional&lt;Operation&gt; cancel(UUID id) {
+        Job job = jobs.get(id);
+        if (job == null) {
+            return Optional.empty();
+        }
+        synchronized (job) {
+            if (job.state != State.QUEUED &amp;&amp; job.state != State.RUNNING) {
+                throw new IllegalStateException(&quot;This job is already &quot; + job.state + &quot;.&quot;);
+            }
+            job.cancelRequested = true;
+            if (job.state == State.QUEUED) {
+                job.state = State.CANCELLED;   // its render will see the flag and stop before the first page
+                activeByInvoice.remove(job.invoice.id(), job);
+            }
+        }
+        return Optional.of(view(job));
+    }
+
+    Optional&lt;Operation&gt; find(UUID id) {
+        return Optional.ofNullable(jobs.get(id)).map(PdfJobs::view);
+    }
+
+    /** The PDF of a finished job; empty if there is no such job or it has not succeeded. */
+    Optional&lt;byte[]&gt; pdf(UUID id) {
+        return Optional.ofNullable(jobs.get(id)).map(j -&gt; j.pdf);
+    }
+
+    private static Operation view(Job j) {
+        State state = j.state;
+        Metadata metadata = new Metadata(j.invoice.id(), state, j.pagesDone.get(), j.invoice.pages(), j.createdAt);
+        return switch (state) {
+            case SUCCEEDED -&gt; new Operation(name(j), true, metadata, new Result(&quot;/pdf-jobs/&quot; + j.id + &quot;/pdf&quot;, j.invoice.pages(), j.pdf.length), null);
+            case FAILED -&gt; new Operation(name(j), true, metadata, null, new Error(&quot;RENDER_FAILED&quot;, j.error));
+            case CANCELLED -&gt; new Operation(name(j), true, metadata, null, new Error(&quot;CANCELLED&quot;, &quot;The job was cancelled.&quot;));
+            default -&gt; new Operation(name(j), false, metadata, null, null);
+        };
+    }
+
+    private static String name(Job j) {
+        return &quot;pdf-jobs/&quot; + j.id;
+    }
+}</code></pre></div><p class="path">challenge/solution/Renderer.java</p><div class="src"><pre class="code"><code class="language-java">package com.billora.invoices;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Component;
+
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
+/**
+ * Renders an invoice as a PDF on the pdf pool. A separate bean on purpose: @Async works through a proxy, so a call
+ * from inside the same class would run on the caller&#x27;s thread.
+ */
+@Component
+class Renderer {
+
+    private final long msPerPage;
+
+    Renderer(@Value(&quot;${billora.pdf.ms-per-page}&quot;) long msPerPage) {
+        this.msPerPage = msPerPage;
+    }
+
+    /** Returns a future, so a failure reaches the caller as a failed future instead of a log line no one reads. */
+    @Async(&quot;pdfExecutor&quot;)
+    CompletableFuture&lt;byte[]&gt; render(PdfJobs.Job job) {
+        if (job.cancelRequested()) {   // challenge 2: cancelled while it waited in the queue
+            return CompletableFuture.failedFuture(new java.util.concurrent.CancellationException(&quot;cancelled&quot;));
+        }
+        job.started();
+        if (job.invoice().id().equals(&quot;INV-2026-0013&quot;)) {
+            throw new IllegalStateException(&quot;The logo image of INV-2026-0013 is damaged.&quot;);
+        }
+        List&lt;String&gt; pages = new ArrayList&lt;&gt;();
+        for (int page = 1; page &lt;= job.invoice().pages(); page++) {
+            if (job.cancelRequested()) {
+                throw new java.util.concurrent.CancellationException(&quot;cancelled after &quot; + (page - 1) + &quot; pages&quot;);
+            }
+            try {
+                Thread.sleep(msPerPage);   // simulated: the real work of laying out one page
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(&quot;Rendering was interrupted.&quot;, e);
+            }
+            pages.add(&quot;Invoice &quot; + job.invoice().id() + &quot; - page &quot; + page + &quot; of &quot; + job.invoice().pages());
+            job.pageDone();
+        }
+        return CompletableFuture.completedFuture(pdf(pages));
+    }
+
+    /** A minimal, valid PDF: one line of Helvetica per page. */
+    static byte[] pdf(List&lt;String&gt; lines) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        List&lt;Integer&gt; offsets = new ArrayList&lt;&gt;();
+        int pages = lines.size();
+        int font = 3 + 2 * pages;
+        StringBuilder kids = new StringBuilder();
+        for (int i = 0; i &lt; pages; i++) {
+            kids.append(3 + 2 * i).append(&quot; 0 R &quot;);
+        }
+        write(out, &quot;%PDF-1.4\n&quot;);
+        object(out, offsets, 1, &quot;&lt;&lt; /Type /Catalog /Pages 2 0 R &gt;&gt;&quot;);
+        object(out, offsets, 2, &quot;&lt;&lt; /Type /Pages /Kids [&quot; + kids.toString().strip() + &quot;] /Count &quot; + pages + &quot; &gt;&gt;&quot;);
+        for (int i = 0; i &lt; pages; i++) {
+            String text = &quot;BT /F1 12 Tf 72 770 Td (&quot; + lines.get(i) + &quot;) Tj ET&quot;;
+            object(out, offsets, 3 + 2 * i, &quot;&lt;&lt; /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents &quot; + (4 + 2 * i)
+                    + &quot; 0 R /Resources &lt;&lt; /Font &lt;&lt; /F1 &quot; + font + &quot; 0 R &gt;&gt; &gt;&gt; &gt;&gt;&quot;);
+            object(out, offsets, 4 + 2 * i, &quot;&lt;&lt; /Length &quot; + text.length() + &quot; &gt;&gt;\nstream\n&quot; + text + &quot;\nendstream&quot;);
+        }
+        object(out, offsets, font, &quot;&lt;&lt; /Type /Font /Subtype /Type1 /BaseFont /Helvetica &gt;&gt;&quot;);
+        int xref = out.size();
+        StringBuilder table = new StringBuilder(&quot;xref\n0 &quot; + (offsets.size() + 1) + &quot;\n0000000000 65535 f \n&quot;);
+        offsets.forEach(o -&gt; table.append(String.format(java.util.Locale.ROOT, &quot;%010d 00000 n \n&quot;, o)));
+        write(out, table + &quot;trailer\n&lt;&lt; /Size &quot; + (offsets.size() + 1) + &quot; /Root 1 0 R &gt;&gt;\nstartxref\n&quot; + xref + &quot;\n%%EOF\n&quot;);
+        return out.toByteArray();
+    }
+
+    private static void object(ByteArrayOutputStream out, List&lt;Integer&gt; offsets, int number, String body) {
+        offsets.add(out.size());
+        write(out, number + &quot; 0 obj\n&quot; + body + &quot;\nendobj\n&quot;);
+    }
+
+    private static void write(ByteArrayOutputStream out, String s) {
+        out.writeBytes(s.getBytes(StandardCharsets.US_ASCII));
+    }
+}</code></pre></div><p class="path">challenge/solution/PdfJobController.java</p><div class="src"><pre class="code"><code class="language-java">package com.billora.invoices;
+
+import jakarta.validation.constraints.Pattern;
+import org.springframework.core.task.TaskRejectedException;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.util.UUID;
+
+@RestController
+class PdfJobController {
+
+    private final Invoices invoices;
+    private final PdfJobs jobs;
+    private final long msPerPage;
+
+    PdfJobController(Invoices invoices, PdfJobs jobs, @org.springframework.beans.factory.annotation.Value(&quot;${billora.pdf.ms-per-page}&quot;) long msPerPage) {
+        this.invoices = invoices;
+        this.jobs = jobs;
+        this.msPerPage = msPerPage;
+    }
+
+    /** Challenge 1: while not done, the seconds the pages left should take, rounded up, at least 1. */
+    private &lt;T&gt; ResponseEntity&lt;T&gt; withRetryAfter(ResponseEntity.BodyBuilder response, PdfJobs.Operation job, T body) {
+        if (!job.done()) {
+            long millis = (long) (job.metadata().pagesTotal() - job.metadata().pagesDone()) * msPerPage;
+            response.header(&quot;Retry-After&quot;, Long.toString(Math.max(1, (millis + 999) / 1000)));
+        }
+        return response.body(body);
+    }
+
+    /** 202 and where to look: the request thread is back in the pool in milliseconds, whatever the invoice&#x27;s size. */
+    @PostMapping(&quot;/invoices/{id}/pdf-jobs&quot;)
+    ResponseEntity&lt;PdfJobs.Operation&gt; start(@PathVariable @Pattern(regexp = &quot;INV-\\d{4}-\\d{4}&quot;) String id) {
+        Invoices.Invoice invoice = invoices.find(id).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such invoice.&quot;));
+        PdfJobs.Submitted submitted = jobs.submit(invoice);
+        URI location = URI.create(&quot;/&quot; + submitted.operation().name());
+        return withRetryAfter(submitted.existing()
+                ? ResponseEntity.ok().location(location)   // already queued or running: the same job
+                : ResponseEntity.accepted().location(location), submitted.operation(), submitted.operation());
+    }
+
+    @GetMapping(&quot;/pdf-jobs/{jobId}&quot;)
+    ResponseEntity&lt;PdfJobs.Operation&gt; get(@PathVariable UUID jobId) {
+        PdfJobs.Operation job = job(jobId);
+        return withRetryAfter(ResponseEntity.ok(), job, job);
+    }
+
+    /** Challenge 2: AIP-151&#x27;s custom method. 200 with the operation; 409 if it is already done. */
+    @org.springframework.web.bind.annotation.PostMapping(&quot;/pdf-jobs/{jobId}:cancel&quot;)
+    PdfJobs.Operation cancel(@PathVariable UUID jobId) {
+        try {
+            return jobs.cancel(jobId).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such job.&quot;));
+        } catch (IllegalStateException done) {
+            throw problem(HttpStatus.CONFLICT, done.getMessage());
+        }
+    }
+
+    private PdfJobs.Operation job(UUID jobId) {
+        return jobs.find(jobId).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such job.&quot;));
+    }
+
+    @GetMapping(&quot;/pdf-jobs/{jobId}/pdf&quot;)
+    ResponseEntity&lt;byte[]&gt; pdf(@PathVariable UUID jobId) {
+        PdfJobs.Operation job = job(jobId);
+        byte[] pdf = jobs.pdf(jobId).orElseThrow(() -&gt; problem(HttpStatus.CONFLICT,
+                job.done() ? &quot;This job failed: there is no PDF.&quot; : &quot;Not ready yet: the job is &quot; + job.metadata().state() + &quot;.&quot;));
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF)
+                .header(&quot;Content-Disposition&quot;, ContentDisposition.attachment().filename(job.metadata().invoiceId() + &quot;.pdf&quot;).build().toString())
+                .body(pdf);
+    }
+
+    /** Both workers busy and the queue full: refuse now, with a hint, rather than queue work the user will give up on. */
+    @ExceptionHandler(TaskRejectedException.class)
+    ResponseEntity&lt;ProblemDetail&gt; busy() {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header(&quot;Retry-After&quot;, &quot;30&quot;)
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, &quot;Too many PDFs are being made right now. Try again in a little while.&quot;));
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Jobs that survive a restart</h2>
+<p>Billora runs four servers and deploys twice a day. A job started on server 2 must be readable from server 3, and a render cut off by a deploy must not be lost. Design it: a jobs table, a queue (a table with SKIP LOCKED, or a broker), PDFs in object storage with a time-limited link, and what happens to a render that was half done when its server stopped.</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: Boot's default pool, and an @Async void method that throws.</li>
+<li>Define a named, bounded executor, and a renderer bean that returns a future.</li>
+<li>Wrap the work in an operation resource: register, follow, finish.</li>
+<li>Map a refused job to <code>503</code>, and test it all with Awaitility.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>A bounded executor, 202 and an operation</td><td>Clients poll; jobs need a home.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Make the PDF inside the request</td><td>A request thread per render; time limits on the way.</td><td><span class="pill bad">The problem</span></td></tr><tr><td>@Async on Boot's default pool, void</td><td>Unbounded queue; errors only logged.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Virtual threads for renders</td><td>No thread shortage, but no limit either: CPU and memory become the limit.</td><td><span class="pill warn">Still needs a limit</span></td></tr><tr><td>A message queue and worker service</td><td>More parts; survives restarts and scales on its own.</td><td><span class="pill warn">At larger scale</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>No database: jobs are in memory, which loses them on restart and hides them from other servers (challenge 3).</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Sizing</dt><dd>Workers are limited by CPU and memory per render; the queue by how long a user will wait (20 jobs × 40 s / 2 workers ≈ 7 minutes here).</dd>
+<dt>Shutdown</dt><dd>The pool waits up to 60 s for running renders on shutdown; longer jobs need to be resumable (challenge 3).</dd>
+<dt>Clean-up</dt><dd>Finished jobs and their PDFs are never removed here. Expire them (an hour, a day) and say so in the API.</dd>
+<dt>Monitoring</dt><dd>Watch queue length, active workers, rejections and failures: <code>ThreadPoolTaskExecutor</code> exposes them, and Micrometer can publish them.</dd>
+<dt>Push instead of poll</dt><dd>Email or a webhook when done saves clients from polling; <code>Retry-After</code> (challenge 1) makes polling cheaper.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>How do you keep a slow task off the request thread?</summary><p>Run it on a separate, bounded executor; answer 202 with a status URL.</p></details><details class="qa"><summary>What is wrong with Spring Boot&#x27;s default @Async pool for this?</summary><p>Its queue has no limit: it accepts everything, runs out of memory or makes users wait for hours, and nobody is told &quot;busy&quot;.</p></details><details class="qa"><summary>What happens to an exception in an @Async void method?</summary><p>It goes to the AsyncUncaughtExceptionHandler, which logs it. The caller never knows. Return a CompletableFuture instead.</p></details><details class="qa"><summary>Why does @Async sometimes not work?</summary><p>It is applied by a proxy: calling the method from the same class bypasses it.</p></details><details class="qa"><summary>How do you test async code?</summary><p>Wait for the condition with Awaitility (poll until true, with a limit), never a fixed sleep.</p></details><details class="qa"><summary>What does a client get when the server is full?</summary><p>503 with Retry-After: an honest answer it can act on.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 8 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>Async</td><td>@Async with a named pool.</td><td>Bounded, rejection mapped to 503, failures recorded.</td></tr><tr><td>API</td><td>202 and a status URL.</td><td>An operation shape with progress, response or error.</td></tr><tr><td>Testing</td><td>Awaitility instead of sleep.</td><td>A test that proves the request returns before the work.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate tidies up: the custom executor goes ("Boot already has one"), <code>@Async</code> loses its name, and <code>whenComplete</code> becomes <code>thenAccept</code> ("we only need the PDF"). Read the three files and list every problem before opening the findings.</p>
+<p class="path">review/InvoicesApplication.java</p>
+<pre class="code"><code class="language-java">package com.billora.invoices;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableAsync;
+
+@SpringBootApplication
+@EnableAsync
+public class InvoicesApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(InvoicesApplication.class, args);
+    }
+
+    // Spring Boot already configures a task executor for @Async: no need for our own.
+}</code></pre>
+<p class="path">review/Renderer.java (only the annotation differs)</p>
+<pre class="code"><code class="language-java"> * Renders an invoice as a PDF on the pdf pool. A separate bean on purpose: @Async works through a proxy, so a call
+    @Async
+    CompletableFuture&lt;byte[]&gt; render(PdfJobs.Job job) {</code></pre>
+<p class="path">review/PdfJobs.java</p>
+<pre class="code"><code class="language-java">package com.billora.invoices;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.task.TaskRejectedException;
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Long-running work as an operation resource, in the shape of Google&#x27;s AIP-151 (an API design guideline, not a
+ * formal standard): a name, done, metadata while it runs, then a response or an error.
+ * shortcut: jobs and finished PDFs are kept in this server&#x27;s memory and never removed; store PDFs in object storage
+ * and the jobs in a database, and expire them, before running more than one server.
+ */
+@Service
+class PdfJobs {
+
+    enum State { QUEUED, RUNNING, SUCCEEDED, FAILED }
+
+    static final class Job {
+        private final UUID id = UUID.randomUUID();
+        private final Invoices.Invoice invoice;
+        private final Instant createdAt = Instant.now();
+        private final AtomicInteger pagesDone = new AtomicInteger();
+        private volatile State state = State.QUEUED;
+        private volatile byte[] pdf;
+        private volatile String error;
+
+        Job(Invoices.Invoice invoice) {
+            this.invoice = invoice;
+        }
+
+        Invoices.Invoice invoice() {
+            return invoice;
+        }
+
+        void started() {
+            state = State.RUNNING;
+        }
+
+        void pageDone() {
+            pagesDone.incrementAndGet();
+        }
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record Operation(String name, boolean done, Metadata metadata, Result response, Error error) {
+    }
+
+    record Metadata(String invoiceId, State state, int pagesDone, int pagesTotal, Instant createdAt) {
+    }
+
+    record Result(String pdfUrl, int pages, int bytes) {
+    }
+
+    record Error(String code, String message) {
+    }
+
+    record Submitted(Operation operation, boolean existing) {
+    }
+
+    private static final Logger log = LoggerFactory.getLogger(PdfJobs.class);
+    private final Map&lt;UUID, Job&gt; jobs = new ConcurrentHashMap&lt;&gt;();
+    private final Map&lt;String, Job&gt; activeByInvoice = new ConcurrentHashMap&lt;&gt;();
+    private final Renderer renderer;
+
+    PdfJobs(Renderer renderer) {
+        this.renderer = renderer;
+    }
+
+    /**
+     * Queues a render and returns at once. The same invoice while its job is queued or running gets that job back.
+     * Throws TaskRejectedException when the pool and its queue are full.
+     */
+    Submitted submit(Invoices.Invoice invoice) {
+        Job fresh = new Job(invoice);
+        Job active = activeByInvoice.putIfAbsent(invoice.id(), fresh);
+        if (active != null) {
+            return new Submitted(view(active), true);
+        }
+        try {
+            renderer.render(fresh).thenAccept(pdf -&gt; finish(fresh, pdf, null));   // simpler: we only need the PDF
+        } catch (TaskRejectedException full) {
+            activeByInvoice.remove(invoice.id(), fresh);
+            throw full;
+        }
+        jobs.put(fresh.id, fresh);
+        return new Submitted(view(fresh), false);
+    }
+
+    private void finish(Job job, byte[] pdf, Throwable failure) {
+        if (failure != null) {
+            // The future&#x27;s stages wrap what the render threw: report the render&#x27;s own message.
+            Throwable cause = failure instanceof CompletionException &amp;&amp; failure.getCause() != null ? failure.getCause() : failure;
+            log.warn(&quot;PDF job {} for {} failed&quot;, job.id, job.invoice.id(), cause);   // logged and kept on the job
+            job.error = cause.getMessage();
+            job.state = State.FAILED;
+        } else {
+            job.pdf = pdf;
+            job.state = State.SUCCEEDED;
+        }
+        activeByInvoice.remove(job.invoice.id(), job);
+    }
+
+    Optional&lt;Operation&gt; find(UUID id) {
+        return Optional.ofNullable(jobs.get(id)).map(PdfJobs::view);
+    }
+
+    /** The PDF of a finished job; empty if there is no such job or it has not succeeded. */
+    Optional&lt;byte[]&gt; pdf(UUID id) {
+        return Optional.ofNullable(jobs.get(id)).map(j -&gt; j.pdf);
+    }
+
+    private static Operation view(Job j) {
+        State state = j.state;
+        Metadata metadata = new Metadata(j.invoice.id(), state, j.pagesDone.get(), j.invoice.pages(), j.createdAt);
+        return switch (state) {
+            case SUCCEEDED -&gt; new Operation(name(j), true, metadata, new Result(&quot;/pdf-jobs/&quot; + j.id + &quot;/pdf&quot;, j.invoice.pages(), j.pdf.length), null);
+            case FAILED -&gt; new Operation(name(j), true, metadata, null, new Error(&quot;RENDER_FAILED&quot;, j.error));
+            default -&gt; new Operation(name(j), false, metadata, null, null);
+        };
+    }
+
+    private static String name(Job j) {
+        return &quot;pdf-jobs/&quot; + j.id;
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>Boot's default executor queues without limit</summary><p>"Spring Boot already configures a task executor": 8 threads and a queue of <code>Integer.MAX_VALUE</code>. At month end every job is accepted, the queue grows in memory, and users wait for hours with no "busy". <code>@Async</code> without a name also shares that pool with every other async task in the app.</p><p class="evidence"><b>Test evidence:</b> <code>whenBothWorkersAndTheQueueAreFullANewJobIs503</code> fails: the 6th job is accepted.</p></details><details class="finding"><summary><span class="sev">2</span>thenAccept only runs on success</summary><p>"Simpler: we only need the PDF": when the render throws, <code>thenAccept</code> is skipped, the failure goes nowhere, and the job says RUNNING for ever. The trap's swallowed error, moved one line.</p><p class="evidence"><b>Test evidence:</b> <code>aFailedRenderIsAFailedJobWithItsReason</code> and <code>theOldWaySwallowsTheErrorAndTheApiReportsIt</code> fail: the job never finishes.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the flawed files copied over the real ones, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>PdfJobContractTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill ok">3 / 3</span></td></tr><tr><td><code>AsyncTrapTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">1 / 2</span></td></tr><tr><td><code>FailureAndBackpressureTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill bad">1 / 3</span></td></tr></tbody></table></div>
+<p class="note">On a quiet day with good invoices, the flawed version works and the PDFs arrive. It fails on the days that matter: month end, and the invoice with a broken logo.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
