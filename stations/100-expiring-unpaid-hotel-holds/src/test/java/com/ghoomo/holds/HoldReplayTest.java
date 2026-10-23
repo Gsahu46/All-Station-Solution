@@ -17,9 +17,11 @@ class HoldReplayTest extends ApiTest {
 
     @Test
     void theSameRequestTwiceIsOneHold() throws Exception {
-        hold("retry-me-0001", 1, "2026-12-27", "asha@example.com").andExpect(status().isCreated()).andExpect(jsonPath("$.id").value(1));
-        hold("retry-me-0001", 1, "2026-12-27", "ASHA@example.com ").andExpect(status().isOk()).andExpect(jsonPath("$.id").value(1));
-        assertThat(held(1, "2026-12-27")).isEqualTo(1);
+        // The one suite: the retry must find the guest's own hold, not "sold out".
+        hold("retry-me-0001", 2, "2026-12-27", "asha@example.com").andExpect(status().isCreated()).andExpect(jsonPath("$.id").value(1));
+        // The retry: the same request (e-mails are compared lower-cased, with Locale.ROOT).
+        hold("retry-me-0001", 2, "2026-12-27", "ASHA@Example.com").andExpect(status().isOk()).andExpect(jsonPath("$.id").value(1));
+        assertThat(held(2, "2026-12-27")).isEqualTo(1);
         hold("retry-me-0001", 1, "2026-12-28", "asha@example.com").andExpect(status().isUnprocessableContent());   // the same key for another night
         assertThat(held(1, "2026-12-28")).isZero();
     }

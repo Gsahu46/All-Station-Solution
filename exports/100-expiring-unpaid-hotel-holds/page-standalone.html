@@ -1,0 +1,2108 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 100 · Expiring unpaid hotel holds</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 100</span>
+    <h1>Expiring unpaid hotel holds</h1>
+    <p class="scenario">Unpaid holds block rooms for days; the cleanup job runs twice when there are two servers.</p>
+    <p class="sim"><b>Simulation</b><span>The hotel, its rooms and the guests are demo data. No payment happens: a hold only reserves a room in the database for 15 minutes.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Travel</li>
+      <li><b>Types</b>Database · Concurrency · Idempotency</li>
+      <li><b>Reviewer view</b>Yes</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>055 Checkout as one transaction</p>
+      <p><span class="eyebrow">Builds toward</span><br>128 Delayed jobs for scheduled reminders · 196 Nightly merchant settlement</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · @Scheduled (fixed delay) · idempotent batch UPDATE ... RETURNING · FOR UPDATE SKIP LOCKED · Idempotency-Key · JdbcClient · PostgreSQL 17 · Testcontainers · Awaitility</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Rooms that never come back</strong><p>On Ghoomo, a guest holds a room while paying. Many never pay. With no clean-up, their holds blocked rooms for days during the Christmas rush.</p></li><li><strong>Two servers, one job</strong><p>A clean-up job fixed that, until a second server was added. Both ran the job at the same moment, both found the same expired hold, and both gave its room back: the hotel thought it had a free room it did not have, and sold it twice.</p></li><li><strong>The fix</strong><p>The job runs on every server, but expiring a hold and giving its room back happen in one statement that only touches holds still held. Whoever runs it, however often, each room comes back once.</p></li></ol>
+<p class="lesson">A scheduled job will run on every server. Write it so running it twice at once is harmless.</p>
+
+<h2>What are we building?</h2>
+<p>Room holds that last 15 minutes, a clean-up job that frees the rooms of unpaid ones, and a hold request that is safe to retry.</p>
+
+<h2>An everyday analogy</h2>
+<p>Two watchmen do the same round. If each one hands back the keys of every room past its time, a room's key is handed back twice and the counter thinks two rooms are free. If the rule is "take the key off the hook only if it is still on the hook", the second watchman finds nothing to do.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Hold</strong>: take a room if one is free, in one statement, and record the hold for 15 minutes.</li>
+<li><strong>Retry</strong>: the same Idempotency-Key and request return the same hold, not a second room.</li>
+<li><strong>Expire</strong>: every 30 s, each server marks holds that are due and still held as expired, and gets back which rooms they had.</li>
+<li><strong>Give back</strong>: only those rooms, in the same transaction.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: why not just make sure the job runs on one server only?</summary><p>That helps (and saves work), but it is a promise kept by another system: a lock that expires, a leader that changes. If the job is also harmless when it runs twice, a broken promise costs some wasted work instead of an overbooked hotel. Challenge 3 adds the lock on top.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No payments.</strong> Challenge 1 adds a confirmation; nothing is charged.</li>
+<li><strong>One night per hold</strong>, one room type per request (demo rules).</li>
+<li><strong>No sign-in.</strong> Holds show no guest details.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Hold</strong></td><td>A room kept for one guest for a short time while they pay.</td><td>A shop keeping a dress aside for 15 minutes.</td><td><code>holds</code></td></tr><tr><td><strong>Scheduled job</strong></td><td>Code the app runs by itself on a timetable.</td><td>A watchman's round every half hour.</td><td><code>@Scheduled</code></td></tr><tr><td><strong>Fixed delay</strong></td><td>The next run starts a set time after the last one ended.</td><td>"Thirty seconds after you finish, go again".</td><td>30 s</td></tr><tr><td><strong>Cron</strong></td><td>Runs at set clock times.</td><td>"At :00 and :30 of every hour".</td><td>not used</td></tr><tr><td><strong>Idempotent</strong></td><td>Doing it twice has the same effect as doing it once.</td><td>Pressing a lift button twice.</td><td><code>WHERE status = 'HELD'</code></td></tr><tr><td><strong>Idempotency-Key</strong></td><td>A key the client sends so a retried request is recognised.</td><td>A token number at the counter.</td><td><code>Idempotency-Key</code> header</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Ghoomo</strong> (a fictional hotel booking site): unpaid holds block rooms for days; the cleanup job runs twice when there are two servers.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo hotel: 5 deluxe rooms (type 1) and 1 suite (type 2) for each night from 24 to 31 December 2026. Demo rules: a hold lasts 15 minutes; the job checks every 30 s.</p>
+<ol class="gwt">
+<li><b>Given</b> a free room, <b>then</b> <code>201</code> with the hold and when it expires; none free <code>409</code>.</li>
+<li><b>Given</b> the same <code>Idempotency-Key</code> and request again, <b>then</b> <code>200</code> with the same hold, even if that took the last room; another request with that key <code>422</code>.</li>
+<li><b>Given</b> 15 minutes without payment, <b>then</b> the job marks the hold <code>EXPIRED</code> and the room is free again.</li>
+<li><b>Given</b> the job running on several servers at once, <b>then</b> each expired hold gives its room back once.</li>
+<li><b>Given</b> twenty guests at once for five rooms, <b>then</b> exactly five holds.</li>
+<li><b>Given</b> no key, a bad date or e-mail, <b>then</b> <code>400</code>; an unknown night or hold <code>404</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>Never more rooms held than there are, in the database too.</li>
+<li>A hold and its room are taken, and given back, in one transaction.</li>
+<li>The job is safe to run on every server at the same moment.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Schedule a job and choose fixed delay or cron.</li>
+<li>Write an idempotent batch update with <code>UPDATE ... RETURNING</code> and <code>SKIP LOCKED</code>.</li>
+<li>Take a limited resource with one conditional <code>UPDATE</code>.</li>
+<li>Make a create request safe to retry with an Idempotency-Key.</li>
+<li>Prove all of it with parallel tests and a clock you move.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/holds</code> with <code>Idempotency-Key</code></td><td>Hold a room for one night: <code>{roomTypeId, date, guestEmail}</code>.</td></tr><tr><td><code>GET</code></td><td><code>/holds/{id}</code></td><td>A hold and its status: <code>HELD</code> or <code>EXPIRED</code>.</td></tr></tbody></table></div>
+<p class="muted">The Idempotency-Key header is the one described in <i>The Idempotency-Key HTTP Header Field</i>, an Internet-Draft of the IETF httpapi working group: a draft, not a standard.</p>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">201</span></td><td>Hold created</td></tr><tr><td><span class="pill ok">200</span></td><td>The same key and request again: the same hold; a read</td></tr><tr><td><span class="pill warn">400</span></td><td>No or a malformed key; a bad date, e-mail or room type</td></tr><tr><td><span class="pill warn">404</span></td><td>No such room night, or hold</td></tr><tr><td><span class="pill warn">409</span></td><td>No room of that type is free that night</td></tr><tr><td><span class="pill warn">422</span></td><td>The key was used for a different hold</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 23 Oct 2026, in this order. To skip 15 minutes of waiting, <code>docs/capture.sh</code> moves hold 1's times back 20 minutes in the database; the real job, every 30 s, does the rest. <code>Date</code>, connection and standard security headers are left out.</p>
+<section class="example"><h3>Case 1: Asha holds the suite for New Year's Eve</h3><p><b>Why:</b> <code>201</code>, held for 15 minutes.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /holds HTTP/1.1
+Content-Type: application/json
+Idempotency-Key: asha-nye-0001
+
+{
+  &quot;roomTypeId&quot;: 2,
+  &quot;date&quot;: &quot;2026-12-31&quot;,
+  &quot;guestEmail&quot;: &quot;asha@example.com&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /holds/1
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 1,
+  &quot;roomTypeId&quot;: 2,
+  &quot;date&quot;: &quot;2026-12-31&quot;,
+  &quot;status&quot;: &quot;HELD&quot;,
+  &quot;expiresAt&quot;: &quot;2026-10-23T20:25:19.977883Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: her app retries</h3><p><b>Why:</b> <code>200</code>, the same hold: although the only suite is taken, it is hers.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /holds HTTP/1.1
+Content-Type: application/json
+Idempotency-Key: asha-nye-0001
+
+{
+  &quot;roomTypeId&quot;: 2,
+  &quot;date&quot;: &quot;2026-12-31&quot;,
+  &quot;guestEmail&quot;: &quot;asha@example.com&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 1,
+  &quot;roomTypeId&quot;: 2,
+  &quot;date&quot;: &quot;2026-12-31&quot;,
+  &quot;status&quot;: &quot;HELD&quot;,
+  &quot;expiresAt&quot;: &quot;2026-10-23T20:25:19.977883Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: the same key, another night</h3><p><b>Why:</b> <code>422</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /holds HTTP/1.1
+Content-Type: application/json
+Idempotency-Key: asha-nye-0001
+
+{
+  &quot;roomTypeId&quot;: 2,
+  &quot;date&quot;: &quot;2026-12-30&quot;,
+  &quot;guestEmail&quot;: &quot;asha@example.com&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;This Idempotency-Key was already used for a different hold.&quot;,
+  &quot;instance&quot;: &quot;/holds&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Unprocessable Content&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: Ravi wants the suite too</h3><p><b>Why:</b> <code>409</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /holds HTTP/1.1
+Content-Type: application/json
+Idempotency-Key: ravi-nye-0001
+
+{
+  &quot;roomTypeId&quot;: 2,
+  &quot;date&quot;: &quot;2026-12-31&quot;,
+  &quot;guestEmail&quot;: &quot;ravi@example.com&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 409 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No room of this type is free that night.&quot;,
+  &quot;instance&quot;: &quot;/holds&quot;,
+  &quot;status&quot;: 409,
+  &quot;title&quot;: &quot;Conflict&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: no Idempotency-Key</h3><p><b>Why:</b> <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /holds HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;roomTypeId&quot;: 2,
+  &quot;date&quot;: &quot;2026-12-31&quot;,
+  &quot;guestEmail&quot;: &quot;asha@example.com&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Required header &#x27;Idempotency-Key&#x27; is not present.&quot;,
+  &quot;instance&quot;: &quot;/holds&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: a night the hotel does not sell</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /holds HTTP/1.1
+Content-Type: application/json
+Idempotency-Key: asha-jan-0001
+
+{
+  &quot;roomTypeId&quot;: 2,
+  &quot;date&quot;: &quot;2027-01-15&quot;,
+  &quot;guestEmail&quot;: &quot;asha@example.com&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No such room type or night.&quot;,
+  &quot;instance&quot;: &quot;/holds&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Not Found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: Asha has not paid yet</h3><p><b>Why:</b> still <code>HELD</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /holds/1 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 101
+
+{
+  &quot;id&quot;: 1,
+  &quot;roomTypeId&quot;: 2,
+  &quot;date&quot;: &quot;2026-12-31&quot;,
+  &quot;status&quot;: &quot;HELD&quot;,
+  &quot;expiresAt&quot;: &quot;2026-10-23T20:25:19.977883Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 8: after its time, the job expired it</h3><p><b>Why:</b> <code>EXPIRED</code>, by the scheduled job, not by a request.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /holds/1 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 104
+
+{
+  &quot;id&quot;: 1,
+  &quot;roomTypeId&quot;: 2,
+  &quot;date&quot;: &quot;2026-12-31&quot;,
+  &quot;status&quot;: &quot;EXPIRED&quot;,
+  &quot;expiresAt&quot;: &quot;2026-10-23T20:05:19.977883Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 9: Ravi tries again</h3><p><b>Why:</b> <code>201</code>: the suite is free again.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /holds HTTP/1.1
+Content-Type: application/json
+Idempotency-Key: ravi-nye-0001
+
+{
+  &quot;roomTypeId&quot;: 2,
+  &quot;date&quot;: &quot;2026-12-31&quot;,
+  &quot;guestEmail&quot;: &quot;ravi@example.com&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /holds/2
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 2,
+  &quot;roomTypeId&quot;: 2,
+  &quot;date&quot;: &quot;2026-12-31&quot;,
+  &quot;status&quot;: &quot;HELD&quot;,
+  &quot;expiresAt&quot;: &quot;2026-10-23T20:25:50.064931Z&quot;
+}</code></pre></div></div></section>
+<h2>The database afterwards</h2>
+<pre class="code"><code class="language-text"> id | room_type_id | stay_date  | status  | expired 
+----+--------------+------------+---------+---------
+  1 |            2 | 2026-12-31 | EXPIRED | t
+  2 |            2 | 2026-12-31 | HELD    | f
+(2 rows)
+
+ room_type_id | stay_date  | total | held 
+--------------+------------+-------+------
+            1 | 2026-12-31 |     5 |    0
+            2 | 2026-12-31 |     1 |    1
+(2 rows)</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>The old job on two servers</td><td>One hold, two rooms back; six guests in five rooms</td><td><code>theOldJobOnTwoServersGivesOneRoomBackTwiceAndTheHotelIsOverbooked</code></td></tr><tr><td>The API's job on two servers</td><td>One room back; the sixth guest <code>409</code></td><td><code>theApiJobOnTwoServersGivesItBackOnce</code></td></tr><tr><td>A hold, then 15 minutes</td><td><code>201</code>, <code>409</code> for the next guest, then expired and free</td><td><code>aHoldTakesARoomForFifteenMinutesThenExpires</code></td></tr><tr><td>One second before its time</td><td>Not expired</td><td><code>aHoldBeforeItsTimeIsNotExpired</code></td></tr><tr><td>No key, bad key, date, e-mail, room type; unknown night or hold</td><td><code>400</code>; <code>404</code>; nothing taken</td><td><code>badRequestsAre400AndUnknownThings404</code></td></tr><tr><td>Twenty guests at once, five rooms</td><td>Exactly five</td><td><code>twentyGuestsAtOnceForFiveRoomsGetExactlyFive</code></td></tr><tr><td>Four job runs at once</td><td>Each room back once; then nothing to do</td><td><code>fourExpiryRunsAtOnceGiveEachRoomBackOnce</code></td></tr><tr><td>The same request twice, on the last room; the key for another night</td><td>One hold; <code>422</code></td><td><code>theSameRequestTwiceIsOneHold</code></td></tr><tr><td>Ten copies at the same moment</td><td>One hold, the same id for all</td><td><code>tenCopiesAtTheSameMomentAreOneHold</code></td></tr><tr><td>Rules written by plain SQL</td><td>Refused by named constraints</td><td><code>roomAndHoldRulesHoldWithoutJava</code></td></tr><tr><td>A hold that cannot be recorded</td><td>Its room is given back too</td><td><code>aHoldThatCannotBeRecordedGivesItsRoomBack</code></td></tr><tr><td>An expiry that cannot give the room back</td><td>Nothing expired; the next run does both</td><td><code>anExpiryThatCannotGiveTheRoomBackExpiresNothing</code></td></tr><tr><td>The real schedule and clock</td><td>Expired without anyone asking</td><td><code>anUnpaidHoldExpiresOnItsOwn</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">A @Scheduled job that runs on every server at once.</p>
+<ul>
+<li><strong>The old job.</strong> It reads the expired holds, then for each one gives a room back and marks the hold. On two servers that both read before either writes (the test lines them up with a barrier), one expired hold gives back two rooms: the count says 3 held while 4 are. Two walk-ins are accepted: six guests holding five rooms.</li>
+<li><strong>The API's job.</strong> The same two runs: one of them expires the hold and gets its room back from <code>RETURNING</code>; the other finds nothing still held. One room back, and the second walk-in is <code>409</code>.</li>
+</ul>
+<p>While building, each part was undone once: no free-room condition turned 3 tests red; no transaction around a hold 2; no transaction around expiry 1 (only after a test made giving the room back fail); no replay check before taking a room 1; e-mails not lower-cased 1; no request check on a reused key 1; no room given back 3; no fallback when two copies race 1. The job's two guards, <code>SKIP LOCKED</code> and <code>AND status = 'HELD'</code>, were each enough alone in the tests; without both, 2 tests turned red. Both stay: one so servers do not wait for each other, the other so correctness does not depend on the lock.</p>
+</div>
+<pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.time.Duration;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executors;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Christmas Eve, five deluxe rooms, all held; one hold is unpaid and expires. Two servers run the clean-up at the
+ * same moment. Written first.
+ */
+class DoubleExpiryTrapTest extends ApiTest {
+
+    @Autowired
+    PlatformTransactionManager transactions;
+
+    void fiveHoldsOneOfThemDue() throws Exception {
+        hold(&quot;unpaid-0001&quot;, 1, &quot;2026-12-24&quot;, &quot;late@example.com&quot;).andExpect(status().isCreated());
+        CLOCK.advance(Duration.ofMinutes(10));
+        for (int i = 2; i &lt;= 5; i++) {
+            hold(&quot;paying-000&quot; + i, 1, &quot;2026-12-24&quot;, &quot;guest&quot; + i + &quot;@example.com&quot;).andExpect(status().isCreated());
+        }
+        CLOCK.advance(Duration.ofMinutes(6));   // the first is 16 minutes old: due; the others 6
+        assertThat(held(1, &quot;2026-12-24&quot;)).isEqualTo(5);
+    }
+
+    /** The old job: read what is due, then give each room back and mark the hold, whatever happened in between. */
+    void oldJob(CyclicBarrier bothHaveRead) {
+        record Due(long id, long roomTypeId, LocalDate stayDate) {
+        }
+        new TransactionTemplate(transactions).executeWithoutResult(tx -&gt; {
+            List&lt;Due&gt; due = jdbc.sql(&quot;SELECT id, room_type_id, stay_date FROM holds WHERE status = &#x27;HELD&#x27; AND expires_at &lt;= ?&quot;)
+                    .param(java.time.OffsetDateTime.ofInstant(CLOCK.instant(), java.time.ZoneOffset.UTC)).query(Due.class).list();
+            try {
+                bothHaveRead.await();   // two servers, the same schedule: both read before either writes
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+            for (Due d : due) {
+                jdbc.sql(&quot;UPDATE room_nights SET held = held - 1 WHERE room_type_id = ? AND stay_date = ?&quot;).params(d.roomTypeId(), d.stayDate()).update();
+                jdbc.sql(&quot;UPDATE holds SET status = &#x27;EXPIRED&#x27;, expired_at = now() WHERE id = ?&quot;).param(d.id()).update();
+            }
+        });
+    }
+
+    @Test
+    void theOldJobOnTwoServersGivesOneRoomBackTwiceAndTheHotelIsOverbooked() throws Exception {
+        fiveHoldsOneOfThemDue();
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        try (var servers = Executors.newVirtualThreadPerTaskExecutor()) {
+            servers.submit(() -&gt; oldJob(barrier));
+            servers.submit(() -&gt; oldJob(barrier));
+        }
+        assertThat(held(1, &quot;2026-12-24&quot;)).isEqualTo(3);   // one hold expired, two rooms given back
+        hold(&quot;walk-in-0001&quot;, 1, &quot;2026-12-24&quot;, &quot;a@example.com&quot;).andExpect(status().isCreated());
+        hold(&quot;walk-in-0002&quot;, 1, &quot;2026-12-24&quot;, &quot;b@example.com&quot;).andExpect(status().isCreated());
+        assertThat(active(1, &quot;2026-12-24&quot;)).isEqualTo(6);   // six guests holding five rooms
+    }
+
+    @Test
+    void theApiJobOnTwoServersGivesItBackOnce() throws Exception {
+        fiveHoldsOneOfThemDue();
+        int[] expired = new int[2];
+        try (var servers = Executors.newVirtualThreadPerTaskExecutor()) {
+            servers.submit(() -&gt; expired[0] = holds.expireDue());
+            servers.submit(() -&gt; expired[1] = holds.expireDue());
+        }
+        assertThat(expired[0] + expired[1]).isEqualTo(1);
+        assertThat(held(1, &quot;2026-12-24&quot;)).isEqualTo(4);
+        hold(&quot;walk-in-0001&quot;, 1, &quot;2026-12-24&quot;, &quot;a@example.com&quot;).andExpect(status().isCreated());
+        hold(&quot;walk-in-0002&quot;, 1, &quot;2026-12-24&quot;, &quot;b@example.com&quot;).andExpect(status().isConflict());
+        assertThat(active(1, &quot;2026-12-24&quot;)).isEqualTo(5);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 13 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Start the app twice, on two ports, against the same database, and watch both run the job without giving a room back twice:</p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run -Dspring-boot.run.arguments=--server.port=8081
+curl -H &#x27;Content-Type: application/json&#x27; -H &#x27;Idempotency-Key: try-it-0001&#x27; -d &#x27;{&quot;roomTypeId&quot;:1,&quot;date&quot;:&quot;2026-12-24&quot;,&quot;guestEmail&quot;:&quot;you@example.com&quot;}&#x27; http://localhost:8080/holds</code></pre>
+<p>Wait 15 minutes (or set <code>ghoomo.holds.ttl=1m</code>), then read <code>room_nights</code>: the room is back once.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>Rooms free that are still held</td><td>Releases counted twice: the job read, then wrote.</td><td>Expire with a conditional UPDATE and give back what it returned.</td></tr><tr><td>The job never runs</td><td><code>@EnableScheduling</code> missing, or the property switched it off.</td><td>Check <code>ghoomo.holds.expiry.enabled</code>.</td></tr><tr><td><code>Could not find a valid Docker environment</code></td><td>Docker is not running.</td><td>Start Docker Desktop or the Docker service.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/100-expiring-unpaid-hotel-holds/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/ghoomo/holds/
+│   ├── HoldController.java   ├── Holds.java   ├── ExpirySchedule.java   └── HoldsApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__room_nights_and_holds.sql, V2__demo_rooms.sql
+├── src/test/java/com/ghoomo/holds/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the job and the database.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">HoldController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">Holds.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">ExpirySchedule.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">V1__room_nights_and_holds.sql</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">V2__demo_rooms.sql</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">HoldsApplication.java</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">compose.yaml</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/ghoomo/holds/HoldController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The two endpoints.</dd><dt>Why</dt><dd>Validates the key and body; <code>201</code> or <code>200</code> for a replay; when two copies race, answers with the one that won.</dd><dt>Without it</dt><dd>A retried request taking a second room.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.time.LocalDate;
+
+@RestController
+class HoldController {
+
+    record HoldRequest(@Positive long roomTypeId, @NotNull LocalDate date, @NotBlank @Email @Size(max = 200) String guestEmail) {
+    }
+
+    private final Holds holds;
+
+    HoldController(Holds holds) {
+        this.holds = holds;
+    }
+
+    /** 201 for a new hold; 200 with the same hold when the same request is sent again with the same key. */
+    @PostMapping(&quot;/holds&quot;)
+    ResponseEntity&lt;Holds.Hold&gt; create(@RequestHeader(&quot;Idempotency-Key&quot;) @Pattern(regexp = &quot;[A-Za-z0-9-]{8,64}&quot;) String key,
+                                      @Valid @RequestBody HoldRequest body) {
+        Holds.Created created;
+        try {
+            created = holds.create(key, body.roomTypeId(), body.date(), body.guestEmail());
+        } catch (DuplicateKeyException sameKeyAtTheSameMoment) {
+            // Another request with this key committed first; ours was rolled back, room included. Answer with theirs.
+            created = holds.replay(key, Holds.sha256(body.roomTypeId() + &quot;|&quot; + body.date() + &quot;|&quot; + body.guestEmail().strip().toLowerCase(java.util.Locale.ROOT)))
+                    .orElseThrow(() -&gt; sameKeyAtTheSameMoment);
+        }
+        Holds.Hold hold = created.hold();
+        return created.replay() ? ResponseEntity.ok(hold) : ResponseEntity.created(URI.create(&quot;/holds/&quot; + hold.id())).body(hold);
+    }
+
+    /** No guest details in the answer: hold ids are short numbers (demo), and anyone can try one. */
+    @GetMapping(&quot;/holds/{id}&quot;)
+    Holds.Hold hold(@PathVariable long id) {
+        return holds.find(id).orElseThrow(() -&gt; Holds.problem(HttpStatus.NOT_FOUND, &quot;No such hold.&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/ghoomo/holds/Holds.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Taking rooms and expiring holds.</dd><dt>Why</dt><dd>One conditional UPDATE takes a room; the hold is recorded in the same transaction; the expiry is one UPDATE ... RETURNING over holds still held.</dd><dt>Without it</dt><dd>Overbooking from two guests at once, a retry, or two servers running the job.</dd></dl><ul><li>The replay check comes before taking a room: on a full night, a retry must find the guest's own hold, not "sold out". Found by a test on the one suite.</li><li>The expiry and the rooms it gives back are one transaction: a hold expired without its room back would lose that room for good.</li><li>At most 500 holds per run; the rest wait for the next run.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.ErrorResponseException;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+
+@Service
+class Holds {
+
+    record Hold(long id, long roomTypeId, LocalDate date, String status, OffsetDateTime expiresAt) {
+    }
+
+    record Created(Hold hold, boolean replay) {
+    }
+
+    private final JdbcClient jdbc;
+    private final Clock clock;
+    private final Duration ttl;
+
+    Holds(JdbcClient jdbc, Clock clock, @Value(&quot;${ghoomo.holds.ttl}&quot;) Duration ttl) {
+        this.jdbc = jdbc;
+        this.clock = clock;
+        this.ttl = ttl;
+    }
+
+    private static final String HOLD = &quot;SELECT id, room_type_id, stay_date AS date, status, expires_at FROM holds&quot;;
+
+    /**
+     * Takes a room and records the hold, in one transaction. The same Idempotency-Key with the same request returns
+     * the first hold; with another request it is a 422.
+     */
+    @Transactional
+    Created create(String key, long roomTypeId, LocalDate date, String guestEmail) {
+        String email = guestEmail.strip().toLowerCase(Locale.ROOT);
+        String hash = sha256(roomTypeId + &quot;|&quot; + date + &quot;|&quot; + email);
+        Optional&lt;Created&gt; replay = replay(key, hash);
+        if (replay.isPresent()) {
+            return replay.get();
+        }
+        // One statement takes a room only if one is free: two guests cannot both take the last one.
+        int taken = jdbc.sql(&quot;UPDATE room_nights SET held = held + 1 WHERE room_type_id = ? AND stay_date = ? AND held &lt; total&quot;)
+                .params(roomTypeId, date).update();
+        if (taken == 0) {
+            boolean exists = jdbc.sql(&quot;SELECT count(*) FROM room_nights WHERE room_type_id = ? AND stay_date = ?&quot;).params(roomTypeId, date).query(Long.class).single() &gt; 0;
+            throw exists ? problem(HttpStatus.CONFLICT, &quot;No room of this type is free that night.&quot;) : problem(HttpStatus.NOT_FOUND, &quot;No such room type or night.&quot;);
+        }
+        OffsetDateTime now = now();
+        long id = jdbc.sql(&quot;&quot;&quot;
+                        INSERT INTO holds (idempotency_key, request_hash, room_type_id, stay_date, guest_email, created_at, expires_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id&quot;&quot;&quot;)
+                .params(key, hash, roomTypeId, date, email, now, now.plus(ttl)).query(Long.class).single();
+        return new Created(find(id).orElseThrow(), false);
+    }
+
+    /** The first hold made with this key, if any. */
+    Optional&lt;Created&gt; replay(String key, String hash) {
+        record Stored(long id, String requestHash) {
+        }
+        return jdbc.sql(&quot;SELECT id, request_hash FROM holds WHERE idempotency_key = ?&quot;).param(key).query(Stored.class).optional().map(s -&gt; {
+            if (!s.requestHash().equals(hash)) {
+                throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;This Idempotency-Key was already used for a different hold.&quot;);
+            }
+            return new Created(find(s.id()).orElseThrow(), true);
+        });
+    }
+
+    Optional&lt;Hold&gt; find(long id) {
+        return jdbc.sql(HOLD + &quot; WHERE id = ?&quot;).param(id).query(Hold.class).optional();
+    }
+
+    /**
+     * Expires every hold that is due and gives its room back, in one transaction. Safe to run on every server at the
+     * same moment: a hold is expired only while it is still HELD, locked rows are skipped, so each room is given
+     * back once. Returns how many holds this run expired.
+     */
+    @Transactional
+    int expireDue() {
+        record Released(long roomTypeId, LocalDate stayDate) {
+        }
+        List&lt;Released&gt; released = jdbc.sql(&quot;&quot;&quot;
+                        UPDATE holds SET status = &#x27;EXPIRED&#x27;, expired_at = :now
+                        WHERE id IN (SELECT id FROM holds WHERE status = &#x27;HELD&#x27; AND expires_at &lt;= :now
+                                     ORDER BY expires_at LIMIT 500 FOR UPDATE SKIP LOCKED)
+                          AND status = &#x27;HELD&#x27;
+                        RETURNING room_type_id, stay_date&quot;&quot;&quot;)
+                .param(&quot;now&quot;, now()).query(Released.class).list();
+        for (Released r : released) {
+            jdbc.sql(&quot;UPDATE room_nights SET held = held - 1 WHERE room_type_id = ? AND stay_date = ?&quot;).params(r.roomTypeId(), r.stayDate()).update();
+        }
+        return released.size();
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+
+    static String sha256(String text) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance(&quot;SHA-256&quot;).digest(text.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private OffsetDateTime now() {
+        return OffsetDateTime.now(clock).withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/ghoomo/holds/ExpirySchedule.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The timetable.</dd><dt>Why</dt><dd>A fixed delay of 30 s: runs on one server never overlap.</dd><dt>Without it</dt><dd>A slow run and the next one stepping on each other.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
+
+/**
+ * Every 30 s after the last run ended (fixed delay: runs on one server never overlap). It runs on every server;
+ * Holds.expireDue makes that safe. Tests switch it off and run it themselves.
+ */
+@Configuration
+@EnableScheduling
+@ConditionalOnProperty(name = &quot;ghoomo.holds.expiry.enabled&quot;, havingValue = &quot;true&quot;, matchIfMissing = true)
+class ExpirySchedule {
+
+    private final Holds holds;
+
+    ExpirySchedule(Holds holds) {
+        this.holds = holds;
+    }
+
+    @Scheduled(fixedDelayString = &quot;${ghoomo.holds.expiry.every}&quot;)
+    void run() {
+        holds.expireDue();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/resources/db/migration/V1__room_nights_and_holds.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Rooms per night and holds.</dd><dt>Why</dt><dd><code>held BETWEEN 0 AND total</code>, one hold per key, states and times that agree.</dd><dt>Without it</dt><dd>Overbooking by any writer.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">-- Rooms of one type on one night: how many there are, how many are held. The rule &quot;never more held than there are&quot;
+-- is here, for every writer, not only in Java.
+CREATE TABLE room_nights (
+    room_type_id bigint NOT NULL,
+    stay_date    date   NOT NULL,
+    total        int    NOT NULL,
+    held         int    NOT NULL DEFAULT 0,
+    CONSTRAINT room_nights_pk PRIMARY KEY (room_type_id, stay_date),
+    CONSTRAINT room_nights_held_range CHECK (held BETWEEN 0 AND total)
+);
+
+-- One hold: one room for one night, while the guest pays (demo rule: one night per hold).
+CREATE TABLE holds (
+    id              bigserial   PRIMARY KEY,
+    idempotency_key text        NOT NULL,
+    request_hash    text        NOT NULL,
+    room_type_id    bigint      NOT NULL,
+    stay_date       date        NOT NULL,
+    guest_email     text        NOT NULL,
+    status          text        NOT NULL DEFAULT &#x27;HELD&#x27;,
+    created_at      timestamptz NOT NULL,
+    expires_at      timestamptz NOT NULL,
+    expired_at      timestamptz,
+    CONSTRAINT holds_key_once UNIQUE (idempotency_key),
+    CONSTRAINT holds_status CHECK (status IN (&#x27;HELD&#x27;, &#x27;EXPIRED&#x27;)),
+    CONSTRAINT holds_expires_after_creation CHECK (expires_at &gt; created_at),
+    CONSTRAINT holds_expired_has_time CHECK ((status = &#x27;EXPIRED&#x27;) = (expired_at IS NOT NULL)),
+    CONSTRAINT holds_room_night FOREIGN KEY (room_type_id, stay_date) REFERENCES room_nights
+);
+CREATE INDEX holds_due ON holds (expires_at) WHERE status = &#x27;HELD&#x27;;</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_rooms.sql</p><div class="notes"><p>The demo hotel's rooms.</p></div><div class="src"><pre class="code"><code class="language-sql">-- Demo hotel, Ghoomo Goa: 5 deluxe rooms (type 1) and 1 suite (type 2) for each night from 24 to 31 December 2026.
+INSERT INTO room_nights (room_type_id, stay_date, total)
+SELECT t.id, d::date, t.total
+FROM (VALUES (1, 5), (2, 1)) AS t (id, total), generate_series(DATE &#x27;2026-12-24&#x27;, DATE &#x27;2026-12-31&#x27;, INTERVAL &#x27;1 day&#x27;) AS d;</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Hold time and the job's interval.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: ghoomo-holds
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ghoomo
+    username: ghoomo
+    password: ghoomo
+
+ghoomo:
+  holds:
+    # Demo rules: a room is held for 15 minutes while the guest pays; the job looks for expired holds every 30 s.
+    ttl: 15m
+    expiry:
+      enabled: true
+      every: 30s</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/ghoomo/holds/HoldsApplication.java</p><div class="notes"><p>Entry point, and the <code>Clock</code>.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+import java.time.Clock;
+
+@SpringBootApplication
+public class HoldsApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(HoldsApplication.class, args);
+    }
+
+    /** Every &quot;now&quot; comes from here, so tests can make holds expire without waiting 15 minutes. */
+    @Bean
+    Clock clock() {
+        return Clock.systemUTC();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ghoomo
+      POSTGRES_USER: ghoomo
+      POSTGRES_PASSWORD: ghoomo
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U ghoomo -d ghoomo&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>HoldContractTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>DoubleExpiryTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>HoldDatabaseTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Concurrency</td><td>A real concurrency test that proves the invariant holds</td><td><code>HoldConcurrencyTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Idempotency</td><td>Replay: the same request twice gives one effect</td><td><code>HoldReplayTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">The job is switched off in the tests, which run it themselves at the moment they choose, on a clock they move: 15 minutes pass in an instant. <code>ScheduledExpiryTest</code> keeps the real schedule (every 200 ms, holds of 1 s) and waits with Awaitility.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.ghoomo.holds.HoldConcurrencyTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.ghoomo.holds.HoldDatabaseTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.ghoomo.holds.HoldReplayTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.ghoomo.holds.DoubleExpiryTrapTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0 -- in com.ghoomo.holds.ScheduledExpiryTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.ghoomo.holds.HoldContractTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">DoubleExpiryTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">HoldContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">HoldConcurrencyTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">HoldReplayTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">HoldDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">ScheduledExpiryTest.java</button><button class="file-btn" role="tab" id="tests-6-b" aria-controls="tests-6" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-7-b" aria-controls="tests-7" aria-selected="false" data-group="tests">TestClock.java</button><button class="file-btn" role="tab" id="tests-8-b" aria-controls="tests-8" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/ghoomo/holds/DoubleExpiryTrapTest.java</p><div class="notes"><p>Written first: the old job and the API's, on two servers at once.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.time.Duration;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executors;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Christmas Eve, five deluxe rooms, all held; one hold is unpaid and expires. Two servers run the clean-up at the
+ * same moment. Written first.
+ */
+class DoubleExpiryTrapTest extends ApiTest {
+
+    @Autowired
+    PlatformTransactionManager transactions;
+
+    void fiveHoldsOneOfThemDue() throws Exception {
+        hold(&quot;unpaid-0001&quot;, 1, &quot;2026-12-24&quot;, &quot;late@example.com&quot;).andExpect(status().isCreated());
+        CLOCK.advance(Duration.ofMinutes(10));
+        for (int i = 2; i &lt;= 5; i++) {
+            hold(&quot;paying-000&quot; + i, 1, &quot;2026-12-24&quot;, &quot;guest&quot; + i + &quot;@example.com&quot;).andExpect(status().isCreated());
+        }
+        CLOCK.advance(Duration.ofMinutes(6));   // the first is 16 minutes old: due; the others 6
+        assertThat(held(1, &quot;2026-12-24&quot;)).isEqualTo(5);
+    }
+
+    /** The old job: read what is due, then give each room back and mark the hold, whatever happened in between. */
+    void oldJob(CyclicBarrier bothHaveRead) {
+        record Due(long id, long roomTypeId, LocalDate stayDate) {
+        }
+        new TransactionTemplate(transactions).executeWithoutResult(tx -&gt; {
+            List&lt;Due&gt; due = jdbc.sql(&quot;SELECT id, room_type_id, stay_date FROM holds WHERE status = &#x27;HELD&#x27; AND expires_at &lt;= ?&quot;)
+                    .param(java.time.OffsetDateTime.ofInstant(CLOCK.instant(), java.time.ZoneOffset.UTC)).query(Due.class).list();
+            try {
+                bothHaveRead.await();   // two servers, the same schedule: both read before either writes
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+            for (Due d : due) {
+                jdbc.sql(&quot;UPDATE room_nights SET held = held - 1 WHERE room_type_id = ? AND stay_date = ?&quot;).params(d.roomTypeId(), d.stayDate()).update();
+                jdbc.sql(&quot;UPDATE holds SET status = &#x27;EXPIRED&#x27;, expired_at = now() WHERE id = ?&quot;).param(d.id()).update();
+            }
+        });
+    }
+
+    @Test
+    void theOldJobOnTwoServersGivesOneRoomBackTwiceAndTheHotelIsOverbooked() throws Exception {
+        fiveHoldsOneOfThemDue();
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        try (var servers = Executors.newVirtualThreadPerTaskExecutor()) {
+            servers.submit(() -&gt; oldJob(barrier));
+            servers.submit(() -&gt; oldJob(barrier));
+        }
+        assertThat(held(1, &quot;2026-12-24&quot;)).isEqualTo(3);   // one hold expired, two rooms given back
+        hold(&quot;walk-in-0001&quot;, 1, &quot;2026-12-24&quot;, &quot;a@example.com&quot;).andExpect(status().isCreated());
+        hold(&quot;walk-in-0002&quot;, 1, &quot;2026-12-24&quot;, &quot;b@example.com&quot;).andExpect(status().isCreated());
+        assertThat(active(1, &quot;2026-12-24&quot;)).isEqualTo(6);   // six guests holding five rooms
+    }
+
+    @Test
+    void theApiJobOnTwoServersGivesItBackOnce() throws Exception {
+        fiveHoldsOneOfThemDue();
+        int[] expired = new int[2];
+        try (var servers = Executors.newVirtualThreadPerTaskExecutor()) {
+            servers.submit(() -&gt; expired[0] = holds.expireDue());
+            servers.submit(() -&gt; expired[1] = holds.expireDue());
+        }
+        assertThat(expired[0] + expired[1]).isEqualTo(1);
+        assertThat(held(1, &quot;2026-12-24&quot;)).isEqualTo(4);
+        hold(&quot;walk-in-0001&quot;, 1, &quot;2026-12-24&quot;, &quot;a@example.com&quot;).andExpect(status().isCreated());
+        hold(&quot;walk-in-0002&quot;, 1, &quot;2026-12-24&quot;, &quot;b@example.com&quot;).andExpect(status().isConflict());
+        assertThat(active(1, &quot;2026-12-24&quot;)).isEqualTo(5);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/ghoomo/holds/HoldContractTest.java</p><div class="notes"><p>A hold's life; its time to the second; bad and unknown requests.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class HoldContractTest extends ApiTest {
+
+    @Test
+    void aHoldTakesARoomForFifteenMinutesThenExpires() throws Exception {
+        hold(&quot;first-hold-01&quot;, 2, &quot;2026-12-31&quot;, &quot;Asha@Example.com&quot;).andExpect(status().isCreated())
+                .andExpect(header().string(&quot;Location&quot;, &quot;/holds/1&quot;))
+                .andExpect(jsonPath(&quot;$.id&quot;).value(1)).andExpect(jsonPath(&quot;$.roomTypeId&quot;).value(2))
+                .andExpect(jsonPath(&quot;$.date&quot;).value(&quot;2026-12-31&quot;)).andExpect(jsonPath(&quot;$.status&quot;).value(&quot;HELD&quot;))
+                .andExpect(jsonPath(&quot;$.expiresAt&quot;).value(&quot;2026-12-20T10:15:00Z&quot;))
+                .andExpect(jsonPath(&quot;$.guestEmail&quot;).doesNotExist());
+        hold(&quot;second-hold-1&quot;, 2, &quot;2026-12-31&quot;, &quot;ravi@example.com&quot;).andExpect(status().isConflict());   // the one suite is taken
+
+        CLOCK.advance(Duration.ofMinutes(15));
+        org.assertj.core.api.Assertions.assertThat(holds.expireDue()).isEqualTo(1);
+        mvc.perform(get(&quot;/holds/1&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.status&quot;).value(&quot;EXPIRED&quot;));
+        hold(&quot;second-hold-1&quot;, 2, &quot;2026-12-31&quot;, &quot;ravi@example.com&quot;).andExpect(status().isCreated());   // free again
+    }
+
+    @Test
+    void aHoldBeforeItsTimeIsNotExpired() throws Exception {
+        hold(&quot;first-hold-01&quot;, 1, &quot;2026-12-25&quot;, &quot;asha@example.com&quot;).andExpect(status().isCreated());
+        CLOCK.advance(Duration.ofMinutes(14).plusSeconds(59));
+        org.assertj.core.api.Assertions.assertThat(holds.expireDue()).isZero();
+        mvc.perform(get(&quot;/holds/1&quot;)).andExpect(jsonPath(&quot;$.status&quot;).value(&quot;HELD&quot;));
+    }
+
+    @Test
+    void badRequestsAre400AndUnknownThings404() throws Exception {
+        hold(null, 1, &quot;2026-12-25&quot;, &quot;asha@example.com&quot;).andExpect(status().isBadRequest());   // no Idempotency-Key
+        hold(&quot;short&quot;, 1, &quot;2026-12-25&quot;, &quot;asha@example.com&quot;).andExpect(status().isBadRequest());
+        hold(&quot;good-key-0001&quot;, 1, &quot;25-12-2026&quot;, &quot;asha@example.com&quot;).andExpect(status().isBadRequest());
+        hold(&quot;good-key-0001&quot;, 1, &quot;2026-12-25&quot;, &quot;not-an-email&quot;).andExpect(status().isBadRequest());
+        hold(&quot;good-key-0001&quot;, 0, &quot;2026-12-25&quot;, &quot;asha@example.com&quot;).andExpect(status().isBadRequest());
+        hold(&quot;good-key-0001&quot;, 1, &quot;2027-01-15&quot;, &quot;asha@example.com&quot;).andExpect(status().isNotFound());   // no such night
+        hold(&quot;good-key-0001&quot;, 9, &quot;2026-12-25&quot;, &quot;asha@example.com&quot;).andExpect(status().isNotFound());
+        mvc.perform(get(&quot;/holds/999&quot;)).andExpect(status().isNotFound());
+        mvc.perform(get(&quot;/holds/abc&quot;)).andExpect(status().isBadRequest());
+        org.assertj.core.api.Assertions.assertThat(held(1, &quot;2026-12-25&quot;)).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/ghoomo/holds/HoldConcurrencyTest.java</p><div class="notes"><p>Twenty guests for five rooms; four job runs at once.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class HoldConcurrencyTest extends ApiTest {
+
+    @Test
+    void twentyGuestsAtOnceForFiveRoomsGetExactlyFive() throws Exception {
+        CountDownLatch start = new CountDownLatch(1);
+        List&lt;Future&lt;Integer&gt;&gt; answers = new ArrayList&lt;&gt;();
+        try (var guests = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; 20; i++) {
+                int n = i;
+                answers.add(guests.submit(() -&gt; {
+                    start.await();
+                    return hold(&quot;guest-key-&quot; + (100 + n), 1, &quot;2026-12-30&quot;, &quot;g&quot; + n + &quot;@example.com&quot;).andReturn().getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+        }
+        assertThat(answers).extracting(Future::resultNow).filteredOn(s -&gt; s == 201).hasSize(5);
+        assertThat(answers).extracting(Future::resultNow).filteredOn(s -&gt; s == 409).hasSize(15);
+        assertThat(held(1, &quot;2026-12-30&quot;)).isEqualTo(5);
+        assertThat(active(1, &quot;2026-12-30&quot;)).isEqualTo(5);
+    }
+
+    @Test
+    void fourExpiryRunsAtOnceGiveEachRoomBackOnce() throws Exception {
+        for (int i = 0; i &lt; 5; i++) {
+            hold(&quot;guest-key-&quot; + (200 + i), 1, &quot;2026-12-29&quot;, &quot;g&quot; + i + &quot;@example.com&quot;).andExpect(status().isCreated());
+        }
+        CLOCK.advance(Duration.ofMinutes(20));
+        CountDownLatch start = new CountDownLatch(1);
+        List&lt;Future&lt;Integer&gt;&gt; runs = new ArrayList&lt;&gt;();
+        try (var servers = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int s = 0; s &lt; 4; s++) {
+                runs.add(servers.submit(() -&gt; {
+                    start.await();
+                    return holds.expireDue();
+                }));
+            }
+            start.countDown();
+        }
+        assertThat(runs.stream().mapToInt(Future::resultNow).sum()).isEqualTo(5);
+        assertThat(held(1, &quot;2026-12-29&quot;)).isZero();
+        assertThat(holds.expireDue()).isZero();   // and again later: nothing left to do
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/ghoomo/holds/HoldReplayTest.java</p><div class="notes"><p>A retry on the last room; a reused key; ten copies at once.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The guest&#x27;s app retries &quot;Hold this room&quot; after a timeout: one hold, one room. */
+class HoldReplayTest extends ApiTest {
+
+    @Test
+    void theSameRequestTwiceIsOneHold() throws Exception {
+        // The one suite: the retry must find the guest&#x27;s own hold, not &quot;sold out&quot;.
+        hold(&quot;retry-me-0001&quot;, 2, &quot;2026-12-27&quot;, &quot;asha@example.com&quot;).andExpect(status().isCreated()).andExpect(jsonPath(&quot;$.id&quot;).value(1));
+        // The retry: the same request (e-mails are compared lower-cased, with Locale.ROOT).
+        hold(&quot;retry-me-0001&quot;, 2, &quot;2026-12-27&quot;, &quot;ASHA@Example.com&quot;).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.id&quot;).value(1));
+        assertThat(held(2, &quot;2026-12-27&quot;)).isEqualTo(1);
+        hold(&quot;retry-me-0001&quot;, 1, &quot;2026-12-28&quot;, &quot;asha@example.com&quot;).andExpect(status().isUnprocessableContent());   // the same key for another night
+        assertThat(held(1, &quot;2026-12-28&quot;)).isZero();
+    }
+
+    @Test
+    void tenCopiesAtTheSameMomentAreOneHold() throws Exception {
+        CountDownLatch start = new CountDownLatch(1);
+        List&lt;Future&lt;String&gt;&gt; answers = new ArrayList&lt;&gt;();
+        try (var copies = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; 10; i++) {
+                answers.add(copies.submit(() -&gt; {
+                    start.await();
+                    var r = hold(&quot;same-moment-01&quot;, 1, &quot;2026-12-26&quot;, &quot;asha@example.com&quot;).andReturn().getResponse();
+                    return r.getStatus() + &quot; &quot; + JSON.readTree(r.getContentAsString()).get(&quot;id&quot;).asLong();
+                }));
+            }
+            start.countDown();
+        }
+        assertThat(answers).extracting(Future::resultNow).filteredOn(a -&gt; a.startsWith(&quot;201&quot;)).hasSize(1);
+        assertThat(answers).extracting(Future::resultNow).extracting(a -&gt; a.split(&quot; &quot;)[1]).containsOnly(&quot;1&quot;);
+        assertThat(held(1, &quot;2026-12-26&quot;)).isEqualTo(1);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/ghoomo/holds/HoldDatabaseTest.java</p><div class="notes"><p>Named constraints with plain SQL; two rollbacks.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The rules hold for any writer, not only this API: plain SQL, no Java in between. */
+class HoldDatabaseTest extends ApiTest {
+
+    void violates(String constraint, String sql) {
+        assertThatThrownBy(() -&gt; jdbc.sql(sql).update()).hasMessageContaining(constraint);
+    }
+
+    @Test
+    void roomAndHoldRulesHoldWithoutJava() throws Exception {
+        hold(&quot;first-hold-01&quot;, 2, &quot;2026-12-24&quot;, &quot;asha@example.com&quot;).andExpect(status().isCreated());
+        violates(&quot;room_nights_held_range&quot;, &quot;UPDATE room_nights SET held = held + 1 WHERE room_type_id = 2 AND stay_date = &#x27;2026-12-24&#x27;&quot;);   // a second guest in the one suite
+        violates(&quot;room_nights_held_range&quot;, &quot;UPDATE room_nights SET held = -1 WHERE room_type_id = 1 AND stay_date = &#x27;2026-12-24&#x27;&quot;);
+        violates(&quot;holds_key_once&quot;, &quot;INSERT INTO holds (idempotency_key, request_hash, room_type_id, stay_date, guest_email, created_at, expires_at) VALUES (&#x27;first-hold-01&#x27;, &#x27;x&#x27;, 1, &#x27;2026-12-24&#x27;, &#x27;b@example.com&#x27;, now(), now() + interval &#x27;15 minutes&#x27;)&quot;);
+        violates(&quot;holds_room_night&quot;, &quot;INSERT INTO holds (idempotency_key, request_hash, room_type_id, stay_date, guest_email, created_at, expires_at) VALUES (&#x27;other-key-01&#x27;, &#x27;x&#x27;, 1, &#x27;2027-06-01&#x27;, &#x27;b@example.com&#x27;, now(), now() + interval &#x27;15 minutes&#x27;)&quot;);
+        violates(&quot;holds_expires_after_creation&quot;, &quot;UPDATE holds SET expires_at = created_at&quot;);
+        violates(&quot;holds_status&quot;, &quot;UPDATE holds SET status = &#x27;LOST&#x27;&quot;);
+        violates(&quot;holds_expired_has_time&quot;, &quot;UPDATE holds SET status = &#x27;EXPIRED&#x27;&quot;);
+    }
+
+    @Test
+    void aHoldThatCannotBeRecordedGivesItsRoomBack() throws Exception {
+        jdbc.sql(&quot;&quot;&quot;
+                CREATE FUNCTION refuse_hold() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION &#x27;holds table read-only&#x27;; END $$ LANGUAGE plpgsql;
+                CREATE TRIGGER refuse_hold BEFORE INSERT ON holds FOR EACH ROW EXECUTE FUNCTION refuse_hold()&quot;&quot;&quot;).update();
+        try {
+            assertThatThrownBy(() -&gt; hold(&quot;first-hold-01&quot;, 1, &quot;2026-12-26&quot;, &quot;asha@example.com&quot;))
+                    .hasRootCauseMessage(&quot;ERROR: holds table read-only\n  Where: PL/pgSQL function refuse_hold() line 1 at RAISE&quot;);
+        } finally {
+            jdbc.sql(&quot;DROP TRIGGER refuse_hold ON holds; DROP FUNCTION refuse_hold()&quot;).update();
+        }
+        assertThat(held(1, &quot;2026-12-26&quot;)).isZero();   // the room taken before the insert was given back with the rollback
+    }
+
+    @Test
+    void anExpiryThatCannotGiveTheRoomBackExpiresNothing() throws Exception {
+        hold(&quot;first-hold-01&quot;, 1, &quot;2026-12-27&quot;, &quot;asha@example.com&quot;).andExpect(status().isCreated());
+        CLOCK.advance(java.time.Duration.ofMinutes(20));
+        jdbc.sql(&quot;&quot;&quot;
+                CREATE FUNCTION refuse_release() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION &#x27;inventory locked&#x27;; END $$ LANGUAGE plpgsql;
+                CREATE TRIGGER refuse_release BEFORE UPDATE ON room_nights FOR EACH ROW EXECUTE FUNCTION refuse_release()&quot;&quot;&quot;).update();
+        try {
+            assertThatThrownBy(() -&gt; holds.expireDue()).hasRootCauseMessage(&quot;ERROR: inventory locked\n  Where: PL/pgSQL function refuse_release() line 1 at RAISE&quot;);
+        } finally {
+            jdbc.sql(&quot;DROP TRIGGER refuse_release ON room_nights; DROP FUNCTION refuse_release()&quot;).update();
+        }
+        // Expired without its room back would lose the room for good; together, the next run does both.
+        assertThat(jdbc.sql(&quot;SELECT status FROM holds WHERE id = 1&quot;).query(String.class).single()).isEqualTo(&quot;HELD&quot;);
+        assertThat(holds.expireDue()).isEqualTo(1);
+        assertThat(held(1, &quot;2026-12-27&quot;)).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/ghoomo/holds/ScheduledExpiryTest.java</p><div class="notes"><p>The real schedule and clock.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+
+import java.time.Duration;
+import java.time.LocalDate;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+/** The real schedule and clock: a hold of 1 s, a check every 200 ms, and nobody calls the job. */
+@SpringBootTest(properties = {&quot;ghoomo.holds.ttl=1s&quot;, &quot;ghoomo.holds.expiry.every=200ms&quot;})
+@Import(PostgresTestConfig.class)
+class ScheduledExpiryTest {
+
+    @Autowired
+    Holds holds;
+
+    @Test
+    void anUnpaidHoldExpiresOnItsOwn() {
+        long id = holds.create(&quot;scheduled-0001&quot;, 1, LocalDate.parse(&quot;2026-12-31&quot;), &quot;asha@example.com&quot;).hold().id();
+        await().atMost(Duration.ofSeconds(5)).until(() -&gt; holds.find(id).orElseThrow().status().equals(&quot;EXPIRED&quot;));
+        assertThat(holds.find(id).orElseThrow().status()).isEqualTo(&quot;EXPIRED&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-6" aria-labelledby="tests-6-b" hidden><p class="path">src/test/java/com/ghoomo/holds/ApiTest.java</p><div class="notes"><p>Shared setup: no holds, the job off, the clock at 10:00 on 20 December.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.bean.override.convention.TestBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.time.Clock;
+import java.time.Instant;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/**
+ * Shared setup: the whole app on a real PostgreSQL, the demo rooms with nothing held, the expiry job switched off
+ * (tests run it themselves) and a clock the test moves.
+ */
+@SpringBootTest(properties = &quot;ghoomo.holds.expiry.enabled=false&quot;)
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    static final Instant T0 = Instant.parse(&quot;2026-12-20T10:00:00Z&quot;);
+    static final TestClock CLOCK = new TestClock(T0);
+    static final JsonMapper JSON = JsonMapper.builder().build();
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+    @Autowired
+    Holds holds;
+
+    @TestBean
+    Clock clock;
+
+    static Clock clock() {
+        return CLOCK;
+    }
+
+    @BeforeEach
+    void noHoldsAtT0() {
+        jdbc.sql(&quot;TRUNCATE holds RESTART IDENTITY&quot;).update();
+        jdbc.sql(&quot;UPDATE room_nights SET held = 0&quot;).update();
+        CLOCK.set(T0);
+    }
+
+    ResultActions hold(String key, long roomTypeId, String date, String email) throws Exception {
+        var request = post(&quot;/holds&quot;).contentType(MediaType.APPLICATION_JSON)
+                .content(&quot;{\&quot;roomTypeId\&quot;:&quot; + roomTypeId + &quot;,\&quot;date\&quot;:\&quot;&quot; + date + &quot;\&quot;,\&quot;guestEmail\&quot;:\&quot;&quot; + email + &quot;\&quot;}&quot;);
+        return mvc.perform(key == null ? request : request.header(&quot;Idempotency-Key&quot;, key));
+    }
+
+    int held(long roomTypeId, String date) {
+        return jdbc.sql(&quot;SELECT held FROM room_nights WHERE room_type_id = ? AND stay_date = CAST(? AS date)&quot;).params(roomTypeId, date).query(Integer.class).single();
+    }
+
+    long active(long roomTypeId, String date) {
+        return jdbc.sql(&quot;SELECT count(*) FROM holds WHERE status = &#x27;HELD&#x27; AND room_type_id = ? AND stay_date = CAST(? AS date)&quot;).params(roomTypeId, date).query(Long.class).single();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-7" aria-labelledby="tests-7-b" hidden><p class="path">src/test/java/com/ghoomo/holds/TestClock.java</p><div class="notes"><p>A clock moved by hand.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+
+/** A clock the test moves by hand: 15 minutes pass in an instant, with no sleeping. */
+final class TestClock extends Clock {
+
+    private volatile Instant now;
+
+    TestClock(Instant now) {
+        this.now = now;
+    }
+
+    void set(Instant instant) {
+        now = instant;
+    }
+
+    void advance(Duration duration) {
+        now = now.plus(duration);
+    }
+
+    @Override
+    public Instant instant() {
+        return now;
+    }
+
+    @Override
+    public ZoneId getZone() {
+        return ZoneOffset.UTC;
+    }
+
+    @Override
+    public Clock withZone(ZoneId zone) {
+        throw new UnsupportedOperationException();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-8" aria-labelledby="tests-8-b" hidden><p class="path">src/test/java/com/ghoomo/holds/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker: constraints and row locks behave exactly as in production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/ghoomo/holds/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=ConfirmChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 13 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 16 tests pass (13 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 25 minutes</p><h2>The guest paid</h2><p><code>POST /holds/{id}/confirmation</code>, called when payment succeeds (simulated). A hold still within its time becomes <code>CONFIRMED</code>, keeps its room and never expires; calling it again is fine. Past its time, swept or not: <code>409</code>.</p><p><b>Done when:</b> both tests in <code>ConfirmChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>A V3 migration widens the status CHECK.</li><li>One UPDATE with the conditions in its WHERE; 0 rows means 404 or 409: read the hold to tell which.</li><li>"Past its time" is <code>expires_at</code>, not the status: the job may not have run yet.</li></ul></details><p class="path">challenge/ConfirmChallengeTest.java</p><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: POST /holds/{id}/confirmation, called when the guest has paid (simulated: a status changes, no money
+ * moves). A confirmed hold keeps its room and never expires. Too late (expired, or past its time): 409.
+ */
+class ConfirmChallengeTest extends ApiTest {
+
+    @Test
+    void aPaidHoldKeepsItsRoom() throws Exception {
+        hold(&quot;pays-in-time1&quot;, 2, &quot;2026-12-25&quot;, &quot;asha@example.com&quot;).andExpect(status().isCreated());
+        CLOCK.advance(Duration.ofMinutes(10));
+        mvc.perform(post(&quot;/holds/1/confirmation&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.status&quot;).value(&quot;CONFIRMED&quot;));
+        mvc.perform(post(&quot;/holds/1/confirmation&quot;)).andExpect(status().isOk());   // a retry of the payment callback: no harm
+        CLOCK.advance(Duration.ofHours(1));
+        assertThat(holds.expireDue()).isZero();
+        assertThat(held(2, &quot;2026-12-25&quot;)).isEqualTo(1);
+    }
+
+    @Test
+    void tooLateIs409() throws Exception {
+        hold(&quot;pays-late-001&quot;, 1, &quot;2026-12-25&quot;, &quot;ravi@example.com&quot;).andExpect(status().isCreated());
+        CLOCK.advance(Duration.ofMinutes(16));   // past its time, not swept yet
+        mvc.perform(post(&quot;/holds/1/confirmation&quot;)).andExpect(status().isConflict());
+        holds.expireDue();
+        mvc.perform(post(&quot;/holds/1/confirmation&quot;)).andExpect(status().isConflict());
+        mvc.perform(post(&quot;/holds/99/confirmation&quot;)).andExpect(status().isNotFound());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/V3__confirmed_and_cancelled.sql</p><div class="src"><pre class="code"><code class="language-sql">-- Challenges 1 and 2: a paid hold is CONFIRMED, a hold the guest gave up is CANCELLED.
+ALTER TABLE holds DROP CONSTRAINT holds_status,
+    ADD CONSTRAINT holds_status CHECK (status IN (&#x27;HELD&#x27;, &#x27;EXPIRED&#x27;, &#x27;CONFIRMED&#x27;, &#x27;CANCELLED&#x27;));</code></pre></div><p class="path">challenge/solution/Holds.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.ErrorResponseException;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+
+@Service
+class Holds {
+
+    record Hold(long id, long roomTypeId, LocalDate date, String status, OffsetDateTime expiresAt) {
+    }
+
+    record Created(Hold hold, boolean replay) {
+    }
+
+    private final JdbcClient jdbc;
+    private final Clock clock;
+    private final Duration ttl;
+
+    Holds(JdbcClient jdbc, Clock clock, @Value(&quot;${ghoomo.holds.ttl}&quot;) Duration ttl) {
+        this.jdbc = jdbc;
+        this.clock = clock;
+        this.ttl = ttl;
+    }
+
+    private static final String HOLD = &quot;SELECT id, room_type_id, stay_date AS date, status, expires_at FROM holds&quot;;
+
+    /**
+     * Takes a room and records the hold, in one transaction. The same Idempotency-Key with the same request returns
+     * the first hold; with another request it is a 422.
+     */
+    @Transactional
+    Created create(String key, long roomTypeId, LocalDate date, String guestEmail) {
+        String email = guestEmail.strip().toLowerCase(Locale.ROOT);
+        String hash = sha256(roomTypeId + &quot;|&quot; + date + &quot;|&quot; + email);
+        Optional&lt;Created&gt; replay = replay(key, hash);
+        if (replay.isPresent()) {
+            return replay.get();
+        }
+        // One statement takes a room only if one is free: two guests cannot both take the last one.
+        int taken = jdbc.sql(&quot;UPDATE room_nights SET held = held + 1 WHERE room_type_id = ? AND stay_date = ? AND held &lt; total&quot;)
+                .params(roomTypeId, date).update();
+        if (taken == 0) {
+            boolean exists = jdbc.sql(&quot;SELECT count(*) FROM room_nights WHERE room_type_id = ? AND stay_date = ?&quot;).params(roomTypeId, date).query(Long.class).single() &gt; 0;
+            throw exists ? problem(HttpStatus.CONFLICT, &quot;No room of this type is free that night.&quot;) : problem(HttpStatus.NOT_FOUND, &quot;No such room type or night.&quot;);
+        }
+        OffsetDateTime now = now();
+        long id = jdbc.sql(&quot;&quot;&quot;
+                        INSERT INTO holds (idempotency_key, request_hash, room_type_id, stay_date, guest_email, created_at, expires_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id&quot;&quot;&quot;)
+                .params(key, hash, roomTypeId, date, email, now, now.plus(ttl)).query(Long.class).single();
+        return new Created(find(id).orElseThrow(), false);
+    }
+
+    /** The first hold made with this key, if any. */
+    Optional&lt;Created&gt; replay(String key, String hash) {
+        record Stored(long id, String requestHash) {
+        }
+        return jdbc.sql(&quot;SELECT id, request_hash FROM holds WHERE idempotency_key = ?&quot;).param(key).query(Stored.class).optional().map(s -&gt; {
+            if (!s.requestHash().equals(hash)) {
+                throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;This Idempotency-Key was already used for a different hold.&quot;);
+            }
+            return new Created(find(s.id()).orElseThrow(), true);
+        });
+    }
+
+    Optional&lt;Hold&gt; find(long id) {
+        return jdbc.sql(HOLD + &quot; WHERE id = ?&quot;).param(id).query(Hold.class).optional();
+    }
+
+    /**
+     * Expires every hold that is due and gives its room back, in one transaction. Safe to run on every server at the
+     * same moment: a hold is expired only while it is still HELD, locked rows are skipped, so each room is given
+     * back once. Returns how many holds this run expired.
+     */
+    @Transactional
+    int expireDue() {
+        record Released(long roomTypeId, LocalDate stayDate) {
+        }
+        List&lt;Released&gt; released = jdbc.sql(&quot;&quot;&quot;
+                        UPDATE holds SET status = &#x27;EXPIRED&#x27;, expired_at = :now
+                        WHERE id IN (SELECT id FROM holds WHERE status = &#x27;HELD&#x27; AND expires_at &lt;= :now
+                                     ORDER BY expires_at LIMIT 500 FOR UPDATE SKIP LOCKED)
+                          AND status = &#x27;HELD&#x27;
+                        RETURNING room_type_id, stay_date&quot;&quot;&quot;)
+                .param(&quot;now&quot;, now()).query(Released.class).list();
+        for (Released r : released) {
+            jdbc.sql(&quot;UPDATE room_nights SET held = held - 1 WHERE room_type_id = ? AND stay_date = ?&quot;).params(r.roomTypeId(), r.stayDate()).update();
+        }
+        return released.size();
+    }
+
+    /**
+     * Challenge 1: the guest paid (simulated). Only a hold that is still within its time; confirming twice is fine.
+     */
+    @Transactional
+    Hold confirm(long id) {
+        int confirmed = jdbc.sql(&quot;&quot;&quot;
+                        UPDATE holds SET status = &#x27;CONFIRMED&#x27;
+                        WHERE id = ? AND (status = &#x27;CONFIRMED&#x27; OR (status = &#x27;HELD&#x27; AND expires_at &gt; ?))&quot;&quot;&quot;)
+                .params(id, now()).update();
+        Hold hold = find(id).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such hold.&quot;));
+        if (confirmed == 0) {
+            throw problem(HttpStatus.CONFLICT, &quot;Too late: this hold has expired.&quot;);
+        }
+        return hold;
+    }
+
+    /** Challenge 2: the room goes back once, however many times this runs: only the run that cancels a HELD hold gives it back. */
+    @Transactional
+    void cancel(long id) {
+        record Released(long roomTypeId, LocalDate stayDate) {
+        }
+        Optional&lt;Released&gt; released = jdbc.sql(&quot;UPDATE holds SET status = &#x27;CANCELLED&#x27; WHERE id = ? AND status = &#x27;HELD&#x27; RETURNING room_type_id, stay_date&quot;)
+                .param(id).query(Released.class).optional();
+        if (released.isPresent()) {
+            jdbc.sql(&quot;UPDATE room_nights SET held = held - 1 WHERE room_type_id = ? AND stay_date = ?&quot;)
+                    .params(released.get().roomTypeId(), released.get().stayDate()).update();
+        } else if (find(id).isEmpty()) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;No such hold.&quot;);
+        }
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+
+    static String sha256(String text) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance(&quot;SHA-256&quot;).digest(text.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private OffsetDateTime now() {
+        return OffsetDateTime.now(clock).withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+    }
+}</code></pre></div><p class="path">challenge/solution/HoldController.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.time.LocalDate;
+
+@RestController
+class HoldController {
+
+    record HoldRequest(@Positive long roomTypeId, @NotNull LocalDate date, @NotBlank @Email @Size(max = 200) String guestEmail) {
+    }
+
+    private final Holds holds;
+
+    HoldController(Holds holds) {
+        this.holds = holds;
+    }
+
+    /** 201 for a new hold; 200 with the same hold when the same request is sent again with the same key. */
+    @PostMapping(&quot;/holds&quot;)
+    ResponseEntity&lt;Holds.Hold&gt; create(@RequestHeader(&quot;Idempotency-Key&quot;) @Pattern(regexp = &quot;[A-Za-z0-9-]{8,64}&quot;) String key,
+                                      @Valid @RequestBody HoldRequest body) {
+        Holds.Created created;
+        try {
+            created = holds.create(key, body.roomTypeId(), body.date(), body.guestEmail());
+        } catch (DuplicateKeyException sameKeyAtTheSameMoment) {
+            // Another request with this key committed first; ours was rolled back, room included. Answer with theirs.
+            created = holds.replay(key, Holds.sha256(body.roomTypeId() + &quot;|&quot; + body.date() + &quot;|&quot; + body.guestEmail().strip().toLowerCase(java.util.Locale.ROOT)))
+                    .orElseThrow(() -&gt; sameKeyAtTheSameMoment);
+        }
+        Holds.Hold hold = created.hold();
+        return created.replay() ? ResponseEntity.ok(hold) : ResponseEntity.created(URI.create(&quot;/holds/&quot; + hold.id())).body(hold);
+    }
+
+    /** Challenge 1. */
+    @PostMapping(&quot;/holds/{id}/confirmation&quot;)
+    Holds.Hold confirm(@PathVariable long id) {
+        return holds.confirm(id);
+    }
+
+    /** Challenge 2: 204 every time, the room given back once. */
+    @org.springframework.web.bind.annotation.DeleteMapping(&quot;/holds/{id}&quot;)
+    ResponseEntity&lt;Void&gt; cancel(@PathVariable long id) {
+        holds.cancel(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** No guest details in the answer: hold ids are short numbers (demo), and anyone can try one. */
+    @GetMapping(&quot;/holds/{id}&quot;)
+    Holds.Hold hold(@PathVariable long id) {
+        return holds.find(id).orElseThrow(() -&gt; Holds.problem(HttpStatus.NOT_FOUND, &quot;No such hold.&quot;));
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 30 minutes</p><h2>Cancel, once</h2><p><code>DELETE /holds/{id}</code>: the guest gives the room up at once. <code>204</code> every time, but the room comes back only once, even when the app sends five DELETEs at the same moment.</p><p><b>Done when:</b> the test in <code>CancelChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>The same shape as the job: <code>UPDATE ... WHERE status = 'HELD' RETURNING</code> the room, then give back only what came back.</li><li>Five at once: the row lock makes four of them find the hold already cancelled.</li></ul></details><p class="path">challenge/CancelChallengeTest.java</p><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: DELETE /holds/{id}: the guest changes their mind and the room is free at once. 204 every time, but
+ * the room is given back only once, even when the app sends the DELETE five times at the same moment.
+ */
+class CancelChallengeTest extends ApiTest {
+
+    @Test
+    void aCancelledHoldFreesItsRoomOnce() throws Exception {
+        hold(&quot;changes-mind1&quot;, 1, &quot;2026-12-28&quot;, &quot;asha@example.com&quot;).andExpect(status().isCreated());
+        hold(&quot;stays-booked1&quot;, 1, &quot;2026-12-28&quot;, &quot;ravi@example.com&quot;).andExpect(status().isCreated());
+        CountDownLatch start = new CountDownLatch(1);
+        List&lt;Future&lt;Integer&gt;&gt; answers = new ArrayList&lt;&gt;();
+        try (var taps = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; 5; i++) {
+                answers.add(taps.submit(() -&gt; {
+                    start.await();
+                    return mvc.perform(delete(&quot;/holds/1&quot;)).andReturn().getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+        }
+        assertThat(answers).extracting(Future::resultNow).containsOnly(204);
+        assertThat(held(1, &quot;2026-12-28&quot;)).isEqualTo(1);   // Ravi&#x27;s
+        mvc.perform(get(&quot;/holds/1&quot;)).andExpect(jsonPath(&quot;$.status&quot;).value(&quot;CANCELLED&quot;));
+        mvc.perform(delete(&quot;/holds/99&quot;)).andExpect(status().isNotFound());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/Holds.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.ErrorResponseException;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+
+@Service
+class Holds {
+
+    record Hold(long id, long roomTypeId, LocalDate date, String status, OffsetDateTime expiresAt) {
+    }
+
+    record Created(Hold hold, boolean replay) {
+    }
+
+    private final JdbcClient jdbc;
+    private final Clock clock;
+    private final Duration ttl;
+
+    Holds(JdbcClient jdbc, Clock clock, @Value(&quot;${ghoomo.holds.ttl}&quot;) Duration ttl) {
+        this.jdbc = jdbc;
+        this.clock = clock;
+        this.ttl = ttl;
+    }
+
+    private static final String HOLD = &quot;SELECT id, room_type_id, stay_date AS date, status, expires_at FROM holds&quot;;
+
+    /**
+     * Takes a room and records the hold, in one transaction. The same Idempotency-Key with the same request returns
+     * the first hold; with another request it is a 422.
+     */
+    @Transactional
+    Created create(String key, long roomTypeId, LocalDate date, String guestEmail) {
+        String email = guestEmail.strip().toLowerCase(Locale.ROOT);
+        String hash = sha256(roomTypeId + &quot;|&quot; + date + &quot;|&quot; + email);
+        Optional&lt;Created&gt; replay = replay(key, hash);
+        if (replay.isPresent()) {
+            return replay.get();
+        }
+        // One statement takes a room only if one is free: two guests cannot both take the last one.
+        int taken = jdbc.sql(&quot;UPDATE room_nights SET held = held + 1 WHERE room_type_id = ? AND stay_date = ? AND held &lt; total&quot;)
+                .params(roomTypeId, date).update();
+        if (taken == 0) {
+            boolean exists = jdbc.sql(&quot;SELECT count(*) FROM room_nights WHERE room_type_id = ? AND stay_date = ?&quot;).params(roomTypeId, date).query(Long.class).single() &gt; 0;
+            throw exists ? problem(HttpStatus.CONFLICT, &quot;No room of this type is free that night.&quot;) : problem(HttpStatus.NOT_FOUND, &quot;No such room type or night.&quot;);
+        }
+        OffsetDateTime now = now();
+        long id = jdbc.sql(&quot;&quot;&quot;
+                        INSERT INTO holds (idempotency_key, request_hash, room_type_id, stay_date, guest_email, created_at, expires_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id&quot;&quot;&quot;)
+                .params(key, hash, roomTypeId, date, email, now, now.plus(ttl)).query(Long.class).single();
+        return new Created(find(id).orElseThrow(), false);
+    }
+
+    /** The first hold made with this key, if any. */
+    Optional&lt;Created&gt; replay(String key, String hash) {
+        record Stored(long id, String requestHash) {
+        }
+        return jdbc.sql(&quot;SELECT id, request_hash FROM holds WHERE idempotency_key = ?&quot;).param(key).query(Stored.class).optional().map(s -&gt; {
+            if (!s.requestHash().equals(hash)) {
+                throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;This Idempotency-Key was already used for a different hold.&quot;);
+            }
+            return new Created(find(s.id()).orElseThrow(), true);
+        });
+    }
+
+    Optional&lt;Hold&gt; find(long id) {
+        return jdbc.sql(HOLD + &quot; WHERE id = ?&quot;).param(id).query(Hold.class).optional();
+    }
+
+    /**
+     * Expires every hold that is due and gives its room back, in one transaction. Safe to run on every server at the
+     * same moment: a hold is expired only while it is still HELD, locked rows are skipped, so each room is given
+     * back once. Returns how many holds this run expired.
+     */
+    @Transactional
+    int expireDue() {
+        record Released(long roomTypeId, LocalDate stayDate) {
+        }
+        List&lt;Released&gt; released = jdbc.sql(&quot;&quot;&quot;
+                        UPDATE holds SET status = &#x27;EXPIRED&#x27;, expired_at = :now
+                        WHERE id IN (SELECT id FROM holds WHERE status = &#x27;HELD&#x27; AND expires_at &lt;= :now
+                                     ORDER BY expires_at LIMIT 500 FOR UPDATE SKIP LOCKED)
+                          AND status = &#x27;HELD&#x27;
+                        RETURNING room_type_id, stay_date&quot;&quot;&quot;)
+                .param(&quot;now&quot;, now()).query(Released.class).list();
+        for (Released r : released) {
+            jdbc.sql(&quot;UPDATE room_nights SET held = held - 1 WHERE room_type_id = ? AND stay_date = ?&quot;).params(r.roomTypeId(), r.stayDate()).update();
+        }
+        return released.size();
+    }
+
+    /**
+     * Challenge 1: the guest paid (simulated). Only a hold that is still within its time; confirming twice is fine.
+     */
+    @Transactional
+    Hold confirm(long id) {
+        int confirmed = jdbc.sql(&quot;&quot;&quot;
+                        UPDATE holds SET status = &#x27;CONFIRMED&#x27;
+                        WHERE id = ? AND (status = &#x27;CONFIRMED&#x27; OR (status = &#x27;HELD&#x27; AND expires_at &gt; ?))&quot;&quot;&quot;)
+                .params(id, now()).update();
+        Hold hold = find(id).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such hold.&quot;));
+        if (confirmed == 0) {
+            throw problem(HttpStatus.CONFLICT, &quot;Too late: this hold has expired.&quot;);
+        }
+        return hold;
+    }
+
+    /** Challenge 2: the room goes back once, however many times this runs: only the run that cancels a HELD hold gives it back. */
+    @Transactional
+    void cancel(long id) {
+        record Released(long roomTypeId, LocalDate stayDate) {
+        }
+        Optional&lt;Released&gt; released = jdbc.sql(&quot;UPDATE holds SET status = &#x27;CANCELLED&#x27; WHERE id = ? AND status = &#x27;HELD&#x27; RETURNING room_type_id, stay_date&quot;)
+                .param(id).query(Released.class).optional();
+        if (released.isPresent()) {
+            jdbc.sql(&quot;UPDATE room_nights SET held = held - 1 WHERE room_type_id = ? AND stay_date = ?&quot;)
+                    .params(released.get().roomTypeId(), released.get().stayDate()).update();
+        } else if (find(id).isEmpty()) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;No such hold.&quot;);
+        }
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+
+    static String sha256(String text) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance(&quot;SHA-256&quot;).digest(text.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private OffsetDateTime now() {
+        return OffsetDateTime.now(clock).withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+    }
+}</code></pre></div><p class="path">challenge/solution/HoldController.java</p><div class="src"><pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.time.LocalDate;
+
+@RestController
+class HoldController {
+
+    record HoldRequest(@Positive long roomTypeId, @NotNull LocalDate date, @NotBlank @Email @Size(max = 200) String guestEmail) {
+    }
+
+    private final Holds holds;
+
+    HoldController(Holds holds) {
+        this.holds = holds;
+    }
+
+    /** 201 for a new hold; 200 with the same hold when the same request is sent again with the same key. */
+    @PostMapping(&quot;/holds&quot;)
+    ResponseEntity&lt;Holds.Hold&gt; create(@RequestHeader(&quot;Idempotency-Key&quot;) @Pattern(regexp = &quot;[A-Za-z0-9-]{8,64}&quot;) String key,
+                                      @Valid @RequestBody HoldRequest body) {
+        Holds.Created created;
+        try {
+            created = holds.create(key, body.roomTypeId(), body.date(), body.guestEmail());
+        } catch (DuplicateKeyException sameKeyAtTheSameMoment) {
+            // Another request with this key committed first; ours was rolled back, room included. Answer with theirs.
+            created = holds.replay(key, Holds.sha256(body.roomTypeId() + &quot;|&quot; + body.date() + &quot;|&quot; + body.guestEmail().strip().toLowerCase(java.util.Locale.ROOT)))
+                    .orElseThrow(() -&gt; sameKeyAtTheSameMoment);
+        }
+        Holds.Hold hold = created.hold();
+        return created.replay() ? ResponseEntity.ok(hold) : ResponseEntity.created(URI.create(&quot;/holds/&quot; + hold.id())).body(hold);
+    }
+
+    /** Challenge 1. */
+    @PostMapping(&quot;/holds/{id}/confirmation&quot;)
+    Holds.Hold confirm(@PathVariable long id) {
+        return holds.confirm(id);
+    }
+
+    /** Challenge 2: 204 every time, the room given back once. */
+    @org.springframework.web.bind.annotation.DeleteMapping(&quot;/holds/{id}&quot;)
+    ResponseEntity&lt;Void&gt; cancel(@PathVariable long id) {
+        holds.cancel(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** No guest details in the answer: hold ids are short numbers (demo), and anyone can try one. */
+    @GetMapping(&quot;/holds/{id}&quot;)
+    Holds.Hold hold(@PathVariable long id) {
+        return holds.find(id).orElseThrow(() -&gt; Holds.problem(HttpStatus.NOT_FOUND, &quot;No such hold.&quot;));
+    }
+}</code></pre></div><p class="path">challenge/solution/V3__confirmed_and_cancelled.sql</p><div class="src"><pre class="code"><code class="language-sql">-- Challenges 1 and 2: a paid hold is CONFIRMED, a hold the guest gave up is CANCELLED.
+ALTER TABLE holds DROP CONSTRAINT holds_status,
+    ADD CONSTRAINT holds_status CHECK (status IN (&#x27;HELD&#x27;, &#x27;EXPIRED&#x27;, &#x27;CONFIRMED&#x27;, &#x27;CANCELLED&#x27;));</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Exactly one server</h2>
+<p>Ghoomo grows to twelve servers. The job is safe on all of them, but twelve runs every 30 s are wasted work, and a nightly job that emails guests must really run once. Compare: a lock table with a lease (ShedLock), <code>pg_try_advisory_lock</code>, a leader chosen by the platform (a Kubernetes CronJob), and a queue of due work. What happens to each when the server holding the lock pauses for a minute? Which job still needs to be idempotent, and why all of them?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: the old job on two servers, lined up with a barrier.</li>
+<li>Write the tables: rooms per night with <code>held BETWEEN 0 AND total</code>, and holds.</li>
+<li>Take a room with one conditional UPDATE; add the Idempotency-Key replay.</li>
+<li>Expire with one UPDATE ... RETURNING; prove it with parallel runs and a rollback.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>An idempotent job on every server</td><td>Some repeated work, all harmless.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Read due holds, then release each</td><td>Two servers release twice: overbooking.</td><td><span class="pill bad">The trap</span></td></tr><tr><td><code>synchronized</code> on the job</td><td>Only within one server.</td><td><span class="pill bad">Review finding</span></td></tr><tr><td>A distributed lock (ShedLock)</td><td>Saves work; a lease can expire under a slow run, so still be idempotent.</td><td><span class="pill warn">On top, not instead</span></td></tr><tr><td>Expire on read ("held and not past its time")</td><td>No job needed for correctness, but the room count must be computed from holds.</td><td><span class="pill warn">A valid alternative</span></td></tr></tbody></table></div>
+<h2>Fixed delay or cron?</h2>
+<p>Fixed delay: the next run starts 30 s after the last one ended, so one server's runs never overlap and slow runs space themselves out. Cron (<code>0/30 * * * * *</code>): runs at fixed clock times, so every server starts at the same second, which is exactly when the trap bites. Cron fits jobs tied to the clock (a report at 06:00); fixed delay fits "keep things tidy" jobs like this one.</p>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Object</th><th>What</th><th>Why</th></tr></thead><tbody><tr><td><code>room_nights_held_range</code></td><td>CHECK held BETWEEN 0 AND total</td><td>No overbooking and no negative counts, for any writer.</td></tr><tr><td><code>holds_key_once</code></td><td>UNIQUE (idempotency_key)</td><td>A retried request cannot make a second hold.</td></tr><tr><td><code>holds_room_night</code></td><td>Foreign key to the room night</td><td>Only nights the hotel sells.</td></tr><tr><td><code>holds_status</code>, <code>holds_expired_has_time</code>, <code>holds_expires_after_creation</code></td><td>CHECKs</td><td>States and times that agree.</td></tr><tr><td><code>holds_due</code></td><td>Partial index on expires_at, held only</td><td>The job reads only what is waiting.</td></tr></tbody></table></div>
+<p><strong>Transaction boundaries:</strong> taking a room and recording the hold commit together; so do expiring holds and giving their rooms back.</p>
+<pre class="code"><code class="language-sql">-- Rooms of one type on one night: how many there are, how many are held. The rule &quot;never more held than there are&quot;
+-- is here, for every writer, not only in Java.
+CREATE TABLE room_nights (
+    room_type_id bigint NOT NULL,
+    stay_date    date   NOT NULL,
+    total        int    NOT NULL,
+    held         int    NOT NULL DEFAULT 0,
+    CONSTRAINT room_nights_pk PRIMARY KEY (room_type_id, stay_date),
+    CONSTRAINT room_nights_held_range CHECK (held BETWEEN 0 AND total)
+);
+
+-- One hold: one room for one night, while the guest pays (demo rule: one night per hold).
+CREATE TABLE holds (
+    id              bigserial   PRIMARY KEY,
+    idempotency_key text        NOT NULL,
+    request_hash    text        NOT NULL,
+    room_type_id    bigint      NOT NULL,
+    stay_date       date        NOT NULL,
+    guest_email     text        NOT NULL,
+    status          text        NOT NULL DEFAULT &#x27;HELD&#x27;,
+    created_at      timestamptz NOT NULL,
+    expires_at      timestamptz NOT NULL,
+    expired_at      timestamptz,
+    CONSTRAINT holds_key_once UNIQUE (idempotency_key),
+    CONSTRAINT holds_status CHECK (status IN (&#x27;HELD&#x27;, &#x27;EXPIRED&#x27;)),
+    CONSTRAINT holds_expires_after_creation CHECK (expires_at &gt; created_at),
+    CONSTRAINT holds_expired_has_time CHECK ((status = &#x27;EXPIRED&#x27;) = (expired_at IS NOT NULL)),
+    CONSTRAINT holds_room_night FOREIGN KEY (room_type_id, stay_date) REFERENCES room_nights
+);
+CREATE INDEX holds_due ON holds (expires_at) WHERE status = &#x27;HELD&#x27;;</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Backlog</dt><dd>500 holds a run, every 30 s, per server. After an outage the backlog clears over a few runs; watch the age of the oldest due hold.</dd>
+<dt>Clocks</dt><dd>"Now" comes from the app server; servers' clocks drift. Using the database's clock (<code>now()</code>) in both the hold and the job removes that, at the cost of testability with a moved clock.</dd>
+<dt>Keys</dt><dd>Idempotency keys are kept for ever here. Expire old ones (a day) and scope them per client.</dd>
+<dt>Guests</dt><dd>Tell the guest when the hold ends, and email them when it does: an expired hold is a lost booking.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>What happens to a @Scheduled job when you run two instances?</summary><p>It runs on both, at about the same time. Unless the job is idempotent, its effect happens twice.</p></details><details class="qa"><summary>How do you make a batch job safe to run twice at once?</summary><p>Change only rows still in the old state, in one statement, and act on what it returned: UPDATE ... WHERE status = &#x27;HELD&#x27; RETURNING. SKIP LOCKED lets runs split the work without waiting.</p></details><details class="qa"><summary>Fixed delay, fixed rate or cron?</summary><p>Fixed delay for clean-up (no overlap, self-spacing); fixed rate for steady sampling; cron for clock times.</p></details><details class="qa"><summary>How do you stop two guests taking the last room?</summary><p>One conditional UPDATE: held = held + 1 WHERE held &lt; total. Check the row count. Back it with a CHECK.</p></details><details class="qa"><summary>Is a distributed lock enough?</summary><p>It saves work, but leases expire under pauses; keep the job idempotent anyway.</p></details><details class="qa"><summary>How do you test it?</summary><p>Run the job from several threads at once on a real database, with a clock you move.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 13 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>The job</td><td>Expires due holds.</td><td>Idempotent across servers, one transaction with the release, bounded batches.</td></tr><tr><td>Inventory</td><td>Sold-out is a 409.</td><td>One conditional UPDATE and a CHECK; a retry on the last room still finds its hold.</td></tr><tr><td>Testing</td><td>A test that runs the job.</td><td>Parallel runs, a barrier for the trap, a moved clock, and one real schedule.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate makes <code>Holds</code> "easier to read": taking a room becomes a check and an update, and the job reads due holds and releases each one, made "safe" with <code>synchronized</code>. Read the file and list every problem before opening the findings.</p>
+<p class="path">review/Holds.java</p>
+<pre class="code"><code class="language-java">package com.ghoomo.holds;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.ErrorResponseException;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+
+@Service
+class Holds {
+
+    record Hold(long id, long roomTypeId, LocalDate date, String status, OffsetDateTime expiresAt) {
+    }
+
+    record Created(Hold hold, boolean replay) {
+    }
+
+    private final JdbcClient jdbc;
+    private final Clock clock;
+    private final Duration ttl;
+
+    Holds(JdbcClient jdbc, Clock clock, @Value(&quot;${ghoomo.holds.ttl}&quot;) Duration ttl) {
+        this.jdbc = jdbc;
+        this.clock = clock;
+        this.ttl = ttl;
+    }
+
+    private static final String HOLD = &quot;SELECT id, room_type_id, stay_date AS date, status, expires_at FROM holds&quot;;
+
+    /**
+     * Takes a room and records the hold, in one transaction. The same Idempotency-Key with the same request returns
+     * the first hold; with another request it is a 422.
+     */
+    @Transactional
+    Created create(String key, long roomTypeId, LocalDate date, String guestEmail) {
+        String email = guestEmail.strip().toLowerCase(Locale.ROOT);
+        String hash = sha256(roomTypeId + &quot;|&quot; + date + &quot;|&quot; + email);
+        Optional&lt;Created&gt; replay = replay(key, hash);
+        if (replay.isPresent()) {
+            return replay.get();
+        }
+        // Clearer in two steps: is a room free? Then take it.
+        record Night(int total, int held) {
+        }
+        Night night = jdbc.sql(&quot;SELECT total, held FROM room_nights WHERE room_type_id = ? AND stay_date = ?&quot;).params(roomTypeId, date)
+                .query(Night.class).optional().orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such room type or night.&quot;));
+        if (night.held() &gt;= night.total()) {
+            throw problem(HttpStatus.CONFLICT, &quot;No room of this type is free that night.&quot;);
+        }
+        jdbc.sql(&quot;UPDATE room_nights SET held = held + 1 WHERE room_type_id = ? AND stay_date = ?&quot;).params(roomTypeId, date).update();
+        OffsetDateTime now = now();
+        long id = jdbc.sql(&quot;&quot;&quot;
+                        INSERT INTO holds (idempotency_key, request_hash, room_type_id, stay_date, guest_email, created_at, expires_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id&quot;&quot;&quot;)
+                .params(key, hash, roomTypeId, date, email, now, now.plus(ttl)).query(Long.class).single();
+        return new Created(find(id).orElseThrow(), false);
+    }
+
+    /** The first hold made with this key, if any. */
+    Optional&lt;Created&gt; replay(String key, String hash) {
+        record Stored(long id, String requestHash) {
+        }
+        return jdbc.sql(&quot;SELECT id, request_hash FROM holds WHERE idempotency_key = ?&quot;).param(key).query(Stored.class).optional().map(s -&gt; {
+            if (!s.requestHash().equals(hash)) {
+                throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;This Idempotency-Key was already used for a different hold.&quot;);
+            }
+            return new Created(find(s.id()).orElseThrow(), true);
+        });
+    }
+
+    Optional&lt;Hold&gt; find(long id) {
+        return jdbc.sql(HOLD + &quot; WHERE id = ?&quot;).param(id).query(Hold.class).optional();
+    }
+
+    /** Expires every hold that is due and gives its room back. synchronized, so it never runs twice at once. */
+    @Transactional
+    synchronized int expireDue() {
+        record Due(long id, long roomTypeId, LocalDate stayDate) {
+        }
+        OffsetDateTime now = now();
+        List&lt;Due&gt; due = jdbc.sql(&quot;SELECT id, room_type_id, stay_date FROM holds WHERE status = &#x27;HELD&#x27; AND expires_at &lt;= ?&quot;)
+                .param(now).query(Due.class).list();
+        for (Due d : due) {
+            jdbc.sql(&quot;UPDATE room_nights SET held = held - 1 WHERE room_type_id = ? AND stay_date = ?&quot;).params(d.roomTypeId(), d.stayDate()).update();
+            jdbc.sql(&quot;UPDATE holds SET status = &#x27;EXPIRED&#x27;, expired_at = ? WHERE id = ?&quot;).params(now, d.id()).update();
+        }
+        return due.size();
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+
+    static String sha256(String text) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance(&quot;SHA-256&quot;).digest(text.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private OffsetDateTime now() {
+        return OffsetDateTime.now(clock).withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>Check, then take</summary><p>"Clearer in two steps": twenty guests read "4 held of 5" at the same moment and all add one. The database's CHECK stops the count passing 5, so the extra guests get an error instead of a clean 409; without that CHECK the hotel would be overbooked. Taking must be the condition: <code>held = held + 1 WHERE held &lt; total</code>.</p><p class="evidence"><b>Test evidence:</b> <code>twentyGuestsAtOnceForFiveRoomsGetExactlyFive</code> fails: some of the twenty requests end in an error instead of a <code>409</code>. Printing the cause while building showed the database's <code>room_nights_held_range</code> refusing them: the constraint kept the hotel from being overbooked.</p></details><details class="finding"><summary><span class="sev">2</span>synchronized is one server's lock</summary><p>"So it never runs twice at once": on this server. The second server has its own lock, and the job reads, then gives back: the trap's shape, with a lock that does not reach the other server.</p><p class="evidence"><b>Test evidence:</b> None on one JVM, and that is the lesson: the four-runs-at-once test passes on the flawed version, because <code>synchronized</code> does line up threads in one process. <code>theOldJobOnTwoServersGivesOneRoomBackTwiceAndTheHotelIsOverbooked</code> runs this read-then-give-back shape as two servers would, and overbooks. A test that runs everything in one JVM cannot show a one-server lock failing; review has to.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the flawed file copied over the real one, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>DoubleExpiryTrapTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill ok">2 / 2</span></td></tr><tr><td><code>HoldContractTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill ok">3 / 3</span></td></tr><tr><td><code>HoldDatabaseTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill ok">3 / 3</span></td></tr><tr><td><code>HoldReplayTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill ok">2 / 2</span></td></tr><tr><td><code>ScheduledExpiryTest</code></td><td><span class="pill ok">1 / 1</span></td><td><span class="pill ok">1 / 1</span></td></tr><tr><td><code>HoldConcurrencyTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">1 / 2</span></td></tr></tbody></table></div>
+<p class="note">Only one test fails, and that is worth a moment: the worse flaw, the job, passes every test in this suite. One guest at a time, on one server, the flawed version is correct. Christmas Eve brings both: many guests at once, and more than one server.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>

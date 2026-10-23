@@ -38,4 +38,22 @@ class HoldDatabaseTest extends ApiTest {
         }
         assertThat(held(1, "2026-12-26")).isZero();   // the room taken before the insert was given back with the rollback
     }
+
+    @Test
+    void anExpiryThatCannotGiveTheRoomBackExpiresNothing() throws Exception {
+        hold("first-hold-01", 1, "2026-12-27", "asha@example.com").andExpect(status().isCreated());
+        CLOCK.advance(java.time.Duration.ofMinutes(20));
+        jdbc.sql("""
+                CREATE FUNCTION refuse_release() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'inventory locked'; END $$ LANGUAGE plpgsql;
+                CREATE TRIGGER refuse_release BEFORE UPDATE ON room_nights FOR EACH ROW EXECUTE FUNCTION refuse_release()""").update();
+        try {
+            assertThatThrownBy(() -> holds.expireDue()).hasRootCauseMessage("ERROR: inventory locked\n  Where: PL/pgSQL function refuse_release() line 1 at RAISE");
+        } finally {
+            jdbc.sql("DROP TRIGGER refuse_release ON room_nights; DROP FUNCTION refuse_release()").update();
+        }
+        // Expired without its room back would lose the room for good; together, the next run does both.
+        assertThat(jdbc.sql("SELECT status FROM holds WHERE id = 1").query(String.class).single()).isEqualTo("HELD");
+        assertThat(holds.expireDue()).isEqualTo(1);
+        assertThat(held(1, "2026-12-27")).isZero();
+    }
 }
