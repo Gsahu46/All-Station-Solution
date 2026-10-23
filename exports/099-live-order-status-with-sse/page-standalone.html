@@ -1,0 +1,2274 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 099 · Live order status with Server-Sent Events</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 099</span>
+    <h1>Live order status with Server-Sent Events</h1>
+    <p class="scenario">The app polls order status every 2 seconds: 30,000 requests a second at dinner time, mostly unchanged.</p>
+    <p class="sim"><b>Simulation</b><span>The orders, the kitchen and the rider are simulated: demo orders 1001 to 1099 move on when the kitchen sign-in posts the next status.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Food delivery</li>
+      <li><b>Types</b>Messaging</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>027 Food order status flow · 098 Invoice PDFs without blocking</p>
+      <p><span class="eyebrow">Builds toward</span><br>129 Chat with delivery receipts</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Server-Sent Events with SseEmitter · Last-Event-ID and retry · timeouts and heartbeats · Spring Security 7 · Awaitility</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Are we there yet?</strong><p>Tiffino's app asked for the order's status every 2 seconds. At dinner time that was 30,000 requests a second, almost all answered "same as before".</p></li><li><strong>Streams that never end</strong><p>A first move to Server-Sent Events made each stream never time out and kept it in a list. People locked their phones; the streams stayed, one for every phone that had ever opened the screen, until the server ran out.</p></li><li><strong>The fix</strong><p>Each stream has a timeout and leaves the list however it ends. A heartbeat finds phones that have gone. A reconnecting phone says which event it saw last and gets exactly what it missed.</p></li></ol>
+<p class="lesson">An open connection is a resource. Every one needs an end: a timeout, a heartbeat, and a place it is removed from.</p>
+
+<h2>What are we building?</h2>
+<p>A live stream of one order's status for the customer's app: the current status at once, then every change as it happens.</p>
+
+<h2>An everyday analogy</h2>
+<p>A cricket commentary on the radio instead of phoning the ground every two minutes. If the signal drops, you tune back in and the commentator says what you missed since the last over you heard.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Open</strong>: the app opens <code>/orders/{id}/events</code>; the server sends the current status.</li>
+<li><strong>Listen</strong>: each change arrives as an event with a number.</li>
+<li><strong>Reconnect</strong>: when the stream ends (timeout, tunnel), the browser reconnects with the last number and gets only what it missed.</li>
+<li><strong>End</strong>: at delivery the server ends the stream; a reconnect after that gets <code>204</code>: "stop".</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: the phone goes through a tunnel while the order goes from COOKING to OUT_FOR_DELIVERY. What does it get when it reconnects?</summary><p>The browser sends <code>Last-Event-ID: 3</code> (COOKING). The server replays event 4, OUT_FOR_DELIVERY, and nothing twice. If event 4 were already too old to keep, it would get a snapshot of the current status instead.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No WebSockets.</strong> The app only listens; SSE is enough (Design).</li>
+<li><strong>One server.</strong> Changes are told to this server's streams only (Production).</li>
+<li><strong>No real kitchen.</strong> A kitchen sign-in moves the demo orders on.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Polling</strong></td><td>Asking again and again: "any news?"</td><td>A child asking "are we there yet?" every minute.</td><td>every 2 s, before</td></tr><tr><td><strong>Server-Sent Events</strong></td><td>One long HTTP response the server keeps writing to, one event at a time.</td><td>A radio station: you tune in once and listen.</td><td><code>text/event-stream</code></td></tr><tr><td><strong>Event id</strong></td><td>A number on each event; the browser remembers the last one.</td><td>Page numbers in a book.</td><td><code>id:3</code></td></tr><tr><td><strong>Last-Event-ID</strong></td><td>The header a reconnecting browser sends: "I had up to here".</td><td>A bookmark.</td><td><code>Last-Event-ID: 3</code></td></tr><tr><td><strong>Timeout</strong></td><td>The server ends a stream after a while; the browser reconnects by itself.</td><td>A phone call that hangs up every five minutes and redials.</td><td>5 minutes</td></tr><tr><td><strong>Heartbeat</strong></td><td>A comment line sent now and then; writing to a phone that has gone fails.</td><td>"Are you still there?" on a quiet call.</td><td>every 15 s</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Tiffino</strong> (a fictional food delivery company): the app polls order status every 2 seconds: 30,000 requests a second at dinner time, mostly unchanged.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo rules: streams end after 5 minutes; a heartbeat every 15 s; the last 50 events of each order are kept. Riya owns the odd orders 1001 to 1099, Kabir the even ones; password: the name plus <code>-demo-pass</code>.</p>
+<ol class="gwt">
+<li><b>Given</b> a customer opening their order's stream, <b>then</b> <code>200</code>, <code>text/event-stream</code>, a <code>retry</code> hint and a snapshot of the current status at once.</li>
+<li><b>Given</b> a status change, <b>then</b> every open stream of that order gets it once, in order, with the next id.</li>
+<li><b>Given</b> a reconnect with <code>Last-Event-ID</code>, <b>then</b> exactly the missed events; if they are no longer kept, a snapshot; if none were missed, an open stream that waits.</li>
+<li><b>Given</b> delivery, <b>then</b> the server ends every stream; a reconnect that saw the last event gets <code>204</code>.</li>
+<li><b>Given</b> a client that has gone, <b>then</b> its stream is dropped at the next heartbeat or timeout.</li>
+<li><b>Given</b> someone else's or an unknown order, <b>then</b> <code>404</code>; no sign-in <code>401</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>Every stream has a timeout and is removed from the list however it ends.</li>
+<li>No change can fall between a stream's replay and its joining the list.</li>
+<li>Statuses move one step at a time.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Stream events with <code>SseEmitter</code>: ids, names, retry, completion.</li>
+<li>Resume with <code>Last-Event-ID</code> without gaps or repeats.</li>
+<li>Release streams with timeouts, callbacks and heartbeats.</li>
+<li>Test streams on a real port, as a browser reads them.</li>
+<li>Choose between polling, SSE and WebSockets.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/orders/{id}/events</code> (<code>Accept: text/event-stream</code>)</td><td>The order's live status. Optional <code>Last-Event-ID</code>.</td></tr><tr><td><code>POST</code></td><td><code>/orders/{id}/status</code></td><td>Simulated kitchen and rider: move the order to its next status.</td></tr></tbody></table></div>
+<h2>The stream</h2>
+<div class="scroll"><table class=""><thead><tr><th>Line</th><th>Meaning</th></tr></thead><tbody><tr><td><code>retry:3000</code></td><td>Wait 3 s before reconnecting. Sent first: it also gets the headers to the client at once.</td></tr><tr><td><code>id:3</code></td><td>This event's number; the browser sends the last one back as <code>Last-Event-ID</code>.</td></tr><tr><td><code>event:snapshot</code> / <code>event:status</code></td><td>The current status (first visit, or after a gap), or a change.</td></tr><tr><td><code>data:{...}</code></td><td>The event as JSON.</td></tr><tr><td><code>:keep-alive</code></td><td>A heartbeat comment, every 15 s; the browser ignores it.</td></tr></tbody></table></div>
+<p class="muted">The format is the HTML Living Standard's <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html">server-sent events</a>, which also says that a <code>204</code> tells the browser to stop reconnecting.</p>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>A stream; a status change</td></tr><tr><td><span class="pill ok">204</span></td><td>Reconnecting to a delivered order whose last event was seen</td></tr><tr><td><span class="pill warn">400</span></td><td><code>Last-Event-ID</code> not a number; an unknown status</td></tr><tr><td><span class="pill warn">401</span></td><td>No sign-in</td></tr><tr><td><span class="pill warn">403</span></td><td>The kitchen watching, or a customer changing a status</td></tr><tr><td><span class="pill warn">404</span></td><td>No such order, or someone else's</td></tr><tr><td><span class="pill warn">409</span></td><td>Not the next status</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 23 Oct 2026, in this order. A stream is read as it arrives (<code>curl -N</code>) and cut off by <code>docs/capture.sh</code> after a few seconds unless the server ends it. <code>Date</code>, connection and standard security headers are left out.</p>
+<section class="example"><h3>Case 1: Riya watches order 1001 while the kitchen works</h3><p><b>Why:</b> the retry hint and a snapshot (event 1), then events 2 and 3 as cases 2 and 3 happen.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /orders/1001/events HTTP/1.1
+Authorization: Basic cml5YTpyaXlhLWRlbW8tcGFzcw==
+Accept: text/event-stream</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: text/event-stream
+
+retry:3000
+
+id:1
+event:snapshot
+data:{&quot;id&quot;:1,&quot;orderId&quot;:1001,&quot;status&quot;:&quot;PLACED&quot;,&quot;at&quot;:&quot;2026-10-23T19:56:09.924818638Z&quot;}
+
+id:2
+event:status
+data:{&quot;id&quot;:2,&quot;orderId&quot;:1001,&quot;status&quot;:&quot;ACCEPTED&quot;,&quot;at&quot;:&quot;2026-10-23T19:56:13.001173166Z&quot;}
+
+id:3
+event:status
+data:{&quot;id&quot;:3,&quot;orderId&quot;:1001,&quot;status&quot;:&quot;COOKING&quot;,&quot;at&quot;:&quot;2026-10-23T19:56:13.116010561Z&quot;}</code></pre></div></div></section><section class="example"><h3>Case 2: the kitchen accepts</h3><p><b>Why:</b> event 2, sent to every open stream.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /orders/1001/status HTTP/1.1
+Authorization: Basic a2l0Y2hlbjpraXRjaGVuLWRlbW8tcGFzcw==
+Content-Type: application/json
+
+{
+  &quot;status&quot;: &quot;ACCEPTED&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 81
+
+{
+  &quot;id&quot;: 2,
+  &quot;orderId&quot;: 1001,
+  &quot;status&quot;: &quot;ACCEPTED&quot;,
+  &quot;at&quot;: &quot;2026-10-23T19:56:13.001173166Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: and starts cooking</h3><p><b>Why:</b> event 3.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /orders/1001/status HTTP/1.1
+Authorization: Basic a2l0Y2hlbjpraXRjaGVuLWRlbW8tcGFzcw==
+Content-Type: application/json
+
+{
+  &quot;status&quot;: &quot;COOKING&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 80
+
+{
+  &quot;id&quot;: 3,
+  &quot;orderId&quot;: 1001,
+  &quot;status&quot;: &quot;COOKING&quot;,
+  &quot;at&quot;: &quot;2026-10-23T19:56:13.116010561Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: out for delivery, while nobody watches</h3><p><b>Why:</b> event 4 is kept for whoever reconnects.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /orders/1001/status HTTP/1.1
+Authorization: Basic a2l0Y2hlbjpraXRjaGVuLWRlbW8tcGFzcw==
+Content-Type: application/json
+
+{
+  &quot;status&quot;: &quot;OUT_FOR_DELIVERY&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 89
+
+{
+  &quot;id&quot;: 4,
+  &quot;orderId&quot;: 1001,
+  &quot;status&quot;: &quot;OUT_FOR_DELIVERY&quot;,
+  &quot;at&quot;: &quot;2026-10-23T19:56:15.862046314Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: Riya reconnects with Last-Event-ID: 3</h3><p><b>Why:</b> event 4 replayed, nothing twice; then 5 (case 6) and the server ends the stream: curl stopped by itself.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /orders/1001/events HTTP/1.1
+Authorization: Basic cml5YTpyaXlhLWRlbW8tcGFzcw==
+Accept: text/event-stream
+Last-Event-ID: 3</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: text/event-stream
+
+retry:3000
+
+id:4
+event:status
+data:{&quot;id&quot;:4,&quot;orderId&quot;:1001,&quot;status&quot;:&quot;OUT_FOR_DELIVERY&quot;,&quot;at&quot;:&quot;2026-10-23T19:56:15.862046314Z&quot;}
+
+id:5
+event:status
+data:{&quot;id&quot;:5,&quot;orderId&quot;:1001,&quot;status&quot;:&quot;DELIVERED&quot;,&quot;at&quot;:&quot;2026-10-23T19:56:16.959173969Z&quot;}</code></pre></div></div></section><section class="example"><h3>Case 6: delivered</h3><p><b>Why:</b> event 5, the last.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /orders/1001/status HTTP/1.1
+Authorization: Basic a2l0Y2hlbjpraXRjaGVuLWRlbW8tcGFzcw==
+Content-Type: application/json
+
+{
+  &quot;status&quot;: &quot;DELIVERED&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 82
+
+{
+  &quot;id&quot;: 5,
+  &quot;orderId&quot;: 1001,
+  &quot;status&quot;: &quot;DELIVERED&quot;,
+  &quot;at&quot;: &quot;2026-10-23T19:56:16.959173969Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: reconnecting after the end</h3><p><b>Why:</b> <code>204</code>: the browser stops.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /orders/1001/events HTTP/1.1
+Authorization: Basic cml5YTpyaXlhLWRlbW8tcGFzcw==
+Accept: text/event-stream
+Last-Event-ID: 5</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 204</code></pre></div></div></section><section class="example"><h3>Case 8: Kabir watches Riya's order</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /orders/1001/events HTTP/1.1
+Authorization: Basic a2FiaXI6a2FiaXItZGVtby1wYXNz
+Accept: text/event-stream</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No such order.&quot;,
+  &quot;instance&quot;: &quot;/orders/1001/events&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Not Found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 9: skipping a step</h3><p><b>Why:</b> <code>409</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /orders/1003/status HTTP/1.1
+Authorization: Basic a2l0Y2hlbjpraXRjaGVuLWRlbW8tcGFzcw==
+Content-Type: application/json
+
+{
+  &quot;status&quot;: &quot;DELIVERED&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 409 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;An order moves one step at a time; it is PLACED.&quot;,
+  &quot;instance&quot;: &quot;/orders/1003/status&quot;,
+  &quot;status&quot;: 409,
+  &quot;title&quot;: &quot;Conflict&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 10: no sign-in</h3><p><b>Why:</b> <code>401</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /orders/1003/events HTTP/1.1
+Accept: text/event-stream</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 401 
+WWW-Authenticate: Basic realm=&quot;tiffino&quot;
+Content-Type: application/problem+json
+Content-Length: 121
+
+{
+  &quot;title&quot;: &quot;Sign-in required&quot;,
+  &quot;status&quot;: 401,
+  &quot;detail&quot;: &quot;Send a valid username and password.&quot;,
+  &quot;instance&quot;: &quot;/orders/1003/events&quot;
+}</code></pre></div></div></section></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>The old way, 20 phones that went away</td><td>20 streams kept for ever</td><td><code>theOldWayKeepsEveryStreamOfEveryClientThatLeft</code></td></tr><tr><td>The API, the same 20</td><td>Dropped at the next heartbeats</td><td><code>theApiLetsGoOfClientsThatLeft</code></td></tr><tr><td>A new watcher, then two changes</td><td>Retry hint, snapshot 1, then 2 and 3</td><td><code>aWatcherGetsTheCurrentStatusThenEachChange</code></td></tr><tr><td>Delivery; reconnects after it</td><td>Stream ended; <code>204</code>; or the missed 4 and 5, then the end</td><td><code>theStreamEndsAtDeliveryAndA204TellsTheBrowserToStop</code></td></tr><tr><td>Someone else's order, unknown, no sign-in, the kitchen, a bad id; bad changes</td><td><code>404</code>, <code>401</code>, <code>403</code>, <code>400</code>; <code>409</code>, <code>400</code></td><td><code>unknownOrdersSomeoneElsesAndBadRequests</code></td></tr><tr><td>A reconnect after a missed change; one that missed nothing</td><td>Only the missed event; an open stream at once</td><td><code>reconnectingWithLastEventIdGetsOnlyWhatWasMissed</code></td></tr><tr><td>A Last-Event-ID older than the kept events</td><td>A snapshot instead of a gap</td><td><code>aLastEventIdOlderThanTheKeptEventsGetsASnapshotInstead</code></td></tr><tr><td>30 watchers, four changes</td><td>Each gets 1 to 5 once, in order, then the end</td><td><code>everyWatcherGetsEveryChangeOnceAndInOrder</code></td></tr><tr><td>A stream that times out</td><td>Ended by the server; the reconnect misses nothing</td><td><code>aStreamTimesOutAndTheClientResumesWithoutMissingAnything</code></td></tr><tr><td>After the timeout</td><td>Not held any more</td><td><code>aStreamThatTimedOutIsNoLongerHeld</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Never timing out emitters, leaking connections and threads.</p>
+<ul>
+<li><strong>The old way.</strong> <code>new SseEmitter(0L)</code> (no timeout) kept in a list. Twenty phones open the stream and go away; four seconds later the list still holds all twenty, and nothing will ever end them. With a sending thread per stream, as many first versions have, those threads stay too.</li>
+<li><strong>The API.</strong> The same twenty: the next heartbeats write to them, the writes fail, and each stream ends and leaves the list.</li>
+</ul>
+<p>While building, each part was undone once: no timeout turned 2 tests red; no completion callback 2; no replay 2; no gap check 1; no <code>204</code> 1; streams not ended at delivery 2; any customer's order 1; no retry hint 1; skipping a status 1; the retry hint not sent first 1 (a reconnect that had missed nothing got no answer at all). Two things turned nothing red and were simplified: removing a stream in the timeout handler and in the heartbeat's failure path (the completion callback already does it). Removing the order's lock turned nothing red either: no test reaches the instant between a replay and joining the list. The lock stays; that case is not proven by a test.</p>
+</div>
+<pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.core.annotation.Order;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.net.URI;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+/** Twenty phones open the order screen, then the users lock them. Written first. */
+@Import(LeakingStreamsTrapTest.OldWay.class)
+class LeakingStreamsTrapTest extends ApiTest {
+
+    /** The old way: an emitter that never times out, kept in a list that nothing ever removes from. */
+    @TestConfiguration
+    static class OldWay {
+        static final List&lt;SseEmitter&gt; STREAMS = new CopyOnWriteArrayList&lt;&gt;();
+
+        @RestController   // a member of this configuration: registered with it
+        static class OldStream {
+            @GetMapping(&quot;/old/orders/1001/events&quot;)
+            SseEmitter events() throws java.io.IOException {
+                SseEmitter emitter = new SseEmitter(0L);   // 0: no timeout
+                emitter.send(&quot;PLACED&quot;);
+                STREAMS.add(emitter);
+                return emitter;
+            }
+        }
+
+        @Bean
+        @Order(0)
+        SecurityFilterChain oldWayIsOpen(HttpSecurity http) throws Exception {
+            return http.securityMatcher(&quot;/old/**&quot;).authorizeHttpRequests(a -&gt; a.anyRequest().permitAll()).build();
+        }
+    }
+
+    @Test
+    void theOldWayKeepsEveryStreamOfEveryClientThatLeft() throws Exception {
+        List&lt;AutoCloseable&gt; phones = new ArrayList&lt;&gt;();
+        for (int i = 0; i &lt; 20; i++) {
+            var response = HTTP.send(HttpRequest.newBuilder(URI.create(&quot;http://localhost:&quot; + port + &quot;/old/orders/1001/events&quot;)).build(),
+                    HttpResponse.BodyHandlers.ofInputStream());
+            phones.add(response.body());
+        }
+        for (AutoCloseable phone : phones) {
+            phone.close();   // locked: the connection is gone from the phone&#x27;s side
+        }
+        // Nothing ever ends these streams or removes them: twenty dead clients, held for as long as the server runs.
+        await().during(Duration.ofSeconds(4)).atMost(Duration.ofSeconds(5)).until(() -&gt; OldWay.STREAMS.size() == 20);
+    }
+
+    @Test
+    void theApiLetsGoOfClientsThatLeft() throws Exception {
+        int before = streams.streams();
+        List&lt;Stream&gt; phones = new ArrayList&lt;&gt;();
+        for (int i = 0; i &lt; 20; i++) {
+            phones.add(open(&quot;riya&quot;, 1001, null));
+        }
+        phones.forEach(p -&gt; p.awaitEvents(1));
+        assertThat(streams.streams()).isEqualTo(before + 20);
+        for (Stream phone : phones) {
+            phone.close();
+        }
+        // The next heartbeats write to them, the writes fail, and they are dropped. (Every 15 s in production.)
+        await().atMost(Duration.ofSeconds(5)).until(() -&gt; {
+            streams.heartbeat();
+            return streams.streams() == before;
+        });
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 10 tests</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Watch in one terminal, cook in another:</p>
+<pre class="code"><code class="language-bash">curl -N -u riya:riya-demo-pass http://localhost:8080/orders/1021/events
+curl -u kitchen:kitchen-demo-pass -H &#x27;Content-Type: application/json&#x27; -d &#x27;{&quot;status&quot;:&quot;ACCEPTED&quot;}&#x27; http://localhost:8080/orders/1021/status</code></pre>
+<p>Stop the first command, move the order on, and reconnect with <code>-H 'Last-Event-ID: 2'</code>: only what you missed arrives.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>Events arrive in bursts, late</td><td>A proxy buffers the response.</td><td>Turn buffering off for the path (nginx: <code>X-Accel-Buffering: no</code>).</td></tr><tr><td>The stream ends every 60 s</td><td>A proxy's idle timeout.</td><td>Heartbeats more often than it; the browser reconnects anyway.</td></tr><tr><td>The browser reconnects for ever after delivery</td><td>The server answers 200 with an empty stream.</td><td>Answer <code>204</code>.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/099-live-order-status-with-sse/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/tiffino/orders/
+│   ├── OrderController.java   ├── OrderStreams.java   ├── SecurityConfig.java
+│   └── ProblemResponses.java   └── OrdersApplication.java
+├── src/main/resources/application.yaml
+├── src/test/java/com/tiffino/orders/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">OrderController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">OrderStreams.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">SecurityConfig.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">ProblemResponses.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">OrdersApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/tiffino/orders/OrderController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The two endpoints.</dd><dt>Why</dt><dd>The customer's own order or <code>404</code>; <code>204</code> when there is nothing left to stream; one step at a time for the kitchen.</dd><dt>Without it</dt><dd>Watching someone else's order; statuses out of order.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import jakarta.validation.constraints.NotNull;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+@RestController
+class OrderController {
+
+    record StatusChange(@NotNull OrderStreams.Status status) {
+    }
+
+    private final OrderStreams streams;
+
+    OrderController(OrderStreams streams) {
+        this.streams = streams;
+    }
+
+    /** The customer&#x27;s own order only; anyone else&#x27;s is a 404. 204 once a delivered order&#x27;s last event was seen. */
+    @GetMapping(path = &quot;/orders/{id}/events&quot;, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    ResponseEntity&lt;SseEmitter&gt; events(@PathVariable long id, @RequestHeader(name = &quot;Last-Event-ID&quot;, required = false) Long lastEventId,
+                                      Authentication auth) {
+        OrderStreams.Order order = streams.order(id, auth.getName()).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such order.&quot;));
+        return streams.subscribe(order, lastEventId).map(ResponseEntity::ok).orElseGet(() -&gt; ResponseEntity.noContent().build());
+    }
+
+    /** Simulated kitchen and rider: move an order to its next status. */
+    @PostMapping(&quot;/orders/{id}/status&quot;)
+    OrderStreams.Event advance(@PathVariable long id, @jakarta.validation.Valid @RequestBody StatusChange change) {
+        OrderStreams.Order order = streams.order(id).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such order.&quot;));
+        return streams.advance(order, change.status())
+                .orElseThrow(() -&gt; problem(HttpStatus.CONFLICT, &quot;An order moves one step at a time; it is &quot; + order.status + &quot;.&quot;));
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/tiffino/orders/OrderStreams.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Orders, their events and their streams.</dd><dt>Why</dt><dd>Replay or snapshot on subscribe, then the stream joins the order's list; every change goes to every stream; heartbeats; the end at delivery.</dd><dt>Without it</dt><dd>Streams that outlive their clients; events lost or repeated on reconnect.</dd></dl><ul><li>Subscribe and advance lock the order, so no change falls between a stream's replay and its joining the list.</li><li><code>onCompletion</code> removes a stream however it ended: delivered, timed out, or a failed write (<code>completeWithError</code>).</li><li><code>onTimeout</code> only completes the stream: without it Spring logs an <code>AsyncRequestTimeoutException</code> for every stream that times out.</li><li><code>retry</code> is sent first because it also flushes the headers: a reconnect that missed nothing would otherwise wait with no answer at all until the next event. Found while building.</li><li>Shortcut: sends run on the kitchen's request thread; a slow reader slows it down.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
+
+/**
+ * Each order&#x27;s status, its recent events, and the streams listening to it. Every stream has a timeout and is
+ * removed when it completes, times out or fails, so a client that leaves costs nothing for long.
+ * shortcut: in this server&#x27;s memory; with several servers, publish status changes through a broker (Valkey pub/sub,
+ * Kafka) so every server can tell its own subscribers.
+ */
+@Service
+class OrderStreams {
+
+    enum Status {
+        PLACED, ACCEPTED, COOKING, OUT_FOR_DELIVERY, DELIVERED;
+
+        Optional&lt;Status&gt; next() {
+            return ordinal() + 1 &lt; values().length ? Optional.of(values()[ordinal() + 1]) : Optional.empty();
+        }
+    }
+
+    record Event(long id, long orderId, Status status, Instant at) {
+    }
+
+    static final class Order {
+        final long id;
+        final String customer;
+        Status status = Status.PLACED;
+        long lastEventId;
+        final Deque&lt;Event&gt; history = new ArrayDeque&lt;&gt;();
+        final List&lt;SseEmitter&gt; streams = new CopyOnWriteArrayList&lt;&gt;();
+
+        Order(long id, String customer) {
+            this.id = id;
+            this.customer = customer;
+            history.add(new Event(++lastEventId, id, status, Instant.now()));
+        }
+    }
+
+    /** Demo orders 1001 to 1099: odd ones are Riya&#x27;s, even ones Kabir&#x27;s. */
+    private final Map&lt;Long, Order&gt; orders = LongStream.rangeClosed(1001, 1099).boxed()
+            .collect(Collectors.toUnmodifiableMap(id -&gt; id, id -&gt; new Order(id, id % 2 == 1 ? &quot;riya&quot; : &quot;kabir&quot;)));
+    private final Duration timeout;
+    private final Duration retry;
+    private final int historySize;
+
+    OrderStreams(@Value(&quot;${tiffino.sse.timeout}&quot;) Duration timeout, @Value(&quot;${tiffino.sse.retry}&quot;) Duration retry,
+                 @Value(&quot;${tiffino.sse.history}&quot;) int historySize) {
+        this.timeout = timeout;
+        this.retry = retry;
+        this.historySize = historySize;
+    }
+
+    Optional&lt;Order&gt; order(long id, String customer) {
+        return Optional.ofNullable(orders.get(id)).filter(o -&gt; o.customer.equals(customer));
+    }
+
+    Optional&lt;Order&gt; order(long id) {
+        return Optional.ofNullable(orders.get(id));
+    }
+
+    /**
+     * A stream for one order: what the client missed (or the current status), then every change. Empty when the
+     * order is delivered and the client has seen that: the controller answers 204, which tells the browser to stop.
+     */
+    Optional&lt;SseEmitter&gt; subscribe(Order order, Long lastEventId) {
+        synchronized (order) {   // nothing can change between the replay and joining the list
+            if (order.status == Status.DELIVERED &amp;&amp; lastEventId != null &amp;&amp; lastEventId &gt;= order.lastEventId) {
+                return Optional.empty();
+            }
+            SseEmitter emitter = new SseEmitter(timeout.toMillis());
+            List&lt;Event&gt; missed = lastEventId == null ? null
+                    : order.history.stream().filter(e -&gt; e.id() &gt; lastEventId).toList();
+            boolean gap = missed != null &amp;&amp; !missed.isEmpty() &amp;&amp; missed.getFirst().id() != lastEventId + 1;
+            try {
+                // The reconnect delay first, always: it also sends the headers at once, even when nothing was missed.
+                emitter.send(SseEmitter.event().reconnectTime(retry.toMillis()));
+                if (missed == null || gap) {
+                    // First visit, or events we no longer keep: the current status instead of a hole in the story.
+                    emitter.send(SseEmitter.event().id(Long.toString(order.lastEventId)).name(&quot;snapshot&quot;)
+                            .data(order.history.getLast(), MediaType.APPLICATION_JSON));
+                } else {
+                    for (Event e : missed) {
+                        emitter.send(event(e));
+                    }
+                }
+            } catch (IOException e) {
+                emitter.completeWithError(e);
+                return Optional.of(emitter);
+            }
+            if (order.status == Status.DELIVERED) {
+                emitter.complete();   // the story is over: no need to stay connected
+                return Optional.of(emitter);
+            }
+            order.streams.add(emitter);
+            // However the stream ends (delivered, timed out, a failed write), it leaves the list.
+            emitter.onCompletion(() -&gt; order.streams.remove(emitter));
+            // On timeout, end it ourselves: otherwise Spring logs an AsyncRequestTimeoutException for every stream.
+            // The browser reconnects with Last-Event-ID and misses nothing.
+            emitter.onTimeout(emitter::complete);
+            return Optional.of(emitter);
+        }
+    }
+
+    /** The kitchen or the rider moves the order on, one step at a time. Empty if that is not the next step. */
+    Optional&lt;Event&gt; advance(Order order, Status to) {
+        synchronized (order) {
+            if (order.status.next().filter(to::equals).isEmpty()) {
+                return Optional.empty();
+            }
+            order.status = to;
+            Event event = new Event(++order.lastEventId, order.id, to, Instant.now());
+            order.history.add(event);
+            while (order.history.size() &gt; historySize) {
+                order.history.removeFirst();
+            }
+            // shortcut: sends happen on this request&#x27;s thread, one stream after another; a client that reads slowly
+            // makes the kitchen wait. Hand the sends to an executor when an order has many watchers.
+            for (SseEmitter stream : order.streams) {
+                try {
+                    stream.send(event(event));
+                    if (to == Status.DELIVERED) {
+                        stream.complete();
+                    }
+                } catch (IOException | IllegalStateException gone) {
+                    drop(stream, gone);
+                }
+            }
+            return Optional.of(event);
+        }
+    }
+
+    /** A comment line to every stream. A client that has gone makes the write fail; its stream is dropped, not retried. */
+    @Scheduled(fixedRateString = &quot;${tiffino.sse.heartbeat}&quot;)
+    void heartbeat() {
+        for (Order order : orders.values()) {
+            for (SseEmitter stream : order.streams) {
+                try {
+                    stream.send(SseEmitter.event().comment(&quot;keep-alive&quot;));
+                } catch (IOException | IllegalStateException gone) {
+                    drop(stream, gone);
+                }
+            }
+        }
+    }
+
+    int streams() {
+        return orders.values().stream().mapToInt(o -&gt; o.streams.size()).sum();
+    }
+
+    /** Ends a stream whose client has gone; its completion callback takes it off the list. */
+    private static void drop(SseEmitter stream, Exception why) {
+        stream.completeWithError(why);
+    }
+
+    private static SseEmitter.SseEventBuilder event(Event e) {
+        return SseEmitter.event().id(Long.toString(e.id())).name(&quot;status&quot;).data(e, MediaType.APPLICATION_JSON);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/tiffino/orders/SecurityConfig.java</p><div class="notes"><p>HTTP Basic: customers watch, the kitchen changes statuses.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems) throws Exception {
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(HttpMethod.GET, &quot;/orders/*/events&quot;).hasRole(&quot;CUSTOMER&quot;)
+                        .requestMatchers(HttpMethod.POST, &quot;/orders/*/status&quot;).hasRole(&quot;KITCHEN&quot;)
+                        .requestMatchers(&quot;/error&quot;).permitAll()
+                        .anyRequest().denyAll())
+                .httpBasic(b -&gt; b.authenticationEntryPoint(problems::unauthenticated))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable());   // credentials in a header with every request, no cookie a browser sends by itself
+        return http.build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+
+    /** Demo users, password: the name plus &quot;-demo-pass&quot;. Riya owns order 1001, Kabir 1002. */
+    @Bean
+    InMemoryUserDetailsManager users(PasswordEncoder encoder) {
+        return new InMemoryUserDetailsManager(
+                User.withUsername(&quot;riya&quot;).password(encoder.encode(&quot;riya-demo-pass&quot;)).roles(&quot;CUSTOMER&quot;).build(),
+                User.withUsername(&quot;kabir&quot;).password(encoder.encode(&quot;kabir-demo-pass&quot;)).roles(&quot;CUSTOMER&quot;).build(),
+                User.withUsername(&quot;kitchen&quot;).password(encoder.encode(&quot;kitchen-demo-pass&quot;)).roles(&quot;KITCHEN&quot;).build());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/tiffino/orders/ProblemResponses.java</p><div class="notes"><p><code>401</code> and <code>403</code> in the problem shape.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/** 401 and 403 are decided in Spring Security&#x27;s filters, before any controller: written here in the same problem shape. */
+@Component
+class ProblemResponses {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    void unauthenticated(HttpServletRequest req, HttpServletResponse res, AuthenticationException e) throws IOException {
+        // The same answer for an unknown username and a wrong password: nothing tells an attacker which accounts exist.
+        res.setHeader(&quot;WWW-Authenticate&quot;, &quot;Basic realm=\&quot;tiffino\&quot;&quot;);
+        write(req, res, HttpStatus.UNAUTHORIZED, &quot;Sign-in required&quot;, &quot;Send a valid username and password.&quot;);
+    }
+
+    void forbidden(HttpServletRequest req, HttpServletResponse res, AccessDeniedException e) throws IOException {
+        write(req, res, HttpStatus.FORBIDDEN, &quot;Not allowed&quot;, &quot;This sign-in cannot do this.&quot;);
+    }
+
+    private static void write(HttpServletRequest req, HttpServletResponse res, HttpStatus status, String title, String detail) throws IOException {
+        Map&lt;String, Object&gt; body = new LinkedHashMap&lt;&gt;();
+        body.put(&quot;title&quot;, title);
+        body.put(&quot;status&quot;, status.value());
+        body.put(&quot;detail&quot;, detail);
+        body.put(&quot;instance&quot;, req.getRequestURI());
+        res.setStatus(status.value());
+        res.setContentType(&quot;application/problem+json&quot;);
+        JSON.writeValue(res.getOutputStream(), body);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Timeout, retry, heartbeat and history: the demo rules.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: tiffino-orders
+  mvc:
+    problemdetails:
+      enabled: true
+
+tiffino:
+  sse:
+    # Demo rules. A stream ends after 5 minutes; the browser reconnects by itself (after `retry`) with Last-Event-ID.
+    timeout: 5m
+    retry: 3s
+    # A comment line to every stream: writing to a client that has gone fails, and that stream is dropped.
+    heartbeat: 15s
+    # Events kept per order for reconnects; older ones are replaced by a snapshot of the current status.
+    history: 50</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/tiffino/orders/OrdersApplication.java</p><div class="notes"><p>Entry point; scheduling on, for the heartbeat.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+@SpringBootApplication
+@EnableScheduling
+public class OrdersApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(OrdersApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>OrderEventsContractTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>LeakingStreamsTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Messaging</td><td>Duplicate delivery, retry and dead letter</td><td><code>ReconnectMessagingTest</code> (3), <code>StreamTimeoutTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">For a stream, "duplicate delivery" is a reconnect that gets events twice (it does not: only what is after <code>Last-Event-ID</code>); "retry" is the browser reconnecting after a timeout without missing anything; the "dead letter" cases are events no longer kept, replaced by a snapshot, and clients that have gone, dropped rather than written to again and again.</p>
+<p class="muted">The tests use a real port and read each stream line by line, as a browser's EventSource does. Streams end after 10 s here (1 s in <code>StreamTimeoutTest</code>), two events are kept per order, and the tests call the heartbeat themselves.</p>
+<p class="muted">Found while building: 30 watchers opened one after another took longer than a short stream timeout, because each sign-in checks a BCrypt password; they are opened at once now. And a test that opened an old-way stream waited for ever: an emitter that has sent nothing has not sent its headers either.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.tiffino.orders.ReconnectMessagingTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.tiffino.orders.OrderEventsContractTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.tiffino.orders.StreamTimeoutTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.tiffino.orders.LeakingStreamsTrapTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">LeakingStreamsTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">OrderEventsContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">ReconnectMessagingTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">StreamTimeoutTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/tiffino/orders/LeakingStreamsTrapTest.java</p><div class="notes"><p>Written first: streams that never end, against the API's.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.core.annotation.Order;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.net.URI;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+/** Twenty phones open the order screen, then the users lock them. Written first. */
+@Import(LeakingStreamsTrapTest.OldWay.class)
+class LeakingStreamsTrapTest extends ApiTest {
+
+    /** The old way: an emitter that never times out, kept in a list that nothing ever removes from. */
+    @TestConfiguration
+    static class OldWay {
+        static final List&lt;SseEmitter&gt; STREAMS = new CopyOnWriteArrayList&lt;&gt;();
+
+        @RestController   // a member of this configuration: registered with it
+        static class OldStream {
+            @GetMapping(&quot;/old/orders/1001/events&quot;)
+            SseEmitter events() throws java.io.IOException {
+                SseEmitter emitter = new SseEmitter(0L);   // 0: no timeout
+                emitter.send(&quot;PLACED&quot;);
+                STREAMS.add(emitter);
+                return emitter;
+            }
+        }
+
+        @Bean
+        @Order(0)
+        SecurityFilterChain oldWayIsOpen(HttpSecurity http) throws Exception {
+            return http.securityMatcher(&quot;/old/**&quot;).authorizeHttpRequests(a -&gt; a.anyRequest().permitAll()).build();
+        }
+    }
+
+    @Test
+    void theOldWayKeepsEveryStreamOfEveryClientThatLeft() throws Exception {
+        List&lt;AutoCloseable&gt; phones = new ArrayList&lt;&gt;();
+        for (int i = 0; i &lt; 20; i++) {
+            var response = HTTP.send(HttpRequest.newBuilder(URI.create(&quot;http://localhost:&quot; + port + &quot;/old/orders/1001/events&quot;)).build(),
+                    HttpResponse.BodyHandlers.ofInputStream());
+            phones.add(response.body());
+        }
+        for (AutoCloseable phone : phones) {
+            phone.close();   // locked: the connection is gone from the phone&#x27;s side
+        }
+        // Nothing ever ends these streams or removes them: twenty dead clients, held for as long as the server runs.
+        await().during(Duration.ofSeconds(4)).atMost(Duration.ofSeconds(5)).until(() -&gt; OldWay.STREAMS.size() == 20);
+    }
+
+    @Test
+    void theApiLetsGoOfClientsThatLeft() throws Exception {
+        int before = streams.streams();
+        List&lt;Stream&gt; phones = new ArrayList&lt;&gt;();
+        for (int i = 0; i &lt; 20; i++) {
+            phones.add(open(&quot;riya&quot;, 1001, null));
+        }
+        phones.forEach(p -&gt; p.awaitEvents(1));
+        assertThat(streams.streams()).isEqualTo(before + 20);
+        for (Stream phone : phones) {
+            phone.close();
+        }
+        // The next heartbeats write to them, the writes fail, and they are dropped. (Every 15 s in production.)
+        await().atMost(Duration.ofSeconds(5)).until(() -&gt; {
+            streams.heartbeat();
+            return streams.streams() == before;
+        });
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/tiffino/orders/OrderEventsContractTest.java</p><div class="notes"><p>Snapshot and changes; the end and the 204; bad and foreign requests.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import org.junit.jupiter.api.Test;
+
+import java.net.URI;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+class OrderEventsContractTest extends ApiTest {
+
+    @Test
+    void aWatcherGetsTheCurrentStatusThenEachChange() throws Exception {
+        try (Stream riya = open(&quot;riya&quot;, 1003, null)) {
+            assertThat(riya.status).isEqualTo(200);
+            var first = riya.awaitEvents(1).getFirst();
+            assertThat(first.event()).isEqualTo(&quot;snapshot&quot;);
+            assertThat(first.id()).isEqualTo(&quot;1&quot;);
+            assertThat(first.data()).contains(&quot;\&quot;orderId\&quot;:1003&quot;, &quot;\&quot;status\&quot;:\&quot;PLACED\&quot;&quot;);
+            assertThat(riya.lines).contains(&quot;retry:3000&quot;);   // how long the browser waits before reconnecting
+
+            assertThat(advance(1003, &quot;ACCEPTED&quot;)).isEqualTo(200);
+            assertThat(advance(1003, &quot;COOKING&quot;)).isEqualTo(200);
+            var events = riya.awaitEvents(3);
+            assertThat(events).extracting(Sse::event).containsExactly(&quot;snapshot&quot;, &quot;status&quot;, &quot;status&quot;);
+            assertThat(events).extracting(Sse::id).containsExactly(&quot;1&quot;, &quot;2&quot;, &quot;3&quot;);
+            assertThat(events.get(2).data()).contains(&quot;\&quot;status\&quot;:\&quot;COOKING\&quot;&quot;);
+        }
+    }
+
+    @Test
+    void theStreamEndsAtDeliveryAndA204TellsTheBrowserToStop() throws Exception {
+        try (Stream riya = open(&quot;riya&quot;, 1005, null)) {
+            for (String status : new String[]{&quot;ACCEPTED&quot;, &quot;COOKING&quot;, &quot;OUT_FOR_DELIVERY&quot;, &quot;DELIVERED&quot;}) {
+                assertThat(advance(1005, status)).isEqualTo(200);
+            }
+            await().atMost(Duration.ofSeconds(5)).until(() -&gt; riya.ended);
+            assertThat(riya.events).extracting(Sse::id).containsExactly(&quot;1&quot;, &quot;2&quot;, &quot;3&quot;, &quot;4&quot;, &quot;5&quot;);
+        }
+        try (Stream sawEverything = open(&quot;riya&quot;, 1005, 5L)) {
+            assertThat(sawEverything.status).isEqualTo(204);   // the HTML standard: 204 means &quot;do not reconnect&quot;
+        }
+        try (Stream missedTheEnd = open(&quot;riya&quot;, 1005, 3L)) {
+            assertThat(missedTheEnd.awaitEvents(2)).extracting(Sse::id).containsExactly(&quot;4&quot;, &quot;5&quot;);
+            await().atMost(Duration.ofSeconds(5)).until(() -&gt; missedTheEnd.ended);
+        }
+    }
+
+    @Test
+    void unknownOrdersSomeoneElsesAndBadRequests() throws Exception {
+        assertThat(open(&quot;kabir&quot;, 1001, null).status).isEqualTo(404);   // Riya&#x27;s order: as if it did not exist
+        assertThat(open(&quot;riya&quot;, 9999, null).status).isEqualTo(404);
+        assertThat(open(&quot;riya&quot;, 1001, null).status).isEqualTo(200);
+        var noSignIn = HTTP.send(HttpRequest.newBuilder(URI.create(&quot;http://localhost:&quot; + port + &quot;/orders/1001/events&quot;)).build(), HttpResponse.BodyHandlers.discarding());
+        assertThat(noSignIn.statusCode()).isEqualTo(401);
+        assertThat(open(&quot;kitchen&quot;, 1001, null).status).isEqualTo(403);
+        var badLastId = HTTP.send(HttpRequest.newBuilder(URI.create(&quot;http://localhost:&quot; + port + &quot;/orders/1001/events&quot;))
+                .header(&quot;Authorization&quot;, basic(&quot;riya&quot;)).header(&quot;Last-Event-ID&quot;, &quot;abc&quot;).build(), HttpResponse.BodyHandlers.discarding());
+        assertThat(badLastId.statusCode()).isEqualTo(400);
+
+        assertThat(advance(1015, &quot;COOKING&quot;)).isEqualTo(409);   // skips ACCEPTED
+        assertThat(advance(1015, &quot;EATEN&quot;)).isEqualTo(400);
+        assertThat(advance(9999, &quot;ACCEPTED&quot;)).isEqualTo(404);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/tiffino/orders/ReconnectMessagingTest.java</p><div class="notes"><p>Reconnects with Last-Event-ID; a gap; 30 watchers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
+import static org.awaitility.Awaitility.await;
+
+class ReconnectMessagingTest extends ApiTest {
+
+    @Test
+    void reconnectingWithLastEventIdGetsOnlyWhatWasMissed() throws Exception {
+        try (Stream before = open(&quot;riya&quot;, 1007, null)) {
+            assertThat(before.awaitEvents(1).getFirst().id()).isEqualTo(&quot;1&quot;);
+        }
+        assertThat(advance(1007, &quot;ACCEPTED&quot;)).isEqualTo(200);   // while the phone is in a tunnel
+        try (Stream after = open(&quot;riya&quot;, 1007, 1L)) {
+            assertThat(advance(1007, &quot;COOKING&quot;)).isEqualTo(200);
+            var events = after.awaitEvents(2);
+            assertThat(events).extracting(Sse::id).containsExactly(&quot;2&quot;, &quot;3&quot;);   // no snapshot, nothing twice
+            assertThat(events).extracting(Sse::event).containsOnly(&quot;status&quot;);
+        }
+        // Nothing missed: the stream still answers at once (status and headers), then waits for the next event.
+        Stream upToDate = assertTimeoutPreemptively(Duration.ofSeconds(2), () -&gt; open(&quot;riya&quot;, 1007, 3L));
+        try (upToDate) {
+            assertThat(upToDate.status).isEqualTo(200);
+            await().during(Duration.ofMillis(300)).until(upToDate.events::isEmpty);
+        }
+    }
+
+    @Test
+    void aLastEventIdOlderThanTheKeptEventsGetsASnapshotInstead() throws Exception {
+        for (String status : new String[]{&quot;ACCEPTED&quot;, &quot;COOKING&quot;, &quot;OUT_FOR_DELIVERY&quot;}) {
+            assertThat(advance(1009, status)).isEqualTo(200);   // events 2, 3, 4; only 3 and 4 are kept here
+        }
+        try (Stream late = open(&quot;riya&quot;, 1009, 1L)) {
+            var first = late.awaitEvents(1).getFirst();
+            assertThat(first.event()).isEqualTo(&quot;snapshot&quot;);   // event 2 is gone: the current status, not a hole
+            assertThat(first.id()).isEqualTo(&quot;4&quot;);
+            assertThat(first.data()).contains(&quot;\&quot;status\&quot;:\&quot;OUT_FOR_DELIVERY\&quot;&quot;);
+            await().during(Duration.ofMillis(300)).until(() -&gt; late.events.size() == 1);
+        }
+    }
+
+    @Test
+    void everyWatcherGetsEveryChangeOnceAndInOrder() throws Exception {
+        List&lt;Stream&gt; watchers = new ArrayList&lt;&gt;();
+        try (var phones = Executors.newVirtualThreadPerTaskExecutor()) {   // at once: 30 sign-ins (BCrypt) one after another are slow
+            List&lt;Future&lt;Stream&gt;&gt; opening = new ArrayList&lt;&gt;();
+            for (int i = 0; i &lt; 30; i++) {
+                opening.add(phones.submit(() -&gt; open(&quot;riya&quot;, 1013, null)));
+            }
+            for (Future&lt;Stream&gt; f : opening) {
+                watchers.add(f.get());
+            }
+        }
+        watchers.forEach(w -&gt; w.awaitEvents(1));
+        for (String status : new String[]{&quot;ACCEPTED&quot;, &quot;COOKING&quot;, &quot;OUT_FOR_DELIVERY&quot;, &quot;DELIVERED&quot;}) {
+            assertThat(advance(1013, status)).isEqualTo(200);
+        }
+        for (Stream w : watchers) {
+            assertThat(w.awaitEvents(5)).extracting(Sse::id).containsExactly(&quot;1&quot;, &quot;2&quot;, &quot;3&quot;, &quot;4&quot;, &quot;5&quot;);
+            await().atMost(Duration.ofSeconds(5)).until(() -&gt; w.ended);
+            w.close();
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/tiffino/orders/StreamTimeoutTest.java</p><div class="notes"><p>Streams that time out after 1 s.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.test.context.TestPropertySource;
+
+import java.time.Duration;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+/** Streams that end after 1 s, so the server&#x27;s timeout and the client&#x27;s reconnect can be watched. */
+@TestPropertySource(properties = &quot;tiffino.sse.timeout=1s&quot;)
+class StreamTimeoutTest extends ApiTest {
+
+    @Test
+    void aStreamTimesOutAndTheClientResumesWithoutMissingAnything() throws Exception {
+        String lastId;
+        try (Stream riya = open(&quot;riya&quot;, 1011, null)) {
+            lastId = riya.awaitEvents(1).getLast().id();
+            await().atMost(Duration.ofSeconds(5)).until(() -&gt; riya.ended);   // the server ended it after 1 s
+        }
+        assertThat(advance(1011, &quot;ACCEPTED&quot;)).isEqualTo(200);
+        try (Stream again = open(&quot;riya&quot;, 1011, Long.parseLong(lastId))) {
+            assertThat(again.awaitEvents(1)).extracting(Sse::id).containsExactly(&quot;2&quot;);
+        }
+    }
+
+    @Test
+    void aStreamThatTimedOutIsNoLongerHeld() throws Exception {
+        try (Stream riya = open(&quot;riya&quot;, 1017, null)) {
+            riya.awaitEvents(1);
+            assertThat(streams.streams()).isPositive();
+            // Every stream in this test ends after 1 s, and each one that ends leaves the list.
+            await().atMost(Duration.ofSeconds(5)).until(() -&gt; riya.ended &amp;&amp; streams.streams() == 0);
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/tiffino/orders/ApiTest.java</p><div class="notes"><p>Shared setup: a stream reader, the kitchen helper, the test settings.</p></div><div class="src"><pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+import static org.awaitility.Awaitility.await;
+
+/**
+ * The real server on a real port, read the way a browser&#x27;s EventSource reads it: line by line as it arrives.
+ * Streams time out after 10 s here (5 minutes in production; StreamTimeoutTest uses 1 s) and two events are kept per
+ * order (50), so old Last-Event-IDs are quick to reach. The heartbeat is called by the tests, not by the clock (every 15 s).
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {&quot;tiffino.sse.timeout=10s&quot;, &quot;tiffino.sse.history=2&quot;, &quot;tiffino.sse.heartbeat=1h&quot;})
+abstract class ApiTest {
+
+    @LocalServerPort
+    int port;
+    @Autowired
+    OrderStreams streams;
+
+    static final HttpClient HTTP = HttpClient.newHttpClient();
+
+    record Sse(String id, String event, String data) {
+    }
+
+    /** One open stream: its status code, the events received so far, and whether the server has ended it. */
+    static final class Stream implements AutoCloseable {
+        final int status;
+        final List&lt;Sse&gt; events = new CopyOnWriteArrayList&lt;&gt;();
+        final List&lt;String&gt; lines = new CopyOnWriteArrayList&lt;&gt;();
+        volatile boolean ended;
+        private final InputStream body;
+
+        Stream(HttpResponse&lt;InputStream&gt; response) {
+            status = response.statusCode();
+            body = response.body();
+            Thread.ofVirtual().start(this::read);
+        }
+
+        private void read() {
+            try (BufferedReader in = new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8))) {
+                String id = null, event = null;
+                List&lt;String&gt; data = new ArrayList&lt;&gt;();
+                for (String line; (line = in.readLine()) != null; ) {
+                    lines.add(line);
+                    if (line.isEmpty()) {
+                        if (!data.isEmpty()) {
+                            events.add(new Sse(id, event, String.join(&quot;\n&quot;, data)));
+                        }
+                        id = null;
+                        event = null;
+                        data.clear();
+                    } else if (line.startsWith(&quot;id:&quot;)) {
+                        id = line.substring(3);
+                    } else if (line.startsWith(&quot;event:&quot;)) {
+                        event = line.substring(6);
+                    } else if (line.startsWith(&quot;data:&quot;)) {
+                        data.add(line.substring(5));
+                    }
+                }
+            } catch (java.io.IOException closedByUs) {
+                // close() below
+            } finally {
+                ended = true;
+            }
+        }
+
+        List&lt;Sse&gt; awaitEvents(int count) {
+            await().atMost(Duration.ofSeconds(5)).until(() -&gt; events.size() &gt;= count);
+            return List.copyOf(events);
+        }
+
+        /** The client goes away: closes its side of the connection without the server knowing yet. */
+        @Override
+        public void close() throws Exception {
+            body.close();
+        }
+    }
+
+    Stream open(String user, long orderId, Long lastEventId) throws Exception {
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(&quot;http://localhost:&quot; + port + &quot;/orders/&quot; + orderId + &quot;/events&quot;))
+                .header(&quot;Accept&quot;, &quot;text/event-stream&quot;).header(&quot;Authorization&quot;, basic(user));
+        if (lastEventId != null) {
+            request.header(&quot;Last-Event-ID&quot;, lastEventId.toString());
+        }
+        return new Stream(HTTP.send(request.build(), HttpResponse.BodyHandlers.ofInputStream()));
+    }
+
+    int advance(long orderId, String status) throws Exception {
+        return HTTP.send(HttpRequest.newBuilder(URI.create(&quot;http://localhost:&quot; + port + &quot;/orders/&quot; + orderId + &quot;/status&quot;))
+                .header(&quot;Authorization&quot;, basic(&quot;kitchen&quot;)).header(&quot;Content-Type&quot;, &quot;application/json&quot;)
+                .POST(HttpRequest.BodyPublishers.ofString(&quot;{\&quot;status\&quot;:\&quot;&quot; + status + &quot;\&quot;}&quot;)).build(), HttpResponse.BodyHandlers.discarding()).statusCode();
+    }
+
+    static String basic(String user) {
+        return &quot;Basic &quot; + Base64.getEncoder().encodeToString((user + &quot;:&quot; + user + &quot;-demo-pass&quot;).getBytes());
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/tiffino/orders/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=RiderLocationChallengeTest</code>.</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 10 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 13 tests pass (10 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 30 minutes</p><h2>Where is the rider?</h2><p>While an order is out for delivery, <code>POST /orders/{id}/location {"lat": ..., "lng": ...}</code> sends the rider's position. Watchers get an event named <code>location</code>, numbered in the same sequence, so a reconnect replays it. Before or after the ride: <code>409</code>; a latitude over 90: <code>400</code>.</p><p><b>Done when:</b> both tests in <code>RiderLocationChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Give the event an optional position; name it by whether it has one.</li><li><code>@DecimalMin</code> and <code>@DecimalMax</code> on the request's numbers.</li></ul></details><p class="path">challenge/RiderLocationChallengeTest.java</p><pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import org.junit.jupiter.api.Test;
+
+import java.net.URI;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Challenge 1: while an order is out for delivery, the rider&#x27;s phone sends its position:
+ * POST /orders/{id}/location {&quot;lat&quot;: 12.97, &quot;lng&quot;: 77.59} (the kitchen sign-in stands in for the rider). Watchers get
+ * an event named &quot;location&quot;, numbered like every other event, so a reconnect replays it too. Before or after the
+ * ride: 409.
+ */
+class RiderLocationChallengeTest extends ApiTest {
+
+    int location(long orderId, String json) throws Exception {
+        return HTTP.send(HttpRequest.newBuilder(URI.create(&quot;http://localhost:&quot; + port + &quot;/orders/&quot; + orderId + &quot;/location&quot;))
+                .header(&quot;Authorization&quot;, basic(&quot;kitchen&quot;)).header(&quot;Content-Type&quot;, &quot;application/json&quot;)
+                .POST(HttpRequest.BodyPublishers.ofString(json)).build(), HttpResponse.BodyHandlers.discarding()).statusCode();
+    }
+
+    @Test
+    void watchersSeeTheRiderMove() throws Exception {
+        assertThat(location(1051, &quot;{\&quot;lat\&quot;:12.97,\&quot;lng\&quot;:77.59}&quot;)).isEqualTo(409);   // not out for delivery yet
+        for (String status : new String[]{&quot;ACCEPTED&quot;, &quot;COOKING&quot;, &quot;OUT_FOR_DELIVERY&quot;}) {
+            assertThat(advance(1051, status)).isEqualTo(200);
+        }
+        try (Stream riya = open(&quot;riya&quot;, 1051, 4L)) {
+            assertThat(location(1051, &quot;{\&quot;lat\&quot;:12.9716,\&quot;lng\&quot;:77.5946}&quot;)).isEqualTo(200);
+            var events = riya.awaitEvents(1);
+            assertThat(events.getFirst().event()).isEqualTo(&quot;location&quot;);
+            assertThat(events.getFirst().id()).isEqualTo(&quot;5&quot;);
+            assertThat(events.getFirst().data()).contains(&quot;\&quot;lat\&quot;:12.9716&quot;, &quot;\&quot;lng\&quot;:77.5946&quot;);
+        }
+        try (Stream later = open(&quot;riya&quot;, 1051, 4L)) {   // a reconnect replays the location like any event
+            assertThat(later.awaitEvents(1).getFirst().event()).isEqualTo(&quot;location&quot;);
+        }
+    }
+
+    @Test
+    void badPositionsAre400() throws Exception {
+        assertThat(location(1053, &quot;{\&quot;lat\&quot;:91,\&quot;lng\&quot;:77.59}&quot;)).isEqualTo(400);
+        assertThat(location(1053, &quot;{\&quot;lat\&quot;:12.97}&quot;)).isEqualTo(400);
+        assertThat(location(9999, &quot;{\&quot;lat\&quot;:12.97,\&quot;lng\&quot;:77.59}&quot;)).isEqualTo(404);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/OrderStreams.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
+
+/**
+ * Each order&#x27;s status, its recent events, and the streams listening to it. Every stream has a timeout and is
+ * removed when it completes, times out or fails, so a client that leaves costs nothing for long.
+ * shortcut: in this server&#x27;s memory; with several servers, publish status changes through a broker (Valkey pub/sub,
+ * Kafka) so every server can tell its own subscribers.
+ */
+@Service
+class OrderStreams {
+
+    enum Status {
+        PLACED, ACCEPTED, COOKING, OUT_FOR_DELIVERY, DELIVERED;
+
+        Optional&lt;Status&gt; next() {
+            return ordinal() + 1 &lt; values().length ? Optional.of(values()[ordinal() + 1]) : Optional.empty();
+        }
+    }
+
+    /** Challenge 1: a rider&#x27;s position. */
+    record Position(double lat, double lng) {
+    }
+
+    /** A status change, or (challenge 1) a position: numbered in one sequence, so reconnects replay both. */
+    record Event(long id, long orderId, Status status, Instant at, @JsonInclude(JsonInclude.Include.NON_NULL) Position position) {
+    }
+
+    /** Challenge 2: a customer has as many open streams as allowed (tiffino.sse.max-streams-per-customer, demo default 50). */
+    static final class TooManyStreams extends RuntimeException {
+    }
+
+    static final class Order {
+        final long id;
+        final String customer;
+        Status status = Status.PLACED;
+        long lastEventId;
+        final Deque&lt;Event&gt; history = new ArrayDeque&lt;&gt;();
+        final List&lt;SseEmitter&gt; streams = new CopyOnWriteArrayList&lt;&gt;();
+
+        Order(long id, String customer) {
+            this.id = id;
+            this.customer = customer;
+            history.add(new Event(++lastEventId, id, status, Instant.now(), null));
+        }
+    }
+
+    /** Demo orders 1001 to 1099: odd ones are Riya&#x27;s, even ones Kabir&#x27;s. */
+    private final Map&lt;Long, Order&gt; orders = LongStream.rangeClosed(1001, 1099).boxed()
+            .collect(Collectors.toUnmodifiableMap(id -&gt; id, id -&gt; new Order(id, id % 2 == 1 ? &quot;riya&quot; : &quot;kabir&quot;)));
+    private final Map&lt;String, Integer&gt; openByCustomer = new HashMap&lt;&gt;();   // challenge 2, guarded by itself
+    private final int maxStreamsPerCustomer;   // challenge 2
+    private final Duration timeout;
+    private final Duration retry;
+    private final int historySize;
+
+    OrderStreams(@Value(&quot;${tiffino.sse.timeout}&quot;) Duration timeout, @Value(&quot;${tiffino.sse.retry}&quot;) Duration retry,
+                 @Value(&quot;${tiffino.sse.history}&quot;) int historySize,
+                 @Value(&quot;${tiffino.sse.max-streams-per-customer:50}&quot;) int maxStreamsPerCustomer) {
+        this.maxStreamsPerCustomer = maxStreamsPerCustomer;
+        this.timeout = timeout;
+        this.retry = retry;
+        this.historySize = historySize;
+    }
+
+    Optional&lt;Order&gt; order(long id, String customer) {
+        return Optional.ofNullable(orders.get(id)).filter(o -&gt; o.customer.equals(customer));
+    }
+
+    Optional&lt;Order&gt; order(long id) {
+        return Optional.ofNullable(orders.get(id));
+    }
+
+    /**
+     * A stream for one order: what the client missed (or the current status), then every change. Empty when the
+     * order is delivered and the client has seen that: the controller answers 204, which tells the browser to stop.
+     */
+    Optional&lt;SseEmitter&gt; subscribe(Order order, Long lastEventId) {
+        synchronized (order) {   // nothing can change between the replay and joining the list
+            if (order.status == Status.DELIVERED &amp;&amp; lastEventId != null &amp;&amp; lastEventId &gt;= order.lastEventId) {
+                return Optional.empty();
+            }
+            SseEmitter emitter = new SseEmitter(timeout.toMillis());
+            List&lt;Event&gt; missed = lastEventId == null ? null
+                    : order.history.stream().filter(e -&gt; e.id() &gt; lastEventId).toList();
+            boolean gap = missed != null &amp;&amp; !missed.isEmpty() &amp;&amp; missed.getFirst().id() != lastEventId + 1;
+            try {
+                // The reconnect delay first, always: it also sends the headers at once, even when nothing was missed.
+                emitter.send(SseEmitter.event().reconnectTime(retry.toMillis()));
+                if (missed == null || gap) {
+                    // First visit, or events we no longer keep: the current status instead of a hole in the story.
+                    emitter.send(SseEmitter.event().id(Long.toString(order.lastEventId)).name(&quot;snapshot&quot;)
+                            .data(order.history.getLast(), MediaType.APPLICATION_JSON));
+                } else {
+                    for (Event e : missed) {
+                        emitter.send(event(e));
+                    }
+                }
+            } catch (IOException e) {
+                emitter.completeWithError(e);
+                return Optional.of(emitter);
+            }
+            if (order.status == Status.DELIVERED) {
+                emitter.complete();   // the story is over: no need to stay connected
+                return Optional.of(emitter);
+            }
+            synchronized (openByCustomer) {   // challenge 2
+                if (openByCustomer.getOrDefault(order.customer, 0) &gt;= maxStreamsPerCustomer) {
+                    emitter.complete();
+                    throw new TooManyStreams();
+                }
+                openByCustomer.merge(order.customer, 1, Integer::sum);
+            }
+            order.streams.add(emitter);
+            // However the stream ends (delivered, timed out, a failed write), it leaves the list.
+            emitter.onCompletion(() -&gt; {
+                if (order.streams.remove(emitter)) {
+                    synchronized (openByCustomer) {
+                        openByCustomer.merge(order.customer, -1, Integer::sum);
+                    }
+                }
+            });
+            // On timeout, end it ourselves: otherwise Spring logs an AsyncRequestTimeoutException for every stream.
+            // The browser reconnects with Last-Event-ID and misses nothing.
+            emitter.onTimeout(emitter::complete);
+            return Optional.of(emitter);
+        }
+    }
+
+    /** The kitchen or the rider moves the order on, one step at a time. Empty if that is not the next step. */
+    Optional&lt;Event&gt; advance(Order order, Status to) {
+        synchronized (order) {
+            if (order.status.next().filter(to::equals).isEmpty()) {
+                return Optional.empty();
+            }
+            order.status = to;
+            Event event = append(order, to, null);
+            // shortcut: sends happen on this request&#x27;s thread, one stream after another; a client that reads slowly
+            // makes the kitchen wait. Hand the sends to an executor when an order has many watchers.
+            for (SseEmitter stream : order.streams) {
+                try {
+                    stream.send(event(event));
+                    if (to == Status.DELIVERED) {
+                        stream.complete();
+                    }
+                } catch (IOException | IllegalStateException gone) {
+                    drop(stream, gone);
+                }
+            }
+            return Optional.of(event);
+        }
+    }
+
+    /** Challenge 1: the rider&#x27;s position, only while out for delivery. Empty otherwise. */
+    Optional&lt;Event&gt; locate(Order order, Position position) {
+        synchronized (order) {
+            if (order.status != Status.OUT_FOR_DELIVERY) {
+                return Optional.empty();
+            }
+            Event event = append(order, order.status, position);
+            for (SseEmitter stream : order.streams) {
+                try {
+                    stream.send(event(event));
+                } catch (IOException | IllegalStateException gone) {
+                    drop(stream, gone);
+                }
+            }
+            return Optional.of(event);
+        }
+    }
+
+    private Event append(Order order, Status status, Position position) {
+        Event event = new Event(++order.lastEventId, order.id, status, Instant.now(), position);
+        order.history.add(event);
+        while (order.history.size() &gt; historySize) {
+            order.history.removeFirst();
+        }
+        return event;
+    }
+
+    /** A comment line to every stream. A client that has gone makes the write fail; its stream is dropped, not retried. */
+    @Scheduled(fixedRateString = &quot;${tiffino.sse.heartbeat}&quot;)
+    void heartbeat() {
+        for (Order order : orders.values()) {
+            for (SseEmitter stream : order.streams) {
+                try {
+                    stream.send(SseEmitter.event().comment(&quot;keep-alive&quot;));
+                } catch (IOException | IllegalStateException gone) {
+                    drop(stream, gone);
+                }
+            }
+        }
+    }
+
+    int streams() {
+        return orders.values().stream().mapToInt(o -&gt; o.streams.size()).sum();
+    }
+
+    /** Ends a stream whose client has gone; its completion callback takes it off the list. */
+    private static void drop(SseEmitter stream, Exception why) {
+        stream.completeWithError(why);
+    }
+
+    private static SseEmitter.SseEventBuilder event(Event e) {
+        return SseEmitter.event().id(Long.toString(e.id())).name(e.position() == null ? &quot;status&quot; : &quot;location&quot;).data(e, MediaType.APPLICATION_JSON);
+    }
+}</code></pre></div><p class="path">challenge/solution/OrderController.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotNull;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+@RestController
+class OrderController {
+
+    record StatusChange(@NotNull OrderStreams.Status status) {
+    }
+
+    /** Challenge 1. */
+    record PositionRequest(@NotNull @DecimalMin(&quot;-90&quot;) @DecimalMax(&quot;90&quot;) Double lat, @NotNull @DecimalMin(&quot;-180&quot;) @DecimalMax(&quot;180&quot;) Double lng) {
+    }
+
+    private final OrderStreams streams;
+
+    OrderController(OrderStreams streams) {
+        this.streams = streams;
+    }
+
+    /** The customer&#x27;s own order only; anyone else&#x27;s is a 404. 204 once a delivered order&#x27;s last event was seen. */
+    @GetMapping(path = &quot;/orders/{id}/events&quot;, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    ResponseEntity&lt;SseEmitter&gt; events(@PathVariable long id, @RequestHeader(name = &quot;Last-Event-ID&quot;, required = false) Long lastEventId,
+                                      Authentication auth) {
+        OrderStreams.Order order = streams.order(id, auth.getName()).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such order.&quot;));
+        try {
+            return streams.subscribe(order, lastEventId).map(ResponseEntity::ok).orElseGet(() -&gt; ResponseEntity.noContent().build());
+        } catch (OrderStreams.TooManyStreams tooMany) {   // challenge 2
+            ErrorResponseException refused = problem(HttpStatus.TOO_MANY_REQUESTS,
+                    &quot;Too many open streams for this customer. Close one, or try again shortly.&quot;);
+            refused.getHeaders().set(&quot;Retry-After&quot;, &quot;15&quot;);
+            throw refused;
+        }
+    }
+
+    /** Simulated kitchen and rider: move an order to its next status. */
+    @PostMapping(&quot;/orders/{id}/status&quot;)
+    OrderStreams.Event advance(@PathVariable long id, @jakarta.validation.Valid @RequestBody StatusChange change) {
+        OrderStreams.Order order = streams.order(id).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such order.&quot;));
+        return streams.advance(order, change.status())
+                .orElseThrow(() -&gt; problem(HttpStatus.CONFLICT, &quot;An order moves one step at a time; it is &quot; + order.status + &quot;.&quot;));
+    }
+
+    /** Challenge 1: the rider&#x27;s phone (the kitchen sign-in here). */
+    @PostMapping(&quot;/orders/{id}/location&quot;)
+    OrderStreams.Event locate(@PathVariable long id, @jakarta.validation.Valid @RequestBody PositionRequest body) {
+        OrderStreams.Order order = streams.order(id).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such order.&quot;));
+        return streams.locate(order, new OrderStreams.Position(body.lat(), body.lng()))
+                .orElseThrow(() -&gt; problem(HttpStatus.CONFLICT, &quot;Positions are sent only while the order is out for delivery.&quot;));
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div><p class="path">challenge/solution/SecurityConfig.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems) throws Exception {
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(HttpMethod.GET, &quot;/orders/*/events&quot;).hasRole(&quot;CUSTOMER&quot;)
+                        .requestMatchers(HttpMethod.POST, &quot;/orders/*/status&quot;, &quot;/orders/*/location&quot;).hasRole(&quot;KITCHEN&quot;)
+                        .requestMatchers(&quot;/error&quot;).permitAll()
+                        .anyRequest().denyAll())
+                .httpBasic(b -&gt; b.authenticationEntryPoint(problems::unauthenticated))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable());   // credentials in a header with every request, no cookie a browser sends by itself
+        return http.build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+
+    /** Demo users, password: the name plus &quot;-demo-pass&quot;. Riya owns order 1001, Kabir 1002. */
+    @Bean
+    InMemoryUserDetailsManager users(PasswordEncoder encoder) {
+        return new InMemoryUserDetailsManager(
+                User.withUsername(&quot;riya&quot;).password(encoder.encode(&quot;riya-demo-pass&quot;)).roles(&quot;CUSTOMER&quot;).build(),
+                User.withUsername(&quot;kabir&quot;).password(encoder.encode(&quot;kabir-demo-pass&quot;)).roles(&quot;CUSTOMER&quot;).build(),
+                User.withUsername(&quot;kitchen&quot;).password(encoder.encode(&quot;kitchen-demo-pass&quot;)).roles(&quot;KITCHEN&quot;).build());
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 35 minutes</p><h2>A limit on open streams</h2><p>A customer may hold a limited number of open streams (<code>tiffino.sse.max-streams-per-customer</code>, 50 by default, 3 in the test). An app stuck in a reconnect loop gets <code>429</code> with <code>Retry-After</code>; when one of its streams ends, it may open another.</p><p><b>Done when:</b> the test in <code>StreamLimitChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>Count when a stream joins a list, and uncount in the same completion callback that removes it.</li><li>Check and count under one lock, or two requests could both take the last place.</li></ul></details><p class="path">challenge/StreamLimitChallengeTest.java</p><pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+/**
+ * Challenge 2: a limit on open streams per customer, tiffino.sse.max-streams-per-customer (a demo rule: 50 by
+ * default, 3 in this test). An app stuck in a reconnect loop gets 429 with Retry-After instead of opening hundreds;
+ * when one of its streams ends, it may open another.
+ */
+@org.springframework.test.context.TestPropertySource(properties = &quot;tiffino.sse.max-streams-per-customer=3&quot;)
+class StreamLimitChallengeTest extends ApiTest {
+
+    @Test
+    void theFourthOpenStreamIs429() throws Exception {
+        List&lt;Stream&gt; open = new ArrayList&lt;&gt;();
+        for (int i = 0; i &lt; 3; i++) {
+            open.add(open(&quot;kabir&quot;, 1062, null));
+        }
+        open.forEach(s -&gt; s.awaitEvents(1));
+        try (Stream fourth = open(&quot;kabir&quot;, 1064, null)) {
+            assertThat(fourth.status).isEqualTo(429);
+        }
+        try (Stream riya = open(&quot;riya&quot;, 1061, null)) {
+            assertThat(riya.status).isEqualTo(200);   // another customer is not affected
+        }
+        open.getFirst().close();   // one phone goes away; the next heartbeat notices
+        await().atMost(Duration.ofSeconds(5)).until(() -&gt; {
+            streams.heartbeat();
+            try (Stream again = open(&quot;kabir&quot;, 1062, null)) {
+                return again.status == 200;
+            }
+        });
+        for (Stream s : open) {
+            s.close();
+        }
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/OrderStreams.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
+
+/**
+ * Each order&#x27;s status, its recent events, and the streams listening to it. Every stream has a timeout and is
+ * removed when it completes, times out or fails, so a client that leaves costs nothing for long.
+ * shortcut: in this server&#x27;s memory; with several servers, publish status changes through a broker (Valkey pub/sub,
+ * Kafka) so every server can tell its own subscribers.
+ */
+@Service
+class OrderStreams {
+
+    enum Status {
+        PLACED, ACCEPTED, COOKING, OUT_FOR_DELIVERY, DELIVERED;
+
+        Optional&lt;Status&gt; next() {
+            return ordinal() + 1 &lt; values().length ? Optional.of(values()[ordinal() + 1]) : Optional.empty();
+        }
+    }
+
+    /** Challenge 1: a rider&#x27;s position. */
+    record Position(double lat, double lng) {
+    }
+
+    /** A status change, or (challenge 1) a position: numbered in one sequence, so reconnects replay both. */
+    record Event(long id, long orderId, Status status, Instant at, @JsonInclude(JsonInclude.Include.NON_NULL) Position position) {
+    }
+
+    /** Challenge 2: a customer has as many open streams as allowed (tiffino.sse.max-streams-per-customer, demo default 50). */
+    static final class TooManyStreams extends RuntimeException {
+    }
+
+    static final class Order {
+        final long id;
+        final String customer;
+        Status status = Status.PLACED;
+        long lastEventId;
+        final Deque&lt;Event&gt; history = new ArrayDeque&lt;&gt;();
+        final List&lt;SseEmitter&gt; streams = new CopyOnWriteArrayList&lt;&gt;();
+
+        Order(long id, String customer) {
+            this.id = id;
+            this.customer = customer;
+            history.add(new Event(++lastEventId, id, status, Instant.now(), null));
+        }
+    }
+
+    /** Demo orders 1001 to 1099: odd ones are Riya&#x27;s, even ones Kabir&#x27;s. */
+    private final Map&lt;Long, Order&gt; orders = LongStream.rangeClosed(1001, 1099).boxed()
+            .collect(Collectors.toUnmodifiableMap(id -&gt; id, id -&gt; new Order(id, id % 2 == 1 ? &quot;riya&quot; : &quot;kabir&quot;)));
+    private final Map&lt;String, Integer&gt; openByCustomer = new HashMap&lt;&gt;();   // challenge 2, guarded by itself
+    private final int maxStreamsPerCustomer;   // challenge 2
+    private final Duration timeout;
+    private final Duration retry;
+    private final int historySize;
+
+    OrderStreams(@Value(&quot;${tiffino.sse.timeout}&quot;) Duration timeout, @Value(&quot;${tiffino.sse.retry}&quot;) Duration retry,
+                 @Value(&quot;${tiffino.sse.history}&quot;) int historySize,
+                 @Value(&quot;${tiffino.sse.max-streams-per-customer:50}&quot;) int maxStreamsPerCustomer) {
+        this.maxStreamsPerCustomer = maxStreamsPerCustomer;
+        this.timeout = timeout;
+        this.retry = retry;
+        this.historySize = historySize;
+    }
+
+    Optional&lt;Order&gt; order(long id, String customer) {
+        return Optional.ofNullable(orders.get(id)).filter(o -&gt; o.customer.equals(customer));
+    }
+
+    Optional&lt;Order&gt; order(long id) {
+        return Optional.ofNullable(orders.get(id));
+    }
+
+    /**
+     * A stream for one order: what the client missed (or the current status), then every change. Empty when the
+     * order is delivered and the client has seen that: the controller answers 204, which tells the browser to stop.
+     */
+    Optional&lt;SseEmitter&gt; subscribe(Order order, Long lastEventId) {
+        synchronized (order) {   // nothing can change between the replay and joining the list
+            if (order.status == Status.DELIVERED &amp;&amp; lastEventId != null &amp;&amp; lastEventId &gt;= order.lastEventId) {
+                return Optional.empty();
+            }
+            SseEmitter emitter = new SseEmitter(timeout.toMillis());
+            List&lt;Event&gt; missed = lastEventId == null ? null
+                    : order.history.stream().filter(e -&gt; e.id() &gt; lastEventId).toList();
+            boolean gap = missed != null &amp;&amp; !missed.isEmpty() &amp;&amp; missed.getFirst().id() != lastEventId + 1;
+            try {
+                // The reconnect delay first, always: it also sends the headers at once, even when nothing was missed.
+                emitter.send(SseEmitter.event().reconnectTime(retry.toMillis()));
+                if (missed == null || gap) {
+                    // First visit, or events we no longer keep: the current status instead of a hole in the story.
+                    emitter.send(SseEmitter.event().id(Long.toString(order.lastEventId)).name(&quot;snapshot&quot;)
+                            .data(order.history.getLast(), MediaType.APPLICATION_JSON));
+                } else {
+                    for (Event e : missed) {
+                        emitter.send(event(e));
+                    }
+                }
+            } catch (IOException e) {
+                emitter.completeWithError(e);
+                return Optional.of(emitter);
+            }
+            if (order.status == Status.DELIVERED) {
+                emitter.complete();   // the story is over: no need to stay connected
+                return Optional.of(emitter);
+            }
+            synchronized (openByCustomer) {   // challenge 2
+                if (openByCustomer.getOrDefault(order.customer, 0) &gt;= maxStreamsPerCustomer) {
+                    emitter.complete();
+                    throw new TooManyStreams();
+                }
+                openByCustomer.merge(order.customer, 1, Integer::sum);
+            }
+            order.streams.add(emitter);
+            // However the stream ends (delivered, timed out, a failed write), it leaves the list.
+            emitter.onCompletion(() -&gt; {
+                if (order.streams.remove(emitter)) {
+                    synchronized (openByCustomer) {
+                        openByCustomer.merge(order.customer, -1, Integer::sum);
+                    }
+                }
+            });
+            // On timeout, end it ourselves: otherwise Spring logs an AsyncRequestTimeoutException for every stream.
+            // The browser reconnects with Last-Event-ID and misses nothing.
+            emitter.onTimeout(emitter::complete);
+            return Optional.of(emitter);
+        }
+    }
+
+    /** The kitchen or the rider moves the order on, one step at a time. Empty if that is not the next step. */
+    Optional&lt;Event&gt; advance(Order order, Status to) {
+        synchronized (order) {
+            if (order.status.next().filter(to::equals).isEmpty()) {
+                return Optional.empty();
+            }
+            order.status = to;
+            Event event = append(order, to, null);
+            // shortcut: sends happen on this request&#x27;s thread, one stream after another; a client that reads slowly
+            // makes the kitchen wait. Hand the sends to an executor when an order has many watchers.
+            for (SseEmitter stream : order.streams) {
+                try {
+                    stream.send(event(event));
+                    if (to == Status.DELIVERED) {
+                        stream.complete();
+                    }
+                } catch (IOException | IllegalStateException gone) {
+                    drop(stream, gone);
+                }
+            }
+            return Optional.of(event);
+        }
+    }
+
+    /** Challenge 1: the rider&#x27;s position, only while out for delivery. Empty otherwise. */
+    Optional&lt;Event&gt; locate(Order order, Position position) {
+        synchronized (order) {
+            if (order.status != Status.OUT_FOR_DELIVERY) {
+                return Optional.empty();
+            }
+            Event event = append(order, order.status, position);
+            for (SseEmitter stream : order.streams) {
+                try {
+                    stream.send(event(event));
+                } catch (IOException | IllegalStateException gone) {
+                    drop(stream, gone);
+                }
+            }
+            return Optional.of(event);
+        }
+    }
+
+    private Event append(Order order, Status status, Position position) {
+        Event event = new Event(++order.lastEventId, order.id, status, Instant.now(), position);
+        order.history.add(event);
+        while (order.history.size() &gt; historySize) {
+            order.history.removeFirst();
+        }
+        return event;
+    }
+
+    /** A comment line to every stream. A client that has gone makes the write fail; its stream is dropped, not retried. */
+    @Scheduled(fixedRateString = &quot;${tiffino.sse.heartbeat}&quot;)
+    void heartbeat() {
+        for (Order order : orders.values()) {
+            for (SseEmitter stream : order.streams) {
+                try {
+                    stream.send(SseEmitter.event().comment(&quot;keep-alive&quot;));
+                } catch (IOException | IllegalStateException gone) {
+                    drop(stream, gone);
+                }
+            }
+        }
+    }
+
+    int streams() {
+        return orders.values().stream().mapToInt(o -&gt; o.streams.size()).sum();
+    }
+
+    /** Ends a stream whose client has gone; its completion callback takes it off the list. */
+    private static void drop(SseEmitter stream, Exception why) {
+        stream.completeWithError(why);
+    }
+
+    private static SseEmitter.SseEventBuilder event(Event e) {
+        return SseEmitter.event().id(Long.toString(e.id())).name(e.position() == null ? &quot;status&quot; : &quot;location&quot;).data(e, MediaType.APPLICATION_JSON);
+    }
+}</code></pre></div><p class="path">challenge/solution/OrderController.java</p><div class="src"><pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotNull;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+@RestController
+class OrderController {
+
+    record StatusChange(@NotNull OrderStreams.Status status) {
+    }
+
+    /** Challenge 1. */
+    record PositionRequest(@NotNull @DecimalMin(&quot;-90&quot;) @DecimalMax(&quot;90&quot;) Double lat, @NotNull @DecimalMin(&quot;-180&quot;) @DecimalMax(&quot;180&quot;) Double lng) {
+    }
+
+    private final OrderStreams streams;
+
+    OrderController(OrderStreams streams) {
+        this.streams = streams;
+    }
+
+    /** The customer&#x27;s own order only; anyone else&#x27;s is a 404. 204 once a delivered order&#x27;s last event was seen. */
+    @GetMapping(path = &quot;/orders/{id}/events&quot;, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    ResponseEntity&lt;SseEmitter&gt; events(@PathVariable long id, @RequestHeader(name = &quot;Last-Event-ID&quot;, required = false) Long lastEventId,
+                                      Authentication auth) {
+        OrderStreams.Order order = streams.order(id, auth.getName()).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such order.&quot;));
+        try {
+            return streams.subscribe(order, lastEventId).map(ResponseEntity::ok).orElseGet(() -&gt; ResponseEntity.noContent().build());
+        } catch (OrderStreams.TooManyStreams tooMany) {   // challenge 2
+            ErrorResponseException refused = problem(HttpStatus.TOO_MANY_REQUESTS,
+                    &quot;Too many open streams for this customer. Close one, or try again shortly.&quot;);
+            refused.getHeaders().set(&quot;Retry-After&quot;, &quot;15&quot;);
+            throw refused;
+        }
+    }
+
+    /** Simulated kitchen and rider: move an order to its next status. */
+    @PostMapping(&quot;/orders/{id}/status&quot;)
+    OrderStreams.Event advance(@PathVariable long id, @jakarta.validation.Valid @RequestBody StatusChange change) {
+        OrderStreams.Order order = streams.order(id).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such order.&quot;));
+        return streams.advance(order, change.status())
+                .orElseThrow(() -&gt; problem(HttpStatus.CONFLICT, &quot;An order moves one step at a time; it is &quot; + order.status + &quot;.&quot;));
+    }
+
+    /** Challenge 1: the rider&#x27;s phone (the kitchen sign-in here). */
+    @PostMapping(&quot;/orders/{id}/location&quot;)
+    OrderStreams.Event locate(@PathVariable long id, @jakarta.validation.Valid @RequestBody PositionRequest body) {
+        OrderStreams.Order order = streams.order(id).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such order.&quot;));
+        return streams.locate(order, new OrderStreams.Position(body.lat(), body.lng()))
+                .orElseThrow(() -&gt; problem(HttpStatus.CONFLICT, &quot;Positions are sent only while the order is out for delivery.&quot;));
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Ten servers, one kitchen</h2>
+<p>Tiffino runs ten servers; a phone's stream is on one of them, and the kitchen's update reaches another. Design how every server learns about the change (Valkey pub/sub, Kafka, or a database's LISTEN/NOTIFY), where the event history lives so any server can replay it, and how many streams one server can hold. Then argue: would WebSockets or plain polling with <code>ETag</code>s be better for this screen?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: streams that never end, and clients that leave.</li>
+<li>Number every event per order and keep the last few.</li>
+<li>Subscribe: retry hint, replay or snapshot, then join the list, all under the order's lock.</li>
+<li>End streams: timeout, completion callback, heartbeat, delivery and <code>204</code>.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>SSE with ids, timeouts and heartbeats</td><td>An open connection per watcher; one-way only.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Polling every 2 s</td><td>30,000 requests a second, nearly all "no change".</td><td><span class="pill bad">The problem</span></td></tr><tr><td>SSE that never times out</td><td>Connections and memory held for every client that ever left.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Polling with <code>ETag</code> and a longer interval</td><td>Cheaper per request, still late and still many.</td><td><span class="pill warn">Fine for slow-changing data</span></td></tr><tr><td>WebSockets</td><td>Two-way; more to run (upgrades, proxies, own reconnect logic).</td><td><span class="pill warn">When the client also talks</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>No database: orders and their last events are in memory. With several servers, the history moves to a shared store and changes go through a broker (challenge 3).</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Connections</dt><dd>Each watcher holds a connection (not a thread: servlet async releases it). Size the server's connection limit and file descriptors for the busiest hour.</dd>
+<dt>Proxies</dt><dd>Turn response buffering off for the stream's path and keep heartbeats shorter than every idle timeout on the way.</dd>
+<dt>HTTP/1.1</dt><dd>Browsers allow about six connections per host over HTTP/1.1; streams count. HTTP/2 removes that limit.</dd>
+<dt>Several servers</dt><dd>Publish changes through a broker so every server can tell its own watchers; keep the history somewhere shared.</dd>
+<dt>Slow readers</dt><dd>Sends here run on the caller's thread; with many watchers, hand them to an executor with a bounded queue and drop readers that fall behind.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>When do you choose SSE over polling and WebSockets?</summary><p>SSE when the server pushes and the client only listens: one HTTP response, automatic reconnects, event ids. Polling for rare changes; WebSockets when the client talks back too.</p></details><details class="qa"><summary>How does a client resume after a dropped connection?</summary><p>The browser reconnects after the retry delay and sends Last-Event-ID; the server replays what came after it.</p></details><details class="qa"><summary>How do you stop leaking SSE connections?</summary><p>A timeout on every emitter, removal in a completion callback, and heartbeats that make writes to gone clients fail.</p></details><details class="qa"><summary>How does the server tell the browser to stop reconnecting?</summary><p>Answer 204 No Content.</p></details><details class="qa"><summary>What if the client&#x27;s last event is no longer kept?</summary><p>Send a snapshot of the current state instead of pretending nothing was missed.</p></details><details class="qa"><summary>How do you test SSE?</summary><p>On a real port, reading the stream line by line, with Awaitility for each expected event.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 10 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>Streams</td><td>Events reach the app.</td><td>Ids, retry, snapshot, 204 at the end.</td></tr><tr><td>Resources</td><td>A timeout.</td><td>Removal however a stream ends, and heartbeats; you can say what a stream costs.</td></tr><tr><td>Testing</td><td>One stream test.</td><td>Reconnects, gaps, timeouts and many watchers on a real port.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate "simplifies the streams": no timeout, "so phones never have to reconnect", and no completion callback, "since streams leave the list when a write to them fails". Read the file and list every problem before opening the findings.</p>
+<p class="path">review/OrderStreams.java</p>
+<pre class="code"><code class="language-java">package com.tiffino.orders;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
+
+/**
+ * Each order&#x27;s status, its recent events, and the streams listening to it.
+ * shortcut: in this server&#x27;s memory; with several servers, publish status changes through a broker (Valkey pub/sub,
+ * Kafka) so every server can tell its own subscribers.
+ */
+@Service
+class OrderStreams {
+
+    enum Status {
+        PLACED, ACCEPTED, COOKING, OUT_FOR_DELIVERY, DELIVERED;
+
+        Optional&lt;Status&gt; next() {
+            return ordinal() + 1 &lt; values().length ? Optional.of(values()[ordinal() + 1]) : Optional.empty();
+        }
+    }
+
+    record Event(long id, long orderId, Status status, Instant at) {
+    }
+
+    static final class Order {
+        final long id;
+        final String customer;
+        Status status = Status.PLACED;
+        long lastEventId;
+        final Deque&lt;Event&gt; history = new ArrayDeque&lt;&gt;();
+        final List&lt;SseEmitter&gt; streams = new CopyOnWriteArrayList&lt;&gt;();
+
+        Order(long id, String customer) {
+            this.id = id;
+            this.customer = customer;
+            history.add(new Event(++lastEventId, id, status, Instant.now()));
+        }
+    }
+
+    /** Demo orders 1001 to 1099: odd ones are Riya&#x27;s, even ones Kabir&#x27;s. */
+    private final Map&lt;Long, Order&gt; orders = LongStream.rangeClosed(1001, 1099).boxed()
+            .collect(Collectors.toUnmodifiableMap(id -&gt; id, id -&gt; new Order(id, id % 2 == 1 ? &quot;riya&quot; : &quot;kabir&quot;)));
+    private final Duration timeout;
+    private final Duration retry;
+    private final int historySize;
+
+    OrderStreams(@Value(&quot;${tiffino.sse.timeout}&quot;) Duration timeout, @Value(&quot;${tiffino.sse.retry}&quot;) Duration retry,
+                 @Value(&quot;${tiffino.sse.history}&quot;) int historySize) {
+        this.timeout = timeout;
+        this.retry = retry;
+        this.historySize = historySize;
+    }
+
+    Optional&lt;Order&gt; order(long id, String customer) {
+        return Optional.ofNullable(orders.get(id)).filter(o -&gt; o.customer.equals(customer));
+    }
+
+    Optional&lt;Order&gt; order(long id) {
+        return Optional.ofNullable(orders.get(id));
+    }
+
+    /**
+     * A stream for one order: what the client missed (or the current status), then every change. Empty when the
+     * order is delivered and the client has seen that: the controller answers 204, which tells the browser to stop.
+     */
+    Optional&lt;SseEmitter&gt; subscribe(Order order, Long lastEventId) {
+        synchronized (order) {   // nothing can change between the replay and joining the list
+            if (order.status == Status.DELIVERED &amp;&amp; lastEventId != null &amp;&amp; lastEventId &gt;= order.lastEventId) {
+                return Optional.empty();
+            }
+            SseEmitter emitter = new SseEmitter(0L);   // no timeout: phones never have to reconnect
+            List&lt;Event&gt; missed = lastEventId == null ? null
+                    : order.history.stream().filter(e -&gt; e.id() &gt; lastEventId).toList();
+            boolean gap = missed != null &amp;&amp; !missed.isEmpty() &amp;&amp; missed.getFirst().id() != lastEventId + 1;
+            try {
+                // The reconnect delay first, always: it also sends the headers at once, even when nothing was missed.
+                emitter.send(SseEmitter.event().reconnectTime(retry.toMillis()));
+                if (missed == null || gap) {
+                    // First visit, or events we no longer keep: the current status instead of a hole in the story.
+                    emitter.send(SseEmitter.event().id(Long.toString(order.lastEventId)).name(&quot;snapshot&quot;)
+                            .data(order.history.getLast(), MediaType.APPLICATION_JSON));
+                } else {
+                    for (Event e : missed) {
+                        emitter.send(event(e));
+                    }
+                }
+            } catch (IOException e) {
+                emitter.completeWithError(e);
+                return Optional.of(emitter);
+            }
+            if (order.status == Status.DELIVERED) {
+                emitter.complete();   // the story is over: no need to stay connected
+                return Optional.of(emitter);
+            }
+            order.streams.add(emitter);   // streams leave the list when a write to them fails
+            return Optional.of(emitter);
+        }
+    }
+
+    /** The kitchen or the rider moves the order on, one step at a time. Empty if that is not the next step. */
+    Optional&lt;Event&gt; advance(Order order, Status to) {
+        synchronized (order) {
+            if (order.status.next().filter(to::equals).isEmpty()) {
+                return Optional.empty();
+            }
+            order.status = to;
+            Event event = new Event(++order.lastEventId, order.id, to, Instant.now());
+            order.history.add(event);
+            while (order.history.size() &gt; historySize) {
+                order.history.removeFirst();
+            }
+            // shortcut: sends happen on this request&#x27;s thread, one stream after another; a client that reads slowly
+            // makes the kitchen wait. Hand the sends to an executor when an order has many watchers.
+            for (SseEmitter stream : order.streams) {
+                try {
+                    stream.send(event(event));
+                    if (to == Status.DELIVERED) {
+                        stream.complete();
+                    }
+                } catch (IOException | IllegalStateException gone) {
+                    drop(stream, gone);
+                }
+            }
+            return Optional.of(event);
+        }
+    }
+
+    /** A comment line to every stream. A client that has gone makes the write fail; its stream is dropped, not retried. */
+    @Scheduled(fixedRateString = &quot;${tiffino.sse.heartbeat}&quot;)
+    void heartbeat() {
+        for (Order order : orders.values()) {
+            for (SseEmitter stream : order.streams) {
+                try {
+                    stream.send(SseEmitter.event().comment(&quot;keep-alive&quot;));
+                } catch (IOException | IllegalStateException gone) {
+                    drop(stream, gone);
+                }
+            }
+        }
+    }
+
+    int streams() {
+        return orders.values().stream().mapToInt(o -&gt; o.streams.size()).sum();
+    }
+
+    /** Ends a stream whose client has gone; its completion callback takes it off the list. */
+    private static void drop(SseEmitter stream, Exception why) {
+        stream.completeWithError(why);
+    }
+
+    private static SseEmitter.SseEventBuilder event(Event e) {
+        return SseEmitter.event().id(Long.toString(e.id())).name(&quot;status&quot;).data(e, MediaType.APPLICATION_JSON);
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>No timeout</summary><p>"So phones never have to reconnect": and a phone that leaves without a word is never noticed unless something writes to it. Reconnects are cheap and built into the browser; a stream with no end is a connection held for ever.</p><p class="evidence"><b>Test evidence:</b> <code>aStreamTimesOutAndTheClientResumesWithoutMissingAnything</code> and <code>aStreamThatTimedOutIsNoLongerHeld</code> fail.</p></details><details class="finding"><summary><span class="sev">2</span>Streams leave the list only on a failed write</summary><p>"Streams leave the list when a write to them fails": but in this version nothing removes them, even then. A failed heartbeat ends the stream, and the ended stream stays in the list for ever; delivered orders' streams too.</p><p class="evidence"><b>Test evidence:</b> <code>theApiLetsGoOfClientsThatLeft</code> fails: the twenty streams stay.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the flawed file copied over the real one, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>OrderEventsContractTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill ok">3 / 3</span></td></tr><tr><td><code>ReconnectMessagingTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill ok">3 / 3</span></td></tr><tr><td><code>LeakingStreamsTrapTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">1 / 2</span></td></tr><tr><td><code>StreamTimeoutTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">0 / 2</span></td></tr></tbody></table></div>
+<p class="note">Every event still reaches every phone that is watching. The flaw is in the phones that stopped watching: invisible in a demo, a slow leak at dinner time.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
