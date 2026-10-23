@@ -1,0 +1,2049 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 094 · Image previews without SSRF</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 094</span>
+    <h1>Image previews without SSRF</h1>
+    <p class="scenario">A &#x27;preview this link&#x27; feature let an attacker read the cloud metadata service through our server.</p>
+    <p class="sim"><b>Simulation</b><span>The members, the news site and the "internal metadata service" are demo data: in the tests two small local servers stand for a public site and a cloud metadata service, and a stand-in for DNS points names at them. The secret is a made-up string.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Social</li>
+      <li><b>Types</b>Security</li>
+      <li><b>Reviewer view</b>Yes</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>092 KYC document upload</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · SSRF defences · Apache HttpClient 5 with a checking DNS resolver · timeouts and size limits · Spring Security 7</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>A preview of the keys</strong><p>Chaupal shows a preview when a member pastes a link. An attacker pasted http://169.254.169.254/latest/meta-data/iam/security-credentials/. The server fetched it, from inside the cloud, and the preview showed the server's access keys.</p></li><li><strong>A check that looked once</strong><p>The fix looked up the name, checked the address was public, and then fetched the URL. The fetch looked the name up again. The attacker's name answered a public address to the check and an internal one to the fetch.</p></li><li><strong>The fix</strong><p>The server looks every name up once, itself, refuses it if any address is internal, and connects to exactly the addresses it checked, also after redirects. It waits at most 3 seconds and reads at most 512 KB.</p></li></ol>
+<p class="lesson">A server that fetches URLs for users is a door into your network. Check where each connection really goes, at the moment it goes.</p>
+
+<h2>What are we building?</h2>
+<p>Link previews for members' draft posts, fetched only from the public internet, quickly and in small amounts.</p>
+
+<h2>An everyday analogy</h2>
+<p>A receptionist who fetches documents for visitors, but only from outside the building, reads the address on the envelope themselves at the moment they leave, and gives up if it takes too long.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Check the link</strong>: http or https, a host, no user name in it.</li>
+<li><strong>Look the name up once</strong>: if any address is loopback, private, link-local or similar, refuse.</li>
+<li><strong>Connect to those addresses</strong>, with short timeouts; redirects go through steps 1 and 2 again.</li>
+<li><strong>Read a little</strong>: HTML only, the first 512 KB, then take the title, description and image link.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: the link is http://news.example/... and news.example has two addresses, one public and one 10.0.0.5. Fetch or not?</summary><p>Refuse. The connection could go to either address, so one internal address is enough: <code>everyWayToNameAnInternalAddressIsRefused</code> (mixed.example).</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No image fetching.</strong> The image is only linked; fetching it is challenge 2, with the same checks.</li>
+<li><strong>No cache.</strong> Previews are kept in memory per member.</li>
+<li><strong>No HTML parser.</strong> A few regular expressions read the title and Open Graph tags.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Link preview</strong></td><td>The title, text and picture shown when a link is pasted into a post.</td><td>The cover of a book seen through a shop window.</td><td><code>POST /link-previews</code></td></tr><tr><td><strong>SSRF</strong></td><td>Server-side request forgery: making a server fetch an address the attacker cannot reach themselves.</td><td>Asking the receptionist to fetch a file from the manager's locked office.</td><td>the metadata address</td></tr><tr><td><strong>Metadata service</strong></td><td>An address inside cloud machines (169.254.169.254) that hands out the machine's keys.</td><td>The key cabinet behind the counter.</td><td><code>169.254.169.254</code></td></tr><tr><td><strong>Private address</strong></td><td>An address only reachable inside a network: 10.x, 192.168.x, 127.0.0.1...</td><td>A room number inside the building.</td><td><code>AddressPolicy</code></td></tr><tr><td><strong>DNS rebinding</strong></td><td>A name that answers a safe address when checked and an internal one when used.</td><td>A visitor whose badge says "guest" at the door and "staff" inside.</td><td><code>rebind.example</code></td></tr><tr><td><strong>Timeout</strong></td><td>The longest the server waits for a page.</td><td>Hanging up after three rings.</td><td>2 s to connect, 3 s to answer</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Chaupal</strong> (a fictional community app): a "preview this link" feature let an attacker read the cloud metadata service through our server.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo users: members meera and dev, and a guest; password <code>name-demo-pass</code>. Demo rules: 2 s to connect, 3 s to answer, 3 redirects, 512 KB.</p>
+<ol class="gwt">
+<li><b>Given</b> a public web page, <b>then</b> <code>201</code> with its title, description and an absolute image link.</li>
+<li><b>Given</b> any address that is loopback, private, link-local, "this network", carrier-grade NAT, multicast or IPv6 unique-local, by IP, by name, among several addresses, or after a redirect, <b>then</b> <code>422</code>, without connecting.</li>
+<li><b>Given</b> a name that changes its answer, <b>then</b> the address checked is the address used.</li>
+<li><b>Given</b> another scheme, no host or a user name in the link, <b>then</b> <code>400</code>.</li>
+<li><b>Given</b> a slow page, <b>then</b> <code>504</code> within about 3 s; a huge page, only its first 512 KB.</li>
+<li><b>Given</b> another member's preview, <b>then</b> <code>404</code>; a guest, <code>403</code>; no sign-in, <code>401</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>One lookup per connection, checked and used together.</li>
+<li>Limits on time, size, redirects and type.</li>
+<li>No fetch of the image by the server (until challenge 2 adds it with the same checks).</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Recognise SSRF and why cloud metadata makes it serious.</li>
+<li>Block address ranges, not host names.</li>
+<li>Defeat DNS rebinding by pinning the checked addresses.</li>
+<li>Put timeouts and size limits on every outgoing request.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/link-previews</code></td><td><code>{url}</code>: fetch the page safely and keep a preview for the member.</td></tr><tr><td><code>GET</code></td><td><code>/link-previews/{id}</code></td><td>The member's own preview.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span> / <span class="pill ok">201</span></td><td>The preview / created</td></tr><tr><td><span class="pill warn">400</span></td><td>Not a link; not http or https; no host; a user name in it</td></tr><tr><td><span class="pill warn">401</span> / <span class="pill warn">403</span></td><td>No sign-in / a guest</td></tr><tr><td><span class="pill warn">404</span></td><td>No such preview for this member</td></tr><tr><td><span class="pill warn">422</span></td><td>A blocked address; no such host; not HTML; not 200; too many or bad redirects</td></tr><tr><td><span class="pill warn">502</span> / <span class="pill warn">504</span></td><td>The page could not be fetched / took more than 3 s</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 23 Oct 2026, in this order. The running app uses real DNS, and every address it could reach while capturing is private: these are refusals. Successful previews are shown by the tests, against the test sites. JSON bodies are indented for reading; <code>Date</code>, connection and standard security headers are left out.</p>
+<section class="example"><h3>Case 1: the cloud metadata address</h3><p><b>Why:</b> 169.254.169.254 is link-local: <code>422</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /link-previews HTTP/1.1
+Authorization: Basic bWVlcmE6bWVlcmEtZGVtby1wYXNz
+Content-Type: application/json
+
+{
+  &quot;url&quot;: &quot;http://169.254.169.254/latest/meta-data/iam/security-credentials/&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;This address cannot be previewed&quot;,
+  &quot;instance&quot;: &quot;/link-previews&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Unprocessable Content&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: the app itself, on localhost</h3><p><b>Why:</b> loopback: <code>422</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /link-previews HTTP/1.1
+Authorization: Basic bWVlcmE6bWVlcmEtZGVtby1wYXNz
+Content-Type: application/json
+
+{
+  &quot;url&quot;: &quot;http://localhost:8080/actuator&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;This address cannot be previewed&quot;,
+  &quot;instance&quot;: &quot;/link-previews&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Unprocessable Content&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: [::1]</h3><p><b>Why:</b> IPv6 loopback: <code>422</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /link-previews HTTP/1.1
+Authorization: Basic bWVlcmE6bWVlcmEtZGVtby1wYXNz
+Content-Type: application/json
+
+{
+  &quot;url&quot;: &quot;http://[::1]:8080/&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;This address cannot be previewed&quot;,
+  &quot;instance&quot;: &quot;/link-previews&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Unprocessable Content&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: 10.0.0.5</h3><p><b>Why:</b> a private network: <code>422</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /link-previews HTTP/1.1
+Authorization: Basic bWVlcmE6bWVlcmEtZGVtby1wYXNz
+Content-Type: application/json
+
+{
+  &quot;url&quot;: &quot;http://10.0.0.5/admin&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;This address cannot be previewed&quot;,
+  &quot;instance&quot;: &quot;/link-previews&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Unprocessable Content&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: file:///etc/passwd</h3><p><b>Why:</b> only http and https: <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /link-previews HTTP/1.1
+Authorization: Basic bWVlcmE6bWVlcmEtZGVtby1wYXNz
+Content-Type: application/json
+
+{
+  &quot;url&quot;: &quot;file:///etc/passwd&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Only http and https links to a host can be previewed&quot;,
+  &quot;instance&quot;: &quot;/link-previews&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: nosuch.invalid</h3><p><b>Why:</b> <code>.invalid</code> never resolves: <code>422</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /link-previews HTTP/1.1
+Authorization: Basic bWVlcmE6bWVlcmEtZGVtby1wYXNz
+Content-Type: application/json
+
+{
+  &quot;url&quot;: &quot;http://nosuch.invalid/&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No such host&quot;,
+  &quot;instance&quot;: &quot;/link-previews&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Unprocessable Content&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: a guest</h3><p><b>Why:</b> <code>403</code>: previews are for members.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /link-previews HTTP/1.1
+Authorization: Basic Z3Vlc3Q6Z3Vlc3QtZGVtby1wYXNz
+Content-Type: application/json
+
+{
+  &quot;url&quot;: &quot;http://169.254.169.254/&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 403 
+Content-Type: application/problem+json
+Content-Length: 104
+
+{
+  &quot;title&quot;: &quot;Not allowed&quot;,
+  &quot;status&quot;: 403,
+  &quot;detail&quot;: &quot;This sign-in cannot do this.&quot;,
+  &quot;instance&quot;: &quot;/link-previews&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 8: no sign-in</h3><p><b>Why:</b> <code>401</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /link-previews HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;url&quot;: &quot;http://169.254.169.254/&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 401 
+WWW-Authenticate: Basic realm=&quot;chaupal&quot;
+Content-Type: application/problem+json
+Content-Length: 116
+
+{
+  &quot;title&quot;: &quot;Sign-in required&quot;,
+  &quot;status&quot;: 401,
+  &quot;detail&quot;: &quot;Send a valid username and password.&quot;,
+  &quot;instance&quot;: &quot;/link-previews&quot;
+}</code></pre></div></div></section>
+<p class="muted">Timed by <code>docs/capture.sh</code>: The metadata address was refused after 100 ms (rounded down to 100 ms); the connect timeout is 2,000 ms. Refused at the lookup, before any connection could wait.</p>
+</section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>A public page</td><td>Title, description, absolute image link; readable by its member</td><td><code>aPublicPageGivesATitleDescriptionAndImageLink</code></td></tr><tr><td>A redirect to a public page</td><td>Followed; relative links resolve against the final page</td><td><code>aSafeRedirectIsFollowed</code></td></tr><tr><td>An image, a 404, an unknown host, a redirect loop, not a link</td><td><code>422</code> or <code>400</code> with a plain reason</td><td><code>whatCannotBePreviewedIsSaidPlainly</code></td></tr><tr><td>Loopback, IPv6, mapped IPv4, 0.0.0.0, metadata, private, CGNAT, ULA, a mixed name, a redirect inside</td><td><code>422</code></td><td><code>everyWayToNameAnInternalAddressIsRefused</code></td></tr><tr><td>file:, gopher:, ftp:, no host, user info, javascript:; a redirect to file:</td><td><code>400</code>; <code>422</code></td><td><code>onlyHttpAndHttpsToAHost</code></td></tr><tr><td>Each address rule</td><td>Blocked or open, one by one</td><td><code>theAddressRulesOneByOne</code></td></tr><tr><td>No sign-in, a guest, another member's preview</td><td><code>401</code>, <code>403</code>, <code>404</code></td><td><code>signInRulesAndAnotherMembersPreview</code></td></tr><tr><td>A page that answers after 10 s</td><td><code>504</code> after about 3 s</td><td><code>aSlowPageTimesOut</code></td></tr><tr><td>A page that never ends</td><td>The first 512 KB, in under 2 s</td><td><code>aHugePageIsReadOnlyAsFarAsAPreviewNeeds</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Fetching any URL the user sends, including internal addresses.</p>
+<ul>
+<li><strong>The old way.</strong> <code>openStream()</code> on the internal address returns the secret.</li>
+<li><strong>Check, then fetch.</strong> The test looks up <code>rebind.example</code> (a public address: "go ahead"), then the fetch looks it up again and gets the internal one: the secret again.</li>
+<li><strong>The API.</strong> <code>metadata.internal</code> is refused. <code>rebind.example</code> is looked up once, checked, and fetched from that same public address: the news page, and exactly one lookup.</li>
+</ul>
+<p>While building, each part was undone once: no address check turned 2 tests red; checking only the first address 1; no link-local 2; no carrier-grade NAT 2; no IPv6 unique-local 2; no scheme check 1; user info allowed 1; no size cap 1; no cancel after the cap 1; long timeouts 1; no type check 1; any member's preview 1.</p>
+</div>
+<pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import org.junit.jupiter.api.Test;
+
+import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.URI;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Written first. The old preview fetched any URL it was sent. An attacker sent the cloud metadata address and read the
+ * instance&#x27;s keys in the &quot;preview&quot;. A later fix checked the name&#x27;s address first, then fetched: a name that answers
+ * a public address once and an internal one the next time (DNS rebinding) walked straight through.
+ */
+class FetchAnyUrlTrapTest extends ApiTest {
+
+    @Test
+    void theOldWayReadTheInternalSecret() throws Exception {
+        try (InputStream in = URI.create(TestSites.url(&quot;127.0.0.1&quot;, &quot;/latest/meta-data/iam/security-credentials/&quot;)).toURL().openStream()) {
+            assertThat(new String(in.readAllBytes())).isEqualTo(TestSites.SECRET);
+        }
+    }
+
+    @Test
+    void checkingFirstAndFetchingLaterWasFooledByRebinding() throws Exception {
+        AddressPolicy policy = new AddressPolicy(java.util.List.of(&quot;127.0.0.2&quot;));
+        InetAddress checked = TestSites.lookup(&quot;rebind.example&quot;)[0];
+        assertThat(policy.isBlocked(checked)).isFalse();                    // &quot;it is public, go ahead&quot;
+        InetAddress connectedTo = TestSites.lookup(&quot;rebind.example&quot;)[0];    // the fetch resolves the name again
+        try (InputStream in = URI.create(TestSites.url(connectedTo.getHostAddress(), &quot;/&quot;)).toURL().openStream()) {
+            assertThat(new String(in.readAllBytes())).isEqualTo(TestSites.SECRET);
+        }
+    }
+
+    @Test
+    void theApiRefusesInternalAddressesAndIsNotFooledByRebinding() throws Exception {
+        preview(TestSites.url(&quot;metadata.internal&quot;, &quot;/latest/meta-data/iam/security-credentials/&quot;)).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;This address cannot be previewed&quot;));
+        TestSites.rebindLookups.set(0);
+        preview(TestSites.url(&quot;rebind.example&quot;, &quot;/article&quot;)).andExpect(status().isCreated())
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Monsoon reaches Kerala early&quot;));   // checked and fetched from the same, public address
+        assertThat(TestSites.rebindLookups.get()).isOne();                                // one lookup: no second answer to trust
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr><tr><td>macOS only</td><td>The address 127.0.0.2 on the loopback interface, for the tests</td><td><code>sudo ifconfig lo0 alias 127.0.0.2</code></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 12 tests</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Ask for a preview of the app itself, as Meera:</p>
+<pre class="code"><code class="language-bash">curl -u meera:meera-demo-pass -H &#x27;Content-Type: application/json&#x27; -d &#x27;{&quot;url&quot;: &quot;http://localhost:8080/actuator&quot;}&#x27; http://localhost:8080/link-previews</code></pre>
+<p>It answers <code>422</code> "This address cannot be previewed", as in case 2. With internet access, a public news page gives <code>201</code> and its title.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>Tests fail to bind 127.0.0.2 (macOS)</td><td>macOS routes only 127.0.0.1 by default.</td><td><code>sudo ifconfig lo0 alias 127.0.0.2</code></td></tr><tr><td>A huge page times out instead of stopping</td><td>The client reads the rest of the body to reuse the connection.</td><td>Cancel the request after reading what you need, as <code>SafeFetcher</code> does.</td></tr><tr><td>Every preview is refused behind a corporate proxy</td><td>The fetcher connects directly; a proxy changes where connections go.</td><td>Then the proxy must enforce the same rules (challenge 3).</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/094-image-previews-without-ssrf/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/chaupal/previews/
+│   ├── SecurityConfig.java   ├── PreviewController.java   ├── Previews.java
+│   ├── SafeFetcher.java   ├── AddressPolicy.java   ├── NameLookup.java
+│   └── ProblemResponses.java   └── PreviewsApplication.java
+├── src/main/resources/application.yaml
+├── src/test/java/com/chaupal/previews/   (see Tests; TestSites.java runs the two test servers)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">SecurityConfig.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">PreviewController.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">Previews.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">SafeFetcher.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">AddressPolicy.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">NameLookup.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">ProblemResponses.java</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">PreviewsApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/chaupal/previews/SecurityConfig.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Who may preview.</dd><dt>Why</dt><dd>HTTP Basic; members create and read; guests nothing.</dd><dt>Without it</dt><dd>Anyone using the server as a fetcher.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems) throws Exception {
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(HttpMethod.POST, &quot;/link-previews&quot;).hasRole(&quot;MEMBER&quot;)
+                        .requestMatchers(HttpMethod.GET, &quot;/link-previews/*&quot;).hasRole(&quot;MEMBER&quot;)
+                        .requestMatchers(&quot;/error&quot;).permitAll()
+                        .anyRequest().denyAll())
+                .httpBasic(b -&gt; b.authenticationEntryPoint(problems::unauthenticated))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable());   // credentials in a header with every request, no cookie a browser sends by itself
+        return http.build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+
+    /** Demo users: members meera and dev, and a guest who may only read; password &quot;name-demo-pass&quot;. */
+    @Bean
+    InMemoryUserDetailsManager users(PasswordEncoder encoder) {
+        return new InMemoryUserDetailsManager(
+                User.withUsername(&quot;meera&quot;).password(encoder.encode(&quot;meera-demo-pass&quot;)).roles(&quot;MEMBER&quot;).build(),
+                User.withUsername(&quot;dev&quot;).password(encoder.encode(&quot;dev-demo-pass&quot;)).roles(&quot;MEMBER&quot;).build(),
+                User.withUsername(&quot;guest&quot;).password(encoder.encode(&quot;guest-demo-pass&quot;)).roles(&quot;GUEST&quot;).build());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/chaupal/previews/PreviewController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The endpoints.</dd><dt>Why</dt><dd>Parses the link, hands it to <code>Previews</code>.</dd><dt>Without it</dt><dd>Links that are not links reaching the fetcher.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.net.URISyntaxException;
+
+@RestController
+class PreviewController {
+
+    record PreviewRequest(@NotNull @Size(max = 2000) String url) {
+    }
+
+    private final Previews previews;
+
+    PreviewController(Previews previews) {
+        this.previews = previews;
+    }
+
+    @PostMapping(&quot;/link-previews&quot;)
+    @ResponseStatus(HttpStatus.CREATED)
+    Previews.Preview create(@Valid @RequestBody PreviewRequest body, Authentication who) {
+        URI uri;
+        try {
+            uri = new URI(body.url().strip());
+        } catch (URISyntaxException e) {
+            throw SafeFetcher.problem(HttpStatus.BAD_REQUEST, &quot;Not a valid link&quot;);
+        }
+        return previews.create(who.getName(), uri);
+    }
+
+    @GetMapping(&quot;/link-previews/{id}&quot;)
+    Previews.Preview get(@PathVariable String id, Authentication who) {
+        return previews.get(who.getName(), id);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/chaupal/previews/Previews.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Making and keeping previews.</dd><dt>Why</dt><dd>Fetches the page safely, reads the title and Open Graph tags, keeps the preview for its member.</dd><dt>Without it</dt><dd>One member reading another's drafts.</dd></dl><p>The image link is returned, never fetched by the server.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+
+import java.net.URI;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/** A preview of a link for a member&#x27;s draft post: the page&#x27;s title, description and image link. */
+@Service
+class Previews {
+
+    record Preview(String id, String url, String title, String description, String imageUrl) {
+    }
+
+    private record Owned(String owner, Preview preview) {
+    }
+
+    private static final Pattern TITLE = Pattern.compile(&quot;&lt;title[^&gt;]*&gt;(.*?)&lt;/title&gt;&quot;, Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+
+    private final SafeFetcher fetcher;
+    // shortcut: previews are kept in memory and lost on restart; a real service would cache them in a store with an expiry.
+    private final Map&lt;String, Owned&gt; byId = new ConcurrentHashMap&lt;&gt;();
+
+    Previews(SafeFetcher fetcher) {
+        this.fetcher = fetcher;
+    }
+
+    Preview create(String owner, URI url) {
+        SafeFetcher.Page page = fetcher.fetch(url);
+        String title = meta(page.html(), &quot;og:title&quot;);
+        if (title == null) {
+            Matcher m = TITLE.matcher(page.html());
+            title = m.find() ? unescape(m.group(1).strip()) : null;
+        }
+        Preview p = new Preview(UUID.randomUUID().toString(), url.toString(), title, meta(page.html(), &quot;og:description&quot;), image(page));
+        byId.put(p.id(), new Owned(owner, p));
+        return p;
+    }
+
+    /** A draft&#x27;s preview is its owner&#x27;s: anyone else gets &quot;not found&quot;, which says nothing about whether it exists. */
+    Preview get(String owner, String id) {
+        Owned o = byId.get(id);
+        if (o == null || !o.owner().equals(owner)) {
+            throw SafeFetcher.problem(HttpStatus.NOT_FOUND, &quot;No such preview&quot;);
+        }
+        return o.preview();
+    }
+
+    /** The image is only linked, never fetched by the server: fetching it would need the same checks as the page. */
+    private static String image(SafeFetcher.Page page) {
+        String src = meta(page.html(), &quot;og:image&quot;);
+        if (src == null) {
+            return null;
+        }
+        try {
+            URI resolved = page.finalUri().resolve(src.strip());
+            return resolved.getScheme() != null &amp;&amp; resolved.getScheme().matches(&quot;(?i)https?&quot;) ? resolved.toString() : null;
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private static String meta(String html, String property) {
+        Matcher m = Pattern.compile(&quot;&lt;meta[^&gt;]+property=[\&quot;&#x27;]&quot; + Pattern.quote(property) + &quot;[\&quot;&#x27;][^&gt;]*content=[\&quot;&#x27;]([^\&quot;&#x27;]*)[\&quot;&#x27;]&quot;, Pattern.CASE_INSENSITIVE).matcher(html);
+        return m.find() ? unescape(m.group(1).strip()) : null;
+    }
+
+    private static String unescape(String s) {
+        return s.replace(&quot;&amp;quot;&quot;, &quot;\&quot;&quot;).replace(&quot;&amp;#39;&quot;, &quot;&#x27;&quot;).replace(&quot;&amp;lt;&quot;, &quot;&lt;&quot;).replace(&quot;&amp;gt;&quot;, &quot;&gt;&quot;).replace(&quot;&amp;amp;&quot;, &quot;&amp;&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/chaupal/previews/SafeFetcher.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Fetching safely.</dd><dt>Why</dt><dd>Apache HttpClient with our <code>DnsResolver</code>: each name resolved once and refused if any address is blocked, then connected to exactly those addresses. Timeouts, 3 redirects, HTML only, the first 512 KB.</dd><dt>Without it</dt><dd>SSRF, DNS rebinding, redirects inside, and pages that never end.</dd></dl><ul><li>The resolver is the only place names become addresses, so the check and the connection cannot disagree.</li><li>When more than 512 KB is coming, the request is cancelled: otherwise the client reads the rest to reuse the connection, and an endless page timed out. Found while building.</li><li>A redirect to <code>file:</code> surfaces as a protocol error; it is answered <code>422</code>.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import org.apache.hc.client5.http.DnsResolver;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.protocol.HttpClientContext;
+import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.util.Timeout;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Component;
+import org.springframework.web.ErrorResponseException;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.SocketTimeoutException;
+import java.net.URI;
+import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+
+/**
+ * Fetches a page for a preview, safely. Every name is resolved once, by our resolver, which refuses it if any of its
+ * addresses is blocked; the connection then goes to exactly those addresses. So a check cannot be fooled by a name
+ * that answers differently the second time (DNS rebinding), and redirects go through the same check.
+ */
+@Component
+class SafeFetcher {
+
+    static final int MAX_BYTES = 512 * 1024;
+    static final int MAX_REDIRECTS = 3;
+
+    record Page(URI finalUri, String html) {
+    }
+
+    static final class Blocked extends UnknownHostException {
+        Blocked(String host) {
+            super(host + &quot; resolves to an address that is not allowed&quot;);
+        }
+    }
+
+    private final CloseableHttpClient http;
+
+    SafeFetcher(AddressPolicy policy, NameLookup lookup) {
+        DnsResolver checked = new DnsResolver() {
+            @Override
+            public InetAddress[] resolve(String host) throws UnknownHostException {
+                InetAddress[] all = lookup.lookup(host);
+                for (InetAddress a : all) {
+                    if (policy.isBlocked(a)) {
+                        throw new Blocked(host);   // one bad address is enough: the client could pick it
+                    }
+                }
+                return all;
+            }
+
+            @Override
+            public String resolveCanonicalHostname(String host) {
+                return host;
+            }
+        };
+        this.http = HttpClients.custom()
+                .setConnectionManager(PoolingHttpClientConnectionManagerBuilder.create().setDnsResolver(checked)
+                        .setDefaultConnectionConfig(ConnectionConfig.custom().setConnectTimeout(Timeout.ofSeconds(2)).setSocketTimeout(Timeout.ofSeconds(3)).build())
+                        .build())
+                .setDefaultRequestConfig(RequestConfig.custom().setResponseTimeout(Timeout.ofSeconds(3)).setMaxRedirects(MAX_REDIRECTS).build())
+                .disableCookieManagement()
+                .setUserAgent(&quot;ChaupalPreview/1.0&quot;)
+                .build();
+    }
+
+    Page fetch(URI uri) {
+        String scheme = uri.getScheme() == null ? &quot;&quot; : uri.getScheme().toLowerCase(Locale.ROOT);
+        if (!(scheme.equals(&quot;http&quot;) || scheme.equals(&quot;https&quot;)) || uri.getHost() == null || uri.getRawUserInfo() != null) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;Only http and https links to a host can be previewed&quot;);
+        }
+        HttpGet get = new HttpGet(uri);
+        get.addHeader(&quot;Accept&quot;, &quot;text/html&quot;);
+        HttpClientContext context = HttpClientContext.create();
+        try {
+            return http.execute(get, context, response -&gt; {
+                if (response.getCode() != 200) {
+                    throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;The page answered &quot; + response.getCode());
+                }
+                ContentType type = ContentType.parseLenient(response.getEntity().getContentType());
+                if (type == null || !type.getMimeType().equalsIgnoreCase(&quot;text/html&quot;)) {
+                    throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;The link is not a web page&quot;);
+                }
+                try (InputStream in = response.getEntity().getContent()) {
+                    byte[] head = in.readNBytes(MAX_BYTES);   // a preview needs the head of a page, never the whole of a huge one
+                    if (in.read() != -1) {
+                        get.cancel();   // more is coming: drop the connection rather than read (or wait for) the rest
+                    }
+                    var redirects = context.getRedirectLocations().getAll();
+                    URI finalUri = redirects.isEmpty() ? uri : redirects.getLast();   // relative links resolve against the page we ended on
+                    return new Page(finalUri, new String(head, type.getCharset() == null ? StandardCharsets.UTF_8 : type.getCharset()));
+                }
+            });
+        } catch (ErrorResponseException e) {
+            throw e;
+        } catch (Blocked e) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;This address cannot be previewed&quot;);
+        } catch (UnknownHostException e) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;No such host&quot;);
+        } catch (SocketTimeoutException e) {   // ConnectTimeoutException is one too
+            throw problem(HttpStatus.GATEWAY_TIMEOUT, &quot;The page took too long to answer&quot;);
+        } catch (IOException e) {
+            if (e.getCause() instanceof org.apache.hc.client5.http.RedirectException) {
+                throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Too many redirects&quot;);
+            }
+            if (e.getCause() instanceof org.apache.hc.core5.http.ProtocolException) {
+                throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;The page redirects to a link that cannot be previewed&quot;);   // file:, no host...
+            }
+            throw problem(HttpStatus.BAD_GATEWAY, &quot;The page could not be fetched&quot;);
+        }
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/chaupal/previews/AddressPolicy.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Which addresses are internal.</dd><dt>Why</dt><dd>Loopback, private, link-local, any-local, 0/8, 100.64/10, multicast, fc00::/7. A list of exceptions exists for tests only.</dd><dt>Without it</dt><dd>Missing a range an attacker can use.</dd></dl><p>No check for IPv6 addresses wrapping IPv4 ones: Java turns <code>::ffff:127.0.0.1</code> into 127.0.0.1 itself. A first version had the check; removing it changed no test. Found while building.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import java.net.Inet4Address;
+import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.util.List;
+
+/**
+ * Which addresses the server may fetch from: the public internet only. Blocked: loopback, private networks, link-local
+ * (169.254.0.0/16, where cloud metadata services live), carrier-grade NAT, &quot;this network&quot;, multicast and IPv6 unique-local.
+ */
+@Component
+class AddressPolicy {
+
+    private final List&lt;String&gt; allowedPrivate;
+
+    AddressPolicy(@Value(&quot;${chaupal.previews.allowed-private-addresses:}&quot;) List&lt;String&gt; allowedPrivate) {
+        this.allowedPrivate = allowedPrivate;
+    }
+
+    boolean isBlocked(InetAddress a) {
+        if (allowedPrivate.contains(a.getHostAddress())) {
+            return false;
+        }
+        // No check for IPv6 addresses wrapping IPv4 ones (::ffff:127.0.0.1): Java already turns them into IPv4 addresses.
+        if (a instanceof Inet6Address v6 &amp;&amp; (v6.getAddress()[0] &amp; 0xFE) == 0xFC) {
+            return true;   // fc00::/7, unique local
+        }
+        if (a instanceof Inet4Address) {
+            int first = a.getAddress()[0] &amp; 0xFF;
+            int second = a.getAddress()[1] &amp; 0xFF;
+            if (first == 0 || (first == 100 &amp;&amp; second &gt;= 64 &amp;&amp; second &lt;= 127)) {
+                return true;   // 0.0.0.0/8 and 100.64.0.0/10
+            }
+        }
+        return a.isAnyLocalAddress() || a.isLoopbackAddress() || a.isLinkLocalAddress() || a.isSiteLocalAddress() || a.isMulticastAddress();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/chaupal/previews/NameLookup.java</p><div class="notes"><p>DNS as one method, so tests can point names at local servers and make one change its answer.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+
+/** DNS, as one method, so tests can stand in for it (names that resolve to test servers, or that change their answer). */
+@FunctionalInterface
+interface NameLookup {
+
+    InetAddress[] lookup(String host) throws UnknownHostException;
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/chaupal/previews/ProblemResponses.java</p><div class="notes"><p><code>401</code> and <code>403</code> in the same problem shape as other errors.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/** 401 and 403 are decided in Spring Security&#x27;s filters, before any controller: written here in the same problem shape. */
+@Component
+class ProblemResponses {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    void unauthenticated(HttpServletRequest req, HttpServletResponse res, AuthenticationException e) throws IOException {
+        // The same answer for an unknown username and a wrong password: nothing tells an attacker which accounts exist.
+        res.setHeader(&quot;WWW-Authenticate&quot;, &quot;Basic realm=\&quot;chaupal\&quot;&quot;);
+        write(req, res, HttpStatus.UNAUTHORIZED, &quot;Sign-in required&quot;, &quot;Send a valid username and password.&quot;);
+    }
+
+    void forbidden(HttpServletRequest req, HttpServletResponse res, AccessDeniedException e) throws IOException {
+        write(req, res, HttpStatus.FORBIDDEN, &quot;Not allowed&quot;, &quot;This sign-in cannot do this.&quot;);
+    }
+
+    private static void write(HttpServletRequest req, HttpServletResponse res, HttpStatus status, String title, String detail) throws IOException {
+        Map&lt;String, Object&gt; body = new LinkedHashMap&lt;&gt;();
+        body.put(&quot;title&quot;, title);
+        body.put(&quot;status&quot;, status.value());
+        body.put(&quot;detail&quot;, detail);
+        body.put(&quot;instance&quot;, req.getRequestURI());
+        res.setStatus(status.value());
+        res.setContentType(&quot;application/problem+json&quot;);
+        JSON.writeValue(res.getOutputStream(), body);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>The exception list, empty.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: chaupal-previews
+  mvc:
+    problemdetails:
+      enabled: true
+chaupal:
+  previews:
+    # Addresses to allow although they are private. Empty in production; tests list their own test server here.
+    allowed-private-addresses: []</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">src/main/java/com/chaupal/previews/PreviewsApplication.java</p><div class="notes"><p>Entry point, and real DNS.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+import java.net.InetAddress;
+
+@SpringBootApplication
+public class PreviewsApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(PreviewsApplication.class, args);
+    }
+
+    /** Real DNS. */
+    @Bean
+    NameLookup nameLookup() {
+        return InetAddress::getAllByName;
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>PreviewContractTest</code> (3), <code>FetchLimitsTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>FetchAnyUrlTrapTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Security</td><td>401, 403, one user accessing another user's data, malicious input</td><td><code>SsrfSecurityTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">The tests need a "public" site and an "internal" one on the same machine: <code>TestSites</code> runs a news site on 127.0.0.2 and a metadata service on 127.0.0.1, on the same port, and a stand-in for DNS. Only 127.0.0.2 is on the test exception list; 127.0.0.1 stays blocked, like every private address.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, Apache HttpClient 5.6.4. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.previews.PreviewContractTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.previews.FetchLimitsTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.previews.SsrfSecurityTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.previews.FetchAnyUrlTrapTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">FetchAnyUrlTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">SsrfSecurityTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">PreviewContractTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">FetchLimitsTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">TestSites.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/chaupal/previews/FetchAnyUrlTrapTest.java</p><div class="notes"><p>Written first: the old fetch, check-then-fetch with rebinding, and the API.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import org.junit.jupiter.api.Test;
+
+import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.URI;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Written first. The old preview fetched any URL it was sent. An attacker sent the cloud metadata address and read the
+ * instance&#x27;s keys in the &quot;preview&quot;. A later fix checked the name&#x27;s address first, then fetched: a name that answers
+ * a public address once and an internal one the next time (DNS rebinding) walked straight through.
+ */
+class FetchAnyUrlTrapTest extends ApiTest {
+
+    @Test
+    void theOldWayReadTheInternalSecret() throws Exception {
+        try (InputStream in = URI.create(TestSites.url(&quot;127.0.0.1&quot;, &quot;/latest/meta-data/iam/security-credentials/&quot;)).toURL().openStream()) {
+            assertThat(new String(in.readAllBytes())).isEqualTo(TestSites.SECRET);
+        }
+    }
+
+    @Test
+    void checkingFirstAndFetchingLaterWasFooledByRebinding() throws Exception {
+        AddressPolicy policy = new AddressPolicy(java.util.List.of(&quot;127.0.0.2&quot;));
+        InetAddress checked = TestSites.lookup(&quot;rebind.example&quot;)[0];
+        assertThat(policy.isBlocked(checked)).isFalse();                    // &quot;it is public, go ahead&quot;
+        InetAddress connectedTo = TestSites.lookup(&quot;rebind.example&quot;)[0];    // the fetch resolves the name again
+        try (InputStream in = URI.create(TestSites.url(connectedTo.getHostAddress(), &quot;/&quot;)).toURL().openStream()) {
+            assertThat(new String(in.readAllBytes())).isEqualTo(TestSites.SECRET);
+        }
+    }
+
+    @Test
+    void theApiRefusesInternalAddressesAndIsNotFooledByRebinding() throws Exception {
+        preview(TestSites.url(&quot;metadata.internal&quot;, &quot;/latest/meta-data/iam/security-credentials/&quot;)).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;This address cannot be previewed&quot;));
+        TestSites.rebindLookups.set(0);
+        preview(TestSites.url(&quot;rebind.example&quot;, &quot;/article&quot;)).andExpect(status().isCreated())
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Monsoon reaches Kerala early&quot;));   // checked and fetched from the same, public address
+        assertThat(TestSites.rebindLookups.get()).isOne();                                // one lookup: no second answer to trust
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/chaupal/previews/SsrfSecurityTest.java</p><div class="notes"><p>Every way to name an internal address, other schemes, each rule, sign-in.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.net.InetAddress;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class SsrfSecurityTest extends ApiTest {
+
+    @Test
+    void everyWayToNameAnInternalAddressIsRefused() throws Exception {
+        for (String url : List.of(
+                TestSites.url(&quot;127.0.0.1&quot;, &quot;/&quot;), TestSites.url(&quot;[::1]&quot;, &quot;/&quot;), TestSites.url(&quot;[::ffff:127.0.0.1]&quot;, &quot;/&quot;),
+                TestSites.url(&quot;0.0.0.0&quot;, &quot;/&quot;), &quot;http://169.254.169.254/latest/meta-data/&quot;, &quot;http://10.0.0.5/&quot;, &quot;http://192.168.1.1/&quot;,
+                &quot;http://100.64.0.1/&quot;, &quot;http://[fd00::1]/&quot;, TestSites.url(&quot;mixed.example&quot;, &quot;/article&quot;),
+                TestSites.url(&quot;news.example&quot;, &quot;/to-metadata&quot;))) {
+            preview(url).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;This address cannot be previewed&quot;));
+        }
+    }
+
+    @Test
+    void onlyHttpAndHttpsToAHost() throws Exception {
+        for (String url : List.of(&quot;file:///etc/passwd&quot;, &quot;gopher://127.0.0.1:6379/_INFO&quot;, &quot;ftp://news.example/&quot;, &quot;http:///nohost&quot;,
+                &quot;http://user:pass@&quot; + &quot;news.example:&quot; + TestSites.PORT + &quot;/article&quot;, &quot;javascript:alert(1)&quot;)) {
+            preview(url).andExpect(status().isBadRequest());
+        }
+        preview(TestSites.url(&quot;news.example&quot;, &quot;/to-file&quot;)).andExpect(status().isUnprocessableContent());   // a redirect to file: is not followed
+    }
+
+    @Test
+    void theAddressRulesOneByOne() throws Exception {
+        AddressPolicy p = new AddressPolicy(List.of());
+        for (String blocked : List.of(&quot;127.0.0.1&quot;, &quot;10.1.2.3&quot;, &quot;172.16.0.1&quot;, &quot;172.31.255.255&quot;, &quot;192.168.0.1&quot;, &quot;169.254.169.254&quot;, &quot;0.0.0.0&quot;,
+                &quot;100.64.0.1&quot;, &quot;100.127.255.255&quot;, &quot;224.0.0.1&quot;, &quot;::1&quot;, &quot;fe80::1&quot;, &quot;fd12:3456::1&quot;, &quot;::ffff:10.0.0.1&quot;)) {
+            assertThat(p.isBlocked(InetAddress.getByName(blocked))).as(blocked).isTrue();
+        }
+        for (String open : List.of(&quot;8.8.8.8&quot;, &quot;172.32.0.1&quot;, &quot;100.128.0.1&quot;, &quot;2001:4860:4860::8888&quot;, &quot;::ffff:8.8.8.8&quot;)) {
+            assertThat(p.isBlocked(InetAddress.getByName(open))).as(open).isFalse();
+        }
+    }
+
+    @Test
+    void signInRulesAndAnotherMembersPreview() throws Exception {
+        mvc.perform(post(&quot;/link-previews&quot;).contentType(&quot;application/json&quot;).content(&quot;{\&quot;url\&quot;:\&quot;http://news.example/\&quot;}&quot;)).andExpect(status().isUnauthorized());
+        preview(&quot;guest&quot;, TestSites.url(&quot;news.example&quot;, &quot;/article&quot;)).andExpect(status().isForbidden());
+        String body = preview(&quot;meera&quot;, TestSites.url(&quot;news.example&quot;, &quot;/article&quot;)).andReturn().getResponse().getContentAsString();
+        String id = JsonMapper.builder().build().readTree(body).get(&quot;id&quot;).asString();
+        read(&quot;dev&quot;, id).andExpect(status().isNotFound());   // Meera&#x27;s draft preview is hers
+        read(&quot;meera&quot;, id).andExpect(status().isOk());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/chaupal/previews/PreviewContractTest.java</p><div class="notes"><p>Previews of the test news site; what cannot be previewed.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
+
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class PreviewContractTest extends ApiTest {
+
+    @Test
+    void aPublicPageGivesATitleDescriptionAndImageLink() throws Exception {
+        String body = preview(TestSites.url(&quot;news.example&quot;, &quot;/article&quot;)).andExpect(status().isCreated())
+                .andExpect(jsonPath(&quot;$.url&quot;).value(TestSites.url(&quot;news.example&quot;, &quot;/article&quot;)))
+                .andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Monsoon reaches Kerala early&quot;))
+                .andExpect(jsonPath(&quot;$.description&quot;).value(&quot;Rain in Kochi &amp; Thiruvananthapuram.&quot;))
+                .andExpect(jsonPath(&quot;$.imageUrl&quot;).value(TestSites.url(&quot;news.example&quot;, &quot;/img/cover.jpg&quot;)))
+                .andReturn().getResponse().getContentAsString();
+        String id = JsonMapper.builder().build().readTree(body).get(&quot;id&quot;).asString();
+        read(&quot;meera&quot;, id).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.title&quot;).value(&quot;Monsoon reaches Kerala early&quot;));
+    }
+
+    @Test
+    void aSafeRedirectIsFollowed() throws Exception {
+        preview(TestSites.url(&quot;news.example&quot;, &quot;/to-article&quot;)).andExpect(status().isCreated())
+                .andExpect(jsonPath(&quot;$.imageUrl&quot;).value(TestSites.url(&quot;news.example&quot;, &quot;/img/cover.jpg&quot;)));
+    }
+
+    @Test
+    void whatCannotBePreviewedIsSaidPlainly() throws Exception {
+        preview(TestSites.url(&quot;news.example&quot;, &quot;/image.png&quot;)).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;The link is not a web page&quot;));
+        preview(TestSites.url(&quot;news.example&quot;, &quot;/gone&quot;)).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;The page answered 404&quot;));
+        preview(TestSites.url(&quot;nosuch.example&quot;, &quot;/&quot;)).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;No such host&quot;));
+        preview(TestSites.url(&quot;news.example&quot;, &quot;/loop&quot;)).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Too many redirects&quot;));
+        preview(&quot;not a link&quot;).andExpect(status().isBadRequest());
+        read(&quot;meera&quot;, &quot;00000000-0000-0000-0000-000000000000&quot;).andExpect(status().isNotFound());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/chaupal/previews/FetchLimitsTest.java</p><div class="notes"><p>A slow page and an endless one.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** A preview never waits long or reads much: an attacker&#x27;s slow or endless page cannot tie up the server. */
+class FetchLimitsTest extends ApiTest {
+
+    @Test
+    void aSlowPageTimesOut() throws Exception {
+        long t = System.nanoTime();
+        preview(TestSites.url(&quot;news.example&quot;, &quot;/slow&quot;)).andExpect(status().isGatewayTimeout()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;The page took too long to answer&quot;));
+        assertThat((System.nanoTime() - t) / 1_000_000).isBetween(2_900L, 5_000L);
+    }
+
+    @Test
+    void aHugePageIsReadOnlyAsFarAsAPreviewNeeds() throws Exception {
+        long t = System.nanoTime();
+        preview(TestSites.url(&quot;news.example&quot;, &quot;/huge&quot;)).andExpect(status().isCreated()).andExpect(jsonPath(&quot;$.title&quot;).doesNotExist());
+        assertThat((System.nanoTime() - t) / 1_000_000).isLessThan(2_000L);   // the first 512 KB, then the connection is dropped
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/chaupal/previews/TestSites.java</p><div class="notes"><p>The two test servers and the test DNS.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Two small web servers on the same port: a &quot;public&quot; news site on 127.0.0.2 and an &quot;internal&quot; metadata service on
+ * 127.0.0.1 that hands out a secret, like a cloud instance&#x27;s. And a stand-in for DNS that points names at them.
+ */
+final class TestSites {
+
+    static final String SECRET = &quot;AKIA-DEMO-SECRET-KEY&quot;;
+    static final int PORT;
+    static final AtomicInteger rebindLookups = new AtomicInteger();
+
+    static {
+        try {
+            HttpServer news = HttpServer.create(new InetSocketAddress(InetAddress.getByName(&quot;127.0.0.2&quot;), 0), 0);
+            PORT = news.getAddress().getPort();
+            HttpServer internal = HttpServer.create(new InetSocketAddress(InetAddress.getByName(&quot;127.0.0.1&quot;), PORT), 0);
+            internal.createContext(&quot;/&quot;, x -&gt; send(x, 200, &quot;text/plain&quot;, SECRET));
+            news.createContext(&quot;/&quot;, TestSites::news);
+            news.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
+            internal.start();
+            news.start();
+        } catch (IOException e) {
+            throw new ExceptionInInitializerError(e);
+        }
+    }
+
+    static String url(String host, String path) {
+        return &quot;http://&quot; + host + &quot;:&quot; + PORT + path;
+    }
+
+    /** DNS for the tests. rebind.example answers the public address, then the internal one, and so on (a 0-second TTL). */
+    static InetAddress[] lookup(String host) throws UnknownHostException {
+        Map&lt;String, String&gt; names = Map.of(&quot;news.example&quot;, &quot;127.0.0.2&quot;, &quot;metadata.internal&quot;, &quot;127.0.0.1&quot;);
+        if (names.containsKey(host)) {
+            return new InetAddress[]{InetAddress.getByName(names.get(host))};
+        }
+        if (host.equals(&quot;rebind.example&quot;)) {
+            return new InetAddress[]{InetAddress.getByName(rebindLookups.incrementAndGet() % 2 == 1 ? &quot;127.0.0.2&quot; : &quot;127.0.0.1&quot;)};
+        }
+        if (host.equals(&quot;mixed.example&quot;)) {
+            return new InetAddress[]{InetAddress.getByName(&quot;127.0.0.2&quot;), InetAddress.getByName(&quot;10.0.0.5&quot;)};
+        }
+        if (host.endsWith(&quot;.example&quot;)) {
+            throw new UnknownHostException(host);
+        }
+        return InetAddress.getAllByName(host);   // IP literals
+    }
+
+    private static void news(HttpExchange x) throws IOException {
+        String path = x.getRequestURI().getPath();
+        switch (path) {
+            case &quot;/article&quot; -&gt; send(x, 200, &quot;text/html; charset=utf-8&quot;, &quot;&quot;&quot;
+                    &lt;html&gt;&lt;head&gt;&lt;title&gt;Monsoon reaches Kerala&lt;/title&gt;
+                    &lt;meta property=&quot;og:title&quot; content=&quot;Monsoon reaches Kerala early&quot;&gt;
+                    &lt;meta property=&quot;og:description&quot; content=&quot;Rain in Kochi &amp;amp; Thiruvananthapuram.&quot;&gt;
+                    &lt;meta property=&quot;og:image&quot; content=&quot;/img/cover.jpg&quot;&gt;&lt;/head&gt;&lt;body&gt;...&lt;/body&gt;&lt;/html&gt;&quot;&quot;&quot;);
+            case &quot;/image.png&quot; -&gt; send(x, 200, &quot;image/png&quot;, &quot;PNG&quot;);
+            case &quot;/gone&quot; -&gt; send(x, 404, &quot;text/html&quot;, &quot;&lt;title&gt;Not found&lt;/title&gt;&quot;);
+            case &quot;/to-metadata&quot; -&gt; redirect(x, url(&quot;127.0.0.1&quot;, &quot;/latest/meta-data/iam/security-credentials/&quot;));
+            case &quot;/to-article&quot; -&gt; redirect(x, &quot;/article&quot;);
+            case &quot;/to-file&quot; -&gt; redirect(x, &quot;file:///etc/passwd&quot;);
+            case &quot;/loop&quot; -&gt; redirect(x, &quot;/loop&quot;);
+            case &quot;/slow&quot; -&gt; {
+                sleep(10_000);
+                send(x, 200, &quot;text/html&quot;, &quot;&lt;title&gt;late&lt;/title&gt;&quot;);
+            }
+            case &quot;/huge&quot; -&gt; {
+                x.getResponseHeaders().set(&quot;Content-Type&quot;, &quot;text/html&quot;);
+                x.sendResponseHeaders(200, 0);
+                try (OutputStream out = x.getResponseBody()) {
+                    out.write(&quot;&lt;html&gt;&lt;head&gt;&quot;.getBytes());
+                    out.write(&quot; &quot;.repeat(600 * 1024).getBytes());   // past the 512 KB a preview reads
+                    out.write(&quot;&lt;title&gt;far down&lt;/title&gt;&quot;.getBytes());
+                    out.flush();
+                    sleep(10_000);   // and the rest never comes
+                } catch (IOException closedByTheReader) {
+                    // expected: the reader stopped early
+                }
+            }
+            default -&gt; send(x, 404, &quot;text/plain&quot;, &quot;no&quot;);
+        }
+    }
+
+    private static void redirect(HttpExchange x, String location) throws IOException {
+        x.getResponseHeaders().set(&quot;Location&quot;, location);
+        x.sendResponseHeaders(302, -1);
+        x.close();
+    }
+
+    private static void send(HttpExchange x, int status, String type, String body) throws IOException {
+        byte[] b = body.getBytes(StandardCharsets.UTF_8);
+        x.getResponseHeaders().set(&quot;Content-Type&quot;, type);
+        x.sendResponseHeaders(status, b.length);
+        try (OutputStream out = x.getResponseBody()) {
+            out.write(b);
+        }
+    }
+
+    private static void sleep(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private TestSites() {
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/chaupal/previews/ApiTest.java</p><div class="notes"><p>Shared setup: the test DNS as a bean, the exception for 127.0.0.2, request helpers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.convention.TestBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/**
+ * Shared setup: the whole app, with the test DNS and the &quot;public&quot; test site allowed although it is on 127.0.0.2.
+ * The &quot;internal&quot; one on 127.0.0.1 stays blocked, like every private address.
+ */
+@SpringBootTest(properties = &quot;chaupal.previews.allowed-private-addresses=127.0.0.2&quot;)
+@AutoConfigureMockMvc
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+
+    @TestBean
+    NameLookup nameLookup;
+
+    static NameLookup nameLookup() {
+        return TestSites::lookup;
+    }
+
+    static String password(String user) {
+        return user + &quot;-demo-pass&quot;;
+    }
+
+    ResultActions preview(String user, String url) throws Exception {
+        return mvc.perform(post(&quot;/link-previews&quot;).with(httpBasic(user, password(user))).contentType(MediaType.APPLICATION_JSON)
+                .content(&quot;{\&quot;url\&quot;:\&quot;&quot; + url.replace(&quot;\\&quot;, &quot;\\\\&quot;).replace(&quot;\&quot;&quot;, &quot;\\\&quot;&quot;) + &quot;\&quot;}&quot;));
+    }
+
+    ResultActions preview(String url) throws Exception {
+        return preview(&quot;meera&quot;, url);
+    }
+
+    ResultActions read(String user, String id) throws Exception {
+        return mvc.perform(get(&quot;/link-previews/{id}&quot;, id).with(httpBasic(user, password(user))));
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/chaupal/previews/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=AllowedDomainsChallengeTest</code>.</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 12 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 15 tests pass (12 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>Only some sites</h2><p><code>chaupal.previews.allowed-domains</code>, when set, limits previews to those sites and their subdomains: <code>fakenews.example</code> is not <code>news.example</code>, and an IP address is no site. The address rules still apply.</p><p><b>Done when:</b> the test in <code>AllowedDomainsChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>Compare the lower-cased host with each domain, or with <code>"." + domain</code> at its end.</li><li>An empty list means no domain limit.</li></ul></details><p class="path">challenge/AllowedDomainsChallengeTest.java</p><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.test.context.TestPropertySource;
+
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: chaupal.previews.allowed-domains, when set, limits previews to those sites and their subdomains. A name
+ * that merely ends with the same letters is another site. The address rules still apply to allowed sites.
+ */
+@TestPropertySource(properties = &quot;chaupal.previews.allowed-domains=news.example,rebind.example&quot;)
+class AllowedDomainsChallengeTest extends ApiTest {
+
+    @Test
+    void onlyListedSitesCanBePreviewed() throws Exception {
+        preview(TestSites.url(&quot;news.example&quot;, &quot;/article&quot;)).andExpect(status().isCreated());
+        preview(TestSites.url(&quot;mixed.example&quot;, &quot;/article&quot;)).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;This site cannot be previewed&quot;));
+        preview(TestSites.url(&quot;fakenews.example&quot;, &quot;/article&quot;)).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;This site cannot be previewed&quot;));
+        preview(TestSites.url(&quot;127.0.0.2&quot;, &quot;/article&quot;)).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;This site cannot be previewed&quot;));
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/SafeFetcher.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import org.apache.hc.client5.http.DnsResolver;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.protocol.HttpClientContext;
+import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.util.Timeout;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Component;
+import org.springframework.web.ErrorResponseException;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.SocketTimeoutException;
+import java.net.URI;
+import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+
+/**
+ * Fetches a page for a preview, safely. Every name is resolved once, by our resolver, which refuses it if any of its
+ * addresses is blocked; the connection then goes to exactly those addresses. So a check cannot be fooled by a name
+ * that answers differently the second time (DNS rebinding), and redirects go through the same check.
+ */
+@Component
+class SafeFetcher {
+
+    static final int MAX_BYTES = 512 * 1024;
+    static final int MAX_REDIRECTS = 3;
+
+    record Page(URI finalUri, String html) {
+    }
+
+    record Fetched(URI finalUri, String mimeType, java.nio.charset.Charset charset, byte[] head) {
+    }
+
+    static final class Blocked extends UnknownHostException {
+        Blocked(String host) {
+            super(host + &quot; resolves to an address that is not allowed&quot;);
+        }
+    }
+
+    private final CloseableHttpClient http;
+
+    private final java.util.List&lt;String&gt; allowedDomains;
+
+    SafeFetcher(AddressPolicy policy, NameLookup lookup, @org.springframework.beans.factory.annotation.Value(&quot;${chaupal.previews.allowed-domains:}&quot;) java.util.List&lt;String&gt; allowedDomains) {
+        this.allowedDomains = allowedDomains.stream().map(d -&gt; d.strip().toLowerCase(Locale.ROOT)).filter(d -&gt; !d.isEmpty()).toList();
+        DnsResolver checked = new DnsResolver() {
+            @Override
+            public InetAddress[] resolve(String host) throws UnknownHostException {
+                InetAddress[] all = lookup.lookup(host);
+                for (InetAddress a : all) {
+                    if (policy.isBlocked(a)) {
+                        throw new Blocked(host);   // one bad address is enough: the client could pick it
+                    }
+                }
+                return all;
+            }
+
+            @Override
+            public String resolveCanonicalHostname(String host) {
+                return host;
+            }
+        };
+        this.http = HttpClients.custom()
+                .setConnectionManager(PoolingHttpClientConnectionManagerBuilder.create().setDnsResolver(checked)
+                        .setDefaultConnectionConfig(ConnectionConfig.custom().setConnectTimeout(Timeout.ofSeconds(2)).setSocketTimeout(Timeout.ofSeconds(3)).build())
+                        .build())
+                .setDefaultRequestConfig(RequestConfig.custom().setResponseTimeout(Timeout.ofSeconds(3)).setMaxRedirects(MAX_REDIRECTS).build())
+                .disableCookieManagement()
+                .setUserAgent(&quot;ChaupalPreview/1.0&quot;)
+                .build();
+    }
+
+    Page fetch(URI uri) {
+        Fetched f = fetch(uri, &quot;text/html&quot;, MAX_BYTES, &quot;The link is not a web page&quot;);
+        return new Page(f.finalUri(), new String(f.head(), f.charset()));
+    }
+
+    /** Fetches with every check; accept is a type (&quot;text/html&quot;) or a family (&quot;image/&quot;). */
+    Fetched fetch(URI uri, String accept, int maxBytes, String wrongType) {
+        String scheme = uri.getScheme() == null ? &quot;&quot; : uri.getScheme().toLowerCase(Locale.ROOT);
+        if (!(scheme.equals(&quot;http&quot;) || scheme.equals(&quot;https&quot;)) || uri.getHost() == null || uri.getRawUserInfo() != null) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;Only http and https links to a host can be previewed&quot;);
+        }
+        String host = uri.getHost().toLowerCase(Locale.ROOT);
+        if (!allowedDomains.isEmpty() &amp;&amp; allowedDomains.stream().noneMatch(d -&gt; host.equals(d) || host.endsWith(&quot;.&quot; + d))) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;This site cannot be previewed&quot;);   // &quot;fakenews.example&quot; does not end with &quot;.news.example&quot;
+        }
+        HttpGet get = new HttpGet(uri);
+        get.addHeader(&quot;Accept&quot;, accept.endsWith(&quot;/&quot;) ? accept + &quot;*&quot; : accept);
+        HttpClientContext context = HttpClientContext.create();
+        try {
+            return http.execute(get, context, response -&gt; {
+                if (response.getCode() != 200) {
+                    throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;The page answered &quot; + response.getCode());
+                }
+                ContentType type = ContentType.parseLenient(response.getEntity().getContentType());
+                String mime = type == null ? &quot;&quot; : type.getMimeType().toLowerCase(Locale.ROOT);
+                if (accept.endsWith(&quot;/&quot;) ? !mime.startsWith(accept) : !mime.equals(accept)) {
+                    throw problem(HttpStatus.UNPROCESSABLE_CONTENT, wrongType);
+                }
+                try (InputStream in = response.getEntity().getContent()) {
+                    byte[] head = in.readNBytes(maxBytes);
+                    if (in.read() != -1) {
+                        get.cancel();   // more is coming: drop the connection rather than read (or wait for) the rest
+                    }
+                    var redirects = context.getRedirectLocations().getAll();
+                    return new Fetched(redirects.isEmpty() ? uri : redirects.getLast(), mime,
+                            type.getCharset() == null ? StandardCharsets.UTF_8 : type.getCharset(), head);
+                }
+            });
+        } catch (ErrorResponseException e) {
+            throw e;
+        } catch (Blocked e) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;This address cannot be previewed&quot;);
+        } catch (UnknownHostException e) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;No such host&quot;);
+        } catch (SocketTimeoutException e) {   // ConnectTimeoutException is one too
+            throw problem(HttpStatus.GATEWAY_TIMEOUT, &quot;The page took too long to answer&quot;);
+        } catch (IOException e) {
+            if (e.getCause() instanceof org.apache.hc.client5.http.RedirectException) {
+                throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Too many redirects&quot;);
+            }
+            if (e.getCause() instanceof org.apache.hc.core5.http.ProtocolException) {
+                throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;The page redirects to a link that cannot be previewed&quot;);
+            }
+            throw problem(HttpStatus.BAD_GATEWAY, &quot;The page could not be fetched&quot;);
+        }
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 35 minutes</p><h2>Images through the server</h2><p><code>GET /link-previews/{id}/image</code> serves the preview's image, fetched by the server with the same checks as the page: only <code>image/*</code>, at most 1 MB. An <code>og:image</code> pointing inside is refused.</p><p><b>Done when:</b> both tests in <code>ImageProxyChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Make the fetcher take the accepted type and the size limit.</li><li>An image link is attacker-controlled exactly like the page link.</li></ul></details><p class="path">challenge/ImageProxyChallengeTest.java</p><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import com.sun.net.httpserver.HttpServer;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: GET /link-previews/{id}/image serves the preview&#x27;s image through the server, so members&#x27; apps never
+ * contact the site. The image is fetched with the same checks as the page: an og:image pointing at an internal
+ * address is refused, and only images (image/*) of at most 1 MB are passed on.
+ */
+class ImageProxyChallengeTest extends ApiTest {
+
+    HttpServer site;
+
+    @BeforeEach
+    void aSiteWithImages() throws Exception {
+        site = HttpServer.create(new InetSocketAddress(InetAddress.getByName(&quot;127.0.0.2&quot;), 0), 0);
+        int port = site.getAddress().getPort();
+        site.createContext(&quot;/good&quot;, x -&gt; page(x, &quot;/cover.png&quot;));
+        site.createContext(&quot;/evil&quot;, x -&gt; page(x, &quot;http://127.0.0.1:&quot; + TestSites.PORT + &quot;/latest/meta-data/&quot;));
+        site.createContext(&quot;/notimage&quot;, x -&gt; page(x, &quot;/cover.html&quot;));
+        site.createContext(&quot;/cover.png&quot;, x -&gt; {
+            byte[] png = {(byte) 0x89, &#x27;P&#x27;, &#x27;N&#x27;, &#x27;G&#x27;, 0x0D, 0x0A, 0x1A, 0x0A};
+            x.getResponseHeaders().set(&quot;Content-Type&quot;, &quot;image/png&quot;);
+            x.sendResponseHeaders(200, png.length);
+            x.getResponseBody().write(png);
+            x.close();
+        });
+        site.createContext(&quot;/cover.html&quot;, x -&gt; {
+            x.getResponseHeaders().set(&quot;Content-Type&quot;, &quot;text/html&quot;);
+            x.sendResponseHeaders(200, 2);
+            x.getResponseBody().write(&quot;hi&quot;.getBytes());
+            x.close();
+        });
+        site.start();
+        base = &quot;http://127.0.0.2:&quot; + port;
+    }
+
+    String base;
+
+    static void page(com.sun.net.httpserver.HttpExchange x, String image) throws java.io.IOException {
+        byte[] b = (&quot;&lt;title&gt;t&lt;/title&gt;&lt;meta property=\&quot;og:image\&quot; content=\&quot;&quot; + image + &quot;\&quot;&gt;&quot;).getBytes();
+        x.getResponseHeaders().set(&quot;Content-Type&quot;, &quot;text/html&quot;);
+        x.sendResponseHeaders(200, b.length);
+        x.getResponseBody().write(b);
+        x.close();
+    }
+
+    @AfterEach
+    void stop() {
+        site.stop(0);
+    }
+
+    String previewId(String path) throws Exception {
+        return JsonMapper.builder().build().readTree(preview(base + path).andReturn().getResponse().getContentAsString()).get(&quot;id&quot;).asString();
+    }
+
+    @Test
+    void theImageComesThroughTheServer() throws Exception {
+        read(&quot;meera&quot;, previewId(&quot;/good&quot;) + &quot;/image&quot;).andExpect(status().isOk()).andExpect(content().contentType(&quot;image/png&quot;));
+    }
+
+    @Test
+    void anImagePointingInsideIsRefusedAndSoIsSomethingElse() throws Exception {
+        read(&quot;meera&quot;, previewId(&quot;/evil&quot;) + &quot;/image&quot;).andExpect(status().isUnprocessableContent()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;This address cannot be previewed&quot;));
+        read(&quot;meera&quot;, previewId(&quot;/notimage&quot;) + &quot;/image&quot;).andExpect(status().isUnprocessableContent());
+        read(&quot;dev&quot;, previewId(&quot;/good&quot;) + &quot;/image&quot;).andExpect(status().isNotFound());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/SafeFetcher.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import org.apache.hc.client5.http.DnsResolver;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.protocol.HttpClientContext;
+import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.util.Timeout;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Component;
+import org.springframework.web.ErrorResponseException;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.SocketTimeoutException;
+import java.net.URI;
+import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+
+/**
+ * Fetches a page for a preview, safely. Every name is resolved once, by our resolver, which refuses it if any of its
+ * addresses is blocked; the connection then goes to exactly those addresses. So a check cannot be fooled by a name
+ * that answers differently the second time (DNS rebinding), and redirects go through the same check.
+ */
+@Component
+class SafeFetcher {
+
+    static final int MAX_BYTES = 512 * 1024;
+    static final int MAX_REDIRECTS = 3;
+
+    record Page(URI finalUri, String html) {
+    }
+
+    record Fetched(URI finalUri, String mimeType, java.nio.charset.Charset charset, byte[] head) {
+    }
+
+    static final class Blocked extends UnknownHostException {
+        Blocked(String host) {
+            super(host + &quot; resolves to an address that is not allowed&quot;);
+        }
+    }
+
+    private final CloseableHttpClient http;
+
+    private final java.util.List&lt;String&gt; allowedDomains;
+
+    SafeFetcher(AddressPolicy policy, NameLookup lookup, @org.springframework.beans.factory.annotation.Value(&quot;${chaupal.previews.allowed-domains:}&quot;) java.util.List&lt;String&gt; allowedDomains) {
+        this.allowedDomains = allowedDomains.stream().map(d -&gt; d.strip().toLowerCase(Locale.ROOT)).filter(d -&gt; !d.isEmpty()).toList();
+        DnsResolver checked = new DnsResolver() {
+            @Override
+            public InetAddress[] resolve(String host) throws UnknownHostException {
+                InetAddress[] all = lookup.lookup(host);
+                for (InetAddress a : all) {
+                    if (policy.isBlocked(a)) {
+                        throw new Blocked(host);   // one bad address is enough: the client could pick it
+                    }
+                }
+                return all;
+            }
+
+            @Override
+            public String resolveCanonicalHostname(String host) {
+                return host;
+            }
+        };
+        this.http = HttpClients.custom()
+                .setConnectionManager(PoolingHttpClientConnectionManagerBuilder.create().setDnsResolver(checked)
+                        .setDefaultConnectionConfig(ConnectionConfig.custom().setConnectTimeout(Timeout.ofSeconds(2)).setSocketTimeout(Timeout.ofSeconds(3)).build())
+                        .build())
+                .setDefaultRequestConfig(RequestConfig.custom().setResponseTimeout(Timeout.ofSeconds(3)).setMaxRedirects(MAX_REDIRECTS).build())
+                .disableCookieManagement()
+                .setUserAgent(&quot;ChaupalPreview/1.0&quot;)
+                .build();
+    }
+
+    Page fetch(URI uri) {
+        Fetched f = fetch(uri, &quot;text/html&quot;, MAX_BYTES, &quot;The link is not a web page&quot;);
+        return new Page(f.finalUri(), new String(f.head(), f.charset()));
+    }
+
+    /** Fetches with every check; accept is a type (&quot;text/html&quot;) or a family (&quot;image/&quot;). */
+    Fetched fetch(URI uri, String accept, int maxBytes, String wrongType) {
+        String scheme = uri.getScheme() == null ? &quot;&quot; : uri.getScheme().toLowerCase(Locale.ROOT);
+        if (!(scheme.equals(&quot;http&quot;) || scheme.equals(&quot;https&quot;)) || uri.getHost() == null || uri.getRawUserInfo() != null) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;Only http and https links to a host can be previewed&quot;);
+        }
+        String host = uri.getHost().toLowerCase(Locale.ROOT);
+        if (!allowedDomains.isEmpty() &amp;&amp; allowedDomains.stream().noneMatch(d -&gt; host.equals(d) || host.endsWith(&quot;.&quot; + d))) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;This site cannot be previewed&quot;);   // &quot;fakenews.example&quot; does not end with &quot;.news.example&quot;
+        }
+        HttpGet get = new HttpGet(uri);
+        get.addHeader(&quot;Accept&quot;, accept.endsWith(&quot;/&quot;) ? accept + &quot;*&quot; : accept);
+        HttpClientContext context = HttpClientContext.create();
+        try {
+            return http.execute(get, context, response -&gt; {
+                if (response.getCode() != 200) {
+                    throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;The page answered &quot; + response.getCode());
+                }
+                ContentType type = ContentType.parseLenient(response.getEntity().getContentType());
+                String mime = type == null ? &quot;&quot; : type.getMimeType().toLowerCase(Locale.ROOT);
+                if (accept.endsWith(&quot;/&quot;) ? !mime.startsWith(accept) : !mime.equals(accept)) {
+                    throw problem(HttpStatus.UNPROCESSABLE_CONTENT, wrongType);
+                }
+                try (InputStream in = response.getEntity().getContent()) {
+                    byte[] head = in.readNBytes(maxBytes);
+                    if (in.read() != -1) {
+                        get.cancel();   // more is coming: drop the connection rather than read (or wait for) the rest
+                    }
+                    var redirects = context.getRedirectLocations().getAll();
+                    return new Fetched(redirects.isEmpty() ? uri : redirects.getLast(), mime,
+                            type.getCharset() == null ? StandardCharsets.UTF_8 : type.getCharset(), head);
+                }
+            });
+        } catch (ErrorResponseException e) {
+            throw e;
+        } catch (Blocked e) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;This address cannot be previewed&quot;);
+        } catch (UnknownHostException e) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;No such host&quot;);
+        } catch (SocketTimeoutException e) {   // ConnectTimeoutException is one too
+            throw problem(HttpStatus.GATEWAY_TIMEOUT, &quot;The page took too long to answer&quot;);
+        } catch (IOException e) {
+            if (e.getCause() instanceof org.apache.hc.client5.http.RedirectException) {
+                throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Too many redirects&quot;);
+            }
+            if (e.getCause() instanceof org.apache.hc.core5.http.ProtocolException) {
+                throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;The page redirects to a link that cannot be previewed&quot;);
+            }
+            throw problem(HttpStatus.BAD_GATEWAY, &quot;The page could not be fetched&quot;);
+        }
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div><p class="path">challenge/solution/Previews.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+
+import java.net.URI;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/** A preview of a link for a member&#x27;s draft post: the page&#x27;s title, description and image link. */
+@Service
+class Previews {
+
+    record Preview(String id, String url, String title, String description, String imageUrl) {
+    }
+
+    private record Owned(String owner, Preview preview) {
+    }
+
+    private static final Pattern TITLE = Pattern.compile(&quot;&lt;title[^&gt;]*&gt;(.*?)&lt;/title&gt;&quot;, Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+
+    private final SafeFetcher fetcher;
+    // shortcut: previews are kept in memory and lost on restart; a real service would cache them in a store with an expiry.
+    private final Map&lt;String, Owned&gt; byId = new ConcurrentHashMap&lt;&gt;();
+
+    Previews(SafeFetcher fetcher) {
+        this.fetcher = fetcher;
+    }
+
+    Preview create(String owner, URI url) {
+        SafeFetcher.Page page = fetcher.fetch(url);
+        String title = meta(page.html(), &quot;og:title&quot;);
+        if (title == null) {
+            Matcher m = TITLE.matcher(page.html());
+            title = m.find() ? unescape(m.group(1).strip()) : null;
+        }
+        Preview p = new Preview(UUID.randomUUID().toString(), url.toString(), title, meta(page.html(), &quot;og:description&quot;), image(page));
+        byId.put(p.id(), new Owned(owner, p));
+        return p;
+    }
+
+    /** A draft&#x27;s preview is its owner&#x27;s: anyone else gets &quot;not found&quot;, which says nothing about whether it exists. */
+    Preview get(String owner, String id) {
+        Owned o = byId.get(id);
+        if (o == null || !o.owner().equals(owner)) {
+            throw SafeFetcher.problem(HttpStatus.NOT_FOUND, &quot;No such preview&quot;);
+        }
+        return o.preview();
+    }
+
+    /** Fetches the preview&#x27;s image with the same checks as the page: only images, at most 1 MB. */
+    SafeFetcher.Fetched image(String owner, String id) {
+        Preview p = get(owner, id);
+        if (p.imageUrl() == null) {
+            throw SafeFetcher.problem(HttpStatus.NOT_FOUND, &quot;This preview has no image&quot;);
+        }
+        return fetcher.fetch(URI.create(p.imageUrl()), &quot;image/&quot;, 1024 * 1024, &quot;The image link is not an image&quot;);
+    }
+
+    /** The image is only linked, never fetched by the server: fetching it would need the same checks as the page. */
+    private static String image(SafeFetcher.Page page) {
+        String src = meta(page.html(), &quot;og:image&quot;);
+        if (src == null) {
+            return null;
+        }
+        try {
+            URI resolved = page.finalUri().resolve(src.strip());
+            return resolved.getScheme() != null &amp;&amp; resolved.getScheme().matches(&quot;(?i)https?&quot;) ? resolved.toString() : null;
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private static String meta(String html, String property) {
+        Matcher m = Pattern.compile(&quot;&lt;meta[^&gt;]+property=[\&quot;&#x27;]&quot; + Pattern.quote(property) + &quot;[\&quot;&#x27;][^&gt;]*content=[\&quot;&#x27;]([^\&quot;&#x27;]*)[\&quot;&#x27;]&quot;, Pattern.CASE_INSENSITIVE).matcher(html);
+        return m.find() ? unescape(m.group(1).strip()) : null;
+    }
+
+    private static String unescape(String s) {
+        return s.replace(&quot;&amp;quot;&quot;, &quot;\&quot;&quot;).replace(&quot;&amp;#39;&quot;, &quot;&#x27;&quot;).replace(&quot;&amp;lt;&quot;, &quot;&lt;&quot;).replace(&quot;&amp;gt;&quot;, &quot;&gt;&quot;).replace(&quot;&amp;amp;&quot;, &quot;&amp;&quot;);
+    }
+}</code></pre></div><p class="path">challenge/solution/PreviewController.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.net.URISyntaxException;
+
+@RestController
+class PreviewController {
+
+    record PreviewRequest(@NotNull @Size(max = 2000) String url) {
+    }
+
+    private final Previews previews;
+
+    PreviewController(Previews previews) {
+        this.previews = previews;
+    }
+
+    @PostMapping(&quot;/link-previews&quot;)
+    @ResponseStatus(HttpStatus.CREATED)
+    Previews.Preview create(@Valid @RequestBody PreviewRequest body, Authentication who) {
+        URI uri;
+        try {
+            uri = new URI(body.url().strip());
+        } catch (URISyntaxException e) {
+            throw SafeFetcher.problem(HttpStatus.BAD_REQUEST, &quot;Not a valid link&quot;);
+        }
+        return previews.create(who.getName(), uri);
+    }
+
+    /** The image, through the server: members&#x27; apps never contact the site, and the server fetches it with every check. */
+    @GetMapping(&quot;/link-previews/{id}/image&quot;)
+    org.springframework.http.ResponseEntity&lt;byte[]&gt; image(@PathVariable String id, Authentication who) {
+        SafeFetcher.Fetched f = previews.image(who.getName(), id);
+        return org.springframework.http.ResponseEntity.ok().contentType(org.springframework.http.MediaType.parseMediaType(f.mimeType())).body(f.head());
+    }
+
+    @GetMapping(&quot;/link-previews/{id}&quot;)
+    Previews.Preview get(@PathVariable String id, Authentication who) {
+        return previews.get(who.getName(), id);
+    }
+}</code></pre></div><p class="path">challenge/solution/SecurityConfig.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems) throws Exception {
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(HttpMethod.POST, &quot;/link-previews&quot;).hasRole(&quot;MEMBER&quot;)
+                        .requestMatchers(HttpMethod.GET, &quot;/link-previews/*&quot;, &quot;/link-previews/*/image&quot;).hasRole(&quot;MEMBER&quot;)
+                        .requestMatchers(&quot;/error&quot;).permitAll()
+                        .anyRequest().denyAll())
+                .httpBasic(b -&gt; b.authenticationEntryPoint(problems::unauthenticated))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable());   // credentials in a header with every request, no cookie a browser sends by itself
+        return http.build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+
+    /** Demo users: members meera and dev, and a guest who may only read; password &quot;name-demo-pass&quot;. */
+    @Bean
+    InMemoryUserDetailsManager users(PasswordEncoder encoder) {
+        return new InMemoryUserDetailsManager(
+                User.withUsername(&quot;meera&quot;).password(encoder.encode(&quot;meera-demo-pass&quot;)).roles(&quot;MEMBER&quot;).build(),
+                User.withUsername(&quot;dev&quot;).password(encoder.encode(&quot;dev-demo-pass&quot;)).roles(&quot;MEMBER&quot;).build(),
+                User.withUsername(&quot;guest&quot;).password(encoder.encode(&quot;guest-demo-pass&quot;)).roles(&quot;GUEST&quot;).build());
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>An egress proxy</h2>
+<p>Instead of checking addresses in the app, send every outgoing fetch through a separate egress proxy that can only reach the internet (no route to private networks, metadata blocked by the network itself). What does the app still check, what moves to the network, and what do you gain when a second team also needs to fetch URLs? Add the cloud provider's own protection (for example, metadata that requires a session token).</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test with a public and an internal test server.</li>
+<li>Write the address policy and test each range.</li>
+<li>Put the policy in the HTTP client's DNS resolver, so every connection, redirects included, is checked where it is made.</li>
+<li>Add timeouts, the size cap, the type check and the member rules.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Check in the resolver, connect to the checked addresses</td><td>A client that lets you plug in DNS (Apache HttpClient does).</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Fetch anything</td><td>The metadata service, the admin panel, everything inside.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Check the address, then fetch by name</td><td>DNS rebinding; redirects unchecked.</td><td><span class="pill bad">The first fix</span></td></tr><tr><td>A block-list of host names</td><td>Endless ways to write an address: IPv6, decimal, other names.</td><td><span class="pill bad">Review finding</span></td></tr><tr><td>An egress proxy with network rules</td><td>Infrastructure; protects every service at once.</td><td><span class="pill ok">Best, with app checks (challenge 3)</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>This station has no database: previews are kept in memory per member (a <code>shortcut:</code> comment says so). A real service would cache previews by URL with an expiry, and never cache a refusal as a preview.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Defence in depth</dt><dd>Block metadata at the cloud level too (for example, metadata that requires a session token) and give the server no network route to private ranges.</dd>
+<dt>More ranges</dt><dd>NAT64 prefixes (64:ff9b::/96) and your own public addresses can also reach inside: add them where they exist.</dd>
+<dt>Abuse</dt><dd>Previews make your server fetch for others: rate-limit per member, and watch for scanning patterns (many hosts, many ports).</dd>
+<dt>Logs</dt><dd>Log refusals with the member and the address: they are often the first sign of an attack.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>What is SSRF?</summary><p>Server-side request forgery: getting a server to make requests the attacker chooses, to places only the server can reach, such as internal services and cloud metadata.</p></details><details class="qa"><summary>Why is a host-name block-list not enough?</summary><p>An address can be written many ways (IPv6, decimal, other names pointing at it), and redirects lead elsewhere. Check the resolved addresses, at connect time.</p></details><details class="qa"><summary>What is DNS rebinding?</summary><p>A name that resolves to a safe address when checked and an internal one when used. Resolve once and connect to the checked address.</p></details><details class="qa"><summary>Which addresses do you block?</summary><p>Loopback, private ranges, link-local (with 169.254.169.254), any-local, 0/8, carrier-grade NAT, multicast, IPv6 unique-local, and anything else that routes inside.</p></details><details class="qa"><summary>What limits does a server-side fetch need?</summary><p>Timeouts for connect and read, a cap on size, few redirects, an expected content type, and a rate limit per user.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 12 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>Addresses</td><td>Loopback and metadata blocked.</td><td>Every internal range, every spelling, every address of a name.</td></tr><tr><td>Rebinding</td><td>Checked before fetching.</td><td>Checked where the connection is made, redirects included.</td></tr><tr><td>Limits</td><td>A timeout.</td><td>Connect and read timeouts, a size cap that really stops reading, type and redirect limits.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate simplifies the fetcher: the URL's host is checked against a short list of internal hosts before fetching, and the resolver stops checking, "since the URL was already checked". Read the file and list every problem before opening the findings.</p>
+<p class="path">review/SafeFetcher.java</p>
+<pre class="code"><code class="language-java">package com.chaupal.previews;
+
+import org.apache.hc.client5.http.DnsResolver;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.protocol.HttpClientContext;
+import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.util.Timeout;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Component;
+import org.springframework.web.ErrorResponseException;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.SocketTimeoutException;
+import java.net.URI;
+import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+
+/**
+ * Fetches a page for a preview, safely. Every name is resolved once, by our resolver, which refuses it if any of its
+ * addresses is blocked; the connection then goes to exactly those addresses. So a check cannot be fooled by a name
+ * that answers differently the second time (DNS rebinding), and redirects go through the same check.
+ */
+@Component
+class SafeFetcher {
+
+    static final int MAX_BYTES = 512 * 1024;
+    static final int MAX_REDIRECTS = 3;
+
+    record Page(URI finalUri, String html) {
+    }
+
+    static final class Blocked extends UnknownHostException {
+        Blocked(String host) {
+            super(host + &quot; resolves to an address that is not allowed&quot;);
+        }
+    }
+
+    /** The internal hosts an attacker would try. */
+    static final java.util.Set&lt;String&gt; BLOCKED_HOSTS = java.util.Set.of(&quot;localhost&quot;, &quot;127.0.0.1&quot;, &quot;169.254.169.254&quot;, &quot;metadata.google.internal&quot;);
+
+    private final CloseableHttpClient http;
+
+    SafeFetcher(AddressPolicy policy, NameLookup lookup) {
+        DnsResolver checked = new DnsResolver() {
+            @Override
+            public InetAddress[] resolve(String host) throws UnknownHostException {
+                return lookup.lookup(host);   // the URL was checked in fetch(): no need to check again here
+            }
+
+            @Override
+            public String resolveCanonicalHostname(String host) {
+                return host;
+            }
+        };
+        this.http = HttpClients.custom()
+                .setConnectionManager(PoolingHttpClientConnectionManagerBuilder.create().setDnsResolver(checked)
+                        .setDefaultConnectionConfig(ConnectionConfig.custom().setConnectTimeout(Timeout.ofSeconds(2)).setSocketTimeout(Timeout.ofSeconds(3)).build())
+                        .build())
+                .setDefaultRequestConfig(RequestConfig.custom().setResponseTimeout(Timeout.ofSeconds(3)).setMaxRedirects(MAX_REDIRECTS).build())
+                .disableCookieManagement()
+                .setUserAgent(&quot;ChaupalPreview/1.0&quot;)
+                .build();
+    }
+
+    Page fetch(URI uri) {
+        String scheme = uri.getScheme() == null ? &quot;&quot; : uri.getScheme().toLowerCase(Locale.ROOT);
+        if (!(scheme.equals(&quot;http&quot;) || scheme.equals(&quot;https&quot;)) || uri.getHost() == null || uri.getRawUserInfo() != null) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;Only http and https links to a host can be previewed&quot;);
+        }
+        if (BLOCKED_HOSTS.contains(uri.getHost().toLowerCase(Locale.ROOT))) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;This address cannot be previewed&quot;);
+        }
+        HttpGet get = new HttpGet(uri);
+        get.addHeader(&quot;Accept&quot;, &quot;text/html&quot;);
+        HttpClientContext context = HttpClientContext.create();
+        try {
+            return http.execute(get, context, response -&gt; {
+                if (response.getCode() != 200) {
+                    throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;The page answered &quot; + response.getCode());
+                }
+                ContentType type = ContentType.parseLenient(response.getEntity().getContentType());
+                if (type == null || !type.getMimeType().equalsIgnoreCase(&quot;text/html&quot;)) {
+                    throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;The link is not a web page&quot;);
+                }
+                try (InputStream in = response.getEntity().getContent()) {
+                    byte[] head = in.readNBytes(MAX_BYTES);   // a preview needs the head of a page, never the whole of a huge one
+                    if (in.read() != -1) {
+                        get.cancel();   // more is coming: drop the connection rather than read (or wait for) the rest
+                    }
+                    var redirects = context.getRedirectLocations().getAll();
+                    URI finalUri = redirects.isEmpty() ? uri : redirects.getLast();   // relative links resolve against the page we ended on
+                    return new Page(finalUri, new String(head, type.getCharset() == null ? StandardCharsets.UTF_8 : type.getCharset()));
+                }
+            });
+        } catch (ErrorResponseException e) {
+            throw e;
+        } catch (Blocked e) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;This address cannot be previewed&quot;);
+        } catch (UnknownHostException e) {
+            throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;No such host&quot;);
+        } catch (SocketTimeoutException e) {   // ConnectTimeoutException is one too
+            throw problem(HttpStatus.GATEWAY_TIMEOUT, &quot;The page took too long to answer&quot;);
+        } catch (IOException e) {
+            if (e.getCause() instanceof org.apache.hc.client5.http.RedirectException) {
+                throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;Too many redirects&quot;);
+            }
+            if (e.getCause() instanceof org.apache.hc.core5.http.ProtocolException) {
+                throw problem(HttpStatus.UNPROCESSABLE_CONTENT, &quot;The page redirects to a link that cannot be previewed&quot;);   // file:, no host...
+            }
+            throw problem(HttpStatus.BAD_GATEWAY, &quot;The page could not be fetched&quot;);
+        }
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>A block-list of host names</summary><p>"The internal hosts an attacker would try": localhost, 127.0.0.1, 169.254.169.254. But [::1], 0.0.0.0, 10.0.0.5, any name that points inside, and a public page that redirects to 127.0.0.1 all pass. An attacker only needs one spelling the list does not have.</p><p class="evidence"><b>Test evidence:</b> <code>everyWayToNameAnInternalAddressIsRefused</code> fails.</p></details><details class="finding"><summary><span class="sev">2</span>No check where the connection is made</summary><p>"The URL was checked in fetch()": the resolver now returns whatever DNS says, so a name pointing inside (metadata.internal) is fetched, and redirects are never checked at all.</p><p class="evidence"><b>Test evidence:</b> <code>theApiRefusesInternalAddressesAndIsNotFooledByRebinding</code> fails.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the flawed file copied over the real one, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>FetchLimitsTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill ok">2 / 2</span></td></tr><tr><td><code>PreviewContractTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill ok">3 / 3</span></td></tr><tr><td><code>FetchAnyUrlTrapTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill bad">2 / 3</span></td></tr><tr><td><code>SsrfSecurityTest</code></td><td><span class="pill ok">4 / 4</span></td><td><span class="pill bad">3 / 4</span></td></tr></tbody></table></div>
+<p class="note">The three addresses on the list are refused, and the obvious attack in a manual test fails. Only two tests fail, but each holds many attacks: one bypass is all it takes.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
