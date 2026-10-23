@@ -1,0 +1,1507 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 097 · Behind a load balancer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 097</span>
+    <h1>Behind a load balancer</h1>
+    <p class="scenario">Behind the load balancer every request seems to come from one IP, redirects point to http://, and uploads time out at 60 seconds.</p>
+    <p class="sim"><b>Simulation</b><span>Uploads are simulated storage: each one is read to the end, counted and hashed, and the bytes are not kept. The load balancer in the captures is a small Python script (docs/test-balancer.py); the addresses are documentation ranges.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>SaaS</li>
+      <li><b>Types</b>Security</li>
+      <li><b>Reviewer view</b>Yes</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>096 Partner API keys and quotas</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Tomcat RemoteIpValve (server.forward-headers-strategy=native) · X-Forwarded-For / -Proto / -Host · trusted proxies · Tomcat timeouts · Spring Security 7 · stateless sessions</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>One address for everyone</strong><p>Mapwise put a load balancer in front of the API. Now every request seemed to come from the balancer's address, links pointed to <code>http://10.0.0.17:8080/</code>, and big uploads timed out.</p></li><li><strong>A quick fix, a new hole</strong><p>A teammate read the client's address from X-Forwarded-For. But anyone can send that header: a user at home wrote the office's address into it and opened the admin page.</p></li><li><strong>The fix</strong><p>Tomcat rewrites the address, scheme and host from X-Forwarded-*, only for requests that really come from the balancer, and only from the balancer's own entry. Every hop has a timeout, and the app keeps no session.</p></li></ol>
+<p class="lesson">A header is only as trustworthy as whoever wrote it. Believe X-Forwarded-For from your balancer, never from the client.</p>
+
+<h2>What are we building?</h2>
+<p>An API that knows the real client, the real scheme and the public host name behind a load balancer, without letting any client choose them.</p>
+
+<h2>An everyday analogy</h2>
+<p>A receptionist writes "from: Mrs Rao, front door" on each visitor's slip. The clerk believes slips the receptionist wrote, and ignores the ones visitors wrote themselves.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>The balancer adds</strong> the client's address to the end of X-Forwarded-For, and the scheme and host it was asked for.</li>
+<li><strong>Tomcat checks</strong> who is talking: the balancer's address, or someone else? Anyone else: the headers are ignored.</li>
+<li><strong>Tomcat reads from the right</strong>: the last entry is the one the balancer wrote; anything before it the client could have written.</li>
+<li><strong>The app uses</strong> the request as rewritten: the real client for the office check, https and the public name for links.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: the balancer receives <code>X-Forwarded-For: 203.0.113.9</code> from a client at 198.51.100.7. What does it send on, and which address is the client?</summary><p><code>203.0.113.9, 198.51.100.7</code>. The client is 198.51.100.7: the balancer wrote that one. The first entry is whatever the client typed.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No real balancer.</strong> Tests send its headers from 127.0.0.1; the captures use a Python one.</li>
+<li><strong>No TLS here.</strong> The balancer ends https; the app speaks http behind it.</li>
+<li><strong>No real storage.</strong> Uploads are counted and hashed, not kept.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Load balancer</strong></td><td>A server in front of yours that spreads requests over several copies of your app.</td><td>A receptionist sending visitors to free counters.</td><td>10.0.0.0/24</td></tr><tr><td><strong>X-Forwarded-For</strong></td><td>A header where proxies write the address of whoever sent them the request.</td><td>A note "from: Mrs Rao" on a parcel the receptionist hands on.</td><td><code>203.0.113.9, 198.51.100.7</code></td></tr><tr><td><strong>X-Forwarded-Proto / -Host</strong></td><td>Whether the client used https, and which name it typed.</td><td>"She came in by the front door, asking for Mapwise".</td><td><code>https</code>, <code>maps.mapwise.example</code></td></tr><tr><td><strong>Trusted proxy</strong></td><td>A machine whose X-Forwarded-* headers you believe: your balancer, nobody else.</td><td>Believing the receptionist's note, not a note the visitor wrote.</td><td><code>internal-proxies</code></td></tr><tr><td><strong>Timeout</strong></td><td>How long one side waits for the other before giving up.</td><td>How long a counter waits for a visitor who stepped away.</td><td>20 s, 75 s, 60 s</td></tr><tr><td><strong>Sticky session</strong></td><td>The balancer sending a user always to the same server because that server remembers them.</td><td>Always the same counter, because only that clerk has your file.</td><td>Not needed here</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Mapwise</strong> (a fictional maps company): behind the load balancer every request seems to come from one IP, redirects point to <code>http://</code>, and uploads time out at 60 seconds.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo rules: the balancer is 10.0.0.0/24; the office is 203.0.113.0/24; uploads at most 10 MiB. Users asha and vikram, admin ops; password: the name plus <code>-demo-pass</code>.</p>
+<ol class="gwt">
+<li><b>Given</b> a request through the balancer, <b>then</b> the app sees the client's address, <code>https</code>, the public host and port 443.</li>
+<li><b>Given</b> a client that writes its own X-Forwarded-For, <b>then</b> it is ignored (direct) or only the balancer's entry counts (through it).</li>
+<li><b>Given</b> an upload, <b>then</b> <code>201</code> with <code>Location: https://maps.mapwise.example/uploads/{id}</code>; over the limit <code>413</code>.</li>
+<li><b>Given</b> a client that stops sending in the middle of an upload, <b>then</b> the app answers <code>408</code> after its read timeout and stores nothing.</li>
+<li><b>Given</b> <code>/admin/uploads</code>, <b>then</b> only an admin from the office: anyone else <code>403</code>, no sign-in <code>401</code>; another user's upload <code>404</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>Only the balancer's addresses are trusted, not Spring Boot's default list.</li>
+<li>No HTTP session: any copy of the app can answer any request.</li>
+<li>Every hop has a timeout, and the app's keep-alive outlasts the balancer's idle timeout.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Configure forwarded headers in Tomcat with an explicit list of trusted proxies.</li>
+<li>Explain why X-Forwarded-For is read from the right.</li>
+<li>Build absolute links from the request, so they are right behind any proxy.</li>
+<li>Set timeouts at each hop and say which one must be longer.</li>
+<li>Test proxy behaviour on a real port from two different client addresses.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/whoami</code></td><td>What the app believes about this request (public).</td></tr><tr><td><code>POST</code></td><td><code>/uploads</code></td><td>Upload a file as the raw body; <code>201</code> with its Location.</td></tr><tr><td><code>GET</code></td><td><code>/uploads/{id}</code></td><td>Your own upload.</td></tr><tr><td><code>GET</code></td><td><code>/admin/uploads</code></td><td>Every upload: admins, from the office network only.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>whoami; your upload; the admin list</td></tr><tr><td><span class="pill ok">201</span></td><td>Upload stored</td></tr><tr><td><span class="pill warn">401</span></td><td>No sign-in, or a wrong password</td></tr><tr><td><span class="pill warn">403</span></td><td>The admin list: not an admin, or not from the office</td></tr><tr><td><span class="pill warn">404</span></td><td>No such upload, or another user's</td></tr><tr><td><span class="pill warn">408</span></td><td>The client stopped sending before the upload was complete (answered by Tomcat)</td></tr><tr><td><span class="pill warn">413</span></td><td>Over 10 MiB</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from 127.0.0.2 on 23 Oct 2026, in this order. Port 8080 is the app as configured (its balancer is 10.0.0.0/24, so curl is just a client). Port 8081 is <code>docs/test-balancer.py</code>, a small Python balancer, in front of a second copy of the app that trusts it. <code>Date</code>, connection and standard security headers are left out.</p>
+<section class="example"><h3>Case 1: straight to the app</h3><p><b>Why:</b> the client is who connected: 127.0.0.2, plain http.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /whoami HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 123
+
+{
+  &quot;clientIp&quot;: &quot;127.0.0.2&quot;,
+  &quot;scheme&quot;: &quot;http&quot;,
+  &quot;secure&quot;: false,
+  &quot;host&quot;: &quot;127.0.0.1&quot;,
+  &quot;port&quot;: 8080,
+  &quot;url&quot;: &quot;http://127.0.0.1:8080/whoami&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: straight, with a made-up X-Forwarded-For</h3><p><b>Why:</b> ignored: 127.0.0.2 is not the balancer.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /whoami HTTP/1.1
+X-Forwarded-For: 203.0.113.9</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 123
+
+{
+  &quot;clientIp&quot;: &quot;127.0.0.2&quot;,
+  &quot;scheme&quot;: &quot;http&quot;,
+  &quot;secure&quot;: false,
+  &quot;host&quot;: &quot;127.0.0.1&quot;,
+  &quot;port&quot;: 8080,
+  &quot;url&quot;: &quot;http://127.0.0.1:8080/whoami&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: the admin pretends to be in the office</h3><p><b>Why:</b> <code>403</code>: the office check sees 127.0.0.2.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /admin/uploads HTTP/1.1
+Authorization: Basic b3BzOm9wcy1kZW1vLXBhc3M=
+X-Forwarded-For: 203.0.113.9</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 403 
+Content-Type: application/problem+json
+Content-Length: 104
+
+{
+  &quot;title&quot;: &quot;Not allowed&quot;,
+  &quot;status&quot;: 403,
+  &quot;detail&quot;: &quot;This sign-in cannot do this.&quot;,
+  &quot;instance&quot;: &quot;/admin/uploads&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: through the balancer</h3><p><b>Why:</b> the balancer's entry is the client; https, the public name, port 443. Spring Security now knows the request is https and adds <code>Strict-Transport-Security</code>; the <code>Server</code> header is the Python balancer's.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /whoami HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 OK
+Server: BaseHTTP/0.6 Python/3.13.16
+Strict-Transport-Security: max-age=31536000 ; includeSubDomains
+Content-Type: application/json
+Content-Length: 140
+
+{
+  &quot;clientIp&quot;: &quot;127.0.0.2&quot;,
+  &quot;scheme&quot;: &quot;https&quot;,
+  &quot;secure&quot;: true,
+  &quot;host&quot;: &quot;maps.mapwise.example&quot;,
+  &quot;port&quot;: 443,
+  &quot;url&quot;: &quot;https://maps.mapwise.example/whoami&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: through the balancer, with a made-up header</h3><p><b>Why:</b> the balancer appended 127.0.0.2 after the made-up 203.0.113.9; Tomcat reads from the right and takes 127.0.0.2.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /whoami HTTP/1.1
+X-Forwarded-For: 203.0.113.9</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 OK
+Server: BaseHTTP/0.6 Python/3.13.16
+Strict-Transport-Security: max-age=31536000 ; includeSubDomains
+Content-Type: application/json
+Content-Length: 140
+
+{
+  &quot;clientIp&quot;: &quot;127.0.0.2&quot;,
+  &quot;scheme&quot;: &quot;https&quot;,
+  &quot;secure&quot;: true,
+  &quot;host&quot;: &quot;maps.mapwise.example&quot;,
+  &quot;port&quot;: 443,
+  &quot;url&quot;: &quot;https://maps.mapwise.example/whoami&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: Asha uploads</h3><p><b>Why:</b> <code>201</code>; the Location is the public https address, not the app's own.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /uploads HTTP/1.1
+Authorization: Basic YXNoYTphc2hhLWRlbW8tcGFzcw==
+Content-Type: application/octet-stream
+
+quarterly-report-v3</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 Created
+Server: BaseHTTP/0.6 Python/3.13.16
+Location: https://maps.mapwise.example/uploads/1
+Strict-Transport-Security: max-age=31536000 ; includeSubDomains
+Content-Type: application/json
+Content-Length: 133
+
+{
+  &quot;id&quot;: 1,
+  &quot;owner&quot;: &quot;asha&quot;,
+  &quot;bytes&quot;: 19,
+  &quot;sha256&quot;: &quot;57692f2b65bf53aaf7225a41f624b3e1d2ecd2cfee939216ccbe990684e9d669&quot;,
+  &quot;clientIp&quot;: &quot;127.0.0.2&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: the admin, through the balancer, from outside the office</h3><p><b>Why:</b> <code>403</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /admin/uploads HTTP/1.1
+Authorization: Basic b3BzOm9wcy1kZW1vLXBhc3M=</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 403 Forbidden
+Server: BaseHTTP/0.6 Python/3.13.16
+Strict-Transport-Security: max-age=31536000 ; includeSubDomains
+Content-Type: application/problem+json
+Content-Length: 104
+
+{
+  &quot;title&quot;: &quot;Not allowed&quot;,
+  &quot;status&quot;: 403,
+  &quot;detail&quot;: &quot;This sign-in cannot do this.&quot;,
+  &quot;instance&quot;: &quot;/admin/uploads&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 8: no sign-in</h3><p><b>Why:</b> <code>401</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /uploads HTTP/1.1
+Content-Type: application/octet-stream
+
+x</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 401 Unauthorized
+Server: BaseHTTP/0.6 Python/3.13.16
+WWW-Authenticate: Basic realm=&quot;mapwise&quot;
+Strict-Transport-Security: max-age=31536000 ; includeSubDomains
+Content-Type: application/problem+json
+Content-Length: 110
+
+{
+  &quot;title&quot;: &quot;Sign-in required&quot;,
+  &quot;status&quot;: 401,
+  &quot;detail&quot;: &quot;Send a valid username and password.&quot;,
+  &quot;instance&quot;: &quot;/uploads&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 9: Vikram reads Asha's upload</h3><p><b>Why:</b> <code>404</code>, the same as one that does not exist.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /uploads/1 HTTP/1.1
+Authorization: Basic dmlrcmFtOnZpa3JhbS1kZW1vLXBhc3M=</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 Not Found
+Server: BaseHTTP/0.6 Python/3.13.16
+Strict-Transport-Security: max-age=31536000 ; includeSubDomains
+Content-Type: application/problem+json
+Content-Length: 85
+
+{
+  &quot;detail&quot;: &quot;No such upload.&quot;,
+  &quot;instance&quot;: &quot;/uploads/1&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Not Found&quot;
+}</code></pre></div></div></section>
+<h2>A stalled upload</h2>
+<p class="muted">From <code>docs/capture.sh</code>, against port 8080 and its 20 s read timeout:</p>
+<pre class="code"><code class="language-text">sent 10 of 1,000 bytes, then nothing; after 20 s (rounded down) the app answered: HTTP/1.1 408</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>The old way, straight or through the balancer</td><td>The office address the client wrote</td><td><code>theOldWayBelievesWhateverTheClientWrites</code></td></tr><tr><td>The API, straight or through the balancer</td><td>127.0.0.2; the balancer's entry; <code>403</code></td><td><code>theApiTrustsTheHeaderOnlyFromTheBalancerAndOnlyItsLastEntry</code></td></tr><tr><td>Boot's default trusted list, a machine that is not the balancer</td><td>Believed: <code>200</code> on /admin</td><td><code>withBootsDefaultListAMachineInsideTheNetworkCanBeTheOffice</code></td></tr><tr><td>A direct request</td><td>Taken as it is</td><td><code>aDirectRequestIsTakenAsItIs</code></td></tr><tr><td>Through the balancer</td><td>Client, https, public host, port 443</td><td><code>throughTheBalancerTheAppSeesTheClientHttpsAndThePublicName</code></td></tr><tr><td>An upload; one byte over the limit; an unknown id</td><td><code>201</code> with an https Location; <code>413</code>; <code>404</code></td><td><code>anUploadIsCountedAndItsLocationIsThePublicHttpsAddress</code></td></tr><tr><td>An upload that stops half way</td><td><code>408</code> after the read timeout; nothing stored</td><td><code>aStalledUploadIsCutOffAndNothingIsStored</code></td></tr><tr><td>Any signed-in request</td><td>No session cookie</td><td><code>noSessionCookieSoNoStickySessionsAreNeeded</code></td></tr><tr><td>No sign-in, a wrong password</td><td><code>401</code></td><td><code>withoutASignInUploadsAre401</code></td></tr><tr><td>Admin from home; a user from the office</td><td><code>403</code></td><td><code>theAdminListIsForAdminsInTheOfficeOnly</code></td></tr><tr><td>Another user's upload</td><td><code>404</code></td><td><code>aUserCannotReadAnotherUsersUpload</code></td></tr><tr><td>Not an address, a look-alike name, a made-up protocol, two headers, 50 fake hops</td><td>Never the office, never https, the balancer's entry</td><td><code>maliciousForwardedHeadersGiveNothingAway</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Trusting X-Forwarded-For from anyone, so clients can spoof their IP.</p>
+<ul>
+<li><strong>The old way.</strong> "The first address in X-Forwarded-For is the client": for a client that wrote <code>203.0.113.9</code> itself, straight to the app or through the balancer, that is the office.</li>
+<li><strong>The API.</strong> The same requests: straight to the app the header is ignored (the client is 127.0.0.2, <code>403</code>); through the balancer the last entry, the one the balancer wrote, is the client.</li>
+<li><strong>The second half.</strong> Forward headers on, but Spring Boot's default list of trusted proxies: every private and loopback range. A machine that is not the balancer, at 127.0.0.2, is trusted, and its made-up office address opens <code>/admin</code>.</li>
+</ul>
+<p>While building, each part was undone once: forward headers off turned 6 tests red; no office check 3; no admin check 2; any user's upload 1; a fixed <code>http://localhost:8080</code> link 1; no upload limit 1; sessions on 1. Removing the header names (<code>remote-ip-header</code>, <code>protocol-header</code>, <code>host-header</code>) turned nothing red: they were Boot's defaults, so they were deleted. A catch that turned a stalled read into our own <code>408</code> never ran (Tomcat answers 408 itself), so it was deleted too.</p>
+</div>
+<pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** A client outside the office writes the office&#x27;s address into X-Forwarded-For. Written first. */
+class SpoofedClientIpTrapTest extends ApiTest {
+
+    /** The old way: the first address in X-Forwarded-For is the client. Whoever sent the header. */
+    static String oldClientIp(String forwardedFor, String remoteAddr) {
+        return forwardedFor == null ? remoteAddr : forwardedFor.split(&quot;,&quot;)[0].strip();
+    }
+
+    @Test
+    void theOldWayBelievesWhateverTheClientWrites() {
+        // Straight to the app, and through the balancer (which appends the real address): the old way sees the office both times.
+        assertThat(oldClientIp(&quot;203.0.113.9&quot;, DIRECT)).isEqualTo(&quot;203.0.113.9&quot;);
+        assertThat(oldClientIp(&quot;203.0.113.9, 198.51.100.7&quot;, BALANCER)).isEqualTo(&quot;203.0.113.9&quot;);
+        assertThat(SecurityConfig.fromNetwork(new org.springframework.security.web.util.matcher.IpAddressMatcher(&quot;203.0.113.0/24&quot;), &quot;203.0.113.9&quot;)).isTrue();
+    }
+
+    @Test
+    void theApiTrustsTheHeaderOnlyFromTheBalancerAndOnlyItsLastEntry() throws Exception {
+        var direct = send(DIRECT, as(&quot;ops&quot;, request(&quot;/admin/uploads&quot;)).header(&quot;X-Forwarded-For&quot;, &quot;203.0.113.9&quot;));
+        assertThat(direct.statusCode()).isEqualTo(403);   // the header from a client is ignored: it is 127.0.0.2
+        var spoofedThroughBalancer = send(BALANCER, as(&quot;ops&quot;, viaBalancer(&quot;/admin/uploads&quot;, &quot;203.0.113.9, 198.51.100.7&quot;)));
+        assertThat(spoofedThroughBalancer.statusCode()).isEqualTo(403);   // the balancer&#x27;s entry, 198.51.100.7, is the client
+        assertThat(json(send(BALANCER, viaBalancer(&quot;/whoami&quot;, &quot;203.0.113.9, 198.51.100.7&quot;))).get(&quot;clientIp&quot;).asString()).isEqualTo(&quot;198.51.100.7&quot;);
+        assertThat(json(send(DIRECT, request(&quot;/whoami&quot;).header(&quot;X-Forwarded-For&quot;, &quot;203.0.113.9&quot;))).get(&quot;clientIp&quot;).asString()).isEqualTo(DIRECT);
+    }
+}</code></pre><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+
+import java.net.InetAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.Base64;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * The second half of the trap: forward headers on, but Spring Boot&#x27;s default list of trusted proxies (every private
+ * and loopback range, copied from Boot 4.1.1&#x27;s own metadata). Any machine inside the network can then claim any address.
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = &quot;server.tomcat.remoteip.internal-proxies=&quot;
+        + &quot;192.168.0.0/16, 172.16.0.0/12, 169.254.0.0/16, fc00::/7, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, fe80::/10, ::1/128&quot;)
+class DefaultTrustedProxiesTrapTest {
+
+    @LocalServerPort
+    int port;
+
+    @Test
+    void withBootsDefaultListAMachineInsideTheNetworkCanBeTheOffice() throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(&quot;http://127.0.0.1:&quot; + port + &quot;/admin/uploads&quot;))
+                .header(&quot;Authorization&quot;, &quot;Basic &quot; + Base64.getEncoder().encodeToString(&quot;ops:ops-demo-pass&quot;.getBytes()))
+                .header(&quot;X-Forwarded-For&quot;, &quot;203.0.113.9&quot;).build();
+        try (HttpClient fromAnotherMachine = HttpClient.newBuilder().localAddress(InetAddress.getByName(&quot;127.0.0.2&quot;)).build()) {
+            // 127.0.0.2 is not the balancer, but it is in 127.0.0.0/8: trusted, so its made-up header is believed.
+            assertThat(fromAnotherMachine.send(request, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(200);
+        }
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Python 3</td><td>Only for the test balancer in Try it yourself</td><td><code>python3 --version</code></td></tr><tr><td>macOS only</td><td>The address 127.0.0.2 on the loopback interface, for the tests</td><td><code>sudo ifconfig lo0 alias 127.0.0.2</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 12 tests</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. <code>HttpClient.Builder.localAddress</code>, which the tests use, is in Java 19 and later.</p>
+<h2>Try it yourself</h2>
+<p>Run a copy of the app that trusts this machine as its balancer, and the Python balancer in front of it:</p>
+<pre class="code"><code class="language-bash">./mvnw spring-boot:run -Dspring-boot.run.arguments=&#x27;--server.port=8082 --server.tomcat.remoteip.internal-proxies=127.0.0.1/32&#x27;
+python3 docs/test-balancer.py 8081 8082
+curl -H &#x27;X-Forwarded-For: 203.0.113.9&#x27; http://localhost:8081/whoami</code></pre>
+<p>The answer shows <code>127.0.0.1</code> (curl's address, appended by the balancer), <code>https</code> and <code>maps.mapwise.example</code>: your made-up address is not the client.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>Every client has the balancer's address</td><td>Forward headers are off, or the balancer is not in <code>internal-proxies</code>.</td><td><code>forward-headers-strategy: native</code> and the balancer's addresses.</td></tr><tr><td>Links start with <code>http://</code> behind an https balancer</td><td>The balancer does not send X-Forwarded-Proto, or it is not trusted.</td><td>Send it; trust the balancer.</td></tr><tr><td>Random 502s from the balancer</td><td>The app closes idle connections before the balancer does.</td><td>App keep-alive longer than the balancer's idle timeout.</td></tr><tr><td>Tests fail to bind 127.0.0.2 (macOS)</td><td>macOS routes only 127.0.0.1 by default.</td><td><code>sudo ifconfig lo0 alias 127.0.0.2</code></td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/097-behind-a-load-balancer/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/mapwise/edge/
+│   ├── SecurityConfig.java   ├── WhoAmIController.java   ├── UploadController.java
+│   └── Uploads.java   ├── ProblemResponses.java   └── EdgeApplication.java
+├── src/main/resources/application.yaml
+├── src/test/java/com/mapwise/edge/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, the Python balancer, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">Configuration first: most of this station is in it. Then the code, in the order a request travels.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">SecurityConfig.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">WhoAmIController.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">UploadController.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">Uploads.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">ProblemResponses.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">EdgeApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/resources/application.yaml</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Where the forwarded headers are trusted, and the timeouts.</dd><dt>Why</dt><dd><code>forward-headers-strategy: native</code>, <code>internal-proxies</code> set to the balancer's subnet only, a 20 s read timeout and a 75 s keep-alive.</dd><dt>Without it</dt><dd>Any machine inside the network choosing its client address; the balancer reusing a connection the app has just closed.</dd></dl><ul><li>Spring Boot 4.1.1's default <code>internal-proxies</code> is every private and loopback range (from Boot's own configuration metadata): convenient, and wrong for most networks.</li><li>The header names are Boot's defaults; nothing else needs setting.</li></ul></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: mapwise-edge
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  # Tomcat reads X-Forwarded-For, -Proto, -Host and -Port (the default names), but only from the load balancer.
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      # Demo rule: the load balancer lives in 10.0.0.0/24. Spring Boot&#x27;s default list trusts every private and
+      # loopback range, so any machine inside the network could claim any client address.
+      internal-proxies: 10.0.0.0/24
+    # Hop 2 (load balancer to app). Waiting for the next bytes of a request: a stalled upload frees its thread.
+    connection-timeout: 20s
+    # Longer than the load balancer&#x27;s idle timeout (60 s), so the app never closes a connection the balancer is about to reuse.
+    keep-alive-timeout: 75s
+
+mapwise:
+  # Demo rule: the office&#x27;s public addresses. /admin answers only to admins coming from here.
+  office-network: 203.0.113.0/24
+  max-upload-bytes: 10485760</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/mapwise/edge/SecurityConfig.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Who may do what.</dd><dt>Why</dt><dd>HTTP Basic, no session; /admin only for admins whose <code>getRemoteAddr()</code> is in the office network.</dd><dt>Without it</dt><dd>A client reaching /admin by writing a header.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.authorization.AuthorizationManager;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
+import org.springframework.security.web.util.matcher.IpAddressMatcher;
+
+@Configuration
+class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems, @Value(&quot;${mapwise.office-network}&quot;) String officeNetwork) throws Exception {
+        IpAddressMatcher office = new IpAddressMatcher(officeNetwork);
+        // getRemoteAddr() is the real client only because Tomcat trusts X-Forwarded-For from the load balancer alone.
+        AuthorizationManager&lt;RequestAuthorizationContext&gt; adminFromOffice = (auth, ctx) -&gt; new AuthorizationDecision(
+                auth.get().getAuthorities().stream().anyMatch(a -&gt; a.getAuthority().equals(&quot;ROLE_ADMIN&quot;))
+                        &amp;&amp; fromNetwork(office, ctx.getRequest().getRemoteAddr()));
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(HttpMethod.GET, &quot;/whoami&quot;).permitAll()
+                        .requestMatchers(HttpMethod.POST, &quot;/uploads&quot;).authenticated()
+                        .requestMatchers(HttpMethod.GET, &quot;/uploads/*&quot;).authenticated()
+                        .requestMatchers(HttpMethod.GET, &quot;/admin/uploads&quot;).access(adminFromOffice)
+                        .requestMatchers(&quot;/error&quot;).permitAll()
+                        .anyRequest().denyAll())
+                .httpBasic(b -&gt; b.authenticationEntryPoint(problems::unauthenticated))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                // No session: any server behind the balancer can answer any request, so no sticky sessions are needed.
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable());   // credentials in a header with every request, no cookie a browser sends by itself
+        return http.build();
+    }
+
+    static boolean fromNetwork(IpAddressMatcher network, String address) {
+        try {
+            return network.matches(address);
+        } catch (IllegalArgumentException notAnAddress) {
+            return false;
+        }
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+
+    /** Demo users, password: the name plus &quot;-demo-pass&quot;. */
+    @Bean
+    InMemoryUserDetailsManager users(PasswordEncoder encoder) {
+        return new InMemoryUserDetailsManager(
+                User.withUsername(&quot;asha&quot;).password(encoder.encode(&quot;asha-demo-pass&quot;)).roles(&quot;USER&quot;).build(),
+                User.withUsername(&quot;vikram&quot;).password(encoder.encode(&quot;vikram-demo-pass&quot;)).roles(&quot;USER&quot;).build(),
+                User.withUsername(&quot;ops&quot;).password(encoder.encode(&quot;ops-demo-pass&quot;)).roles(&quot;USER&quot;, &quot;ADMIN&quot;).build());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/mapwise/edge/WhoAmIController.java</p><div class="notes"><p>What the request looks like after Tomcat rewrote it.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * What the app believes about the request. Behind the load balancer these come from Tomcat&#x27;s RemoteIpValve, which
+ * rewrites them from the X-Forwarded-* headers, and only when the request really came from the load balancer.
+ */
+@RestController
+class WhoAmIController {
+
+    record WhoAmI(String clientIp, String scheme, boolean secure, String host, int port, String url) {
+    }
+
+    @GetMapping(&quot;/whoami&quot;)
+    WhoAmI whoami(HttpServletRequest req) {
+        return new WhoAmI(req.getRemoteAddr(), req.getScheme(), req.isSecure(), req.getServerName(), req.getServerPort(), req.getRequestURL().toString());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/mapwise/edge/UploadController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Uploads.</dd><dt>Why</dt><dd>Builds the Location from the request (<code>ServletUriComponentsBuilder</code>), so it carries https and the public host.</dd><dt>Without it</dt><dd>Links that point at the app's internal address.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
+import java.io.IOException;
+import java.util.Collection;
+
+@RestController
+class UploadController {
+
+    private final Uploads uploads;
+
+    UploadController(Uploads uploads) {
+        this.uploads = uploads;
+    }
+
+    /** 201 with a Location built from the request: https://maps.mapwise.example/... behind the balancer, not http://10.0.0.17:8080/... */
+    @PostMapping(&quot;/uploads&quot;)
+    ResponseEntity&lt;Uploads.Upload&gt; upload(HttpServletRequest req, Authentication auth) throws IOException {
+        Uploads.Upload saved = uploads.save(auth.getName(), req.getRemoteAddr(), req.getInputStream());
+        return ResponseEntity.created(ServletUriComponentsBuilder.fromCurrentContextPath().path(&quot;/uploads/{id}&quot;).build(saved.id())).body(saved);
+    }
+
+    /** Another user&#x27;s upload is a 404, the same as one that does not exist. */
+    @GetMapping(&quot;/uploads/{id}&quot;)
+    Uploads.Upload upload(@PathVariable long id, Authentication auth) {
+        return uploads.find(auth.getName(), id).orElseThrow(() -&gt;
+                new ErrorResponseException(HttpStatus.NOT_FOUND, ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No such upload.&quot;), null));
+    }
+
+    /** Admins, from the office network only (see SecurityConfig). */
+    @GetMapping(&quot;/admin/uploads&quot;)
+    Collection&lt;Uploads.Upload&gt; all() {
+        return uploads.all();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/mapwise/edge/Uploads.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Reading an upload.</dd><dt>Why</dt><dd>8 KB at a time, counted and hashed, stopped at the limit.</dd><dt>Without it</dt><dd>Memory that grows with the file; a stalled client holding a thread.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.stereotype.Component;
+import org.springframework.web.ErrorResponseException;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Collection;
+import java.util.HexFormat;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * Simulated storage: an upload is read to the end, counted and hashed; the bytes themselves are not kept.
+ * shortcut: the records are in this server&#x27;s memory, so another server behind the balancer does not know them
+ * (that is what sticky sessions paper over); keep them in a database and the bytes in object storage.
+ */
+@Component
+class Uploads {
+
+    record Upload(long id, String owner, long bytes, String sha256, String clientIp) {
+    }
+
+    private final long maxBytes;
+    private final Map&lt;Long, Upload&gt; uploads = new ConcurrentHashMap&lt;&gt;();
+    private final AtomicLong ids = new AtomicLong();
+
+    Uploads(@Value(&quot;${mapwise.max-upload-bytes}&quot;) long maxBytes) {
+        this.maxBytes = maxBytes;
+    }
+
+    /** Streams the body in 8 KB pieces: memory stays flat and reading stops at the limit. */
+    Upload save(String owner, String clientIp, InputStream body) throws IOException {
+        MessageDigest sha256;
+        try {
+            sha256 = MessageDigest.getInstance(&quot;SHA-256&quot;);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+        long total = 0;
+        byte[] buffer = new byte[8192];
+        for (int n; (n = body.read(buffer)) != -1; ) {   // a stalled client: Tomcat&#x27;s read timeout ends it with 408
+            total += n;
+            if (total &gt; maxBytes) {
+                throw tooLarge();
+            }
+            sha256.update(buffer, 0, n);
+        }
+        long id = ids.incrementAndGet();
+        Upload upload = new Upload(id, owner, total, HexFormat.of().formatHex(sha256.digest()), clientIp);
+        uploads.put(id, upload);
+        return upload;
+    }
+
+    Optional&lt;Upload&gt; find(String owner, long id) {
+        return Optional.ofNullable(uploads.get(id)).filter(u -&gt; u.owner().equals(owner));
+    }
+
+    Collection&lt;Upload&gt; all() {
+        return uploads.values();
+    }
+
+    private ErrorResponseException tooLarge() {
+        return new ErrorResponseException(HttpStatus.CONTENT_TOO_LARGE,
+                ProblemDetail.forStatusAndDetail(HttpStatus.CONTENT_TOO_LARGE, &quot;Uploads are limited to &quot; + maxBytes + &quot; bytes.&quot;), null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/mapwise/edge/ProblemResponses.java</p><div class="notes"><p><code>401</code> and <code>403</code> in the problem shape.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/** 401 and 403 are decided in Spring Security&#x27;s filters, before any controller: written here in the same problem shape. */
+@Component
+class ProblemResponses {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    void unauthenticated(HttpServletRequest req, HttpServletResponse res, AuthenticationException e) throws IOException {
+        // The same answer for an unknown username and a wrong password: nothing tells an attacker which accounts exist.
+        res.setHeader(&quot;WWW-Authenticate&quot;, &quot;Basic realm=\&quot;mapwise\&quot;&quot;);
+        write(req, res, HttpStatus.UNAUTHORIZED, &quot;Sign-in required&quot;, &quot;Send a valid username and password.&quot;);
+    }
+
+    void forbidden(HttpServletRequest req, HttpServletResponse res, AccessDeniedException e) throws IOException {
+        write(req, res, HttpStatus.FORBIDDEN, &quot;Not allowed&quot;, &quot;This sign-in cannot do this.&quot;);
+    }
+
+    private static void write(HttpServletRequest req, HttpServletResponse res, HttpStatus status, String title, String detail) throws IOException {
+        Map&lt;String, Object&gt; body = new LinkedHashMap&lt;&gt;();
+        body.put(&quot;title&quot;, title);
+        body.put(&quot;status&quot;, status.value());
+        body.put(&quot;detail&quot;, detail);
+        body.put(&quot;instance&quot;, req.getRequestURI());
+        res.setStatus(status.value());
+        res.setContentType(&quot;application/problem+json&quot;);
+        JSON.writeValue(res.getOutputStream(), body);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/mapwise/edge/EdgeApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class EdgeApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(EdgeApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>ProxyContractTest</code> (3), <code>TimeoutAndSessionTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>SpoofedClientIpTrapTest</code> (2), <code>DefaultTrustedProxiesTrapTest</code> (1)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Security</td><td>401, 403, one user accessing another user's data, malicious input</td><td><code>ProxySecurityTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">These tests need a real server: the valve that reads X-Forwarded-* runs inside Tomcat, and MockMvc has no Tomcat. Each request is sent from a chosen address with <code>HttpClient.Builder.localAddress</code>: 127.0.0.1 plays the balancer, 127.0.0.2 a client. The tests use a 1 s read timeout and a 1 MiB upload limit so they run quickly.</p>
+<p class="muted">Found while building: one byte over 10 MiB, the Java client saw the connection close instead of the <code>413</code>. Tomcat answers and then reads at most 2 MB more of the body before closing; a client still sending 10 MB sees the close first. With a 1 MiB limit in the tests the rest fits, and the <code>413</code> arrives.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0 -- in com.mapwise.edge.DefaultTrustedProxiesTrapTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.mapwise.edge.SpoofedClientIpTrapTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.mapwise.edge.TimeoutAndSessionTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.mapwise.edge.ProxyContractTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.mapwise.edge.ProxySecurityTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">SpoofedClientIpTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">DefaultTrustedProxiesTrapTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">ProxyContractTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">TimeoutAndSessionTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ProxySecurityTest.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/mapwise/edge/SpoofedClientIpTrapTest.java</p><div class="notes"><p>Written first: the old way against the API.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** A client outside the office writes the office&#x27;s address into X-Forwarded-For. Written first. */
+class SpoofedClientIpTrapTest extends ApiTest {
+
+    /** The old way: the first address in X-Forwarded-For is the client. Whoever sent the header. */
+    static String oldClientIp(String forwardedFor, String remoteAddr) {
+        return forwardedFor == null ? remoteAddr : forwardedFor.split(&quot;,&quot;)[0].strip();
+    }
+
+    @Test
+    void theOldWayBelievesWhateverTheClientWrites() {
+        // Straight to the app, and through the balancer (which appends the real address): the old way sees the office both times.
+        assertThat(oldClientIp(&quot;203.0.113.9&quot;, DIRECT)).isEqualTo(&quot;203.0.113.9&quot;);
+        assertThat(oldClientIp(&quot;203.0.113.9, 198.51.100.7&quot;, BALANCER)).isEqualTo(&quot;203.0.113.9&quot;);
+        assertThat(SecurityConfig.fromNetwork(new org.springframework.security.web.util.matcher.IpAddressMatcher(&quot;203.0.113.0/24&quot;), &quot;203.0.113.9&quot;)).isTrue();
+    }
+
+    @Test
+    void theApiTrustsTheHeaderOnlyFromTheBalancerAndOnlyItsLastEntry() throws Exception {
+        var direct = send(DIRECT, as(&quot;ops&quot;, request(&quot;/admin/uploads&quot;)).header(&quot;X-Forwarded-For&quot;, &quot;203.0.113.9&quot;));
+        assertThat(direct.statusCode()).isEqualTo(403);   // the header from a client is ignored: it is 127.0.0.2
+        var spoofedThroughBalancer = send(BALANCER, as(&quot;ops&quot;, viaBalancer(&quot;/admin/uploads&quot;, &quot;203.0.113.9, 198.51.100.7&quot;)));
+        assertThat(spoofedThroughBalancer.statusCode()).isEqualTo(403);   // the balancer&#x27;s entry, 198.51.100.7, is the client
+        assertThat(json(send(BALANCER, viaBalancer(&quot;/whoami&quot;, &quot;203.0.113.9, 198.51.100.7&quot;))).get(&quot;clientIp&quot;).asString()).isEqualTo(&quot;198.51.100.7&quot;);
+        assertThat(json(send(DIRECT, request(&quot;/whoami&quot;).header(&quot;X-Forwarded-For&quot;, &quot;203.0.113.9&quot;))).get(&quot;clientIp&quot;).asString()).isEqualTo(DIRECT);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/mapwise/edge/DefaultTrustedProxiesTrapTest.java</p><div class="notes"><p>Boot's default trusted list, shown letting a non-balancer in.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+
+import java.net.InetAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.Base64;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * The second half of the trap: forward headers on, but Spring Boot&#x27;s default list of trusted proxies (every private
+ * and loopback range, copied from Boot 4.1.1&#x27;s own metadata). Any machine inside the network can then claim any address.
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = &quot;server.tomcat.remoteip.internal-proxies=&quot;
+        + &quot;192.168.0.0/16, 172.16.0.0/12, 169.254.0.0/16, fc00::/7, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, fe80::/10, ::1/128&quot;)
+class DefaultTrustedProxiesTrapTest {
+
+    @LocalServerPort
+    int port;
+
+    @Test
+    void withBootsDefaultListAMachineInsideTheNetworkCanBeTheOffice() throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(&quot;http://127.0.0.1:&quot; + port + &quot;/admin/uploads&quot;))
+                .header(&quot;Authorization&quot;, &quot;Basic &quot; + Base64.getEncoder().encodeToString(&quot;ops:ops-demo-pass&quot;.getBytes()))
+                .header(&quot;X-Forwarded-For&quot;, &quot;203.0.113.9&quot;).build();
+        try (HttpClient fromAnotherMachine = HttpClient.newBuilder().localAddress(InetAddress.getByName(&quot;127.0.0.2&quot;)).build()) {
+            // 127.0.0.2 is not the balancer, but it is in 127.0.0.0/8: trusted, so its made-up header is believed.
+            assertThat(fromAnotherMachine.send(request, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(200);
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/mapwise/edge/ProxyContractTest.java</p><div class="notes"><p>Direct and through the balancer; uploads and their Location.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import org.junit.jupiter.api.Test;
+
+import java.net.http.HttpRequest;
+import java.security.MessageDigest;
+import java.util.HexFormat;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class ProxyContractTest extends ApiTest {
+
+    @Test
+    void aDirectRequestIsTakenAsItIs() throws Exception {
+        var me = json(send(DIRECT, request(&quot;/whoami&quot;)));
+        assertThat(me.get(&quot;clientIp&quot;).asString()).isEqualTo(DIRECT);
+        assertThat(me.get(&quot;scheme&quot;).asString()).isEqualTo(&quot;http&quot;);
+        assertThat(me.get(&quot;secure&quot;).asBoolean()).isFalse();
+        assertThat(me.get(&quot;url&quot;).asString()).isEqualTo(&quot;http://127.0.0.1:&quot; + port + &quot;/whoami&quot;);
+    }
+
+    @Test
+    void throughTheBalancerTheAppSeesTheClientHttpsAndThePublicName() throws Exception {
+        var response = send(BALANCER, viaBalancer(&quot;/whoami&quot;, &quot;198.51.100.7&quot;));
+        assertThat(response.statusCode()).isEqualTo(200);
+        var me = json(response);
+        assertThat(me.get(&quot;clientIp&quot;).asString()).isEqualTo(&quot;198.51.100.7&quot;);
+        assertThat(me.get(&quot;scheme&quot;).asString()).isEqualTo(&quot;https&quot;);
+        assertThat(me.get(&quot;secure&quot;).asBoolean()).isTrue();
+        assertThat(me.get(&quot;host&quot;).asString()).isEqualTo(&quot;maps.mapwise.example&quot;);
+        assertThat(me.get(&quot;port&quot;).asInt()).isEqualTo(443);
+        assertThat(me.get(&quot;url&quot;).asString()).isEqualTo(&quot;https://maps.mapwise.example/whoami&quot;);
+    }
+
+    @Test
+    void anUploadIsCountedAndItsLocationIsThePublicHttpsAddress() throws Exception {
+        byte[] file = new byte[1024 * 1024];   // exactly the limit in these tests
+        new java.util.Random(97).nextBytes(file);
+        var created = send(BALANCER, as(&quot;asha&quot;, viaBalancer(&quot;/uploads&quot;, &quot;198.51.100.8&quot;)).POST(HttpRequest.BodyPublishers.ofByteArray(file)));
+        assertThat(created.statusCode()).isEqualTo(201);
+        String location = created.headers().firstValue(&quot;Location&quot;).orElseThrow();
+        assertThat(location).matches(&quot;https://maps\\.mapwise\\.example/uploads/\\d+&quot;);   // not http://127.0.0.1:port/...
+        var body = json(created);
+        assertThat(body.get(&quot;owner&quot;).asString()).isEqualTo(&quot;asha&quot;);
+        assertThat(body.get(&quot;bytes&quot;).asLong()).isEqualTo(file.length);
+        assertThat(body.get(&quot;sha256&quot;).asString()).isEqualTo(HexFormat.of().formatHex(MessageDigest.getInstance(&quot;SHA-256&quot;).digest(file)));
+        assertThat(body.get(&quot;clientIp&quot;).asString()).isEqualTo(&quot;198.51.100.8&quot;);
+
+        String path = location.substring(&quot;https://maps.mapwise.example&quot;.length());
+        assertThat(send(BALANCER, as(&quot;asha&quot;, viaBalancer(path, &quot;198.51.100.8&quot;))).statusCode()).isEqualTo(200);
+        assertThat(send(BALANCER, as(&quot;asha&quot;, viaBalancer(&quot;/uploads/999&quot;, &quot;198.51.100.8&quot;))).statusCode()).isEqualTo(404);
+        // One byte over: 413 before a byte is read. (Far over, Tomcat answers and closes the connection rather than read the rest.)
+        var tooBig = send(BALANCER, as(&quot;asha&quot;, viaBalancer(&quot;/uploads&quot;, &quot;198.51.100.8&quot;)).POST(HttpRequest.BodyPublishers.ofByteArray(new byte[file.length + 1])));
+        assertThat(tooBig.statusCode()).isEqualTo(413);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/mapwise/edge/TimeoutAndSessionTest.java</p><div class="notes"><p>A stalled upload on a raw socket; no session cookie.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class TimeoutAndSessionTest extends ApiTest {
+
+    @Autowired
+    Uploads uploads;
+
+    /** A client announces 1,000 bytes, sends 10 and stops. Tomcat&#x27;s read timeout (1 s here) ends it; no thread waits forever. */
+    @Test
+    void aStalledUploadIsCutOffAndNothingIsStored() throws Exception {
+        int before = uploads.all().size();
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(&quot;127.0.0.1&quot;, port));
+            socket.setSoTimeout(10_000);
+            OutputStream out = socket.getOutputStream();
+            out.write((&quot;POST /uploads HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Basic &quot; + Base64.getEncoder().encodeToString(&quot;asha:asha-demo-pass&quot;.getBytes())
+                    + &quot;\r\nContent-Type: application/octet-stream\r\nContent-Length: 1000\r\n\r\n0123456789&quot;).getBytes(StandardCharsets.US_ASCII));
+            out.flush();
+            long started = System.nanoTime();
+            InputStream in = socket.getInputStream();
+            String answer = new String(in.readAllBytes(), StandardCharsets.US_ASCII);   // until the server closes
+            long seconds = (System.nanoTime() - started) / 1_000_000_000;
+            assertThat(seconds).isLessThan(5);
+            assertThat(answer).startsWith(&quot;HTTP/1.1 408&quot;);
+        }
+        assertThat(uploads.all()).hasSize(before);
+    }
+
+    /** Nothing about a user is kept between requests, so any server behind the balancer can answer any request. */
+    @Test
+    void noSessionCookieSoNoStickySessionsAreNeeded() throws Exception {
+        var response = send(BALANCER, as(&quot;asha&quot;, viaBalancer(&quot;/uploads&quot;, &quot;198.51.100.7&quot;)).POST(java.net.http.HttpRequest.BodyPublishers.ofString(&quot;hello&quot;)));
+        assertThat(response.statusCode()).isEqualTo(201);
+        assertThat(response.headers().allValues(&quot;Set-Cookie&quot;)).isEmpty();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/mapwise/edge/ProxySecurityTest.java</p><div class="notes"><p>401, 403, another user's upload, malicious headers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import org.junit.jupiter.api.Test;
+
+import java.net.http.HttpRequest;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class ProxySecurityTest extends ApiTest {
+
+    static final String OFFICE = &quot;203.0.113.9&quot;;
+    static final String HOME = &quot;198.51.100.7&quot;;
+
+    @Test
+    void withoutASignInUploadsAre401() throws Exception {
+        assertThat(send(BALANCER, viaBalancer(&quot;/uploads&quot;, HOME).POST(HttpRequest.BodyPublishers.ofString(&quot;x&quot;))).statusCode()).isEqualTo(401);
+        assertThat(send(BALANCER, viaBalancer(&quot;/uploads&quot;, HOME).header(&quot;Authorization&quot;, &quot;Basic YXNoYTp3cm9uZw==&quot;)
+                .POST(HttpRequest.BodyPublishers.ofString(&quot;x&quot;))).statusCode()).isEqualTo(401);
+        assertThat(send(BALANCER, viaBalancer(&quot;/admin/uploads&quot;, OFFICE)).statusCode()).isEqualTo(401);
+    }
+
+    @Test
+    void theAdminListIsForAdminsInTheOfficeOnly() throws Exception {
+        assertThat(send(BALANCER, as(&quot;ops&quot;, viaBalancer(&quot;/admin/uploads&quot;, OFFICE))).statusCode()).isEqualTo(200);
+        assertThat(send(BALANCER, as(&quot;ops&quot;, viaBalancer(&quot;/admin/uploads&quot;, HOME))).statusCode()).isEqualTo(403);
+        assertThat(send(BALANCER, as(&quot;asha&quot;, viaBalancer(&quot;/admin/uploads&quot;, OFFICE))).statusCode()).isEqualTo(403);
+    }
+
+    @Test
+    void aUserCannotReadAnotherUsersUpload() throws Exception {
+        var created = send(BALANCER, as(&quot;asha&quot;, viaBalancer(&quot;/uploads&quot;, HOME)).POST(HttpRequest.BodyPublishers.ofString(&quot;asha&#x27;s file&quot;)));
+        String path = &quot;/uploads/&quot; + json(created).get(&quot;id&quot;).asLong();
+        assertThat(send(BALANCER, as(&quot;vikram&quot;, viaBalancer(path, HOME))).statusCode()).isEqualTo(404);
+        assertThat(send(BALANCER, as(&quot;asha&quot;, viaBalancer(path, HOME))).statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void maliciousForwardedHeadersGiveNothingAway() throws Exception {
+        // Not an address, through the balancer: never the office, and no error.
+        assertThat(send(BALANCER, as(&quot;ops&quot;, viaBalancer(&quot;/admin/uploads&quot;, &quot;not-an-ip&quot;))).statusCode()).isEqualTo(403);
+        assertThat(send(BALANCER, as(&quot;ops&quot;, viaBalancer(&quot;/admin/uploads&quot;, &quot;203.0.113.9.evil.example&quot;))).statusCode()).isEqualTo(403);
+        // A made-up protocol is not https.
+        var me = json(send(BALANCER, request(&quot;/whoami&quot;).header(&quot;X-Forwarded-For&quot;, HOME).header(&quot;X-Forwarded-Proto&quot;, &quot;javascript&quot;)));
+        assertThat(me.get(&quot;secure&quot;).asBoolean()).isFalse();
+        // Two X-Forwarded-For headers, the first written by the client: still the balancer&#x27;s entry.
+        var twice = send(BALANCER, request(&quot;/whoami&quot;).header(&quot;X-Forwarded-For&quot;, OFFICE).header(&quot;X-Forwarded-For&quot;, HOME));
+        assertThat(json(twice).get(&quot;clientIp&quot;).asString()).isEqualTo(HOME);
+        // A long chain of made-up hops before the real one.
+        var chain = send(BALANCER, request(&quot;/whoami&quot;).header(&quot;X-Forwarded-For&quot;, (OFFICE + &quot;, &quot;).repeat(50) + HOME));
+        assertThat(json(chain).get(&quot;clientIp&quot;).asString()).isEqualTo(HOME);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/mapwise/edge/ApiTest.java</p><div class="notes"><p>Shared setup: a real port, requests from a chosen address, the balancer's headers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.net.InetAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.Base64;
+
+/**
+ * The real server on a real port: X-Forwarded-* headers are handled inside Tomcat, which MockMvc does not run.
+ * In these tests the load balancer is 127.0.0.1; anything else (127.0.0.2) is a client talking to the app directly.
+ * Tomcat waits 1 s (not 20 s) for the next bytes of a request, and uploads are limited to 1 MiB (not 10 MiB).
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {&quot;server.tomcat.remoteip.internal-proxies=127.0.0.1/32&quot;, &quot;server.tomcat.connection-timeout=1s&quot;, &quot;mapwise.max-upload-bytes=1048576&quot;})
+abstract class ApiTest {
+
+    static final String BALANCER = &quot;127.0.0.1&quot;;
+    static final String DIRECT = &quot;127.0.0.2&quot;;
+    static final JsonMapper JSON = JsonMapper.builder().build();
+
+    @LocalServerPort
+    int port;
+
+    HttpRequest.Builder request(String path) {
+        return HttpRequest.newBuilder(URI.create(&quot;http://127.0.0.1:&quot; + port + path));
+    }
+
+    /** The request as it reaches the app: from the balancer&#x27;s address, or from a client&#x27;s own. */
+    HttpResponse&lt;String&gt; send(String from, HttpRequest.Builder request) throws Exception {
+        try (HttpClient client = HttpClient.newBuilder().localAddress(InetAddress.getByName(from)).build()) {
+            return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+        }
+    }
+
+    /** What the load balancer adds: the client&#x27;s address (appended), https, and the public host name. */
+    HttpRequest.Builder viaBalancer(String path, String forwardedFor) {
+        return request(path).header(&quot;X-Forwarded-For&quot;, forwardedFor).header(&quot;X-Forwarded-Proto&quot;, &quot;https&quot;).header(&quot;X-Forwarded-Host&quot;, &quot;maps.mapwise.example&quot;);
+    }
+
+    static HttpRequest.Builder as(String user, HttpRequest.Builder request) {
+        return request.header(&quot;Authorization&quot;, &quot;Basic &quot; + Base64.getEncoder().encodeToString((user + &quot;:&quot; + user + &quot;-demo-pass&quot;).getBytes()));
+    }
+
+    static JsonNode json(HttpResponse&lt;String&gt; response) {
+        return JSON.readTree(response.body());
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/mapwise/edge/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=RequestIdChallengeTest</code>.</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 12 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 16 tests pass (12 station tests and 4 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 25 minutes</p><h2>One id across hops</h2><p>Every answer carries <code>X-Request-Id</code>, so one request can be found in the balancer's log and the app's. Keep the balancer's id; replace one a client sent itself (it could reuse another request's id to muddle the logs); make one when there is none. Errors too.</p><p><b>Done when:</b> both tests in <code>RequestIdChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Tomcat's valve marks requests that came through a trusted proxy: the request attribute <code>org.apache.tomcat.request.forwarded</code>.</li><li>A filter that runs before Spring Security, so <code>401</code>s get an id too.</li><li>The id goes into logs: allow only a short, safe set of characters.</li></ul></details><p class="path">challenge/RequestIdChallengeTest.java</p><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Challenge 1: every answer carries X-Request-Id, so one request can be followed through the balancer&#x27;s log and the
+ * app&#x27;s. The balancer&#x27;s id is kept; a client&#x27;s own is not trusted (it could reuse someone else&#x27;s to muddle the logs).
+ */
+class RequestIdChallengeTest extends ApiTest {
+
+    static final String UUID = &quot;[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}&quot;;
+
+    @Test
+    void theBalancersIdIsKept() throws Exception {
+        var response = send(BALANCER, viaBalancer(&quot;/whoami&quot;, &quot;198.51.100.7&quot;).header(&quot;X-Request-Id&quot;, &quot;lb-7f3a9c&quot;));
+        assertThat(response.headers().firstValue(&quot;X-Request-Id&quot;)).hasValue(&quot;lb-7f3a9c&quot;);
+    }
+
+    @Test
+    void aClientsOwnIdIsReplacedAndAMissingOneIsMade() throws Exception {
+        var direct = send(DIRECT, request(&quot;/whoami&quot;).header(&quot;X-Request-Id&quot;, &quot;lb-7f3a9c&quot;));
+        assertThat(direct.headers().firstValue(&quot;X-Request-Id&quot;).orElseThrow()).matches(UUID);
+        var none = send(BALANCER, viaBalancer(&quot;/whoami&quot;, &quot;198.51.100.7&quot;));
+        assertThat(none.headers().firstValue(&quot;X-Request-Id&quot;).orElseThrow()).matches(UUID);
+        var unauthorised = send(BALANCER, viaBalancer(&quot;/uploads&quot;, &quot;198.51.100.7&quot;).POST(java.net.http.HttpRequest.BodyPublishers.ofString(&quot;x&quot;)));
+        assertThat(unauthorised.statusCode()).isEqualTo(401);
+        assertThat(unauthorised.headers().firstValue(&quot;X-Request-Id&quot;)).isPresent();   // errors too: they are what you look up
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/RequestIdFilter.java</p><div class="src"><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.util.UUID;
+import java.util.regex.Pattern;
+
+/** Challenge 1: X-Request-Id on every answer; the balancer&#x27;s id kept, anyone else&#x27;s replaced. Runs before security, so 401s get one too. */
+@Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
+class RequestIdFilter extends OncePerRequestFilter {
+
+    /** Set by Tomcat&#x27;s RemoteIpValve when the request came through a trusted proxy (Globals.REQUEST_FORWARDED_ATTRIBUTE). */
+    static final String FORWARDED = &quot;org.apache.tomcat.request.forwarded&quot;;
+    private static final Pattern SAFE = Pattern.compile(&quot;[A-Za-z0-9._-]{1,64}&quot;);   // goes into logs: no spaces or line breaks
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) throws ServletException, IOException {
+        String id = req.getHeader(&quot;X-Request-Id&quot;);
+        boolean fromBalancer = Boolean.TRUE.equals(req.getAttribute(FORWARDED));
+        if (!fromBalancer || id == null || !SAFE.matcher(id).matches()) {
+            id = UUID.randomUUID().toString();
+        }
+        res.setHeader(&quot;X-Request-Id&quot;, id);
+        chain.doFilter(req, res);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 35 minutes</p><h2>Three uploads a minute per client</h2><p>At most 3 uploads a minute from one client address (a demo rule), <code>429</code> with <code>Retry-After</code> after that. It only works because the address is real: with the old way, a client would write a new X-Forwarded-For each time.</p><p><b>Done when:</b> both tests in <code>UploadsPerClientChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Key the window by <code>getRemoteAddr()</code>: after the valve, that is the client.</li><li>A deque of times per address, trimmed to the last minute, under a lock per address.</li></ul></details><p class="path">challenge/UploadsPerClientChallengeTest.java</p><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import org.junit.jupiter.api.Test;
+
+import java.net.http.HttpRequest;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Challenge 2: at most 3 uploads a minute from one client address (demo rule). It only works because the address is
+ * the real one: with the old way, a client would write a new X-Forwarded-For each time and never be limited.
+ */
+class UploadsPerClientChallengeTest extends ApiTest {
+
+    int upload(String from, HttpRequest.Builder request) throws Exception {
+        return send(from, as(&quot;vikram&quot;, request).POST(HttpRequest.BodyPublishers.ofString(&quot;a file&quot;))).statusCode();
+    }
+
+    @Test
+    void theFourthUploadInAMinuteFromOneAddressIs429() throws Exception {
+        for (int i = 0; i &lt; 3; i++) {
+            assertThat(upload(BALANCER, viaBalancer(&quot;/uploads&quot;, &quot;198.51.100.20&quot;))).isEqualTo(201);
+        }
+        var fourth = send(BALANCER, as(&quot;vikram&quot;, viaBalancer(&quot;/uploads&quot;, &quot;198.51.100.20&quot;)).POST(HttpRequest.BodyPublishers.ofString(&quot;a file&quot;)));
+        assertThat(fourth.statusCode()).isEqualTo(429);
+        assertThat(fourth.headers().firstValue(&quot;Retry-After&quot;)).isPresent();
+        assertThat(upload(BALANCER, viaBalancer(&quot;/uploads&quot;, &quot;198.51.100.21&quot;))).isEqualTo(201);   // another client is not affected
+    }
+
+    @Test
+    void aClientCannotEscapeItsLimitWithMadeUpAddresses() throws Exception {
+        for (int i = 0; i &lt; 3; i++) {
+            assertThat(upload(DIRECT, request(&quot;/uploads&quot;).header(&quot;X-Forwarded-For&quot;, &quot;203.0.113.&quot; + i))).isEqualTo(201);
+        }
+        assertThat(upload(DIRECT, request(&quot;/uploads&quot;).header(&quot;X-Forwarded-For&quot;, &quot;203.0.113.99&quot;))).isEqualTo(429);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/UploadLimiter.java</p><div class="src"><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Challenge 2: at most 3 uploads a minute per client address (demo rule), a sliding window per address.
+ * shortcut: in memory and never cleaned up; with many clients, expire idle addresses or keep this in Valkey.
+ */
+@Component
+class UploadLimiter {
+
+    static final int PER_MINUTE = 3;
+    private final Map&lt;String, Deque&lt;Instant&gt;&gt; recent = new ConcurrentHashMap&lt;&gt;();
+
+    /** 0 when allowed, else the seconds to wait. */
+    long take(String clientIp) {
+        Instant now = Instant.now();
+        Deque&lt;Instant&gt; times = recent.computeIfAbsent(clientIp, ip -&gt; new ArrayDeque&lt;&gt;());
+        synchronized (times) {
+            while (!times.isEmpty() &amp;&amp; times.peekFirst().isBefore(now.minus(Duration.ofMinutes(1)))) {
+                times.pollFirst();
+            }
+            if (times.size() &gt;= PER_MINUTE) {
+                return Math.max(1, Duration.between(now, times.peekFirst().plus(Duration.ofMinutes(1))).toSeconds());
+            }
+            times.addLast(now);
+            return 0;
+        }
+    }
+}</code></pre></div><p class="path">challenge/solution/UploadController.java</p><div class="src"><pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
+import java.io.IOException;
+import java.util.Collection;
+
+@RestController
+class UploadController {
+
+    private final Uploads uploads;
+    private final UploadLimiter limiter;
+
+    UploadController(Uploads uploads, UploadLimiter limiter) {
+        this.uploads = uploads;
+        this.limiter = limiter;
+    }
+
+    /** 201 with a Location built from the request: https://maps.mapwise.example/... behind the balancer, not http://10.0.0.17:8080/... */
+    @PostMapping(&quot;/uploads&quot;)
+    ResponseEntity&lt;Uploads.Upload&gt; upload(HttpServletRequest req, Authentication auth) throws IOException {
+        long wait = limiter.take(req.getRemoteAddr());   // challenge 2: the real client, thanks to the valve
+        if (wait &gt; 0) {
+            ErrorResponseException refused = new ErrorResponseException(HttpStatus.TOO_MANY_REQUESTS,
+                    ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, &quot;At most &quot; + UploadLimiter.PER_MINUTE + &quot; uploads a minute from one address.&quot;), null);
+            refused.getHeaders().set(&quot;Retry-After&quot;, Long.toString(wait));
+            throw refused;
+        }
+        Uploads.Upload saved = uploads.save(auth.getName(), req.getRemoteAddr(), req.getInputStream());
+        return ResponseEntity.created(ServletUriComponentsBuilder.fromCurrentContextPath().path(&quot;/uploads/{id}&quot;).build(saved.id())).body(saved);
+    }
+
+    /** Another user&#x27;s upload is a 404, the same as one that does not exist. */
+    @GetMapping(&quot;/uploads/{id}&quot;)
+    Uploads.Upload upload(@PathVariable long id, Authentication auth) {
+        return uploads.find(auth.getName(), id).orElseThrow(() -&gt;
+                new ErrorResponseException(HttpStatus.NOT_FOUND, ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No such upload.&quot;), null));
+    }
+
+    /** Admins, from the office network only (see SecurityConfig). */
+    @GetMapping(&quot;/admin/uploads&quot;)
+    Collection&lt;Uploads.Upload&gt; all() {
+        return uploads.all();
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>An upload longer than any timeout</h2>
+<p>Field teams upload 2 GB survey videos over slow mobile networks: 20 minutes or more, through a balancer that cuts connections after 60 s of silence and a CDN with its own limits. Design it so no hop's timeout matters: the API hands out a short-lived signed URL, the phone uploads straight to object storage in parts it can resume, and storage tells the API when it is done. Which timeouts are left, and who owns each?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap tests: the old way, and Boot's default trusted list.</li>
+<li>Turn on forward headers in Tomcat with the balancer's addresses only.</li>
+<li>Build links from the request; check the office against <code>getRemoteAddr()</code>.</li>
+<li>Set the timeouts and prove the read timeout with a stalled upload.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Tomcat's valve with an explicit list of trusted proxies</td><td>One list to keep up to date when the balancer moves.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Read X-Forwarded-For yourself, first entry</td><td>Any client chooses its address.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>The valve with Boot's default list</td><td>Every private address is trusted: any machine inside can spoof.</td><td><span class="pill bad">The trap, second half</span></td></tr><tr><td>Spring's <code>ForwardedHeaderFilter</code> (strategy <code>framework</code>)</td><td>Trusts the headers from anyone; only safe if the app cannot be reached except through the balancer.</td><td><span class="pill warn">Only with a closed network</span></td></tr><tr><td>The RFC 7239 <code>Forwarded</code> header</td><td>One standard header instead of three; not every balancer sends it.</td><td><span class="pill warn">If your balancer does</span></td></tr><tr><td>Sticky sessions</td><td>Uneven load; users lose their state when a server goes.</td><td><span class="pill bad">Avoid: stay stateless</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>No database: uploads are kept in memory, which is exactly what would force sticky sessions with several copies of the app. In production their records go to a database and their bytes to object storage, so any copy can answer.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Timeouts at every hop</dt><dd>Client to balancer: the balancer's idle timeout (60 s is a common default). Balancer to app: the app's keep-alive must be longer than that, or the balancer reuses a connection the app just closed (a 502). The app's read timeout frees threads from stalled clients. App to anything it calls: a connect and a read timeout on every client, shorter than the request's own.</dd>
+<dt>Close the side door</dt><dd>If the app can be reached without the balancer, every header check matters more. Put it in a private network or security group that only the balancer can reach.</dd>
+<dt>Several layers</dt><dd>CDN, then balancer, then app: each layer appends; trust them all in <code>internal-proxies</code> or <code>trusted-proxies</code>, and nothing else.</dd>
+<dt>Long uploads</dt><dd>Raise the balancer's idle timeout only for upload paths, or upload straight to object storage (challenge 3).</dd>
+<dt>Logs</dt><dd>Log the rewritten client address, and the request id the balancer sends (challenge 1).</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>How does your app learn the client&#x27;s IP behind a load balancer?</summary><p>From X-Forwarded-For, but only when the request comes from the balancer, and from the entry the balancer appended: read it from the right, skipping trusted proxies.</p></details><details class="qa"><summary>Why not the first entry?</summary><p>The client can send the header with anything in it; the balancer appends to it. The first entry is whatever the client wrote.</p></details><details class="qa"><summary>Why do links say http:// behind an https balancer?</summary><p>The app sees plain http from the balancer. Trust X-Forwarded-Proto from it, and build links from the request.</p></details><details class="qa"><summary>Which timeout must be longer, the balancer&#x27;s or the app&#x27;s?</summary><p>The app&#x27;s keep-alive must outlast the balancer&#x27;s idle timeout, or the balancer sends requests down connections the app has closed.</p></details><details class="qa"><summary>Why avoid sticky sessions?</summary><p>They tie a user to one server: uneven load, and lost state when it restarts. Keep state in a database or token instead.</p></details><details class="qa"><summary>How do you test this?</summary><p>On a real port, sending requests from two local addresses: one plays the balancer.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 12 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>Trust</td><td>Forward headers on.</td><td>Only the balancer trusted; you can say why Boot's default is risky.</td></tr><tr><td>Links</td><td>https links.</td><td>Links built from the request, never from a Host header or a constant.</td></tr><tr><td>Timeouts</td><td>A read timeout.</td><td>Every hop's timeout, and which must be longer.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate "fixes the balancer issues in code": the office check reads the client from X-Forwarded-For, "because behind the balancer getRemoteAddr() is the balancer", and the upload's Location is built from the Host header the client used. Read both files and list every problem before opening the findings.</p>
+<p class="path">review/SecurityConfig.java</p>
+<pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.authorization.AuthorizationManager;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
+import org.springframework.security.web.util.matcher.IpAddressMatcher;
+
+@Configuration
+class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems, @Value(&quot;${mapwise.office-network}&quot;) String officeNetwork) throws Exception {
+        IpAddressMatcher office = new IpAddressMatcher(officeNetwork);
+        // Behind the load balancer getRemoteAddr() is the balancer, so take the client from X-Forwarded-For.
+        AuthorizationManager&lt;RequestAuthorizationContext&gt; adminFromOffice = (auth, ctx) -&gt; new AuthorizationDecision(
+                auth.get().getAuthorities().stream().anyMatch(a -&gt; a.getAuthority().equals(&quot;ROLE_ADMIN&quot;))
+                        &amp;&amp; fromNetwork(office, clientIp(ctx.getRequest())));
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(HttpMethod.GET, &quot;/whoami&quot;).permitAll()
+                        .requestMatchers(HttpMethod.POST, &quot;/uploads&quot;).authenticated()
+                        .requestMatchers(HttpMethod.GET, &quot;/uploads/*&quot;).authenticated()
+                        .requestMatchers(HttpMethod.GET, &quot;/admin/uploads&quot;).access(adminFromOffice)
+                        .requestMatchers(&quot;/error&quot;).permitAll()
+                        .anyRequest().denyAll())
+                .httpBasic(b -&gt; b.authenticationEntryPoint(problems::unauthenticated))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                // No session: any server behind the balancer can answer any request, so no sticky sessions are needed.
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable());   // credentials in a header with every request, no cookie a browser sends by itself
+        return http.build();
+    }
+
+    /** The first address in X-Forwarded-For is the original client; the rest are proxies. */
+    static String clientIp(jakarta.servlet.http.HttpServletRequest req) {
+        String forwardedFor = req.getHeader(&quot;X-Forwarded-For&quot;);
+        return forwardedFor == null ? req.getRemoteAddr() : forwardedFor.split(&quot;,&quot;)[0].strip();
+    }
+
+    static boolean fromNetwork(IpAddressMatcher network, String address) {
+        try {
+            return network.matches(address);
+        } catch (IllegalArgumentException notAnAddress) {
+            return false;
+        }
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+
+    /** Demo users, password: the name plus &quot;-demo-pass&quot;. */
+    @Bean
+    InMemoryUserDetailsManager users(PasswordEncoder encoder) {
+        return new InMemoryUserDetailsManager(
+                User.withUsername(&quot;asha&quot;).password(encoder.encode(&quot;asha-demo-pass&quot;)).roles(&quot;USER&quot;).build(),
+                User.withUsername(&quot;vikram&quot;).password(encoder.encode(&quot;vikram-demo-pass&quot;)).roles(&quot;USER&quot;).build(),
+                User.withUsername(&quot;ops&quot;).password(encoder.encode(&quot;ops-demo-pass&quot;)).roles(&quot;USER&quot;, &quot;ADMIN&quot;).build());
+    }
+}</code></pre>
+<p class="path">review/UploadController.java</p>
+<pre class="code"><code class="language-java">package com.mapwise.edge;
+
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.io.IOException;
+import java.util.Collection;
+
+@RestController
+class UploadController {
+
+    private final Uploads uploads;
+
+    UploadController(Uploads uploads) {
+        this.uploads = uploads;
+    }
+
+    /** 201 with a Location for the new upload. */
+    @PostMapping(&quot;/uploads&quot;)
+    ResponseEntity&lt;Uploads.Upload&gt; upload(HttpServletRequest req, Authentication auth) throws IOException {
+        Uploads.Upload saved = uploads.save(auth.getName(), req.getRemoteAddr(), req.getInputStream());
+        // The link the client used: its Host header.
+        return ResponseEntity.created(java.net.URI.create(&quot;http://&quot; + req.getHeader(&quot;Host&quot;) + &quot;/uploads/&quot; + saved.id())).body(saved);
+    }
+
+    /** Another user&#x27;s upload is a 404, the same as one that does not exist. */
+    @GetMapping(&quot;/uploads/{id}&quot;)
+    Uploads.Upload upload(@PathVariable long id, Authentication auth) {
+        return uploads.find(auth.getName(), id).orElseThrow(() -&gt;
+                new ErrorResponseException(HttpStatus.NOT_FOUND, ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, &quot;No such upload.&quot;), null));
+    }
+
+    /** Admins, from the office network only (see SecurityConfig). */
+    @GetMapping(&quot;/admin/uploads&quot;)
+    Collection&lt;Uploads.Upload&gt; all() {
+        return uploads.all();
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>The office check believes the client</summary><p>"Behind the balancer getRemoteAddr() is the balancer": not with forward headers on, it is the client. And the first entry of X-Forwarded-For is whatever the client wrote: a client at home sends <code>203.0.113.9</code> and is in the office. Straight to the app it works the same way.</p><p class="evidence"><b>Test evidence:</b> <code>theApiTrustsTheHeaderOnlyFromTheBalancerAndOnlyItsLastEntry</code> fails: the admin list answers <code>200</code> to a made-up header.</p></details><details class="finding"><summary><span class="sev">2</span>Links from the Host header</summary><p><code>"http://" + Host</code> is the address the balancer used to reach the app, with http: <code>http://127.0.0.1:PORT/uploads/1</code> in the tests, <code>http://10.0.0.17:8080/...</code> in production. Clients that follow it go around the balancer, or fail. <code>ServletUriComponentsBuilder</code> uses the rewritten scheme, host and port.</p><p class="evidence"><b>Test evidence:</b> <code>anUploadIsCountedAndItsLocationIsThePublicHttpsAddress</code> fails.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the flawed files copied over the real ones, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>DefaultTrustedProxiesTrapTest</code></td><td><span class="pill ok">1 / 1</span></td><td><span class="pill ok">1 / 1</span></td></tr><tr><td><code>ProxySecurityTest</code></td><td><span class="pill ok">4 / 4</span></td><td><span class="pill ok">4 / 4</span></td></tr><tr><td><code>TimeoutAndSessionTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill ok">2 / 2</span></td></tr><tr><td><code>ProxyContractTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill bad">2 / 3</span></td></tr><tr><td><code>SpoofedClientIpTrapTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">1 / 2</span></td></tr></tbody></table></div>
+<p class="note">Every honest request works on the flawed version. Its problems need a client who writes a header, and a client who follows a link: both happen on the first day in production.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
