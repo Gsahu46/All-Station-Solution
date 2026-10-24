@@ -1,0 +1,1806 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 103 · Calling a legacy SOAP service</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 103</span>
+    <h1>Calling a legacy SOAP service</h1>
+    <p class="scenario">Policy issuance must go through a 15-year-old SOAP service at the insurer; nobody on the team has used SOAP.</p>
+    <p class="sim"><b>Simulation</b><span>The insurer's SOAP service is simulated: a small server answers with SOAP envelopes written by hand (no policy is really issued). The customers and products are demo data.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Specialisation</li>
+      <li><b>Industry</b>Insurance</li>
+      <li><b>Types</b>None</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>024 Public holidays from a partner API</p>
+      <p><span class="eyebrow">Builds toward</span><br>104 Enterprise integration with Apache Camel</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring-WS 5 · JAXB classes generated from the WSDL · java.net.http client with timeouts</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>The insurer's old system</strong><p>Bimaly sells health and term insurance. Policies are issued only by the insurer's 15-year-old SOAP service. Nobody on the team had used SOAP.</p></li><li><strong>A minute of waiting, then a 500</strong><p>The first client used the library's defaults. On a slow day the insurer took 40 seconds; customers waited, retried and stacked up. When the insurer said "we do not sell that product", the customer saw "500 Internal Server Error".</p></li><li><strong>The fix</strong><p>The client is generated from the WSDL, gives the insurer 8 seconds at most, and reads each fault: our mistake is a 422 with the insurer's reason, the insurer's failure is a 502, and no answer is a 504 that says the policy may or may not exist.</p></li></ol>
+<p class="lesson">Every call to another system needs a time limit and an honest translation of its errors. Old systems need both most.</p>
+
+<h2>What are we building?</h2>
+<p>A JSON endpoint that issues a policy through the insurer's SOAP service, with time limits and clear errors.</p>
+
+<h2>An everyday analogy</h2>
+<p>A travel agent booking with an airline that only accepts paper forms by fax. The agent fills in the airline's form exactly, waits a fixed time for the reply, and tells the customer in plain words whether the airline refused ("no seats in that class") or its fax machine is broken.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Check</strong>: the request is validated before anything is sent; a bad request never reaches the insurer.</li>
+<li><strong>Translate</strong>: generated classes turn it into the insurer's XML envelope.</li>
+<li><strong>Send, with a limit</strong>: at most 2 s to connect and 8 s for the answer.</li>
+<li><strong>Translate back</strong>: a policy is <code>201</code>; a refusal <code>422</code>; the insurer failing <code>502</code>; no answer <code>504</code>.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: why not retry when the insurer does not answer?</summary><p>The insurer may have issued the policy and only the answer was lost. A retry could issue a second policy for the same person. The API says "may or may not have been issued" instead.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No real insurer.</strong> A small simulated SOAP server answers.</li>
+<li><strong>No database.</strong> The insurer keeps the policies; we only pass them on.</li>
+<li><strong>No SOAP server of our own.</strong> We only call one.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>SOAP</strong></td><td>An older way for systems to talk: every message is an XML "envelope" sent by HTTP POST.</td><td>A letter in a fixed government form.</td><td>the insurer's IssuePolicy</td></tr><tr><td><strong>WSDL</strong></td><td>An XML file that describes a SOAP service: its operations, its messages and its address.</td><td>The form's instruction booklet.</td><td><code>policy-issuance.wsdl</code></td></tr><tr><td><strong>Generated client classes</strong></td><td>Java classes made from the WSDL at build time, so you never write the XML yourself.</td><td>A pre-printed form you only fill in.</td><td><code>IssuePolicyRequest</code>, <code>PolicyFault</code></td></tr><tr><td><strong>SOAP fault</strong></td><td>SOAP's error message: a code (whose mistake: Client or Server), a reason, and details.</td><td>The form sent back with "rejected: field 4" stamped on it.</td><td>422 or 502</td></tr><tr><td><strong>Timeout</strong></td><td>How long you wait for an answer before giving up.</td><td>Hanging up after a minute on hold.</td><td>connect 2 s, answer 8 s</td></tr><tr><td><strong>Circuit breaker</strong></td><td>After several failures in a row, stop calling for a while.</td><td>Not redialling a number that is clearly down.</td><td>challenge 2</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Bimaly</strong> (a fictional insurance broker) issues policies through its insurer's SOAP service. Slow answers hold requests for a minute, and refusals reach customers as 500s.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo rules: 2 s to connect, 8 s for the whole answer (the insurer usually answers in 1 to 3 s, at worst 6 s); a name of at most 100 characters; a product code of 3 to 10 letters or digits.</p>
+<ol class="gwt">
+<li><b>Given</b> a valid request the insurer accepts, <b>then</b> <code>201</code> with the insurer's policy number and premium, and a <code>Location</code>.</li>
+<li><b>Given</b> a request the insurer refuses (a Client fault), <b>then</b> <code>422</code> with the insurer's reason and code.</li>
+<li><b>Given</b> the insurer's own failure (a Server fault) or no connection, <b>then</b> <code>502</code>.</li>
+<li><b>Given</b> no answer within 8 s, <b>then</b> <code>504</code>, saying the policy may or may not have been issued.</li>
+<li><b>Given</b> bad input, <b>then</b> <code>400</code>, and nothing is sent.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>The client is generated from the insurer's WSDL, not written by hand.</li>
+<li>Every call has a connect timeout and an answer timeout.</li>
+<li>IssuePolicy is never retried automatically: it is not idempotent.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Read a WSDL: operations, messages, faults, address.</li>
+<li>Generate client classes from it with Maven.</li>
+<li>Call a SOAP operation with Spring-WS and set real timeouts.</li>
+<li>Map SOAP faults to honest HTTP errors.</li>
+<li>Test against a simulated SOAP server, including slow and broken answers.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/policies</code></td><td>Issue a policy: <code>{customerName, dateOfBirth, productCode, sumInsuredPaise}</code>.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">201</span></td><td>Issued by the insurer</td></tr><tr><td><span class="pill warn">400</span></td><td>Missing or bad fields; a date of birth not in the past</td></tr><tr><td><span class="pill warn">422</span></td><td>The insurer refused the request (its code in <code>insurerCode</code>)</td></tr><tr><td><span class="pill warn">502</span></td><td>The insurer's system failed, or could not be reached</td></tr><tr><td><span class="pill warn">504</span></td><td>No answer within 8 s; the policy may or may not exist</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 24 Oct 2026, in this order, against <code>docs/test-insurer.py</code>, a small simulated insurer. <code>Date</code>, connection and standard security headers are left out.</p>
+<section class="example"><h3>Case 1: a term policy</h3><p><b>Why:</b> <code>201</code>; the policy number comes from the insurer.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /policies HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;customerName&quot;: &quot;Meera Iyer&quot;,
+  &quot;dateOfBirth&quot;: &quot;1988-04-12&quot;,
+  &quot;productCode&quot;: &quot;TERM10&quot;,
+  &quot;sumInsuredPaise&quot;: 1000000000
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /policies/SG-2026-000001
+Content-Type: application/json
+
+{
+  &quot;policyNumber&quot;: &quot;SG-2026-000001&quot;,
+  &quot;productCode&quot;: &quot;TERM10&quot;,
+  &quot;sumInsuredPaise&quot;: 1000000000,
+  &quot;premiumPaise&quot;: 1000000
+}</code></pre></div></div></section><section class="example"><h3>Case 2: a product the insurer does not sell</h3><p><b>Why:</b> a Client fault: <code>422</code> with the insurer's own reason.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /policies HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;customerName&quot;: &quot;Meera Iyer&quot;,
+  &quot;dateOfBirth&quot;: &quot;1988-04-12&quot;,
+  &quot;productCode&quot;: &quot;CAR1&quot;,
+  &quot;sumInsuredPaise&quot;: 1000000000
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;The insurer refused the policy: Product CAR1 is not sold.&quot;,
+  &quot;instance&quot;: &quot;/policies&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Unprocessable Content&quot;,
+  &quot;insurerCode&quot;: &quot;PRODUCT_UNKNOWN&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: a sum above the insurer's limit</h3><p><b>Why:</b> the insurer's rule, not ours: <code>422</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /policies HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;customerName&quot;: &quot;Ravi Kumar&quot;,
+  &quot;dateOfBirth&quot;: &quot;1975-11-02&quot;,
+  &quot;productCode&quot;: &quot;HEALTH5&quot;,
+  &quot;sumInsuredPaise&quot;: 60000000000
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 422 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;The insurer refused the policy: The sum insured is above the limit for online issuance.&quot;,
+  &quot;instance&quot;: &quot;/policies&quot;,
+  &quot;status&quot;: 422,
+  &quot;title&quot;: &quot;Unprocessable Content&quot;,
+  &quot;insurerCode&quot;: &quot;SUM_TOO_HIGH&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: a date of birth in the future</h3><p><b>Why:</b> <code>400</code>; nothing sent.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /policies HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;customerName&quot;: &quot;Ravi Kumar&quot;,
+  &quot;dateOfBirth&quot;: &quot;2999-01-01&quot;,
+  &quot;productCode&quot;: &quot;HEALTH5&quot;,
+  &quot;sumInsuredPaise&quot;: 50000000
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Invalid request content.&quot;,
+  &quot;instance&quot;: &quot;/policies&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: the insurer's system fails</h3><p><b>Why:</b> a Server fault: <code>502</code>, and no internal detail passed on.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /policies HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;customerName&quot;: &quot;Asha Rao&quot;,
+  &quot;dateOfBirth&quot;: &quot;1990-06-30&quot;,
+  &quot;productCode&quot;: &quot;HEALTH5&quot;,
+  &quot;sumInsuredPaise&quot;: 50000000
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 502 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;The insurer&#x27;s system failed. Try again later.&quot;,
+  &quot;instance&quot;: &quot;/policies&quot;,
+  &quot;status&quot;: 502,
+  &quot;title&quot;: &quot;Bad Gateway&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: the insurer hangs for 20 s</h3><p><b>Why:</b> <code>504</code> after 8 s.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /policies HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;customerName&quot;: &quot;Asha Rao&quot;,
+  &quot;dateOfBirth&quot;: &quot;1990-06-30&quot;,
+  &quot;productCode&quot;: &quot;HEALTH5&quot;,
+  &quot;sumInsuredPaise&quot;: 50000000
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 504 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;The insurer did not answer in time. The policy may or may not have been issued: check before trying again.&quot;,
+  &quot;instance&quot;: &quot;/policies&quot;,
+  &quot;status&quot;: 504,
+  &quot;title&quot;: &quot;Gateway Timeout&quot;
+}</code></pre></div></div></section>
+<p class="muted">How long case 6 took, measured by curl:</p>
+<pre class="code"><code class="language-text">the app answered 504 after 8.010278 s (its limit: 8 s; the insurer would have taken 20 s)</code></pre>
+<h2>On the wire</h2>
+<p class="muted">What the simulated insurer received and sent back for cases 1 and 2. Note the <code>SOAPAction</code> header, and that SOAP 1.1 sends a fault with HTTP 500.</p>
+<pre class="code"><code class="language-xml">SOAPAction: &quot;http://insurer.example/policy/v1/IssuePolicy&quot;
+
+&lt;SOAP-ENV:Envelope xmlns:SOAP-ENV=&quot;http://schemas.xmlsoap.org/soap/envelope/&quot;&gt;&lt;SOAP-ENV:Header/&gt;&lt;SOAP-ENV:Body&gt;&lt;ns2:IssuePolicyRequest xmlns:ns2=&quot;http://insurer.example/policy/v1&quot;&gt;&lt;ns2:customerName&gt;Meera Iyer&lt;/ns2:customerName&gt;&lt;ns2:dateOfBirth&gt;1988-04-12&lt;/ns2:dateOfBirth&gt;&lt;ns2:productCode&gt;TERM10&lt;/ns2:productCode&gt;&lt;ns2:sumInsuredPaise&gt;1000000000&lt;/ns2:sumInsuredPaise&gt;&lt;/ns2:IssuePolicyRequest&gt;&lt;/SOAP-ENV:Body&gt;&lt;/SOAP-ENV:Envelope&gt;
+
+--- answer (HTTP 200) ---
+
+&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;&lt;soap:Envelope xmlns:soap=&quot;http://schemas.xmlsoap.org/soap/envelope/&quot;&gt;&lt;soap:Body&gt;&lt;p:IssuePolicyResponse xmlns:p=&quot;http://insurer.example/policy/v1&quot;&gt;&lt;p:policyNumber&gt;SG-2026-000001&lt;/p:policyNumber&gt;&lt;p:premiumPaise&gt;1000000&lt;/p:premiumPaise&gt;&lt;/p:IssuePolicyResponse&gt;&lt;/soap:Body&gt;&lt;/soap:Envelope&gt;</code></pre><pre class="code"><code class="language-xml">SOAPAction: &quot;http://insurer.example/policy/v1/IssuePolicy&quot;
+
+&lt;SOAP-ENV:Envelope xmlns:SOAP-ENV=&quot;http://schemas.xmlsoap.org/soap/envelope/&quot;&gt;&lt;SOAP-ENV:Header/&gt;&lt;SOAP-ENV:Body&gt;&lt;ns2:IssuePolicyRequest xmlns:ns2=&quot;http://insurer.example/policy/v1&quot;&gt;&lt;ns2:customerName&gt;Meera Iyer&lt;/ns2:customerName&gt;&lt;ns2:dateOfBirth&gt;1988-04-12&lt;/ns2:dateOfBirth&gt;&lt;ns2:productCode&gt;CAR1&lt;/ns2:productCode&gt;&lt;ns2:sumInsuredPaise&gt;1000000000&lt;/ns2:sumInsuredPaise&gt;&lt;/ns2:IssuePolicyRequest&gt;&lt;/SOAP-ENV:Body&gt;&lt;/SOAP-ENV:Envelope&gt;
+
+--- answer (HTTP 500) ---
+
+&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;&lt;soap:Envelope xmlns:soap=&quot;http://schemas.xmlsoap.org/soap/envelope/&quot;&gt;&lt;soap:Body&gt;&lt;soap:Fault&gt;&lt;faultcode&gt;soap:Client&lt;/faultcode&gt;&lt;faultstring&gt;Validation failed&lt;/faultstring&gt;&lt;detail&gt;&lt;p:PolicyFault xmlns:p=&quot;http://insurer.example/policy/v1&quot;&gt;&lt;p:code&gt;PRODUCT_UNKNOWN&lt;/p:code&gt;&lt;p:message&gt;Product CAR1 is not sold.&lt;/p:message&gt;&lt;/p:PolicyFault&gt;&lt;/detail&gt;&lt;/soap:Fault&gt;&lt;/soap:Body&gt;&lt;/soap:Envelope&gt;</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>The old client and a slow insurer</td><td>60 s read timeout; still waiting after 2 s</td><td><code>theOldClientWaitsAsLongAsTheInsurerDoes</code></td></tr><tr><td>The old way and a refusal</td><td>An exception escapes (a 500); the API answers <code>422</code></td><td><code>theOldWayLetsAFaultEscapeAsAnErrorAndTheApiExplainsIt</code></td></tr><tr><td>A policy issued</td><td><code>201</code>, Location, SOAPAction sent</td><td><code>aPolicyIsIssuedThroughTheInsurersSoapService</code></td></tr><tr><td>A refusal</td><td><code>422</code> with the insurer's reason and code</td><td><code>theInsurersRefusalIs422WithItsReason</code></td></tr><tr><td>A Server fault; a slow insurer</td><td><code>502</code>; <code>504</code></td><td><code>theInsurersOwnFailureIs502AndASlowInsurer504</code></td></tr><tr><td>Bad input</td><td><code>400</code>; the insurer gets nothing</td><td><code>badRequestsAre400AndNeverReachTheInsurer</code></td></tr><tr><td>No insurer listening</td><td><code>502</code></td><td><code>anInsurerThatCannotBeReachedIs502</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">No timeout on a slow legacy service, and SOAP faults turned into 500s.</p>
+<ul>
+<li><strong>The old way.</strong> A <code>WebServiceTemplate</code> as it comes. Its default sender waits 60 s to connect and 60 s for an answer: the test reads the value and shows a request still waiting after 2 s. A refusal arrives as <code>SoapFaultClientException</code>; nothing catches it, so the customer gets a 500 with no reason.</li>
+<li><strong>The API.</strong> Gives up after its limit (1 s in the tests) with <code>504</code>, and turns the same refusal into <code>422</code> "The insurer refused the policy: Product CAR1 is not sold."</li>
+</ul>
+<p>While building, each part was undone once: no timeouts turned 2 tests red; no SOAPAction 1; every fault as <code>422</code> 1; the fault's detail ignored 2; every lost answer as <code>502</code> 2; the product code not upper-cased 1; no pattern on the product code 1.</p>
+</div>
+<pre class="code"><code class="language-java">package com.bimaly.policies;
+
+import com.bimaly.policies.insurer.IssuePolicyRequest;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.oxm.jaxb.Jaxb2Marshaller;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.ws.client.core.WebServiceTemplate;
+import org.springframework.ws.soap.client.SoapFaultClientException;
+import org.springframework.ws.transport.http.HttpUrlConnectionMessageSender;
+
+import javax.xml.datatype.DatatypeFactory;
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+
+import static com.bimaly.policies.TestInsurer.INSURER;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The insurer is slow today, and it refuses some requests. Written first. */
+class LegacySoapTrapTest extends ApiTest {
+
+    @Autowired
+    Jaxb2Marshaller messages;
+
+    /** The old way: a WebServiceTemplate as it comes, and no handling of faults. */
+    WebServiceTemplate oldClient() {
+        WebServiceTemplate template = new WebServiceTemplate(messages);
+        template.setDefaultUri(INSURER.url());
+        return template;
+    }
+
+    static IssuePolicyRequest request(String product) {
+        IssuePolicyRequest r = new IssuePolicyRequest();
+        r.setCustomerName(&quot;Meera Iyer&quot;);
+        r.setDateOfBirth(DatatypeFactory.newDefaultInstance().newXMLGregorianCalendar(&quot;1988-04-12&quot;));
+        r.setProductCode(product);
+        r.setSumInsuredPaise(1_000_000_000L);
+        return r;
+    }
+
+    @Test
+    void theOldClientWaitsAsLongAsTheInsurerDoes() throws Exception {
+        // Spring-WS&#x27;s default sender gives the insurer 60 s to connect and 60 s more to answer.
+        var sender = (HttpUrlConnectionMessageSender) oldClient().getMessageSenders()[0];
+        assertThat(ReflectionTestUtils.getField(sender, &quot;readTimeout&quot;)).isEqualTo(Duration.ofSeconds(60));
+
+        INSURER.delayMillis = 4_000;
+        var old = CompletableFuture.supplyAsync(() -&gt; oldClient().marshalSendAndReceive(request(&quot;TERM10&quot;)));
+        await().during(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(3)).until(() -&gt; !old.isDone());   // a request thread, held
+        old.join();
+
+        long started = System.nanoTime();
+        issue(&quot;TERM10&quot;, 1_000_000_000L).andExpect(status().isGatewayTimeout());   // the API gives up after its 1 s
+        assertThat((System.nanoTime() - started) / 1_000_000).isLessThan(2_000);
+    }
+
+    @Test
+    void theOldWayLetsAFaultEscapeAsAnErrorAndTheApiExplainsIt() throws Exception {
+        assertThatThrownBy(() -&gt; oldClient().marshalSendAndReceive(request(&quot;CAR1&quot;)))
+                .isInstanceOf(SoapFaultClientException.class);   // unhandled in a controller: a 500 with no reason
+        issue(&quot;CAR1&quot;, 1_000_000_000L).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;The insurer refused the policy: Product CAR1 is not sold.&quot;))
+                .andExpect(jsonPath(&quot;$.insurerCode&quot;).value(&quot;PRODUCT_UNKNOWN&quot;));
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Python 3</td><td>Only for the simulated insurer in Try it yourself</td><td><code>python3 --version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">python3 docs/test-insurer.py 9088 &amp;   # the simulated insurer
+./mvnw spring-boot:run      # generates the client from the WSDL; the API on http://localhost:8080
+./mvnw test                 # all 7 tests; they start their own simulated insurer</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">Start-Process python -ArgumentList &#x27;docs/test-insurer.py&#x27;,&#x27;9088&#x27;
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Make the insurer hang, then issue a policy:</p>
+<pre class="code"><code class="language-bash">curl -d &#x27;{&quot;delay&quot;:20}&#x27; http://127.0.0.1:9088/control
+curl -i -H &#x27;Content-Type: application/json&#x27; -d &#x27;{&quot;customerName&quot;:&quot;Asha Rao&quot;,&quot;dateOfBirth&quot;:&quot;1990-06-30&quot;,&quot;productCode&quot;:&quot;HEALTH5&quot;,&quot;sumInsuredPaise&quot;:50000000}&#x27; localhost:8080/policies</code></pre>
+<p>The answer is <code>504</code> after 8 s. Then copy the Review tab's <code>PoliciesApplication.java</code> over the real one and try again: the request waits the full 20 s.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>cannot find symbol IssuePolicyRequest</code> in the IDE</td><td>The classes are generated by the build.</td><td>Run <code>./mvnw compile</code> once, and mark <code>target/generated-sources</code> as a source folder if the IDE does not.</td></tr><tr><td><code>HttpClient is not available</code></td><td>A <code>JdkHttpClientMessageSender</code> made by hand, without an HttpClient.</td><td>Pass one to its constructor, as in <code>PoliciesApplication</code>.</td></tr><tr><td>The insurer answers "no operation" or ignores the request</td><td>No or wrong <code>SOAPAction</code> header.</td><td>Send the action named in the WSDL's binding.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/103-calling-a-legacy-soap-service/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/
+├── src/main/java/com/bimaly/policies/
+│   ├── PolicyController.java   ├── InsurerClient.java   └── PoliciesApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── wsdl/policy-issuance.wsdl
+├── target/generated-sources/   com/bimaly/policies/insurer/ (made by the build)
+├── src/test/java/com/bimaly/policies/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, simulated insurer, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">The contract first, then in the order a request travels.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">policy-issuance.wsdl</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">pom.xml</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">PolicyController.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">InsurerClient.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">PoliciesApplication.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">application.yaml</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/resources/wsdl/policy-issuance.wsdl</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The insurer's contract.</dd><dt>Why</dt><dd>One operation, IssuePolicy; its request, answer and fault; the address. SOAP 1.1, document/literal.</dd><dt>Without it</dt><dd>Hand-written XML that drifts from what the insurer expects.</dd></dl><ul><li>Here a copy of the insurer's file, kept in the project so the build does not depend on their server.</li></ul></div><div class="src"><pre class="code"><code class="language-text">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;!-- The insurer&#x27;s WSDL (simulated: Bimaly&#x27;s partner insurer, &quot;Suraksha General&quot;). SOAP 1.1, document/literal. --&gt;
+&lt;wsdl:definitions name=&quot;PolicyIssuance&quot;
+                  targetNamespace=&quot;http://insurer.example/policy/v1&quot;
+                  xmlns:tns=&quot;http://insurer.example/policy/v1&quot;
+                  xmlns:wsdl=&quot;http://schemas.xmlsoap.org/wsdl/&quot;
+                  xmlns:soap=&quot;http://schemas.xmlsoap.org/wsdl/soap/&quot;
+                  xmlns:xs=&quot;http://www.w3.org/2001/XMLSchema&quot;&gt;
+    &lt;wsdl:types&gt;
+        &lt;xs:schema targetNamespace=&quot;http://insurer.example/policy/v1&quot; elementFormDefault=&quot;qualified&quot;&gt;
+            &lt;xs:element name=&quot;IssuePolicyRequest&quot;&gt;
+                &lt;xs:complexType&gt;
+                    &lt;xs:sequence&gt;
+                        &lt;xs:element name=&quot;customerName&quot; type=&quot;xs:string&quot;/&gt;
+                        &lt;xs:element name=&quot;dateOfBirth&quot; type=&quot;xs:date&quot;/&gt;
+                        &lt;xs:element name=&quot;productCode&quot; type=&quot;xs:string&quot;/&gt;
+                        &lt;xs:element name=&quot;sumInsuredPaise&quot; type=&quot;xs:long&quot;/&gt;
+                    &lt;/xs:sequence&gt;
+                &lt;/xs:complexType&gt;
+            &lt;/xs:element&gt;
+            &lt;xs:element name=&quot;IssuePolicyResponse&quot;&gt;
+                &lt;xs:complexType&gt;
+                    &lt;xs:sequence&gt;
+                        &lt;xs:element name=&quot;policyNumber&quot; type=&quot;xs:string&quot;/&gt;
+                        &lt;xs:element name=&quot;premiumPaise&quot; type=&quot;xs:long&quot;/&gt;
+                    &lt;/xs:sequence&gt;
+                &lt;/xs:complexType&gt;
+            &lt;/xs:element&gt;
+            &lt;xs:element name=&quot;PolicyFault&quot;&gt;
+                &lt;xs:complexType&gt;
+                    &lt;xs:sequence&gt;
+                        &lt;xs:element name=&quot;code&quot; type=&quot;xs:string&quot;/&gt;
+                        &lt;xs:element name=&quot;message&quot; type=&quot;xs:string&quot;/&gt;
+                    &lt;/xs:sequence&gt;
+                &lt;/xs:complexType&gt;
+            &lt;/xs:element&gt;
+        &lt;/xs:schema&gt;
+    &lt;/wsdl:types&gt;
+
+    &lt;wsdl:message name=&quot;IssuePolicyInput&quot;&gt;
+        &lt;wsdl:part name=&quot;parameters&quot; element=&quot;tns:IssuePolicyRequest&quot;/&gt;
+    &lt;/wsdl:message&gt;
+    &lt;wsdl:message name=&quot;IssuePolicyOutput&quot;&gt;
+        &lt;wsdl:part name=&quot;parameters&quot; element=&quot;tns:IssuePolicyResponse&quot;/&gt;
+    &lt;/wsdl:message&gt;
+    &lt;wsdl:message name=&quot;PolicyFaultMessage&quot;&gt;
+        &lt;wsdl:part name=&quot;fault&quot; element=&quot;tns:PolicyFault&quot;/&gt;
+    &lt;/wsdl:message&gt;
+
+    &lt;wsdl:portType name=&quot;PolicyIssuancePort&quot;&gt;
+        &lt;wsdl:operation name=&quot;IssuePolicy&quot;&gt;
+            &lt;wsdl:input message=&quot;tns:IssuePolicyInput&quot;/&gt;
+            &lt;wsdl:output message=&quot;tns:IssuePolicyOutput&quot;/&gt;
+            &lt;wsdl:fault name=&quot;PolicyFault&quot; message=&quot;tns:PolicyFaultMessage&quot;/&gt;
+        &lt;/wsdl:operation&gt;
+    &lt;/wsdl:portType&gt;
+
+    &lt;wsdl:binding name=&quot;PolicyIssuanceSoapBinding&quot; type=&quot;tns:PolicyIssuancePort&quot;&gt;
+        &lt;soap:binding style=&quot;document&quot; transport=&quot;http://schemas.xmlsoap.org/soap/http&quot;/&gt;
+        &lt;wsdl:operation name=&quot;IssuePolicy&quot;&gt;
+            &lt;soap:operation soapAction=&quot;http://insurer.example/policy/v1/IssuePolicy&quot;/&gt;
+            &lt;wsdl:input&gt;&lt;soap:body use=&quot;literal&quot;/&gt;&lt;/wsdl:input&gt;
+            &lt;wsdl:output&gt;&lt;soap:body use=&quot;literal&quot;/&gt;&lt;/wsdl:output&gt;
+            &lt;wsdl:fault name=&quot;PolicyFault&quot;&gt;&lt;soap:fault name=&quot;PolicyFault&quot; use=&quot;literal&quot;/&gt;&lt;/wsdl:fault&gt;
+        &lt;/wsdl:operation&gt;
+    &lt;/wsdl:binding&gt;
+
+    &lt;wsdl:service name=&quot;PolicyIssuanceService&quot;&gt;
+        &lt;wsdl:port name=&quot;PolicyIssuancePort&quot; binding=&quot;tns:PolicyIssuanceSoapBinding&quot;&gt;
+            &lt;soap:address location=&quot;http://localhost:9088/policy&quot;/&gt;
+        &lt;/wsdl:port&gt;
+    &lt;/wsdl:service&gt;
+&lt;/wsdl:definitions&gt;</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">pom.xml</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Generating the client.</dd><dt>Why</dt><dd><code>jaxb-maven-plugin</code> reads the WSDL at build time and writes <code>com.bimaly.policies.insurer</code> into <code>target/</code>.</dd><dt>Without it</dt><dd>Generated code checked in and forgotten when the WSDL changes.</dd></dl></div><div class="src"><pre class="code"><code class="language-xml">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;project xmlns=&quot;http://maven.apache.org/POM/4.0.0&quot;
+         xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot;
+         xsi:schemaLocation=&quot;http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd&quot;&gt;
+    &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+
+    &lt;parent&gt;
+        &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+        &lt;artifactId&gt;spring-boot-starter-parent&lt;/artifactId&gt;
+        &lt;version&gt;4.1.1&lt;/version&gt;
+        &lt;relativePath/&gt;
+    &lt;/parent&gt;
+
+    &lt;groupId&gt;com.bimaly&lt;/groupId&gt;
+    &lt;artifactId&gt;policy-issuance&lt;/artifactId&gt;
+    &lt;version&gt;1.0.0&lt;/version&gt;
+    &lt;name&gt;Station 103 - Calling a legacy SOAP service&lt;/name&gt;
+
+    &lt;properties&gt;
+        &lt;java.version&gt;25&lt;/java.version&gt;
+    &lt;/properties&gt;
+
+    &lt;dependencies&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-webmvc&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-validation&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;!-- Apache HttpClient 5: its DnsResolver lets us check the addresses a name resolves to and connect to exactly those. --&gt;
+
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.ws&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-ws-core&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-oxm&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.glassfish.jaxb&lt;/groupId&gt;
+            &lt;artifactId&gt;jaxb-runtime&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-test&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-webmvc-test&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.awaitility&lt;/groupId&gt;
+            &lt;artifactId&gt;awaitility&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+
+    &lt;/dependencies&gt;
+
+    &lt;build&gt;
+        &lt;plugins&gt;
+            &lt;plugin&gt;
+                &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+                &lt;artifactId&gt;spring-boot-maven-plugin&lt;/artifactId&gt;
+            &lt;/plugin&gt;
+            &lt;!-- Java classes for the insurer&#x27;s messages, generated from its WSDL on every build (target/generated-sources). --&gt;
+            &lt;plugin&gt;
+                &lt;groupId&gt;org.jvnet.jaxb&lt;/groupId&gt;
+                &lt;artifactId&gt;jaxb-maven-plugin&lt;/artifactId&gt;
+                &lt;version&gt;4.0.16&lt;/version&gt;
+                &lt;executions&gt;
+                    &lt;execution&gt;
+                        &lt;goals&gt;
+                            &lt;goal&gt;generate&lt;/goal&gt;
+                        &lt;/goals&gt;
+                    &lt;/execution&gt;
+                &lt;/executions&gt;
+                &lt;configuration&gt;
+                    &lt;schemaLanguage&gt;WSDL&lt;/schemaLanguage&gt;
+                    &lt;schemaDirectory&gt;src/main/resources/wsdl&lt;/schemaDirectory&gt;
+                    &lt;schemaIncludes&gt;
+                        &lt;include&gt;policy-issuance.wsdl&lt;/include&gt;
+                    &lt;/schemaIncludes&gt;
+                    &lt;generatePackage&gt;com.bimaly.policies.insurer&lt;/generatePackage&gt;
+                &lt;/configuration&gt;
+            &lt;/plugin&gt;
+        &lt;/plugins&gt;
+    &lt;/build&gt;
+&lt;/project&gt;</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/bimaly/policies/PolicyController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The endpoint and its errors.</dd><dt>Why</dt><dd>Validates, builds the generated request, and turns each outcome into one status with a plain sentence.</dd><dt>Without it</dt><dd>A 500 for every problem on the insurer's side.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.policies;
+
+import com.bimaly.policies.insurer.IssuePolicyRequest;
+import com.bimaly.policies.insurer.IssuePolicyResponse;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Past;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import javax.xml.datatype.DatatypeFactory;
+import java.net.URI;
+import java.time.LocalDate;
+import java.util.Locale;
+
+@RestController
+class PolicyController {
+
+    record PolicyRequest(@NotBlank @Size(max = 100) String customerName, @NotNull @Past LocalDate dateOfBirth,
+                         @NotBlank @Pattern(regexp = &quot;[A-Za-z0-9]{3,10}&quot;) String productCode,
+                         @Positive @Max(1_000_000_000_000L) long sumInsuredPaise) {
+    }
+
+    record Policy(String policyNumber, String productCode, long sumInsuredPaise, long premiumPaise) {
+    }
+
+    private static final Logger log = LoggerFactory.getLogger(PolicyController.class);
+    private final InsurerClient insurer;
+
+    PolicyController(InsurerClient insurer) {
+        this.insurer = insurer;
+    }
+
+    /** Not retried on failure: the insurer&#x27;s IssuePolicy is not idempotent, and a retry could issue two policies. */
+    @PostMapping(&quot;/policies&quot;)
+    ResponseEntity&lt;Policy&gt; issue(@Valid @RequestBody PolicyRequest body) {
+        IssuePolicyRequest request = new IssuePolicyRequest();
+        request.setCustomerName(body.customerName().strip());
+        request.setDateOfBirth(DatatypeFactory.newDefaultInstance().newXMLGregorianCalendar(body.dateOfBirth().toString()));
+        request.setProductCode(body.productCode().toUpperCase(Locale.ROOT));
+        request.setSumInsuredPaise(body.sumInsuredPaise());
+        IssuePolicyResponse issued = insurer.issue(request);
+        return ResponseEntity.created(URI.create(&quot;/policies/&quot; + issued.getPolicyNumber()))
+                .body(new Policy(issued.getPolicyNumber(), request.getProductCode(), body.sumInsuredPaise(), issued.getPremiumPaise()));
+    }
+
+    /** The insurer said no. Its reason, if the fault was about our request; a gateway error if it was about itself. */
+    @ExceptionHandler(InsurerClient.Refused.class)
+    ResponseEntity&lt;ProblemDetail&gt; refused(InsurerClient.Refused e) {
+        if (e.ourRequest) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, &quot;The insurer refused the policy: &quot; + e.getMessage());
+            problem.setProperty(&quot;insurerCode&quot;, e.code);
+            return ResponseEntity.unprocessableContent().body(problem);
+        }
+        log.error(&quot;The insurer reported its own failure: {} {}&quot;, e.code, e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, &quot;The insurer&#x27;s system failed. Try again later.&quot;));
+    }
+
+    @ExceptionHandler(InsurerClient.Unreachable.class)
+    ResponseEntity&lt;ProblemDetail&gt; unreachable(InsurerClient.Unreachable e) {
+        log.error(&quot;No answer from the insurer: {}&quot;, e.getCause().getMessage());
+        HttpStatus status = e.timedOut ? HttpStatus.GATEWAY_TIMEOUT : HttpStatus.BAD_GATEWAY;
+        return ResponseEntity.status(status).body(ProblemDetail.forStatusAndDetail(status,
+                e.timedOut ? &quot;The insurer did not answer in time. The policy may or may not have been issued: check before trying again.&quot;
+                        : &quot;The insurer could not be reached. Try again later.&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/bimaly/policies/InsurerClient.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The SOAP call.</dd><dt>Why</dt><dd>Sends the SOAPAction; reads a fault's code (Client/Sender: our request; Server/Receiver: theirs) and its PolicyFault detail; tells a timeout from a lost connection.</dd><dt>Without it</dt><dd>"The insurer refused" and "the insurer is broken" looking the same.</dd></dl><ul><li>A timeout is recognised by its cause (<code>HttpTimeoutException</code>), not by the words of its message.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.policies;
+
+import com.bimaly.policies.insurer.IssuePolicyRequest;
+import com.bimaly.policies.insurer.IssuePolicyResponse;
+import com.bimaly.policies.insurer.PolicyFault;
+import org.springframework.oxm.jaxb.Jaxb2Marshaller;
+import org.springframework.stereotype.Component;
+import org.springframework.ws.client.WebServiceIOException;
+import org.springframework.ws.client.core.WebServiceTemplate;
+import org.springframework.ws.soap.SoapFaultDetailElement;
+import org.springframework.ws.soap.client.SoapFaultClientException;
+import org.springframework.ws.soap.client.core.SoapActionCallback;
+
+import java.io.IOException;
+import java.net.http.HttpTimeoutException;
+import java.util.Iterator;
+import java.util.Set;
+
+/** Calls the insurer&#x27;s IssuePolicy operation and turns what can go wrong into three plain outcomes. */
+@Component
+class InsurerClient {
+
+    static final String SOAP_ACTION = &quot;http://insurer.example/policy/v1/IssuePolicy&quot;;
+
+    /** The insurer answered with a SOAP fault. Its own fault code and message, and whose mistake it says it is. */
+    static final class Refused extends RuntimeException {
+        final boolean ourRequest;
+        final String code;
+
+        Refused(boolean ourRequest, String code, String message) {
+            super(message);
+            this.ourRequest = ourRequest;
+            this.code = code;
+        }
+    }
+
+    /** No answer: the insurer could not be reached, or did not answer in time. */
+    static final class Unreachable extends RuntimeException {
+        final boolean timedOut;
+
+        Unreachable(boolean timedOut, Throwable cause) {
+            super(cause);
+            this.timedOut = timedOut;
+        }
+    }
+
+    // SOAP 1.1 says Client and Server; SOAP 1.2 says Sender and Receiver.
+    private static final Set&lt;String&gt; OUR_FAULT = Set.of(&quot;Client&quot;, &quot;Sender&quot;);
+    private final WebServiceTemplate insurer;
+    private final Jaxb2Marshaller messages;
+
+    InsurerClient(WebServiceTemplate insurer, Jaxb2Marshaller messages) {
+        this.insurer = insurer;
+        this.messages = messages;
+    }
+
+    IssuePolicyResponse issue(IssuePolicyRequest request) {
+        try {
+            return (IssuePolicyResponse) insurer.marshalSendAndReceive(request, new SoapActionCallback(SOAP_ACTION));
+        } catch (SoapFaultClientException fault) {
+            PolicyFault detail = detail(fault);
+            boolean ours = OUR_FAULT.contains(fault.getFaultCode().getLocalPart());
+            throw new Refused(ours, detail == null ? fault.getFaultCode().getLocalPart() : detail.getCode(),
+                    detail == null ? fault.getFaultStringOrReason() : detail.getMessage());
+        } catch (WebServiceIOException noAnswer) {
+            boolean timedOut = false;
+            for (Throwable t = noAnswer; t != null; t = t.getCause()) {
+                timedOut |= t instanceof HttpTimeoutException;
+            }
+            throw new Unreachable(timedOut, noAnswer);
+        }
+    }
+
+    /** The PolicyFault the WSDL declares, if the insurer sent one in the fault&#x27;s detail. */
+    private PolicyFault detail(SoapFaultClientException fault) {
+        if (fault.getSoapFault().getFaultDetail() == null) {
+            return null;
+        }
+        Iterator&lt;SoapFaultDetailElement&gt; entries = fault.getSoapFault().getFaultDetail().getDetailEntries();
+        try {
+            return entries.hasNext() &amp;&amp; messages.unmarshal(entries.next().getSource()) instanceof PolicyFault p ? p : null;
+        } catch (RuntimeException notOurs) {
+            return null;
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/bimaly/policies/PoliciesApplication.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The client's settings.</dd><dt>Why</dt><dd><code>JdkHttpClientMessageSender</code>: connect 2 s, whole request 8 s.</dd><dt>Without it</dt><dd>Spring-WS's default sender: 60 s and 60 s.</dd></dl><ul><li>Made inside a <code>@Bean</code> method, the sender must be given its <code>HttpClient</code>: it only builds one in <code>afterPropertiesSet</code>, which Spring calls for beans, and otherwise fails with "HttpClient is not available". Found while building.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.policies;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.oxm.jaxb.Jaxb2Marshaller;
+import org.springframework.ws.client.core.WebServiceTemplate;
+import org.springframework.ws.transport.http.JdkHttpClientMessageSender;
+
+import java.net.http.HttpClient;
+import java.time.Duration;
+
+@SpringBootApplication
+public class PoliciesApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(PoliciesApplication.class, args);
+    }
+
+    /** XML to and from the classes generated from the insurer&#x27;s WSDL at build time. */
+    @Bean
+    Jaxb2Marshaller insurerMessages() {
+        Jaxb2Marshaller marshaller = new Jaxb2Marshaller();
+        marshaller.setContextPath(&quot;com.bimaly.policies.insurer&quot;);
+        return marshaller;
+    }
+
+    /** The SOAP client, with both timeouts: a stuck insurer costs a request at most `timeout`. */
+    @Bean
+    WebServiceTemplate insurer(Jaxb2Marshaller messages, @Value(&quot;${bimaly.insurer.url}&quot;) String url,
+                               @Value(&quot;${bimaly.insurer.connect-timeout}&quot;) Duration connectTimeout,
+                               @Value(&quot;${bimaly.insurer.timeout}&quot;) Duration timeout) {
+        // Given its HttpClient: made by hand inside a @Bean method, the sender never builds its own (that is done in
+        // afterPropertiesSet, which only runs for beans) and fails with &quot;HttpClient is not available&quot;.
+        JdkHttpClientMessageSender sender = new JdkHttpClientMessageSender(HttpClient.newBuilder().connectTimeout(connectTimeout).build());
+        sender.setRequestTimeout(timeout);
+        WebServiceTemplate template = new WebServiceTemplate(messages);
+        template.setDefaultUri(url);
+        template.setMessageSender(sender);
+        return template;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>The insurer's address and the two timeouts.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: bimaly-policies
+  mvc:
+    problemdetails:
+      enabled: true
+
+bimaly:
+  insurer:
+    # The insurer&#x27;s SOAP endpoint (simulated: docs/test-insurer.py in the captures).
+    url: http://localhost:9088/policy
+    # Demo rules: 2 s to connect, 8 s for the whole answer. The insurer&#x27;s own figures: usually 1 to 3 s, at worst 6 s.
+    connect-timeout: 2s
+    timeout: 8s</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>PolicyContractTest</code> (4), <code>InsurerDownTest</code> (1)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>LegacySoapTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">"Not found" here is the insurer's side: a product it does not sell (<code>422</code>) and an insurer that cannot be reached (<code>502</code>); there is no policy to look up in this station. The tests' simulated insurer answers with hand-written SOAP 1.1 envelopes, can be made slow or broken, and the API's limit is 1 s, so a hang is reached in a second.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0 -- in com.bimaly.policies.InsurerDownTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.bimaly.policies.LegacySoapTrapTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.bimaly.policies.PolicyContractTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">LegacySoapTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">PolicyContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">InsurerDownTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">TestInsurer.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/bimaly/policies/LegacySoapTrapTest.java</p><div class="notes"><p>Written first: the client as it comes against the API, a slow insurer and a refusal.</p></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.policies;
+
+import com.bimaly.policies.insurer.IssuePolicyRequest;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.oxm.jaxb.Jaxb2Marshaller;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.ws.client.core.WebServiceTemplate;
+import org.springframework.ws.soap.client.SoapFaultClientException;
+import org.springframework.ws.transport.http.HttpUrlConnectionMessageSender;
+
+import javax.xml.datatype.DatatypeFactory;
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+
+import static com.bimaly.policies.TestInsurer.INSURER;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The insurer is slow today, and it refuses some requests. Written first. */
+class LegacySoapTrapTest extends ApiTest {
+
+    @Autowired
+    Jaxb2Marshaller messages;
+
+    /** The old way: a WebServiceTemplate as it comes, and no handling of faults. */
+    WebServiceTemplate oldClient() {
+        WebServiceTemplate template = new WebServiceTemplate(messages);
+        template.setDefaultUri(INSURER.url());
+        return template;
+    }
+
+    static IssuePolicyRequest request(String product) {
+        IssuePolicyRequest r = new IssuePolicyRequest();
+        r.setCustomerName(&quot;Meera Iyer&quot;);
+        r.setDateOfBirth(DatatypeFactory.newDefaultInstance().newXMLGregorianCalendar(&quot;1988-04-12&quot;));
+        r.setProductCode(product);
+        r.setSumInsuredPaise(1_000_000_000L);
+        return r;
+    }
+
+    @Test
+    void theOldClientWaitsAsLongAsTheInsurerDoes() throws Exception {
+        // Spring-WS&#x27;s default sender gives the insurer 60 s to connect and 60 s more to answer.
+        var sender = (HttpUrlConnectionMessageSender) oldClient().getMessageSenders()[0];
+        assertThat(ReflectionTestUtils.getField(sender, &quot;readTimeout&quot;)).isEqualTo(Duration.ofSeconds(60));
+
+        INSURER.delayMillis = 4_000;
+        var old = CompletableFuture.supplyAsync(() -&gt; oldClient().marshalSendAndReceive(request(&quot;TERM10&quot;)));
+        await().during(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(3)).until(() -&gt; !old.isDone());   // a request thread, held
+        old.join();
+
+        long started = System.nanoTime();
+        issue(&quot;TERM10&quot;, 1_000_000_000L).andExpect(status().isGatewayTimeout());   // the API gives up after its 1 s
+        assertThat((System.nanoTime() - started) / 1_000_000).isLessThan(2_000);
+    }
+
+    @Test
+    void theOldWayLetsAFaultEscapeAsAnErrorAndTheApiExplainsIt() throws Exception {
+        assertThatThrownBy(() -&gt; oldClient().marshalSendAndReceive(request(&quot;CAR1&quot;)))
+                .isInstanceOf(SoapFaultClientException.class);   // unhandled in a controller: a 500 with no reason
+        issue(&quot;CAR1&quot;, 1_000_000_000L).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;The insurer refused the policy: Product CAR1 is not sold.&quot;))
+                .andExpect(jsonPath(&quot;$.insurerCode&quot;).value(&quot;PRODUCT_UNKNOWN&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/bimaly/policies/PolicyContractTest.java</p><div class="notes"><p>Issued, refused, failed, slow and bad requests.</p></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.policies;
+
+import org.junit.jupiter.api.Test;
+
+import static com.bimaly.policies.TestInsurer.INSURER;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class PolicyContractTest extends ApiTest {
+
+    @Test
+    void aPolicyIsIssuedThroughTheInsurersSoapService() throws Exception {
+        issue(&quot;term10&quot;, 1_000_000_000L).andExpect(status().isCreated())
+                .andExpect(header().string(&quot;Location&quot;, org.hamcrest.Matchers.matchesRegex(&quot;/policies/SG-2026-\\d{6}&quot;)))
+                .andExpect(jsonPath(&quot;$.productCode&quot;).value(&quot;TERM10&quot;)).andExpect(jsonPath(&quot;$.sumInsuredPaise&quot;).value(1_000_000_000L))
+                .andExpect(jsonPath(&quot;$.premiumPaise&quot;).value(1_000_000L));
+        var call = INSURER.calls.getFirst();
+        assertThat(call.soapAction()).isEqualTo(&quot;\&quot;http://insurer.example/policy/v1/IssuePolicy\&quot;&quot;);
+        assertThat(call.body()).contains(&quot;IssuePolicyRequest xmlns:ns2=\&quot;http://insurer.example/policy/v1\&quot;&quot;)
+                .contains(&quot;&lt;ns2:dateOfBirth&gt;1988-04-12&lt;/ns2:dateOfBirth&gt;&quot;).contains(&quot;&lt;ns2:productCode&gt;TERM10&lt;/ns2:productCode&gt;&quot;);
+    }
+
+    @Test
+    void theInsurersRefusalIs422WithItsReason() throws Exception {
+        issue(&quot;TERM10&quot;, 60_000_000_000L).andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath(&quot;$.insurerCode&quot;).value(&quot;SUM_TOO_HIGH&quot;))
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;The insurer refused the policy: The sum insured is above the limit for online issuance.&quot;));
+    }
+
+    @Test
+    void theInsurersOwnFailureIs502AndASlowInsurer504() throws Exception {
+        INSURER.broken = true;
+        issue(&quot;TERM10&quot;, 1_000_000_000L).andExpect(status().isBadGateway())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;The insurer&#x27;s system failed. Try again later.&quot;));
+        INSURER.broken = false;
+        INSURER.delayMillis = 2_000;
+        issue(&quot;TERM10&quot;, 1_000_000_000L).andExpect(status().isGatewayTimeout())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;The insurer did not answer in time. The policy may or may not have been issued: check before trying again.&quot;));
+        assertThat(INSURER.calls).hasSize(2);   // never retried: a retry could issue a second policy
+    }
+
+    @Test
+    void badRequestsAre400AndNeverReachTheInsurer() throws Exception {
+        issue(&quot;{\&quot;dateOfBirth\&quot;:\&quot;1988-04-12\&quot;,\&quot;productCode\&quot;:\&quot;TERM10\&quot;,\&quot;sumInsuredPaise\&quot;:1000}&quot;).andExpect(status().isBadRequest());
+        issue(&quot;{\&quot;customerName\&quot;:\&quot;Meera\&quot;,\&quot;dateOfBirth\&quot;:\&quot;2999-01-01\&quot;,\&quot;productCode\&quot;:\&quot;TERM10\&quot;,\&quot;sumInsuredPaise\&quot;:1000}&quot;).andExpect(status().isBadRequest());
+        issue(&quot;{\&quot;customerName\&quot;:\&quot;Meera\&quot;,\&quot;dateOfBirth\&quot;:\&quot;1988-04-12\&quot;,\&quot;productCode\&quot;:\&quot;&lt;x&gt;&amp;amp;\&quot;,\&quot;sumInsuredPaise\&quot;:1000}&quot;).andExpect(status().isBadRequest());
+        issue(&quot;TERM10&quot;, 0).andExpect(status().isBadRequest());
+        assertThat(INSURER.calls).isEmpty();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/bimaly/policies/InsurerDownTest.java</p><div class="notes"><p>Nothing listening at the insurer's address.</p></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.policies;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Nothing listens where the insurer should be (port 1). */
+@SpringBootTest(properties = &quot;bimaly.insurer.url=http://127.0.0.1:1/policy&quot;)
+@AutoConfigureMockMvc
+class InsurerDownTest {
+
+    @Autowired
+    MockMvc mvc;
+
+    @Test
+    void anInsurerThatCannotBeReachedIs502() throws Exception {
+        mvc.perform(post(&quot;/policies&quot;).contentType(MediaType.APPLICATION_JSON)
+                        .content(&quot;{\&quot;customerName\&quot;:\&quot;Meera Iyer\&quot;,\&quot;dateOfBirth\&quot;:\&quot;1988-04-12\&quot;,\&quot;productCode\&quot;:\&quot;TERM10\&quot;,\&quot;sumInsuredPaise\&quot;:1000000000}&quot;))
+                .andExpect(status().isBadGateway()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;The insurer could not be reached. Try again later.&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/bimaly/policies/TestInsurer.java</p><div class="notes"><p>A simulated SOAP service: hand-written envelopes, a delay, a broken switch, the requests it received.</p></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.policies;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * The insurer&#x27;s SOAP service, faked for the tests: hand-written SOAP 1.1 envelopes, as a legacy system sends them.
+ * TERM10 and HEALTH5 are sold; premium is a thousandth of the sum (a demo rule). Anything else is a Client fault.
+ */
+final class TestInsurer {
+
+    static final TestInsurer INSURER = new TestInsurer();
+    record Call(String soapAction, String body) {
+    }
+
+    final List&lt;Call&gt; calls = new CopyOnWriteArrayList&lt;&gt;();
+    volatile long delayMillis;
+    volatile boolean broken;   // answer every call with a Server fault
+    private final AtomicInteger issued = new AtomicInteger();
+    private final HttpServer server;
+
+    private TestInsurer() {
+        try {
+            server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+        server.createContext(&quot;/policy&quot;, this::handle);
+        server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
+        server.start();
+    }
+
+    String url() {
+        return &quot;http://127.0.0.1:&quot; + server.getAddress().getPort() + &quot;/policy&quot;;
+    }
+
+    void reset() {
+        calls.clear();
+        delayMillis = 0;
+        broken = false;
+    }
+
+    static String field(String xml, String name) {
+        Matcher m = Pattern.compile(&quot;&lt;(?:\\w+:)?&quot; + name + &quot;&gt;([^&lt;]*)&lt;/&quot;).matcher(xml);
+        return m.find() ? m.group(1) : null;
+    }
+
+    private void handle(HttpExchange x) throws IOException {
+        String body = new String(x.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        calls.add(new Call(x.getRequestHeaders().getFirst(&quot;SOAPAction&quot;), body));
+        try {
+            Thread.sleep(delayMillis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        String product = field(body, &quot;productCode&quot;);
+        long sum = Long.parseLong(field(body, &quot;sumInsuredPaise&quot;));
+        String reply;
+        int status = 500;   // SOAP 1.1 over HTTP: faults come with 500
+        if (broken) {
+            reply = fault(&quot;soap:Server&quot;, &quot;Internal error&quot;, null, null);
+        } else if (!List.of(&quot;TERM10&quot;, &quot;HEALTH5&quot;).contains(product)) {
+            reply = fault(&quot;soap:Client&quot;, &quot;Validation failed&quot;, &quot;PRODUCT_UNKNOWN&quot;, &quot;Product &quot; + product + &quot; is not sold.&quot;);
+        } else if (sum &gt; 50_000_000_000L) {
+            reply = fault(&quot;soap:Client&quot;, &quot;Validation failed&quot;, &quot;SUM_TOO_HIGH&quot;, &quot;The sum insured is above the limit for online issuance.&quot;);
+        } else {
+            status = 200;
+            reply = envelope(&quot;&lt;p:IssuePolicyResponse xmlns:p=\&quot;http://insurer.example/policy/v1\&quot;&gt;&lt;p:policyNumber&gt;SG-2026-&quot;
+                    + String.format(java.util.Locale.ROOT, &quot;%06d&quot;, issued.incrementAndGet()) + &quot;&lt;/p:policyNumber&gt;&lt;p:premiumPaise&gt;&quot; + sum / 1000
+                    + &quot;&lt;/p:premiumPaise&gt;&lt;/p:IssuePolicyResponse&gt;&quot;);
+        }
+        byte[] out = reply.getBytes(StandardCharsets.UTF_8);
+        x.getResponseHeaders().add(&quot;Content-Type&quot;, &quot;text/xml; charset=utf-8&quot;);
+        try {
+            x.sendResponseHeaders(status, out.length);
+            x.getResponseBody().write(out);
+        } catch (IOException clientGaveUp) {
+            // the app stopped waiting
+        }
+        x.close();
+    }
+
+    static String envelope(String content) {
+        return &quot;&lt;?xml version=\&quot;1.0\&quot; encoding=\&quot;UTF-8\&quot;?&gt;&lt;soap:Envelope xmlns:soap=\&quot;http://schemas.xmlsoap.org/soap/envelope/\&quot;&gt;&lt;soap:Body&gt;&quot;
+                + content + &quot;&lt;/soap:Body&gt;&lt;/soap:Envelope&gt;&quot;;
+    }
+
+    static String fault(String code, String reason, String detailCode, String detailMessage) {
+        String detail = detailCode == null ? &quot;&quot; : &quot;&lt;detail&gt;&lt;p:PolicyFault xmlns:p=\&quot;http://insurer.example/policy/v1\&quot;&gt;&lt;p:code&gt;&quot; + detailCode
+                + &quot;&lt;/p:code&gt;&lt;p:message&gt;&quot; + detailMessage + &quot;&lt;/p:message&gt;&lt;/p:PolicyFault&gt;&lt;/detail&gt;&quot;;
+        return envelope(&quot;&lt;soap:Fault&gt;&lt;faultcode&gt;&quot; + code + &quot;&lt;/faultcode&gt;&lt;faultstring&gt;&quot; + reason + &quot;&lt;/faultstring&gt;&quot; + detail + &quot;&lt;/soap:Fault&gt;&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/bimaly/policies/ApiTest.java</p><div class="notes"><p>Shared setup: the insurer's address and the 1 s limit.</p></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.policies;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import static com.bimaly.policies.TestInsurer.INSURER;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/** The whole app against the fake insurer, with a 1 s limit on its answers (8 s in production). */
+@SpringBootTest(properties = &quot;bimaly.insurer.timeout=1s&quot;)
+@AutoConfigureMockMvc
+abstract class ApiTest {
+
+    @DynamicPropertySource
+    static void insurer(DynamicPropertyRegistry registry) {
+        registry.add(&quot;bimaly.insurer.url&quot;, INSURER::url);
+    }
+
+    @Autowired
+    MockMvc mvc;
+
+    @BeforeEach
+    void freshInsurer() {
+        INSURER.reset();
+    }
+
+    ResultActions issue(String product, long sumPaise) throws Exception {
+        return issue(&quot;{\&quot;customerName\&quot;:\&quot;Meera Iyer\&quot;,\&quot;dateOfBirth\&quot;:\&quot;1988-04-12\&quot;,\&quot;productCode\&quot;:\&quot;&quot; + product + &quot;\&quot;,\&quot;sumInsuredPaise\&quot;:&quot; + sumPaise + &quot;}&quot;);
+    }
+
+    ResultActions issue(String json) throws Exception {
+        return mvc.perform(post(&quot;/policies&quot;).contentType(MediaType.APPLICATION_JSON).content(json));
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/bimaly/policies/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=MaskedSoapLogChallengeTest</code>.</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 7 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 11 tests pass (7 station tests and 4 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 25 minutes</p><h2>Log the envelopes, not the customer</h2><p>When the insurer refuses something, support wants to see the exact XML. Log every request, answer and fault envelope at DEBUG on the logger <code>com.bimaly.policies.SoapLog</code>, with the customer's name replaced by <code>***</code>.</p><p><b>Done when:</b> both tests in <code>MaskedSoapLogChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>A Spring-WS <code>ClientInterceptor</code> sees each message: <code>handleRequest</code>, <code>handleResponse</code>, <code>handleFault</code>.</li><li>Write the message to a <code>ByteArrayOutputStream</code>, then mask the <code>customerName</code> element.</li><li>Register it with <code>template.setInterceptors(...)</code>, and return <code>true</code> so the call goes on.</li></ul></details><p class="path">challenge/MaskedSoapLogChallengeTest.java</p><pre class="code"><code class="language-java">package com.bimaly.policies;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.test.context.TestPropertySource;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: when the insurer disputes a policy, support needs the exact envelopes. Log each request and response
+ * envelope at DEBUG (logger com.bimaly.policies.SoapLog), with the customer&#x27;s name replaced by ***.
+ */
+@ExtendWith(OutputCaptureExtension.class)
+@TestPropertySource(properties = &quot;logging.level.com.bimaly.policies.SoapLog=DEBUG&quot;)
+class MaskedSoapLogChallengeTest extends ApiTest {
+
+    @Test
+    void envelopesAreLoggedWithoutTheCustomersName(CapturedOutput output) throws Exception {
+        issue(&quot;TERM10&quot;, 1_000_000_000L).andExpect(status().isCreated());
+        assertThat(output.getOut()).contains(&quot;IssuePolicyRequest&quot;).contains(&quot;customerName&gt;***&lt;/&quot;).contains(&quot;IssuePolicyResponse&quot;)
+                .doesNotContain(&quot;Meera Iyer&quot;);
+    }
+
+    @Test
+    void faultsAreLoggedToo(CapturedOutput output) throws Exception {
+        issue(&quot;CAR1&quot;, 1_000_000_000L).andExpect(status().isUnprocessableContent());
+        assertThat(output.getOut()).contains(&quot;PRODUCT_UNKNOWN&quot;).doesNotContain(&quot;Meera Iyer&quot;);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/SoapLog.java</p><div class="src"><pre class="code"><code class="language-java">package com.bimaly.policies;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.ws.WebServiceMessage;
+import org.springframework.ws.client.support.interceptor.ClientInterceptorAdapter;
+import org.springframework.ws.context.MessageContext;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.regex.Pattern;
+
+/** Challenge 1: every envelope at DEBUG, for support, with the customer&#x27;s name masked. */
+class SoapLog extends ClientInterceptorAdapter {
+
+    private static final Logger log = LoggerFactory.getLogger(SoapLog.class);
+    private static final Pattern NAME = Pattern.compile(&quot;(&lt;(?:\\w+:)?customerName&gt;)[^&lt;]*(&lt;/)&quot;);
+
+    @Override
+    public boolean handleRequest(MessageContext context) {
+        log(&quot;request&quot;, context.getRequest());
+        return true;
+    }
+
+    @Override
+    public boolean handleResponse(MessageContext context) {
+        log(&quot;response&quot;, context.getResponse());
+        return true;
+    }
+
+    @Override
+    public boolean handleFault(MessageContext context) {
+        log(&quot;fault&quot;, context.getResponse());
+        return true;
+    }
+
+    private static void log(String kind, WebServiceMessage message) {
+        if (!log.isDebugEnabled()) {
+            return;
+        }
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try {
+            message.writeTo(out);
+        } catch (IOException e) {
+            log.debug(&quot;SOAP {} could not be written for the log: {}&quot;, kind, e.getMessage());
+            return;
+        }
+        log.debug(&quot;SOAP {}: {}&quot;, kind, NAME.matcher(out.toString(StandardCharsets.UTF_8)).replaceAll(&quot;$1***$2&quot;));
+    }
+}</code></pre></div><p class="path">challenge/solution/PoliciesApplication.java</p><div class="src"><pre class="code"><code class="language-java">package com.bimaly.policies;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.oxm.jaxb.Jaxb2Marshaller;
+import org.springframework.ws.client.core.WebServiceTemplate;
+import org.springframework.ws.client.support.interceptor.ClientInterceptor;
+import org.springframework.ws.transport.http.JdkHttpClientMessageSender;
+
+import java.net.http.HttpClient;
+import java.time.Duration;
+
+@SpringBootApplication
+public class PoliciesApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(PoliciesApplication.class, args);
+    }
+
+    /** XML to and from the classes generated from the insurer&#x27;s WSDL at build time. */
+    @Bean
+    Jaxb2Marshaller insurerMessages() {
+        Jaxb2Marshaller marshaller = new Jaxb2Marshaller();
+        marshaller.setContextPath(&quot;com.bimaly.policies.insurer&quot;);
+        return marshaller;
+    }
+
+    /** The SOAP client, with both timeouts: a stuck insurer costs a request at most `timeout`. */
+    @Bean
+    WebServiceTemplate insurer(Jaxb2Marshaller messages, @Value(&quot;${bimaly.insurer.url}&quot;) String url,
+                               @Value(&quot;${bimaly.insurer.connect-timeout}&quot;) Duration connectTimeout,
+                               @Value(&quot;${bimaly.insurer.timeout}&quot;) Duration timeout) {
+        // Given its HttpClient: made by hand inside a @Bean method, the sender never builds its own (that is done in
+        // afterPropertiesSet, which only runs for beans) and fails with &quot;HttpClient is not available&quot;.
+        JdkHttpClientMessageSender sender = new JdkHttpClientMessageSender(HttpClient.newBuilder().connectTimeout(connectTimeout).build());
+        sender.setRequestTimeout(timeout);
+        WebServiceTemplate template = new WebServiceTemplate(messages);
+        template.setDefaultUri(url);
+        template.setMessageSender(sender);
+        template.setInterceptors(new ClientInterceptor[]{new SoapLog()});   // challenge 1
+        return template;
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 35 minutes</p><h2>Leave a struggling insurer alone</h2><p>When the insurer is down, every customer still waits for a timeout. After 3 failures in a row (Server faults or no answer), answer <code>503</code> "The insurer is having trouble. Try again in a minute." without calling it, for <code>bimaly.insurer.cool-down</code> (1 s in the test). A refusal is an answer, so it does not count.</p><p><b>Done when:</b> both tests in <code>CircuitBreakerChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Count failures in a row; reset the count on any answer, refusals included.</li><li>Remember when the circuit opened; after the cool-down, let a call through.</li><li>Many requests at once: an <code>AtomicInteger</code> and a <code>volatile</code> time are enough here.</li></ul></details><p class="path">challenge/CircuitBreakerChallengeTest.java</p><pre class="code"><code class="language-java">package com.bimaly.policies;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.test.context.TestPropertySource;
+
+import static com.bimaly.policies.TestInsurer.INSURER;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: a struggling 15-year-old system should not get more traffic. After 3 failures in a row (Server faults,
+ * timeouts, no connection), stop calling the insurer for bimaly.insurer.cool-down (1 s here) and answer 503 at once.
+ * A refusal (Client fault) is the insurer working, not failing.
+ */
+@TestPropertySource(properties = &quot;bimaly.insurer.cool-down=1s&quot;)
+class CircuitBreakerChallengeTest extends ApiTest {
+
+    @Test
+    void afterThreeFailuresTheInsurerIsLeftAloneForAWhile() throws Exception {
+        INSURER.broken = true;
+        for (int i = 0; i &lt; 3; i++) {
+            issue(&quot;TERM10&quot;, 1_000_000_000L).andExpect(status().isBadGateway());
+        }
+        issue(&quot;TERM10&quot;, 1_000_000_000L).andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;The insurer is having trouble. Try again in a minute.&quot;));
+        assertThat(INSURER.calls).hasSize(3);   // the fourth never reached it
+
+        INSURER.broken = false;
+        await().atMost(java.time.Duration.ofSeconds(3)).until(() -&gt; issue(&quot;TERM10&quot;, 1_000_000_000L).andReturn().getResponse().getStatus() == 201);
+    }
+
+    @Test
+    void refusalsDoNotOpenTheCircuit() throws Exception {
+        for (int i = 0; i &lt; 4; i++) {
+            issue(&quot;CAR1&quot;, 1_000_000_000L).andExpect(status().isUnprocessableContent());
+        }
+        issue(&quot;TERM10&quot;, 1_000_000_000L).andExpect(status().isCreated());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/InsurerClient.java</p><div class="src"><pre class="code"><code class="language-java">package com.bimaly.policies;
+
+import com.bimaly.policies.insurer.IssuePolicyRequest;
+import com.bimaly.policies.insurer.IssuePolicyResponse;
+import com.bimaly.policies.insurer.PolicyFault;
+import org.springframework.oxm.jaxb.Jaxb2Marshaller;
+import org.springframework.stereotype.Component;
+import org.springframework.ws.client.WebServiceIOException;
+import org.springframework.ws.client.core.WebServiceTemplate;
+import org.springframework.ws.soap.SoapFaultDetailElement;
+import org.springframework.ws.soap.client.SoapFaultClientException;
+import org.springframework.ws.soap.client.core.SoapActionCallback;
+
+import java.io.IOException;
+import java.net.http.HttpTimeoutException;
+import java.util.Iterator;
+import java.util.Set;
+
+/** Calls the insurer&#x27;s IssuePolicy operation and turns what can go wrong into three plain outcomes. */
+@Component
+class InsurerClient {
+
+    static final String SOAP_ACTION = &quot;http://insurer.example/policy/v1/IssuePolicy&quot;;
+
+    /** The insurer answered with a SOAP fault. Its own fault code and message, and whose mistake it says it is. */
+    static final class Refused extends RuntimeException {
+        final boolean ourRequest;
+        final String code;
+
+        Refused(boolean ourRequest, String code, String message) {
+            super(message);
+            this.ourRequest = ourRequest;
+            this.code = code;
+        }
+    }
+
+    /** No answer: the insurer could not be reached, or did not answer in time. */
+    static final class Unreachable extends RuntimeException {
+        final boolean timedOut;
+
+        Unreachable(boolean timedOut, Throwable cause) {
+            super(cause);
+            this.timedOut = timedOut;
+        }
+    }
+
+    /** Challenge 2: too many failures in a row; the insurer is left alone for a while. */
+    static final class CircuitOpen extends RuntimeException {
+    }
+
+    static final int FAILURES_TO_OPEN = 3;
+    private final java.util.concurrent.atomic.AtomicInteger failuresInARow = new java.util.concurrent.atomic.AtomicInteger();
+    private volatile long closedAgainAt;   // System.nanoTime()
+    private final java.time.Duration coolDown;
+
+    // SOAP 1.1 says Client and Server; SOAP 1.2 says Sender and Receiver.
+    private static final Set&lt;String&gt; OUR_FAULT = Set.of(&quot;Client&quot;, &quot;Sender&quot;);
+    private final WebServiceTemplate insurer;
+    private final Jaxb2Marshaller messages;
+
+    InsurerClient(WebServiceTemplate insurer, Jaxb2Marshaller messages,
+                  @org.springframework.beans.factory.annotation.Value(&quot;${bimaly.insurer.cool-down:30s}&quot;) java.time.Duration coolDown) {
+        this.insurer = insurer;
+        this.messages = messages;
+        this.coolDown = coolDown;
+    }
+
+    private void failed() {
+        if (failuresInARow.incrementAndGet() &gt;= FAILURES_TO_OPEN) {
+            closedAgainAt = System.nanoTime() + coolDown.toNanos();
+            failuresInARow.set(0);
+        }
+    }
+
+    IssuePolicyResponse issue(IssuePolicyRequest request) {
+        if (System.nanoTime() - closedAgainAt &lt; 0) {
+            throw new CircuitOpen();
+        }
+        try {
+            IssuePolicyResponse response = (IssuePolicyResponse) insurer.marshalSendAndReceive(request, new SoapActionCallback(SOAP_ACTION));
+            failuresInARow.set(0);
+            return response;
+        } catch (SoapFaultClientException fault) {
+            PolicyFault detail = detail(fault);
+            boolean ours = OUR_FAULT.contains(fault.getFaultCode().getLocalPart());
+            if (ours) {
+                failuresInARow.set(0);   // a refusal is the insurer working
+            } else {
+                failed();
+            }
+            throw new Refused(ours, detail == null ? fault.getFaultCode().getLocalPart() : detail.getCode(),
+                    detail == null ? fault.getFaultStringOrReason() : detail.getMessage());
+        } catch (WebServiceIOException noAnswer) {
+            boolean timedOut = false;
+            for (Throwable t = noAnswer; t != null; t = t.getCause()) {
+                timedOut |= t instanceof HttpTimeoutException;
+            }
+            failed();
+            throw new Unreachable(timedOut, noAnswer);
+        }
+    }
+
+    /** The PolicyFault the WSDL declares, if the insurer sent one in the fault&#x27;s detail. */
+    private PolicyFault detail(SoapFaultClientException fault) {
+        if (fault.getSoapFault().getFaultDetail() == null) {
+            return null;
+        }
+        Iterator&lt;SoapFaultDetailElement&gt; entries = fault.getSoapFault().getFaultDetail().getDetailEntries();
+        try {
+            return entries.hasNext() &amp;&amp; messages.unmarshal(entries.next().getSource()) instanceof PolicyFault p ? p : null;
+        } catch (RuntimeException notOurs) {
+            return null;
+        }
+    }
+}</code></pre></div><p class="path">challenge/solution/PolicyController.java</p><div class="src"><pre class="code"><code class="language-java">package com.bimaly.policies;
+
+import com.bimaly.policies.insurer.IssuePolicyRequest;
+import com.bimaly.policies.insurer.IssuePolicyResponse;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Past;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import javax.xml.datatype.DatatypeFactory;
+import java.net.URI;
+import java.time.LocalDate;
+import java.util.Locale;
+
+@RestController
+class PolicyController {
+
+    record PolicyRequest(@NotBlank @Size(max = 100) String customerName, @NotNull @Past LocalDate dateOfBirth,
+                         @NotBlank @Pattern(regexp = &quot;[A-Za-z0-9]{3,10}&quot;) String productCode,
+                         @Positive @Max(1_000_000_000_000L) long sumInsuredPaise) {
+    }
+
+    record Policy(String policyNumber, String productCode, long sumInsuredPaise, long premiumPaise) {
+    }
+
+    private static final Logger log = LoggerFactory.getLogger(PolicyController.class);
+    private final InsurerClient insurer;
+
+    PolicyController(InsurerClient insurer) {
+        this.insurer = insurer;
+    }
+
+    /** Not retried on failure: the insurer&#x27;s IssuePolicy is not idempotent, and a retry could issue two policies. */
+    @PostMapping(&quot;/policies&quot;)
+    ResponseEntity&lt;Policy&gt; issue(@Valid @RequestBody PolicyRequest body) {
+        IssuePolicyRequest request = new IssuePolicyRequest();
+        request.setCustomerName(body.customerName().strip());
+        request.setDateOfBirth(DatatypeFactory.newDefaultInstance().newXMLGregorianCalendar(body.dateOfBirth().toString()));
+        request.setProductCode(body.productCode().toUpperCase(Locale.ROOT));
+        request.setSumInsuredPaise(body.sumInsuredPaise());
+        IssuePolicyResponse issued = insurer.issue(request);
+        return ResponseEntity.created(URI.create(&quot;/policies/&quot; + issued.getPolicyNumber()))
+                .body(new Policy(issued.getPolicyNumber(), request.getProductCode(), body.sumInsuredPaise(), issued.getPremiumPaise()));
+    }
+
+    /** The insurer said no. Its reason, if the fault was about our request; a gateway error if it was about itself. */
+    @ExceptionHandler(InsurerClient.Refused.class)
+    ResponseEntity&lt;ProblemDetail&gt; refused(InsurerClient.Refused e) {
+        if (e.ourRequest) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, &quot;The insurer refused the policy: &quot; + e.getMessage());
+            problem.setProperty(&quot;insurerCode&quot;, e.code);
+            return ResponseEntity.unprocessableContent().body(problem);
+        }
+        log.error(&quot;The insurer reported its own failure: {} {}&quot;, e.code, e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, &quot;The insurer&#x27;s system failed. Try again later.&quot;));
+    }
+
+    /** Challenge 2. */
+    @ExceptionHandler(InsurerClient.CircuitOpen.class)
+    ResponseEntity&lt;ProblemDetail&gt; circuitOpen() {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header(&quot;Retry-After&quot;, &quot;60&quot;)
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, &quot;The insurer is having trouble. Try again in a minute.&quot;));
+    }
+
+    @ExceptionHandler(InsurerClient.Unreachable.class)
+    ResponseEntity&lt;ProblemDetail&gt; unreachable(InsurerClient.Unreachable e) {
+        log.error(&quot;No answer from the insurer: {}&quot;, e.getCause().getMessage());
+        HttpStatus status = e.timedOut ? HttpStatus.GATEWAY_TIMEOUT : HttpStatus.BAD_GATEWAY;
+        return ResponseEntity.status(status).body(ProblemDetail.forStatusAndDetail(status,
+                e.timedOut ? &quot;The insurer did not answer in time. The policy may or may not have been issued: check before trying again.&quot;
+                        : &quot;The insurer could not be reached. Try again later.&quot;));
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>What happened to the 504?</h2>
+<p>A customer got <code>504</code>: the policy may or may not have been issued. The insurer's WSDL has no "look up by our reference" operation, but its team says they could add one next quarter. Design what Bimaly does today and after: what reference you send with each IssuePolicy, where you record the attempt, who checks it and when, and what the customer is told meanwhile.</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: the client as it comes, against a slow and a refusing simulated insurer.</li>
+<li>Generate the classes from the WSDL; call IssuePolicy with the SOAPAction.</li>
+<li>Set both timeouts on the sender.</li>
+<li>Map faults by code, with the insurer's detail, and lost answers by cause.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Generated classes + Spring-WS</td><td>A build plugin; regenerate when the WSDL changes.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Hand-written XML strings</td><td>Easy to start; breaks silently on namespaces and escaping.</td><td><span class="pill bad">Avoid</span></td></tr><tr><td>JAX-WS (Jakarta XML Web Services) client</td><td>Also generated from the WSDL; a second stack beside Spring.</td><td><span class="pill warn">Fine too</span></td></tr><tr><td>The library's default timeouts</td><td>60 s per call, or none at all with some senders.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Retry IssuePolicy on a timeout</td><td>A second policy for the same person.</td><td><span class="pill bad">Not without a lookup</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>No database in this station: the insurer stores the policies, and Bimaly passes them on. Challenge 3 asks where a record of each attempt would belong.</p>
+<p><strong>Transaction boundaries:</strong> none of our own. One SOAP call is one attempt at the insurer; it is never repeated automatically.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>14. Operations: metric, alert, rollback, runbook, failure drill</li><li>15. Real-world considerations</li></ul><p class="rule">What changes when this runs for real.</p></aside>
+<h2>Real-world considerations</h2>
+<dl class="facts">
+<dt>Timeouts from the insurer's figures</dt><dd>Ask the insurer for its usual and worst answer times; set the limit a little above the worst. Here: usually 1 to 3 s, at worst 6 s, limit 8 s (demo rules).</dd>
+<dt>A changing WSDL</dt><dd>Keep the insurer's WSDL in the project and regenerate on purpose. A new optional field is harmless; a renamed one fails the build, which is where you want to find out.</dd>
+<dt>Security</dt><dd>Real partners usually want HTTPS with client certificates, or WS-Security headers. Both are set on the message sender or as interceptors; neither is simulated here.</dd>
+<dt>Logs</dt><dd>Envelopes carry personal data: log them masked (challenge 1), and never the full detail of a Server fault to the customer.</dd>
+<dt>Watching it</dt><dd>Count outcomes (issued, refused, failed, timed out) and how long calls take. A rising timeout count is the first sign the insurer is struggling.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>What is a WSDL, and what do you do with it?</summary><p>The service&#x27;s contract: operations, messages, faults and address. You generate client classes from it at build time.</p></details><details class="qa"><summary>What is the SOAPAction header?</summary><p>In SOAP 1.1, an HTTP header naming the operation. Many old servers route by it, so send the value the WSDL gives.</p></details><details class="qa"><summary>How do you map SOAP faults to HTTP?</summary><p>By the fault code: Client/Sender means our request was wrong (4xx, with the reason); Server/Receiver means theirs failed (502).</p></details><details class="qa"><summary>What are Spring-WS&#x27;s default timeouts?</summary><p>The default HttpURLConnection sender waits 60 s to connect and 60 s to read. Set your own on the sender.</p></details><details class="qa"><summary>Should you retry a timed-out call?</summary><p>Only if the operation is idempotent or you can look up what happened. Issuing a policy is neither here.</p></details><details class="qa"><summary>How do you test a SOAP client?</summary><p>Against a simulated SOAP server that sends real envelopes, including faults, delays and nothing at all.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 7 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>SOAP</td><td>Generated classes; the call works.</td><td>You can read the WSDL and the captured envelopes and explain every part.</td></tr><tr><td>Errors</td><td>No 500s for the insurer's answers.</td><td>Refusals, failures and timeouts each with an honest status and sentence.</td></tr><tr><td>Timeouts</td><td>Set.</td><td>Chosen from the insurer's figures, and proved by a test.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate "simplifies" the client: "the defaults are fine, and a fault means the insurer had a problem". Read both files and list every problem before opening the findings.</p>
+<p class="path">review/PoliciesApplication.java</p>
+<pre class="code"><code class="language-java">package com.bimaly.policies;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.oxm.jaxb.Jaxb2Marshaller;
+import org.springframework.ws.client.core.WebServiceTemplate;
+
+
+@SpringBootApplication
+public class PoliciesApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(PoliciesApplication.class, args);
+    }
+
+    /** XML to and from the classes generated from the insurer&#x27;s WSDL at build time. */
+    @Bean
+    Jaxb2Marshaller insurerMessages() {
+        Jaxb2Marshaller marshaller = new Jaxb2Marshaller();
+        marshaller.setContextPath(&quot;com.bimaly.policies.insurer&quot;);
+        return marshaller;
+    }
+
+    /** The SOAP client. Spring-WS&#x27;s defaults are fine for a partner we trust. */
+    @Bean
+    WebServiceTemplate insurer(Jaxb2Marshaller messages, @Value(&quot;${bimaly.insurer.url}&quot;) String url) {
+        WebServiceTemplate template = new WebServiceTemplate(messages);
+        template.setDefaultUri(url);
+        return template;
+    }
+}</code></pre>
+<p class="path">review/InsurerClient.java</p>
+<pre class="code"><code class="language-java">package com.bimaly.policies;
+
+import com.bimaly.policies.insurer.IssuePolicyRequest;
+import com.bimaly.policies.insurer.IssuePolicyResponse;
+import com.bimaly.policies.insurer.PolicyFault;
+import org.springframework.oxm.jaxb.Jaxb2Marshaller;
+import org.springframework.stereotype.Component;
+import org.springframework.ws.client.WebServiceIOException;
+import org.springframework.ws.client.core.WebServiceTemplate;
+import org.springframework.ws.soap.SoapFaultDetailElement;
+import org.springframework.ws.soap.client.SoapFaultClientException;
+import org.springframework.ws.soap.client.core.SoapActionCallback;
+
+import java.io.IOException;
+import java.net.http.HttpTimeoutException;
+import java.util.Iterator;
+import java.util.Set;
+
+/** Calls the insurer&#x27;s IssuePolicy operation and turns what can go wrong into three plain outcomes. */
+@Component
+class InsurerClient {
+
+    static final String SOAP_ACTION = &quot;http://insurer.example/policy/v1/IssuePolicy&quot;;
+
+    /** The insurer answered with a SOAP fault. Its own fault code and message, and whose mistake it says it is. */
+    static final class Refused extends RuntimeException {
+        final boolean ourRequest;
+        final String code;
+
+        Refused(boolean ourRequest, String code, String message) {
+            super(message);
+            this.ourRequest = ourRequest;
+            this.code = code;
+        }
+    }
+
+    /** No answer: the insurer could not be reached, or did not answer in time. */
+    static final class Unreachable extends RuntimeException {
+        final boolean timedOut;
+
+        Unreachable(boolean timedOut, Throwable cause) {
+            super(cause);
+            this.timedOut = timedOut;
+        }
+    }
+
+    // SOAP 1.1 says Client and Server; SOAP 1.2 says Sender and Receiver.
+    private static final Set&lt;String&gt; OUR_FAULT = Set.of(&quot;Client&quot;, &quot;Sender&quot;);
+    private final WebServiceTemplate insurer;
+    private final Jaxb2Marshaller messages;
+
+    InsurerClient(WebServiceTemplate insurer, Jaxb2Marshaller messages) {
+        this.insurer = insurer;
+        this.messages = messages;
+    }
+
+    IssuePolicyResponse issue(IssuePolicyRequest request) {
+        try {
+            return (IssuePolicyResponse) insurer.marshalSendAndReceive(request, new SoapActionCallback(SOAP_ACTION));
+        } catch (SoapFaultClientException fault) {
+            PolicyFault detail = detail(fault);
+            boolean ours = false;   // a fault comes from the insurer, so it is the insurer&#x27;s problem
+            throw new Refused(ours, detail == null ? fault.getFaultCode().getLocalPart() : detail.getCode(),
+                    detail == null ? fault.getFaultStringOrReason() : detail.getMessage());
+        } catch (WebServiceIOException noAnswer) {
+            boolean timedOut = false;
+            for (Throwable t = noAnswer; t != null; t = t.getCause()) {
+                timedOut |= t instanceof HttpTimeoutException;
+            }
+            throw new Unreachable(timedOut, noAnswer);
+        }
+    }
+
+    /** The PolicyFault the WSDL declares, if the insurer sent one in the fault&#x27;s detail. */
+    private PolicyFault detail(SoapFaultClientException fault) {
+        if (fault.getSoapFault().getFaultDetail() == null) {
+            return null;
+        }
+        Iterator&lt;SoapFaultDetailElement&gt; entries = fault.getSoapFault().getFaultDetail().getDetailEntries();
+        try {
+            return entries.hasNext() &amp;&amp; messages.unmarshal(entries.next().getSource()) instanceof PolicyFault p ? p : null;
+        } catch (RuntimeException notOurs) {
+            return null;
+        }
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>The library's default timeouts</summary><p>"Spring-WS's defaults are fine for a partner we trust": the default sender waits 60 s to connect and 60 s for an answer. On a slow day each customer's request is held for up to two minutes, and the API's 8 s promise is gone.</p><p class="evidence"><b>Test evidence:</b> <code>theOldClientWaitsAsLongAsTheInsurerDoes</code> and <code>theInsurersOwnFailureIs502AndASlowInsurer504</code> fail.</p></details><details class="finding"><summary><span class="sev">2</span>Every fault is the insurer's problem</summary><p>"A fault comes from the insurer, so it is the insurer's problem": a Client fault says our request was wrong. Answering <code>502</code> "try again later" makes the customer retry a request that can never succeed, and hides the reason the insurer gave.</p><p class="evidence"><b>Test evidence:</b> <code>theInsurersRefusalIs422WithItsReason</code> and <code>theOldWayLetsAFaultEscapeAsAnErrorAndTheApiExplainsIt</code> fail.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the flawed files copied over the real ones, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>InsurerDownTest</code></td><td><span class="pill ok">1 / 1</span></td><td><span class="pill ok">1 / 1</span></td></tr><tr><td><code>LegacySoapTrapTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">0 / 2</span></td></tr><tr><td><code>PolicyContractTest</code></td><td><span class="pill ok">4 / 4</span></td><td><span class="pill bad">2 / 4</span></td></tr></tbody></table></div>
+<p class="note">On a good day, with a fast insurer and correct requests, the flawed version works. It fails on the slow day and on the first refusal.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
