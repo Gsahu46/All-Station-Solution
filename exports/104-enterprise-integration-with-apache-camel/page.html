@@ -1,0 +1,1911 @@
+<title>Station 104 · Enterprise integration with Apache Camel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 104</span>
+    <h1>Enterprise integration with Apache Camel</h1>
+    <p class="scenario">Partner banks drop policy files on SFTP at 2 am, a queue carries claims, and 4,000 lines of custom glue code connect them.</p>
+    <p class="sim"><b>Simulation</b><span>The partner bank and its SFTP server are simulated (an SFTP server in Docker with demo files). Nothing is issued: valid lines become messages on a queue.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Insurance</li>
+      <li><b>Types</b>Messaging · Idempotency</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>101 Task queue with RabbitMQ · 103 Calling a legacy SOAP service</p>
+      <p><span class="eyebrow">Builds toward</span><br>None</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Apache Camel 4.23 (SFTP, file, idempotent consumer, error handling) · RabbitMQ 4.1 · Spring AMQP · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Files at 2 am</strong><p>Partner banks sell Bimaly's insurance. Each night a bank drops a file of new policies on its SFTP server. 4,000 lines of home-made glue code read the files and put each policy on a queue for the issuance team.</p></li><li><strong>Every policy twice</strong><p>One night the app was restarted for a deployment. The glue code had kept the list of files it had read in memory. After the restart it read the whole folder again, and the issuance team received every policy of the last month a second time.</p></li><li><strong>The fix</strong><p>A short Camel route replaces the glue code. What has been processed is recorded on disk, by the file's content; a restart, or the bank sending the same file again, changes nothing. Bad lines are rejected with their reason, unreadable files are put aside, and a broker problem is retried.</p></li></ol>
+<p class="lesson">Whatever must not happen twice needs a record that outlives the process. Memory is gone at the next restart.</p>
+
+<h2>What are we building?</h2>
+<p>A route that reads a bank's policy files from SFTP, checks them, and puts each valid policy on a queue exactly once per file, with a record of every run.</p>
+
+<h2>An everyday analogy</h2>
+<p>An accounts clerk who receives invoices by post. Each one is stamped "entered" in a ledger before it is paid. If the supplier posts the same invoice twice, or the clerk goes home and comes back, the ledger says it is done. A torn, unreadable invoice goes into a tray for the manager, not into the bin.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Poll</strong>: every 30 s, look in the bank's folder for files not seen before.</li>
+<li><strong>Check the record</strong>: a file whose content was already processed is noted as a duplicate and skipped.</li>
+<li><strong>Validate</strong>: a file that cannot be read goes to the dead-letter folder; a bad line is rejected with its reason.</li>
+<li><strong>Send</strong>: valid lines go to the queue; the run is done only when the broker has confirmed every one.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: why not just delete the file after reading it?</summary><p>It is the bank's folder, and the bank allows us to read only. Even where moving files is allowed, a crash between "sent" and "moved" leaves the file to be read again: you still need a record.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No real bank.</strong> An SFTP server in Docker with demo files.</li>
+<li><strong>No policy issuance.</strong> That team reads the queue; here we only fill it.</li>
+<li><strong>Not one server per bank.</strong> One bank, one folder; more banks are more routes of the same shape.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Integration route</strong></td><td>A pipeline that takes something from one system, changes or checks it, and hands it to another.</td><td>A sorting office: letters in, sorted, out to the vans.</td><td>SFTP → validate → queue</td></tr><tr><td><strong>Apache Camel</strong></td><td>A library of ready connectors ("components") and patterns for writing such routes in a few lines.</td><td>A box of standard pipe fittings.</td><td><code>PolicyFileRoute</code></td></tr><tr><td><strong>SFTP polling</strong></td><td>Looking in a remote folder every so often for new files.</td><td>Checking the letterbox every half hour.</td><td>every 30 s</td></tr><tr><td><strong>Idempotent consumer</strong></td><td>Remembers what it already handled and skips it if it comes again.</td><td>Ticking off invoices already paid.</td><td>two records on disk</td></tr><tr><td><strong>Dead-letter channel</strong></td><td>Where a message that can never be processed is put aside for a person.</td><td>The "return to sender" tray.</td><td><code>data/dead-letter/</code></td></tr><tr><td><strong>Redelivery</strong></td><td>Trying a failed step again after a short wait, in case the problem passes.</td><td>Ringing back when the line was busy.</td><td>3 times, 2 s apart</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Bimaly</strong> (a fictional insurance broker) receives nightly policy files from partner banks on SFTP. The glue code that reads them is 4,000 lines long and sent a month of policies twice after a restart.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo rules: files named <code>BANK-YYYYMMDD.csv</code>, UTF-8, with the header <code>reference,customer_name,date_of_birth,product_code,sum_insured_paise</code>, five columns without commas or quotes inside them, at most 10,000 lines; a poll every 30 s; a failed step tried 3 more times, 2 s apart.</p>
+<ol class="gwt">
+<li><b>Given</b> a good file, <b>then</b> every line is one message on <code>policy.requests</code> with the id <code>BANK:REFERENCE</code>, and the run is <code>DONE</code>.</li>
+<li><b>Given</b> bad lines, <b>then</b> each is rejected with its line number and reason, and the others are sent.</li>
+<li><b>Given</b> a file that cannot be read (name, header, encoding, empty), <b>then</b> nothing is sent, the file goes to the dead-letter folder as it arrived, and it is not tried again.</li>
+<li><b>Given</b> the broker refuses, <b>then</b> the step is retried; if it still fails, the run is <code>FAILED</code> and the next poll tries the file again.</li>
+<li><b>Given</b> a restart, or the same content uploaded again, <b>then</b> nothing is sent twice; a re-upload is recorded as <code>DUPLICATE</code>.</li>
+<li><b>Given</b> <code>GET /integration/runs/{id}</code>, <b>then</b> <code>200</code> with what happened, <code>404</code> for an unknown run, <code>400</code> for a non-number.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>The bank's folder is read-only to us: files are never moved or deleted there.</li>
+<li>What was processed is recorded on disk, by content.</li>
+<li>Errors that will pass are retried; errors that never will are put aside at once.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Write a Camel route with the SFTP and file components.</li>
+<li>Use an idempotent consumer with a store that survives restarts.</li>
+<li>Separate retryable errors from dead letters with <code>onException</code>.</li>
+<li>Publish to RabbitMQ with confirms and stable message ids.</li>
+<li>Test a route against a real SFTP server and broker, including a restart.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app, its RabbitMQ and the simulated bank's SFTP server, never typed by hand.</p></aside>
+<h2>The route and the endpoint</h2>
+<div class="scroll"><table class=""><thead><tr><th>What</th><th>Where</th><th>Purpose</th></tr></thead><tbody><tr><td>Route <code>policy-files</code></td><td><code>sftp://koshbank@…/upload</code> → <code>policy.requests</code></td><td>Poll the bank's folder; validate; queue each valid line.</td></tr><tr><td><code>GET</code></td><td><code>/integration/runs/{id}</code></td><td>What happened to one file: status, lines, accepted, rejected lines with reasons, error.</td></tr></tbody></table></div>
+<h2>Run statuses</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>Meaning</th></tr></thead><tbody><tr><td><span class="pill ok">DONE</span></td><td>Valid lines sent and confirmed by the broker</td></tr><tr><td><span class="pill warn">DUPLICATE</span></td><td>The same content was already processed; nothing sent</td></tr><tr><td><span class="pill warn">FAILED</span></td><td>A step kept failing; the next poll tries the file again</td></tr><tr><td><span class="pill bad">DEAD_LETTERED</span></td><td>The file can never be processed as it is; a copy waits in the dead-letter folder</td></tr><tr><td><span class="pill">RUNNING</span></td><td>Being processed now</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured on 24 Oct 2026 by <code>docs/capture.sh</code>: three files uploaded at once (one poll takes them in name order), then the first again, then one while the broker refuses. <code>Date</code>, connection and standard security headers are left out.</p>
+<section class="example"><h3>Run 1: a good file</h3><p><b>Why:</b> three lines, three messages.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /integration/runs/1 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 274
+
+{
+  &quot;accepted&quot;: 3,
+  &quot;checksum&quot;: &quot;8d862bc8676f0925b025036bd368de2201aaef8256a0e667329a954d026e24e6&quot;,
+  &quot;error&quot;: null,
+  &quot;file&quot;: &quot;KOSHBANK-20261022.csv&quot;,
+  &quot;finishedAt&quot;: &quot;2026-10-24T18:19:39.537739682Z&quot;,
+  &quot;id&quot;: 1,
+  &quot;lines&quot;: 3,
+  &quot;rejected&quot;: [],
+  &quot;startedAt&quot;: &quot;2026-10-24T18:19:39.296569892Z&quot;,
+  &quot;status&quot;: &quot;DONE&quot;
+}</code></pre></div></div></section><section class="example"><h3>Run 2: a file with bad lines</h3><p><b>Why:</b> one line sent; three rejected, each with its line number and reason.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /integration/runs/2 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 515
+
+{
+  &quot;accepted&quot;: 1,
+  &quot;checksum&quot;: &quot;00f3a2ced4e53a84fa5e2a8d583b7e87394bf106985f2962ef50c27e750326e0&quot;,
+  &quot;error&quot;: null,
+  &quot;file&quot;: &quot;KOSHBANK-20261023.csv&quot;,
+  &quot;finishedAt&quot;: &quot;2026-10-24T18:19:39.589464194Z&quot;,
+  &quot;id&quot;: 2,
+  &quot;lines&quot;: 4,
+  &quot;rejected&quot;: [
+    {
+      &quot;line&quot;: 3,
+      &quot;reference&quot;: &quot;KB-1102&quot;,
+      &quot;reason&quot;: &quot;the date of birth must be in the past&quot;
+    },
+    {
+      &quot;line&quot;: 4,
+      &quot;reference&quot;: &quot;KB-1103&quot;,
+      &quot;reason&quot;: &quot;expected 5 columns, found 4&quot;
+    },
+    {
+      &quot;line&quot;: 5,
+      &quot;reference&quot;: &quot;KB-1101&quot;,
+      &quot;reason&quot;: &quot;reference KB-1101 already appears on line 2&quot;
+    }
+  ],
+  &quot;startedAt&quot;: &quot;2026-10-24T18:19:39.571093010Z&quot;,
+  &quot;status&quot;: &quot;DONE&quot;
+}</code></pre></div></div></section><section class="example"><h3>Run 3: a file with semicolons</h3><p><b>Why:</b> the header is wrong: dead-lettered at once, no retry.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /integration/runs/3 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 383
+
+{
+  &quot;accepted&quot;: 0,
+  &quot;checksum&quot;: &quot;55ea5553a0c1793d65cb1fac3f0717bdb19837911b98c7036103556f9903c278&quot;,
+  &quot;error&quot;: &quot;The first line is not the header reference,customer_name,date_of_birth,product_code,sum_insured_paise.&quot;,
+  &quot;file&quot;: &quot;KOSHBANK-20261024.csv&quot;,
+  &quot;finishedAt&quot;: &quot;2026-10-24T18:19:39.610494764Z&quot;,
+  &quot;id&quot;: 3,
+  &quot;lines&quot;: 0,
+  &quot;rejected&quot;: [],
+  &quot;startedAt&quot;: &quot;2026-10-24T18:19:39.602476542Z&quot;,
+  &quot;status&quot;: &quot;DEAD_LETTERED&quot;
+}</code></pre></div></div></section><pre class="code"><code class="language-text">data/dead-letter/KOSHBANK-20261024.csv: the file as it arrived (identical bytes)</code></pre>
+<p class="muted">The queue after runs 1 to 3, read through RabbitMQ's management API without taking the messages off (message id, delivery mode 2 = persistent, body):</p>
+<pre class="code"><code class="language-text">4 messages on policy.requests
+KOSHBANK:KB-1001 2 {&quot;bank&quot;:&quot;KOSHBANK&quot;,&quot;reference&quot;:&quot;KB-1001&quot;,&quot;customerName&quot;:&quot;Meera Iyer&quot;,&quot;dateOfBirth&quot;:&quot;1988-04-12&quot;,&quot;productCode&quot;:&quot;TERM10&quot;,&quot;sumInsuredPaise&quot;:1000000000}
+KOSHBANK:KB-1002 2 {&quot;bank&quot;:&quot;KOSHBANK&quot;,&quot;reference&quot;:&quot;KB-1002&quot;,&quot;customerName&quot;:&quot;Ravi Kumar&quot;,&quot;dateOfBirth&quot;:&quot;1975-11-02&quot;,&quot;productCode&quot;:&quot;HEALTH5&quot;,&quot;sumInsuredPaise&quot;:50000000}
+KOSHBANK:KB-1003 2 {&quot;bank&quot;:&quot;KOSHBANK&quot;,&quot;reference&quot;:&quot;KB-1003&quot;,&quot;customerName&quot;:&quot;Asha Rao&quot;,&quot;dateOfBirth&quot;:&quot;1990-06-30&quot;,&quot;productCode&quot;:&quot;HEALTH5&quot;,&quot;sumInsuredPaise&quot;:50000000}
+KOSHBANK:KB-1101 2 {&quot;bank&quot;:&quot;KOSHBANK&quot;,&quot;reference&quot;:&quot;KB-1101&quot;,&quot;customerName&quot;:&quot;Vikram Shah&quot;,&quot;dateOfBirth&quot;:&quot;1982-01-15&quot;,&quot;productCode&quot;:&quot;TERM10&quot;,&quot;sumInsuredPaise&quot;:2500000000}</code></pre><section class="example"><h3>Run 4: the bank uploads run 1's file again</h3><p><b>Why:</b> same content: a duplicate, nothing sent.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /integration/runs/4 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 316
+
+{
+  &quot;accepted&quot;: 0,
+  &quot;checksum&quot;: &quot;8d862bc8676f0925b025036bd368de2201aaef8256a0e667329a954d026e24e6&quot;,
+  &quot;error&quot;: &quot;The same content was already processed.&quot;,
+  &quot;file&quot;: &quot;KOSHBANK-20261022.csv&quot;,
+  &quot;finishedAt&quot;: &quot;2026-10-24T18:20:09.645024402Z&quot;,
+  &quot;id&quot;: 4,
+  &quot;lines&quot;: 0,
+  &quot;rejected&quot;: [],
+  &quot;startedAt&quot;: &quot;2026-10-24T18:20:09.643820024Z&quot;,
+  &quot;status&quot;: &quot;DUPLICATE&quot;
+}</code></pre></div></div></section><section class="example"><h3>Run 5: the broker refuses every message</h3><p><b>Why:</b> 3 retries 2 s apart, then <code>FAILED</code>; the file is not marked as processed.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /integration/runs/5 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 309
+
+{
+  &quot;accepted&quot;: 1,
+  &quot;checksum&quot;: &quot;f68df4ea0d7c1d84594be51643242187c80f5bc3bed92cba83855cba92a3660e&quot;,
+  &quot;error&quot;: &quot;java.io.IOException: nacks received&quot;,
+  &quot;file&quot;: &quot;KOSHBANK-20261025.csv&quot;,
+  &quot;finishedAt&quot;: &quot;2026-10-24T18:20:45.696947969Z&quot;,
+  &quot;id&quot;: 5,
+  &quot;lines&quot;: 1,
+  &quot;rejected&quot;: [],
+  &quot;startedAt&quot;: &quot;2026-10-24T18:20:39.661179233Z&quot;,
+  &quot;status&quot;: &quot;FAILED&quot;
+}</code></pre></div></div></section><section class="example"><h3>Run 6: the broker is back</h3><p><b>Why:</b> the next poll picked the same file up again: <code>DONE</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /integration/runs/6 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 274
+
+{
+  &quot;accepted&quot;: 1,
+  &quot;checksum&quot;: &quot;f68df4ea0d7c1d84594be51643242187c80f5bc3bed92cba83855cba92a3660e&quot;,
+  &quot;error&quot;: null,
+  &quot;file&quot;: &quot;KOSHBANK-20261025.csv&quot;,
+  &quot;finishedAt&quot;: &quot;2026-10-24T18:21:15.743546861Z&quot;,
+  &quot;id&quot;: 6,
+  &quot;lines&quot;: 1,
+  &quot;rejected&quot;: [],
+  &quot;startedAt&quot;: &quot;2026-10-24T18:21:15.737763520Z&quot;,
+  &quot;status&quot;: &quot;DONE&quot;
+}</code></pre></div></div></section><section class="example"><h3>No such run</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /integration/runs/99 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;instance&quot;: &quot;/integration/runs/99&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Not Found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Not a run number</h3><p><b>Why:</b> <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /integration/runs/latest HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Failed to convert &#x27;id&#x27; with value: &#x27;latest&#x27;&quot;,
+  &quot;instance&quot;: &quot;/integration/runs/latest&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section>
+<h2>What the app remembers</h2>
+<p class="muted">The two records on disk at the end of the capture:</p>
+<pre class="code"><code class="language-text">data/processed-files.dat (SHA-256 of each processed file&#x27;s content):
+8d862bc8676f0925b025036bd368de2201aaef8256a0e667329a954d026e24e6
+00f3a2ced4e53a84fa5e2a8d583b7e87394bf106985f2962ef50c27e750326e0
+f68df4ea0d7c1d84594be51643242187c80f5bc3bed92cba83855cba92a3660e
+
+data/seen-files.dat (name-size-time of each downloaded file):
+KOSHBANK-20261022.csv-209-1792865978000
+KOSHBANK-20261024.csv-73-1792865978000
+KOSHBANK-20261023.csv-251-1792865978000
+KOSHBANK-20261022.csv-209-1792865981000
+KOSHBANK-20261025.csv-117-1792866011000</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>The old route, restarted</td><td>The same file read again</td><td><code>theOldRouteReadsTheSameFileAgainAfterARestart</code></td></tr><tr><td>The app, restarted; then the same file under a new name</td><td>Processed once; then <code>DUPLICATE</code></td><td><code>theApiRemembersWhatItProcessedAcrossARestart</code></td></tr><tr><td>A good file</td><td><code>DONE</code>; one message per line, id <code>BANK:REFERENCE</code>, codes upper-cased</td><td><code>aFileIsCheckedAndItsValidLinesQueued</code></td></tr><tr><td>Missing column, future birth date, bad sum, repeated reference</td><td>Rejected with line number and reason; the rest sent</td><td><code>badLinesAreRejectedWithTheirReasonAndTheOthersGoOn</code></td></tr><tr><td>Unknown run; not a number</td><td><code>404</code>; <code>400</code></td><td><code>anUnknownRunIs404AndANonNumberIs400</code></td></tr><tr><td>The broker refuses</td><td>Retried, <code>FAILED</code>, then <code>DONE</code> on a later poll</td><td><code>aBrokerThatRefusesIsRetriedThenTheFileIsTriedAgainOnTheNextPoll</code></td></tr><tr><td>A wrong header</td><td>Dead-lettered once, as it arrived</td><td><code>aFileThatCanNeverBeReadGoesToTheDeadLetterFolderOnce</code></td></tr><tr><td>A wrong name; a header only</td><td>Dead-lettered</td><td><code>aWrongFileNameOrAnEmptyFileIsDeadLetteredToo</code></td></tr><tr><td>The same file uploaded again, same or new name</td><td><code>DUPLICATE</code>; nothing sent</td><td><code>theSameFileUploadedAgainSendsNothingAndIsRecordedAsADuplicate</code></td></tr><tr><td>A corrected file with the same name</td><td>Processed; unchanged lines sent again with the same ids</td><td><code>aCorrectedFileWithTheSameNameIsProcessed</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Processing the same file twice after a restart because nothing records what was already consumed.</p>
+<ul>
+<li><strong>The old way.</strong> The bank's folder is read-only, so the route uses <code>noop=true</code>, and Camel then remembers the files it read. In memory: within one run the file is read once; after a restart (a new Camel context) it is read again.</li>
+<li><strong>The API.</strong> The app is started, processes the file, is stopped and started again: the file is not processed again. Then the bank uploads the same file under a new name: it is recorded as a duplicate, and the queue still holds only the first two messages.</li>
+</ul>
+<p>While building, each part was undone once: the downloaded-files record in memory turned 1 test red; the processed-files record in memory 1; no duplicate check 2; no dead-letter handling 2; every error handled (never retried) 1; no publisher confirms 1; no message ids 5; product codes not upper-cased 1; repeated references allowed 1; birth dates in the future allowed 1.</p>
+</div>
+<pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.impl.DefaultCamelContext;
+import org.junit.jupiter.api.Test;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.util.FileSystemUtils;
+
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+/** The app is restarted at night for a deployment. Written first. */
+class FileRestartTrapTest {
+
+    static final String FILE = PolicyFile.HEADER + &quot;\nKB-8001,Meera Iyer,1988-04-12,TERM10,1000000000\nKB-8002,Ravi Kumar,1975-11-02,HEALTH5,50000000\n&quot;;
+
+    /** The old way: the bank&#x27;s folder is read-only, so noop=true, and Camel remembers the files it read in memory. */
+    @Test
+    void theOldRouteReadsTheSameFileAgainAfterARestart() throws Exception {
+        Partners.upload(&quot;old&quot;, &quot;KOSHBANK-20260101.csv&quot;, FILE);
+        AtomicInteger processed = new AtomicInteger();
+        for (int restart = 1; restart &lt;= 2; restart++) {
+            try (var camel = new DefaultCamelContext()) {
+                camel.addRoutes(new RouteBuilder() {
+                    @Override
+                    public void configure() {
+                        from(Partners.sftp(&quot;old&quot;, 200) + &quot;&amp;noop=true&quot;).process(e -&gt; processed.incrementAndGet());
+                    }
+                });
+                camel.start();
+                int expected = restart;
+                await().atMost(Duration.ofSeconds(15)).until(() -&gt; processed.get() == expected);
+                Thread.sleep(1_000);   // five more polls: within one run, the file is not read again
+                assertThat(processed).hasValue(restart);
+            }
+        }
+        assertThat(processed).as(&quot;the same file, processed once per start&quot;).hasValue(2);
+    }
+
+    /** The API: what was processed is recorded on disk, so a restart starts where the last run stopped. */
+    @Test
+    void theApiRemembersWhatItProcessedAcrossARestart() throws Exception {
+        FileSystemUtils.deleteRecursively(Path.of(&quot;target/restart-data&quot;).toFile());
+        Partners.upload(&quot;restart&quot;, &quot;KOSHBANK-20260102.csv&quot;, FILE);
+
+        try (var first = start()) {
+            first.getBean(RabbitAdmin.class).purgeQueue(PolicyQueue.QUEUE);
+            Runs runs = first.getBean(Runs.class);
+            await().atMost(Duration.ofSeconds(20)).until(() -&gt; runs.forFile(&quot;KOSHBANK-20260102.csv&quot;),
+                    r -&gt; r.size() == 1 &amp;&amp; r.getFirst().status == Runs.Status.DONE);
+            assertThat(waiting(first)).isEqualTo(2);
+        }
+        try (var second = start()) {
+            Thread.sleep(2_000);   // ten polls of the same folder
+            assertThat(second.getBean(Runs.class).forFile(&quot;KOSHBANK-20260102.csv&quot;)).hasSize(1);
+            assertThat(waiting(second)).as(&quot;still the two messages of the first start&quot;).isEqualTo(2);
+
+            Partners.upload(&quot;restart&quot;, &quot;KOSHBANK-20260103.csv&quot;, FILE);   // the same file again, under a new name
+            await().atMost(Duration.ofSeconds(20)).until(() -&gt; second.getBean(Runs.class).forFile(&quot;KOSHBANK-20260103.csv&quot;),
+                    r -&gt; r.size() == 1 &amp;&amp; r.getFirst().status == Runs.Status.DUPLICATE);
+            assertThat(waiting(second)).isEqualTo(2);
+        }
+    }
+
+    private static ConfigurableApplicationContext start() {
+        return new SpringApplicationBuilder(IntegrationApplication.class).run(&quot;--server.port=0&quot;,
+                &quot;--bimaly.files.data=target/restart-data&quot;, &quot;--bimaly.partner.uri=&quot; + Partners.sftp(&quot;restart&quot;, 200),
+                &quot;--spring.rabbitmq.host=&quot; + Partners.RABBIT.getHost(), &quot;--spring.rabbitmq.port=&quot; + Partners.RABBIT.getAmqpPort());
+    }
+
+    private static long waiting(ConfigurableApplicationContext app) {
+        return app.getBean(RabbitAdmin.class).getQueueInfo(PolicyQueue.QUEUE).getMessageCount();
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d --wait  # RabbitMQ (5672, UI on 15672) and the bank&#x27;s SFTP server (2222)
+./mvnw spring-boot:run       # the route and http://localhost:8080
+./mvnw test                  # all 10 tests; starts its own RabbitMQ and SFTP server</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d --wait
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Drop a file in the bank's folder as the bank would, wait for the next poll, and read run 1:</p>
+<pre class="code"><code class="language-bash">printf &#x27;reference,customer_name,date_of_birth,product_code,sum_insured_paise\nKB-1,Meera Iyer,1988-04-12,TERM10,1000000000\n&#x27; \
+  | docker compose exec -T sftp sh -c &#x27;cat &gt; /home/koshbank/upload/KOSHBANK-20261024.part &amp;&amp; mv /home/koshbank/upload/KOSHBANK-20261024.part /home/koshbank/upload/KOSHBANK-20261024.csv&#x27;
+curl localhost:8080/integration/runs/1</code></pre>
+<p>Stop the app, start it again, and wait for a poll: no run 2. Then delete <code>data/</code> while it is stopped and start once more: the file is processed again. That is what the record is for.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>Auth fail</code> in the log</td><td>Wrong SFTP user or password.</td><td>Compose's user is <code>koshbank</code> / <code>demo-only</code>.</td></tr><tr><td><code>reject HostKey</code></td><td>The server's key is not in known_hosts.</td><td>Demo: <code>strictHostKeyChecking=no</code>. Production: add the bank's key to a known_hosts file.</td></tr><tr><td>A file is never picked up</td><td>Its name does not end in <code>.csv</code>, or it was seen before with the same name, size and time.</td><td>Check <code>data/seen-files.dat</code>.</td></tr><tr><td>A run stays FAILED and repeats every poll</td><td>The broker keeps refusing.</td><td>Check RabbitMQ's alarms (disk, memory) and queue policies.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/104-enterprise-integration-with-apache-camel/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/bimaly/integration/
+│   ├── PolicyFileRoute.java   ├── PolicyFile.java   ├── PolicyQueue.java   ├── PolicyRequest.java
+│   ├── Runs.java   ├── RunController.java   └── IntegrationApplication.java
+├── src/main/resources/application.yaml
+├── src/test/java/com/bimaly/integration/   (see Tests)
+├── data/                     made by the app: runs/, the two records, dead-letter/
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">The route first, then in the order a file travels.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">PolicyFileRoute.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">IntegrationApplication.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">PolicyFile.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">PolicyQueue.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">Runs.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">RunController.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">PolicyRequest.java</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-8-b" aria-controls="code-8" aria-selected="false" data-group="code">compose.yaml</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/bimaly/integration/PolicyFileRoute.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The route.</dd><dt>Why</dt><dd>Polls the bank's folder, checks the record, validates, sends, and records the run. Two <code>onException</code> blocks: never-retry (dead letter) and retry-then-fail.</dd><dt>Without it</dt><dd>4,000 lines of glue code; a file read twice; a broken file retried for ever.</dd></dl><ul><li><code>noop=true</code> because the folder is read-only; <code>sortBy=file:name</code> so a poll with several days' files takes them in date order.</li><li><code>handled(false)</code> on the retryable errors is what puts the file back: the record of the file is removed and the next poll sees it again.</li><li>Found in the capture: a dead-lettered file's content is not in <code>processed-files.dat</code>. The idempotent consumer removes the key when the exception passes through it, even though <code>onException</code> handles it later. The download record is what keeps the file from coming back; a re-upload of the same broken file is dead-lettered again, which is what a person fixing it wants.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.apache.camel.Exchange;
+import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.spi.IdempotentRepository;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.util.HexFormat;
+
+/** The bank&#x27;s SFTP folder → validate each file → valid lines on the policy-requests queue. One run per file. */
+@Component
+class PolicyFileRoute extends RouteBuilder {
+
+    private static final String RUN = &quot;bimalyRun&quot;;
+    private static final String CHECKSUM = &quot;bimalyChecksum&quot;;
+    private final Runs runs;
+    private final PolicyQueue queue;
+    private final IdempotentRepository processedFiles;
+    private final String partner;
+    private final String deadLetter;
+    private final int redeliveries;
+    private final Duration redeliveryDelay;
+
+    PolicyFileRoute(Runs runs, PolicyQueue queue, IdempotentRepository processedFiles,
+                    @Value(&quot;${bimaly.partner.uri}&quot;) String partner, @Value(&quot;${bimaly.files.data}&quot;) String data,
+                    @Value(&quot;${bimaly.files.redeliveries}&quot;) int redeliveries,
+                    @Value(&quot;${bimaly.files.redelivery-delay}&quot;) Duration redeliveryDelay) {
+        this.runs = runs;
+        this.queue = queue;
+        this.processedFiles = processedFiles;
+        this.partner = partner;
+        this.deadLetter = &quot;file:&quot; + data + &quot;/dead-letter&quot;;
+        this.redeliveries = redeliveries;
+        this.redeliveryDelay = redeliveryDelay;
+    }
+
+    @Override
+    public void configure() {
+        // A file that can never be processed: no retry. The file as it arrived goes to the dead-letter folder, and
+        // its run says why. The download stays recorded (seenFiles), so the next poll does not pick it up again.
+        onException(PolicyFile.BadFileException.class).handled(true).maximumRedeliveries(0).useOriginalMessage()
+                .process(e -&gt; runs.finish(run(e), Runs.Status.DEAD_LETTERED, e.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class).getMessage()))
+                .to(deadLetter);
+
+        // Anything else (the broker is down, the disk is full) may pass: try the step again, then fail the run.
+        // Not handled, so the file is not recorded as processed and the next poll picks it up again.
+        onException(Exception.class).handled(false).maximumRedeliveries(redeliveries).redeliveryDelay(redeliveryDelay.toMillis())
+                .process(e -&gt; runs.finish(run(e), Runs.Status.FAILED, e.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class).getMessage()));
+
+        // noop: the bank&#x27;s folder is read-only to us, so files stay there and the poller must remember them itself.
+        // sortBy: when one poll finds several days&#x27; files, they go in date order (the date is in the name).
+        from(partner + &quot;&amp;noop=true&amp;include=.*\\.csv&amp;sortBy=file:name&amp;idempotentRepository=#seenFiles&quot;
+                + &quot;&amp;idempotentKey=${file:name}-${file:size}-${file:modified}&quot;)
+                .routeId(&quot;policy-files&quot;)
+                .process(this::start)
+                .idempotentConsumer(exchangeProperty(CHECKSUM), processedFiles).skipDuplicate(false)
+                .choice()
+                    .when(exchangeProperty(Exchange.DUPLICATE_MESSAGE).isEqualTo(true))
+                        .process(e -&gt; runs.finish(run(e), Runs.Status.DUPLICATE, &quot;The same content was already processed.&quot;))
+                    .otherwise()
+                        .process(this::validate)
+                        .process(e -&gt; queue.sendAll(e.getMessage().getBody(PolicyFile.Parsed.class).accepted()))
+                        .process(e -&gt; runs.finish(run(e), Runs.Status.DONE, null))
+                .end();
+    }
+
+    private void start(Exchange e) throws NoSuchAlgorithmException {
+        byte[] content = e.getMessage().getBody(byte[].class);
+        String checksum = HexFormat.of().formatHex(MessageDigest.getInstance(&quot;SHA-256&quot;).digest(content));
+        e.setProperty(CHECKSUM, checksum);
+        e.setProperty(RUN, runs.start(e.getMessage().getHeader(Exchange.FILE_NAME_ONLY, String.class), checksum));
+    }
+
+    private void validate(Exchange e) {
+        PolicyFile.Parsed parsed = PolicyFile.parse(run(e).file, e.getMessage().getBody(byte[].class));
+        Runs.Run run = run(e);
+        run.lines = parsed.lines();
+        run.accepted = parsed.accepted().size();
+        run.rejected = parsed.rejected();
+        e.getMessage().setBody(parsed);
+    }
+
+    private static Runs.Run run(Exchange e) {
+        return e.getProperty(RUN, Runs.Run.class);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/bimaly/integration/IntegrationApplication.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The two records and the queue.</dd><dt>Why</dt><dd><code>FileIdempotentRepository</code> twice: downloaded files (name, size, time) and processed content (SHA-256).</dd><dt>Without it</dt><dd>A restart that forgets.</dd></dl><ul><li>Shortcut: files on one server's disk. Two servers polling the same folder need a shared store, such as Camel's JDBC repository.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.apache.camel.spi.IdempotentRepository;
+import org.apache.camel.support.processor.idempotent.FileIdempotentRepository;
+import org.springframework.amqp.core.Queue;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+import java.io.File;
+
+@SpringBootApplication
+public class IntegrationApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(IntegrationApplication.class, args);
+    }
+
+    /** Where each valid policy line goes: the policy-issuance team reads this queue. Durable, so a broker restart keeps it. */
+    @Bean
+    Queue policyRequests() {
+        return new Queue(PolicyQueue.QUEUE, true);
+    }
+
+    /**
+     * Files already downloaded, by name, size and time: saves downloading every file on every poll. On disk, so a
+     * restart does not download the bank&#x27;s whole folder again.
+     */
+    @Bean
+    IdempotentRepository seenFiles(@Value(&quot;${bimaly.files.data}&quot;) String data) {
+        return FileIdempotentRepository.fileIdempotentRepository(new File(data, &quot;seen-files.dat&quot;), 10_000);
+    }
+
+    /**
+     * Files already processed, by the SHA-256 of their content: the record that stops a file being processed twice,
+     * after a restart or when the bank uploads the same file again. On disk, so it survives restarts.
+     * shortcut: one server&#x27;s disk. Two servers polling the same folder need a shared store (Camel&#x27;s JDBC repository).
+     */
+    @Bean
+    IdempotentRepository processedFiles(@Value(&quot;${bimaly.files.data}&quot;) String data) {
+        return FileIdempotentRepository.fileIdempotentRepository(new File(data, &quot;processed-files.dat&quot;), 10_000);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/bimaly/integration/PolicyFile.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Reading a file.</dd><dt>Why</dt><dd>File-level problems throw <code>BadFileException</code>; line-level problems become rejected lines with reasons.</dd><dt>Without it</dt><dd>One bad line losing a whole night's file, or a broken file half-sent.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Reads a bank&#x27;s policy file. A file that cannot be read at all is a {@link BadFileException}; a bad line is only
+ * rejected, with its reason, and the other lines go on.
+ * Demo rules: KOSHBANK-20261024.csv; UTF-8; the header below; five columns with no commas or quotes inside them;
+ * at most 10,000 lines.
+ */
+final class PolicyFile {
+
+    static final String HEADER = &quot;reference,customer_name,date_of_birth,product_code,sum_insured_paise&quot;;
+    static final int MAX_LINES = 10_000;
+    private static final Pattern NAME = Pattern.compile(&quot;([A-Za-z]{3,12})-(\\d{8})\\.csv&quot;);
+    private static final Pattern REFERENCE = Pattern.compile(&quot;[A-Za-z0-9-]{4,20}&quot;);
+    private static final Pattern PRODUCT = Pattern.compile(&quot;[A-Za-z0-9]{3,10}&quot;);
+
+    record Rejected(int line, String reference, String reason) {
+    }
+
+    record Parsed(int lines, List&lt;PolicyRequest&gt; accepted, List&lt;Rejected&gt; rejected) {
+    }
+
+    static final class BadFileException extends RuntimeException {
+        BadFileException(String message) {
+            super(message);
+        }
+    }
+
+    private PolicyFile() {
+    }
+
+    static Parsed parse(String fileName, byte[] content) {
+        Matcher name = NAME.matcher(fileName);
+        if (!name.matches()) {
+            throw new BadFileException(&quot;The file name &quot; + fileName + &quot; is not BANK-YYYYMMDD.csv.&quot;);
+        }
+        String bank = name.group(1).toUpperCase(Locale.ROOT);
+        List&lt;String&gt; lines = utf8(content).lines().toList();
+        if (lines.isEmpty() || !lines.getFirst().strip().equalsIgnoreCase(HEADER)) {
+            throw new BadFileException(&quot;The first line is not the header &quot; + HEADER + &quot;.&quot;);
+        }
+        if (lines.size() - 1 &gt; MAX_LINES) {
+            throw new BadFileException(&quot;The file has &quot; + (lines.size() - 1) + &quot; lines; the limit is &quot; + MAX_LINES + &quot;.&quot;);
+        }
+        List&lt;PolicyRequest&gt; accepted = new ArrayList&lt;&gt;();
+        List&lt;Rejected&gt; rejected = new ArrayList&lt;&gt;();
+        Map&lt;String, Integer&gt; seen = new HashMap&lt;&gt;();
+        int count = 0;
+        for (int i = 1; i &lt; lines.size(); i++) {
+            if (lines.get(i).isBlank()) {
+                continue;
+            }
+            count++;
+            int lineNo = i + 1;
+            String[] f = lines.get(i).split(&quot;,&quot;, -1);
+            String ref = f[0].strip().toUpperCase(Locale.ROOT);
+            String reason = f.length != 5 ? &quot;expected 5 columns, found &quot; + f.length : check(f);
+            if (reason == null &amp;&amp; seen.containsKey(ref)) {
+                reason = &quot;reference &quot; + ref + &quot; already appears on line &quot; + seen.get(ref);
+            }
+            if (reason != null) {
+                rejected.add(new Rejected(lineNo, ref, reason));
+                continue;
+            }
+            seen.put(ref, lineNo);
+            accepted.add(new PolicyRequest(bank, ref, f[1].strip(), LocalDate.parse(f[2].strip()),
+                    f[3].strip().toUpperCase(Locale.ROOT), Long.parseLong(f[4].strip())));
+        }
+        if (count == 0) {
+            throw new BadFileException(&quot;The file has a header but no policies.&quot;);
+        }
+        return new Parsed(count, accepted, rejected);
+    }
+
+    /** Why a five-column line is wrong, or null. */
+    private static String check(String[] f) {
+        if (!REFERENCE.matcher(f[0].strip()).matches()) {
+            return &quot;the reference must be 4 to 20 letters, digits or dashes&quot;;
+        }
+        String customer = f[1].strip();
+        if (customer.isEmpty() || customer.length() &gt; 100) {
+            return &quot;the customer name must be 1 to 100 characters&quot;;
+        }
+        try {
+            if (!LocalDate.parse(f[2].strip()).isBefore(LocalDate.now())) {
+                return &quot;the date of birth must be in the past&quot;;
+            }
+        } catch (DateTimeParseException e) {
+            return &quot;the date of birth must be YYYY-MM-DD&quot;;
+        }
+        if (!PRODUCT.matcher(f[3].strip()).matches()) {
+            return &quot;the product code must be 3 to 10 letters or digits&quot;;
+        }
+        try {
+            long sum = Long.parseLong(f[4].strip());
+            if (sum &lt;= 0 || sum &gt; 1_000_000_000_000L) {
+                return &quot;the sum insured must be 1 to 1000000000000 paise&quot;;
+            }
+        } catch (NumberFormatException e) {
+            return &quot;the sum insured must be a whole number of paise&quot;;
+        }
+        return null;
+    }
+
+    private static String utf8(byte[] content) {
+        try {
+            return StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(content)).toString();
+        } catch (CharacterCodingException e) {
+            throw new BadFileException(&quot;The file is not UTF-8.&quot;);
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/bimaly/integration/PolicyQueue.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Sending.</dd><dt>Why</dt><dd>All of a file's lines, persistent, with <code>BANK:REFERENCE</code> as message id, then waits for the broker's confirms.</dd><dt>Without it</dt><dd>A run marked done while the broker dropped the messages.</dd></dl><ul><li>If the broker fails part-way, the lines already sent are sent again on the retry, with the same ids: the reader drops the copies. Exactly once is not on offer; at least once with stable ids is.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageBuilder;
+import org.springframework.amqp.core.MessageDeliveryMode;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.List;
+
+/** Puts a file&#x27;s valid lines on the policy-requests queue. */
+@Component
+class PolicyQueue {
+
+    static final String QUEUE = &quot;policy.requests&quot;;
+    private final RabbitTemplate rabbit;
+    private final JsonMapper json;
+
+    PolicyQueue(RabbitTemplate rabbit, JsonMapper json) {
+        this.rabbit = rabbit;
+        this.json = json;
+    }
+
+    /**
+     * Returns only when the broker has confirmed every message. If it fails part-way, some lines are already on the
+     * queue; the file is tried again and they are sent again with the same message ids, for the reader to drop.
+     */
+    void sendAll(List&lt;PolicyRequest&gt; policies) {
+        rabbit.invoke(channel -&gt; {
+            for (PolicyRequest p : policies) {
+                Message m = MessageBuilder.withBody(json.writeValueAsBytes(p)).setContentType(&quot;application/json&quot;)
+                        .setMessageId(p.messageId()).setDeliveryMode(MessageDeliveryMode.PERSISTENT).build();
+                channel.send(&quot;&quot;, QUEUE, m);
+            }
+            channel.waitForConfirmsOrDie(10_000);
+            return null;
+        });
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/bimaly/integration/Runs.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The runs.</dd><dt>Why</dt><dd>One JSON file per run in <code>data/runs/</code>, written to a temporary file and renamed.</dd><dt>Without it</dt><dd>"What happened to our file?" with no answer.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Stream;
+
+/**
+ * One run per file picked up: what happened to it. Kept as JSON files in data/runs, numbered 1, 2, 3.
+ * shortcut: files on one server&#x27;s disk; with a database in the project, runs belong in a table.
+ */
+@Component
+class Runs {
+
+    enum Status { RUNNING, DONE, DUPLICATE, FAILED, DEAD_LETTERED }
+
+    static final class Run {
+        public long id;
+        public String file;
+        public String checksum;
+        public Status status;
+        public Instant startedAt;
+        public Instant finishedAt;
+        public int lines;
+        public int accepted;
+        public List&lt;PolicyFile.Rejected&gt; rejected = List.of();
+        public String error;
+    }
+
+    private final Path dir;
+    private final JsonMapper json;
+    private final AtomicLong last;
+
+    Runs(@Value(&quot;${bimaly.files.data}&quot;) String data, JsonMapper json) throws IOException {
+        this.dir = Files.createDirectories(Path.of(data, &quot;runs&quot;));
+        this.json = json;
+        try (Stream&lt;Path&gt; files = Files.list(dir)) {
+            last = new AtomicLong(files.map(f -&gt; f.getFileName().toString().replace(&quot;.json&quot;, &quot;&quot;))
+                    .filter(n -&gt; n.matches(&quot;\\d+&quot;)).mapToLong(Long::parseLong).max().orElse(0));
+        }
+    }
+
+    Run start(String file, String checksum) {
+        Run run = new Run();
+        run.id = last.incrementAndGet();
+        run.file = file;
+        run.checksum = checksum;
+        run.status = Status.RUNNING;
+        run.startedAt = Instant.now();
+        return save(run);
+    }
+
+    Run finish(Run run, Status status, String error) {
+        run.status = status;
+        run.error = error;
+        run.finishedAt = Instant.now();
+        return save(run);
+    }
+
+    Optional&lt;Run&gt; find(long id) {
+        Path f = dir.resolve(id + &quot;.json&quot;);
+        return Files.exists(f) ? Optional.of(json.readValue(f.toFile(), Run.class)) : Optional.empty();
+    }
+
+    /** Every run of one file name, oldest first (for tests and support). */
+    List&lt;Run&gt; forFile(String file) {
+        return Stream.iterate(1L, id -&gt; id &lt;= last.get(), id -&gt; id + 1).map(this::find).flatMap(Optional::stream)
+                .filter(r -&gt; r.file.equals(file)).toList();
+    }
+
+    private Run save(Run run) {
+        try {
+            Path tmp = Files.createTempFile(dir, &quot;run&quot;, &quot;.tmp&quot;);
+            json.writeValue(tmp.toFile(), run);
+            Files.move(tmp, dir.resolve(run.id + &quot;.json&quot;), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);   // a reader never sees half a file
+            return run;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/bimaly/integration/RunController.java</p><div class="notes"><p><code>GET /integration/runs/{id}</code>.</p></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RestController;
+
+/** What happened to a file: for the operations team and for the bank&#x27;s support line. */
+@RestController
+class RunController {
+
+    private final Runs runs;
+
+    RunController(Runs runs) {
+        this.runs = runs;
+    }
+
+    @GetMapping(&quot;/integration/runs/{id}&quot;)
+    Runs.Run run(@PathVariable long id) {
+        return runs.find(id).orElseThrow(() -&gt; new ErrorResponseException(HttpStatus.NOT_FOUND));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/java/com/bimaly/integration/PolicyRequest.java</p><div class="notes"><p>One valid line, as the issuance team receives it.</p></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import java.time.LocalDate;
+
+/** One valid line of a bank&#x27;s file, as the policy-issuance team receives it. */
+record PolicyRequest(String bank, String reference, String customerName, LocalDate dateOfBirth, String productCode,
+                     long sumInsuredPaise) {
+
+    /** The same line always gets the same id, so the reader can drop a copy it already has. */
+    String messageId() {
+        return bank + &quot;:&quot; + reference;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Settings.</dd><dt>Why</dt><dd>The bank's SFTP address, poll interval, retries, the data folder, publisher confirms.</dd><dt>Without it</dt><dd></dd></dl><ul><li>Demo rules: a password and <code>strictHostKeyChecking=no</code>. Production uses a private key and pins the bank's host key with <code>knownHostsFile</code>.</li></ul></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: bimaly-partner-files
+  mvc:
+    problemdetails:
+      enabled: true
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    # A file&#x27;s run is DONE only after the broker confirms it has every message.
+    publisher-confirm-type: simple
+
+camel:
+  main:
+    # Let the route finish the file it is on when the app stops (Camel&#x27;s default is 45 s).
+    shutdown-timeout: 30
+
+bimaly:
+  partner:
+    # KoshBank&#x27;s SFTP folder (simulated: compose.yaml). Poll every 30 s. Demo rules: a password, and the server&#x27;s key
+    # not checked. Production uses a private key (privateKeyFile=...) and pins the bank&#x27;s host key (knownHostsFile=...).
+    uri: sftp://koshbank@localhost:2222/upload?password=RAW(demo-only)&amp;strictHostKeyChecking=no&amp;delay=30000
+  files:
+    # Runs, the two &quot;already seen&quot; records and the dead-letter folder.
+    data: data
+    # Demo rules: a failed step is tried 3 more times, 2 s apart; then the run fails and the next poll tries the file again.
+    redeliveries: 3
+    redelivery-delay: 2s</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-8" aria-labelledby="code-8-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>RabbitMQ 4.1 and the simulated bank's SFTP server, each with a health check.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  rabbitmq:
+    image: rabbitmq:4.1-management-alpine
+    ports:
+      - &quot;5672:5672&quot;
+      - &quot;15672:15672&quot;   # management UI: http://localhost:15672, guest / guest
+    healthcheck:
+      test: [&quot;CMD&quot;, &quot;rabbitmq-diagnostics&quot;, &quot;-q&quot;, &quot;check_port_connectivity&quot;]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+  # The partner bank&#x27;s SFTP server (simulated): user &quot;koshbank&quot;, password &quot;demo-only&quot;, files in /upload.
+  sftp:
+    image: atmoz/sftp:alpine
+    ports:
+      - &quot;2222:22&quot;
+    command: koshbank:demo-only:1001::upload
+    healthcheck:
+      test: [&quot;CMD&quot;, &quot;nc&quot;, &quot;-z&quot;, &quot;localhost&quot;, &quot;22&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 30</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>IntegrationRunContractTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>FileRestartTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Messaging</td><td>Duplicate delivery, retry and dead letter</td><td><code>RetryAndDeadLetterMessagingTest</code> (3), <code>DuplicateFileReplayTest</code></td><td><span class="pill ok">pass</span></td></tr><tr><td>Idempotency</td><td>The same request twice gives one effect</td><td><code>DuplicateFileReplayTest</code> (2), and the restart in <code>FileRestartTrapTest</code></td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">Real servers: RabbitMQ 4.1 and an SFTP server (atmoz/sftp) in Docker. A restart is a real one: the app is started, stopped and started again. The broker's refusal is real too: a queue policy makes it reject every message. Polls every 200 ms and retries 100 ms apart keep the suite fast.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, Camel 4.23.0. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.bimaly.integration.DuplicateFileReplayTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.bimaly.integration.RetryAndDeadLetterMessagingTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.bimaly.integration.IntegrationRunContractTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.bimaly.integration.FileRestartTrapTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">FileRestartTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">IntegrationRunContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">RetryAndDeadLetterMessagingTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">DuplicateFileReplayTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">Partners.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/bimaly/integration/FileRestartTrapTest.java</p><div class="notes"><p>Written first: the old route and the app, each restarted.</p></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.impl.DefaultCamelContext;
+import org.junit.jupiter.api.Test;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.util.FileSystemUtils;
+
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+/** The app is restarted at night for a deployment. Written first. */
+class FileRestartTrapTest {
+
+    static final String FILE = PolicyFile.HEADER + &quot;\nKB-8001,Meera Iyer,1988-04-12,TERM10,1000000000\nKB-8002,Ravi Kumar,1975-11-02,HEALTH5,50000000\n&quot;;
+
+    /** The old way: the bank&#x27;s folder is read-only, so noop=true, and Camel remembers the files it read in memory. */
+    @Test
+    void theOldRouteReadsTheSameFileAgainAfterARestart() throws Exception {
+        Partners.upload(&quot;old&quot;, &quot;KOSHBANK-20260101.csv&quot;, FILE);
+        AtomicInteger processed = new AtomicInteger();
+        for (int restart = 1; restart &lt;= 2; restart++) {
+            try (var camel = new DefaultCamelContext()) {
+                camel.addRoutes(new RouteBuilder() {
+                    @Override
+                    public void configure() {
+                        from(Partners.sftp(&quot;old&quot;, 200) + &quot;&amp;noop=true&quot;).process(e -&gt; processed.incrementAndGet());
+                    }
+                });
+                camel.start();
+                int expected = restart;
+                await().atMost(Duration.ofSeconds(15)).until(() -&gt; processed.get() == expected);
+                Thread.sleep(1_000);   // five more polls: within one run, the file is not read again
+                assertThat(processed).hasValue(restart);
+            }
+        }
+        assertThat(processed).as(&quot;the same file, processed once per start&quot;).hasValue(2);
+    }
+
+    /** The API: what was processed is recorded on disk, so a restart starts where the last run stopped. */
+    @Test
+    void theApiRemembersWhatItProcessedAcrossARestart() throws Exception {
+        FileSystemUtils.deleteRecursively(Path.of(&quot;target/restart-data&quot;).toFile());
+        Partners.upload(&quot;restart&quot;, &quot;KOSHBANK-20260102.csv&quot;, FILE);
+
+        try (var first = start()) {
+            first.getBean(RabbitAdmin.class).purgeQueue(PolicyQueue.QUEUE);
+            Runs runs = first.getBean(Runs.class);
+            await().atMost(Duration.ofSeconds(20)).until(() -&gt; runs.forFile(&quot;KOSHBANK-20260102.csv&quot;),
+                    r -&gt; r.size() == 1 &amp;&amp; r.getFirst().status == Runs.Status.DONE);
+            assertThat(waiting(first)).isEqualTo(2);
+        }
+        try (var second = start()) {
+            Thread.sleep(2_000);   // ten polls of the same folder
+            assertThat(second.getBean(Runs.class).forFile(&quot;KOSHBANK-20260102.csv&quot;)).hasSize(1);
+            assertThat(waiting(second)).as(&quot;still the two messages of the first start&quot;).isEqualTo(2);
+
+            Partners.upload(&quot;restart&quot;, &quot;KOSHBANK-20260103.csv&quot;, FILE);   // the same file again, under a new name
+            await().atMost(Duration.ofSeconds(20)).until(() -&gt; second.getBean(Runs.class).forFile(&quot;KOSHBANK-20260103.csv&quot;),
+                    r -&gt; r.size() == 1 &amp;&amp; r.getFirst().status == Runs.Status.DUPLICATE);
+            assertThat(waiting(second)).isEqualTo(2);
+        }
+    }
+
+    private static ConfigurableApplicationContext start() {
+        return new SpringApplicationBuilder(IntegrationApplication.class).run(&quot;--server.port=0&quot;,
+                &quot;--bimaly.files.data=target/restart-data&quot;, &quot;--bimaly.partner.uri=&quot; + Partners.sftp(&quot;restart&quot;, 200),
+                &quot;--spring.rabbitmq.host=&quot; + Partners.RABBIT.getHost(), &quot;--spring.rabbitmq.port=&quot; + Partners.RABBIT.getAmqpPort());
+    }
+
+    private static long waiting(ConfigurableApplicationContext app) {
+        return app.getBean(RabbitAdmin.class).getQueueInfo(PolicyQueue.QUEUE).getMessageCount();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/bimaly/integration/IntegrationRunContractTest.java</p><div class="notes"><p>Good and bad lines; the endpoint.</p></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class IntegrationRunContractTest extends ApiTest {
+
+    @Test
+    void aFileIsCheckedAndItsValidLinesQueued() throws Exception {
+        upload(&quot;koshbank-20261001.csv&quot;, HEADER + &quot;&quot;&quot;
+                kb-1001,Meera Iyer,1988-04-12,term10,1000000000
+                KB-1002,Ravi Kumar,1975-11-02,HEALTH5,50000000
+                KB-1003,Asha Rao,1990-06-30,HEALTH5,50000000
+                &quot;&quot;&quot;);
+        Runs.Run run = awaitRun(&quot;koshbank-20261001.csv&quot;, Runs.Status.DONE);
+
+        mvc.perform(get(&quot;/integration/runs/{id}&quot;, run.id)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.status&quot;).value(&quot;DONE&quot;)).andExpect(jsonPath(&quot;$.file&quot;).value(&quot;koshbank-20261001.csv&quot;))
+                .andExpect(jsonPath(&quot;$.lines&quot;).value(3)).andExpect(jsonPath(&quot;$.accepted&quot;).value(3))
+                .andExpect(jsonPath(&quot;$.rejected&quot;).isEmpty()).andExpect(jsonPath(&quot;$.checksum&quot;).isString());
+        var messages = drain();
+        assertThat(ids(messages)).containsExactly(&quot;KOSHBANK:KB-1001&quot;, &quot;KOSHBANK:KB-1002&quot;, &quot;KOSHBANK:KB-1003&quot;);
+        var first = JsonMapper.builder().build().readTree(messages.getFirst().getBody());
+        assertThat(first.path(&quot;productCode&quot;).asString()).isEqualTo(&quot;TERM10&quot;);
+        assertThat(first.path(&quot;sumInsuredPaise&quot;).asLong()).isEqualTo(1_000_000_000L);
+        assertThat(first.path(&quot;dateOfBirth&quot;).asString()).isEqualTo(&quot;1988-04-12&quot;);
+    }
+
+    @Test
+    void badLinesAreRejectedWithTheirReasonAndTheOthersGoOn() throws Exception {
+        upload(&quot;KOSHBANK-20261002.csv&quot;, HEADER + &quot;&quot;&quot;
+                KB-2001,Meera Iyer,1988-04-12,TERM10,1000000000
+                KB-2002,Ravi Kumar,1975-11-02,HEALTH5
+                KB-2003,Asha Rao,2999-01-01,HEALTH5,50000000
+                KB-2004,Asha Rao,1990-06-30,HEALTH5,-5
+                kb-2001,Meera Iyer,1988-04-12,TERM10,1000000000
+                &quot;&quot;&quot;);
+        Runs.Run run = awaitRun(&quot;KOSHBANK-20261002.csv&quot;, Runs.Status.DONE);
+
+        assertThat(run.lines).isEqualTo(5);
+        assertThat(run.accepted).isEqualTo(1);
+        assertThat(run.rejected).containsExactly(
+                new PolicyFile.Rejected(3, &quot;KB-2002&quot;, &quot;expected 5 columns, found 4&quot;),
+                new PolicyFile.Rejected(4, &quot;KB-2003&quot;, &quot;the date of birth must be in the past&quot;),
+                new PolicyFile.Rejected(5, &quot;KB-2004&quot;, &quot;the sum insured must be 1 to 1000000000000 paise&quot;),
+                new PolicyFile.Rejected(6, &quot;KB-2001&quot;, &quot;reference KB-2001 already appears on line 2&quot;));
+        assertThat(ids(drain())).isEqualTo(List.of(&quot;KOSHBANK:KB-2001&quot;));
+    }
+
+    @Test
+    void anUnknownRunIs404AndANonNumberIs400() throws Exception {
+        mvc.perform(get(&quot;/integration/runs/{id}&quot;, 999_999)).andExpect(status().isNotFound());
+        mvc.perform(get(&quot;/integration/runs/{id}&quot;, &quot;latest&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/integration/runs/&quot;)).andExpect(status().isNotFound());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/bimaly/integration/RetryAndDeadLetterMessagingTest.java</p><div class="notes"><p>A refusing broker; files that can never be read.</p></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.junit.jupiter.api.Test;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+class RetryAndDeadLetterMessagingTest extends ApiTest {
+
+    @Test
+    void aBrokerThatRefusesIsRetriedThenTheFileIsTriedAgainOnTheNextPoll() throws Exception {
+        // The broker refuses every message for the queue (as when it is out of disk or memory).
+        rabbitmqctl(&quot;set_policy&quot;, &quot;--apply-to&quot;, &quot;queues&quot;, &quot;refuse&quot;, &quot;^policy\\.requests$&quot;, &quot;{\&quot;max-length\&quot;:0,\&quot;overflow\&quot;:\&quot;reject-publish\&quot;}&quot;);
+        try {
+            upload(&quot;KOSHBANK-20261101.csv&quot;, HEADER + &quot;KB-3001,Meera Iyer,1988-04-12,TERM10,1000000000\nKB-3002,Ravi Kumar,1975-11-02,HEALTH5,50000000\n&quot;);
+            Runs.Run failed = awaitRun(&quot;KOSHBANK-20261101.csv&quot;, Runs.Status.FAILED);
+            assertThat(failed.error).isNotBlank();
+            assertThat(waiting()).isZero();
+        } finally {
+            rabbitmqctl(&quot;clear_policy&quot;, &quot;refuse&quot;);
+        }
+        awaitRun(&quot;KOSHBANK-20261101.csv&quot;, Runs.Status.DONE);
+        assertThat(runs.forFile(&quot;KOSHBANK-20261101.csv&quot;).getFirst().status).isEqualTo(Runs.Status.FAILED);
+        assertThat(ids(drain())).containsExactly(&quot;KOSHBANK:KB-3001&quot;, &quot;KOSHBANK:KB-3002&quot;);
+    }
+
+    @Test
+    void aFileThatCanNeverBeReadGoesToTheDeadLetterFolderOnce() throws Exception {
+        String content = &quot;ref;name;dob;product;sum\nKB-4001;Meera Iyer;1988-04-12;TERM10;1000000000\n&quot;;
+        upload(&quot;KOSHBANK-20261102.csv&quot;, content);
+        Runs.Run run = awaitRun(&quot;KOSHBANK-20261102.csv&quot;, Runs.Status.DEAD_LETTERED);
+
+        assertThat(run.error).isEqualTo(&quot;The first line is not the header &quot; + PolicyFile.HEADER + &quot;.&quot;);
+        Path copy = Path.of(&quot;target/test-data/dead-letter/KOSHBANK-20261102.csv&quot;);
+        await().atMost(Duration.ofSeconds(5)).until(() -&gt; Files.exists(copy));
+        assertThat(Files.readString(copy)).isEqualTo(content);   // as it arrived, for a person to look at
+        Thread.sleep(1_500);   // seven more polls
+        assertThat(runs.forFile(&quot;KOSHBANK-20261102.csv&quot;)).hasSize(1);
+        assertThat(waiting()).isZero();
+    }
+
+    @Test
+    void aWrongFileNameOrAnEmptyFileIsDeadLetteredToo() throws Exception {
+        upload(&quot;koshbank-policies.csv&quot;, HEADER + &quot;KB-5001,Meera Iyer,1988-04-12,TERM10,1000000000\n&quot;);
+        upload(&quot;KOSHBANK-20261103.csv&quot;, HEADER);
+        assertThat(awaitRun(&quot;koshbank-policies.csv&quot;, Runs.Status.DEAD_LETTERED).error)
+                .isEqualTo(&quot;The file name koshbank-policies.csv is not BANK-YYYYMMDD.csv.&quot;);
+        assertThat(awaitRun(&quot;KOSHBANK-20261103.csv&quot;, Runs.Status.DEAD_LETTERED).error)
+                .isEqualTo(&quot;The file has a header but no policies.&quot;);
+        assertThat(waiting()).isZero();
+    }
+
+    private static void rabbitmqctl(String... args) throws Exception {
+        String[] command = new String[args.length + 1];
+        command[0] = &quot;rabbitmqctl&quot;;
+        System.arraycopy(args, 0, command, 1, args.length);
+        var result = Partners.RABBIT.execInContainer(command);
+        assertThat(result.getExitCode()).as(result.getStderr()).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/bimaly/integration/DuplicateFileReplayTest.java</p><div class="notes"><p>The same file again; a corrected file.</p></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+class DuplicateFileReplayTest extends ApiTest {
+
+    static final String FILE = HEADER + &quot;KB-6001,Meera Iyer,1988-04-12,TERM10,1000000000\nKB-6002,Ravi Kumar,1975-11-02,HEALTH5,50000000\n&quot;;
+
+    @Test
+    void theSameFileUploadedAgainSendsNothingAndIsRecordedAsADuplicate() throws Exception {
+        upload(&quot;KOSHBANK-20261201.csv&quot;, FILE);
+        awaitRun(&quot;KOSHBANK-20261201.csv&quot;, Runs.Status.DONE);
+        assertThat(ids(drain())).containsExactly(&quot;KOSHBANK:KB-6001&quot;, &quot;KOSHBANK:KB-6002&quot;);
+
+        Thread.sleep(1_100);   // the server keeps times in seconds: a new upload must look new
+        upload(&quot;KOSHBANK-20261201.csv&quot;, FILE);                // the bank&#x27;s job ran twice
+        upload(&quot;KOSHBANK-20261202.csv&quot;, FILE);                // or the same file under tomorrow&#x27;s name
+        assertThat(awaitRun(&quot;KOSHBANK-20261201.csv&quot;, Runs.Status.DUPLICATE).error).isEqualTo(&quot;The same content was already processed.&quot;);
+        awaitRun(&quot;KOSHBANK-20261202.csv&quot;, Runs.Status.DUPLICATE);
+        assertThat(runs.forFile(&quot;KOSHBANK-20261201.csv&quot;)).hasSize(2);
+        assertThat(waiting()).isZero();
+    }
+
+    @Test
+    void aCorrectedFileWithTheSameNameIsProcessed() throws Exception {
+        upload(&quot;KOSHBANK-20261203.csv&quot;, HEADER + &quot;KB-7001,Meera Iyer,1988-04-12,TERM10,1000000000\nKB-7002,Ravi Kumar,1975-11-02,CAR,0\n&quot;);
+        assertThat(awaitRun(&quot;KOSHBANK-20261203.csv&quot;, Runs.Status.DONE).accepted).isEqualTo(1);
+
+        Thread.sleep(1_100);
+        upload(&quot;KOSHBANK-20261203.csv&quot;, HEADER + &quot;KB-7001,Meera Iyer,1988-04-12,TERM10,1000000000\nKB-7002,Ravi Kumar,1975-11-02,HEALTH5,50000000\n&quot;);
+        await().atMost(Duration.ofSeconds(20)).until(() -&gt; runs.forFile(&quot;KOSHBANK-20261203.csv&quot;),
+                r -&gt; r.size() == 2 &amp;&amp; r.getLast().status == Runs.Status.DONE);
+        // KB-7001 is sent again with the same id: the reader keeps the first and drops the copy.
+        assertThat(ids(drain())).containsExactly(&quot;KOSHBANK:KB-7001&quot;, &quot;KOSHBANK:KB-7001&quot;, &quot;KOSHBANK:KB-7002&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/bimaly/integration/ApiTest.java</p><div class="notes"><p>Shared setup: fast polls, an empty queue, helpers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.util.FileSystemUtils;
+
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.awaitility.Awaitility.await;
+
+/**
+ * The whole app against the bank&#x27;s upload folder, polled every 200 ms (30 s in production); a failed step is tried
+ * again after 100 ms (2 s). Each test uses its own file names and starts with an empty queue.
+ */
+@SpringBootTest(properties = {&quot;bimaly.files.data=target/test-data&quot;, &quot;bimaly.files.redelivery-delay=100ms&quot;})
+@AutoConfigureMockMvc
+abstract class ApiTest {
+
+    static final String HEADER = PolicyFile.HEADER + &quot;\n&quot;;
+
+    static {
+        FileSystemUtils.deleteRecursively(Path.of(&quot;target/test-data&quot;).toFile());
+    }
+
+    @DynamicPropertySource
+    static void partners(DynamicPropertyRegistry registry) {
+        registry.add(&quot;spring.rabbitmq.host&quot;, Partners.RABBIT::getHost);
+        registry.add(&quot;spring.rabbitmq.port&quot;, Partners.RABBIT::getAmqpPort);
+        registry.add(&quot;bimaly.partner.uri&quot;, () -&gt; Partners.sftp(&quot;upload&quot;, 200));
+    }
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    Runs runs;
+    @Autowired
+    RabbitAdmin admin;
+    @Autowired
+    RabbitTemplate rabbit;
+
+    @BeforeEach
+    void emptyQueue() {
+        admin.purgeQueue(PolicyQueue.QUEUE);
+    }
+
+    void upload(String name, String content) throws Exception {
+        Partners.upload(&quot;upload&quot;, name, content);
+    }
+
+    /** Waits until the file&#x27;s latest run has this status; returns it. */
+    Runs.Run awaitRun(String file, Runs.Status status) {
+        return await().atMost(Duration.ofSeconds(20)).pollInterval(Duration.ofMillis(100))
+                .until(() -&gt; runs.forFile(file), r -&gt; !r.isEmpty() &amp;&amp; r.getLast().status == status).getLast();
+    }
+
+    long waiting() {
+        return admin.getQueueInfo(PolicyQueue.QUEUE).getMessageCount();
+    }
+
+    /** Takes every message off the queue. */
+    List&lt;Message&gt; drain() {
+        List&lt;Message&gt; all = new ArrayList&lt;&gt;();
+        for (Message m; (m = rabbit.receive(PolicyQueue.QUEUE, 500)) != null; ) {
+            all.add(m);
+        }
+        return all;
+    }
+
+    static List&lt;String&gt; ids(List&lt;Message&gt; messages) {
+        return messages.stream().map(m -&gt; m.getMessageProperties().getMessageId()).toList();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/bimaly/integration/Partners.java</p><div class="notes"><p>RabbitMQ and the bank's SFTP server in Docker; uploads the way banks do them.</p></div><div class="src"><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.images.builder.Transferable;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
+/**
+ * A real RabbitMQ 4.1 and a real SFTP server (the bank&#x27;s), started once for all tests. The bank&#x27;s user has three
+ * folders: upload (the app in ApiTest polls it), restart and old (the restart tests use them, so they never meet).
+ */
+final class Partners {
+
+    static final RabbitMQContainer RABBIT = new RabbitMQContainer(&quot;rabbitmq:4.1-management-alpine&quot;);
+    static final GenericContainer&lt;?&gt; SFTP = new GenericContainer&lt;&gt;(&quot;atmoz/sftp:alpine&quot;)
+            .withCommand(&quot;koshbank:demo-only:1001::upload,restart,old&quot;).withExposedPorts(22);
+
+    static {
+        RABBIT.start();
+        SFTP.start();
+    }
+
+    private Partners() {
+    }
+
+    static String sftp(String folder, int pollMillis) {
+        return &quot;sftp://koshbank@&quot; + SFTP.getHost() + &quot;:&quot; + SFTP.getMappedPort(22) + &quot;/&quot; + folder
+                + &quot;?password=RAW(demo-only)&amp;strictHostKeyChecking=no&amp;delay=&quot; + pollMillis;
+    }
+
+    /** As banks do it: write NAME.part, then rename, so the poller never sees half a file. */
+    static void upload(String folder, String name, byte[] content) throws IOException, InterruptedException {
+        String path = &quot;/home/koshbank/&quot; + folder + &quot;/&quot; + name;
+        SFTP.copyFileToContainer(Transferable.of(content), path + &quot;.part&quot;);
+        var mv = SFTP.execInContainer(&quot;mv&quot;, path + &quot;.part&quot;, path);
+        if (mv.getExitCode() != 0) {
+            throw new IllegalStateException(mv.getStderr());
+        }
+    }
+
+    static void upload(String folder, String name, String content) throws IOException, InterruptedException {
+        upload(folder, name, content.getBytes(StandardCharsets.UTF_8));
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/bimaly/integration/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=RunsOfAFileChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 10 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 14 tests pass (10 station tests and 4 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>What happened to our file?</h2><p>The bank's support line knows only the file's name. Add <code>GET /integration/runs?file=NAME</code>: every run of that file, oldest first; an empty list for a file never seen; <code>400</code> without <code>file</code>.</p><p><b>Done when:</b> both tests in <code>RunsOfAFileChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li><code>Runs.forFile</code> already exists.</li><li>A required <code>@RequestParam</code> gives the <code>400</code> for free.</li></ul></details><p class="path">challenge/RunsOfAFileChallengeTest.java</p><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Challenge 1: the bank&#x27;s support line asks &quot;what happened to our file?&quot; and knows only its name. */
+class RunsOfAFileChallengeTest extends ApiTest {
+
+    @Test
+    void everyRunOfAFileIsListedOldestFirst() throws Exception {
+        String file = HEADER + &quot;KB-9101,Meera Iyer,1988-04-12,TERM10,1000000000\n&quot;;
+        upload(&quot;KOSHBANK-20270101.csv&quot;, file);
+        awaitRun(&quot;KOSHBANK-20270101.csv&quot;, Runs.Status.DONE);
+        Thread.sleep(1_100);
+        upload(&quot;KOSHBANK-20270101.csv&quot;, file);
+        awaitRun(&quot;KOSHBANK-20270101.csv&quot;, Runs.Status.DUPLICATE);
+
+        mvc.perform(get(&quot;/integration/runs&quot;).param(&quot;file&quot;, &quot;KOSHBANK-20270101.csv&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.length()&quot;).value(2))
+                .andExpect(jsonPath(&quot;$[0].status&quot;).value(&quot;DONE&quot;)).andExpect(jsonPath(&quot;$[1].status&quot;).value(&quot;DUPLICATE&quot;));
+    }
+
+    @Test
+    void anUnknownFileHasNoRunsAndTheNameIsRequired() throws Exception {
+        mvc.perform(get(&quot;/integration/runs&quot;).param(&quot;file&quot;, &quot;KOSHBANK-19990101.csv&quot;)).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.length()&quot;).value(0));
+        mvc.perform(get(&quot;/integration/runs&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/RunController.java</p><div class="src"><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+/** What happened to a file: for the operations team and for the bank&#x27;s support line. */
+@RestController
+class RunController {
+
+    private final Runs runs;
+
+    RunController(Runs runs) {
+        this.runs = runs;
+    }
+
+    @GetMapping(&quot;/integration/runs/{id}&quot;)
+    Runs.Run run(@PathVariable long id) {
+        return runs.find(id).orElseThrow(() -&gt; new ErrorResponseException(HttpStatus.NOT_FOUND));
+    }
+
+    /** Every run of one file, oldest first; an empty list for a file never seen. */
+    @GetMapping(&quot;/integration/runs&quot;)
+    List&lt;Runs.Run&gt; runsOf(@RequestParam String file) {
+        return runs.forFile(file);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 35 minutes</p><h2>Hold a suspicious file</h2><p>If more than 20% of the lines of a file of 10 lines or more are rejected, the bank's export is probably broken: send nothing, set the run to <code>HELD</code> with the reason "3 of 10 lines were rejected; the limit is 20%.", and copy the file as it arrived to <code>data/held/</code> for a person. Exactly 20% still goes through; smaller files are judged line by line.</p><p><b>Done when:</b> both tests in <code>HeldFileChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>A Camel <code>filter</code> after validation, ending in <code>stop()</code>.</li><li>The body is the parsed file by then: keep the original bytes in an exchange property.</li><li>Compare with whole numbers (<code>rejected × 100 &gt; lines × 20</code>), not doubles.</li></ul></details><p class="path">challenge/HeldFileChallengeTest.java</p><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.junit.jupiter.api.Test;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Challenge 2: when a large share of a file is wrong, the bank&#x27;s export is probably broken: hold the whole file for a
+ * person instead of sending the part that happens to look right. Files under 10 lines are judged line by line.
+ */
+class HeldFileChallengeTest extends ApiTest {
+
+    static final String GOOD = &quot;KB-92%02d,Meera Iyer,1988-04-12,TERM10,1000000000\n&quot;;
+    static final String BAD = &quot;KB-92%02d,Meera Iyer,1988-04-12,TERM10\n&quot;;
+
+    @Test
+    void aFileWithMoreThanOneFifthOfItsLinesWrongIsHeldAndSendsNothing() throws Exception {
+        String content = HEADER + lines(1, 7, GOOD) + lines(8, 10, BAD);
+        upload(&quot;KOSHBANK-20270201.csv&quot;, content);
+        Runs.Run run = awaitRun(&quot;KOSHBANK-20270201.csv&quot;, Runs.Status.HELD);
+
+        assertThat(run.error).isEqualTo(&quot;3 of 10 lines were rejected; the limit is 20%.&quot;);
+        assertThat(run.rejected).hasSize(3);
+        assertThat(Files.readString(Path.of(&quot;target/test-data/held/KOSHBANK-20270201.csv&quot;))).isEqualTo(content);
+        assertThat(waiting()).isZero();
+    }
+
+    @Test
+    void oneFifthIsStillAllowedAndASmallFileIsJudgedLineByLine() throws Exception {
+        upload(&quot;KOSHBANK-20270202.csv&quot;, HEADER + lines(11, 18, GOOD) + lines(19, 20, BAD));
+        assertThat(awaitRun(&quot;KOSHBANK-20270202.csv&quot;, Runs.Status.DONE).accepted).isEqualTo(8);
+        upload(&quot;KOSHBANK-20270203.csv&quot;, HEADER + lines(21, 22, GOOD) + lines(23, 25, BAD));
+        assertThat(awaitRun(&quot;KOSHBANK-20270203.csv&quot;, Runs.Status.DONE).accepted).isEqualTo(2);
+        assertThat(waiting()).isEqualTo(10);
+    }
+
+    private static String lines(int from, int to, String format) {
+        StringBuilder s = new StringBuilder();
+        for (int i = from; i &lt;= to; i++) {
+            s.append(format.formatted(i));
+        }
+        return s.toString();
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/PolicyFileRoute.java</p><div class="src"><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.apache.camel.Exchange;
+import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.spi.IdempotentRepository;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.util.HexFormat;
+
+/** The bank&#x27;s SFTP folder → validate each file → valid lines on the policy-requests queue. One run per file. */
+@Component
+class PolicyFileRoute extends RouteBuilder {
+
+    private static final String RUN = &quot;bimalyRun&quot;;
+    private static final String CHECKSUM = &quot;bimalyChecksum&quot;;
+    private static final String CONTENT = &quot;bimalyContent&quot;;
+    private final Runs runs;
+    private final PolicyQueue queue;
+    private final IdempotentRepository processedFiles;
+    private final String partner;
+    private final String deadLetter;
+    private final int redeliveries;
+    private final Duration redeliveryDelay;
+    private final String held;
+    private final int maxRejectedPercent;
+
+    PolicyFileRoute(Runs runs, PolicyQueue queue, IdempotentRepository processedFiles,
+                    @Value(&quot;${bimaly.partner.uri}&quot;) String partner, @Value(&quot;${bimaly.files.data}&quot;) String data,
+                    @Value(&quot;${bimaly.files.redeliveries}&quot;) int redeliveries,
+                    @Value(&quot;${bimaly.files.redelivery-delay}&quot;) Duration redeliveryDelay,
+                    @Value(&quot;${bimaly.files.max-rejected-percent:20}&quot;) int maxRejectedPercent) {
+        this.runs = runs;
+        this.queue = queue;
+        this.processedFiles = processedFiles;
+        this.partner = partner;
+        this.deadLetter = &quot;file:&quot; + data + &quot;/dead-letter&quot;;
+        this.redeliveries = redeliveries;
+        this.redeliveryDelay = redeliveryDelay;
+        this.held = &quot;file:&quot; + data + &quot;/held&quot;;
+        this.maxRejectedPercent = maxRejectedPercent;
+    }
+
+    @Override
+    public void configure() {
+        // A file that can never be processed: no retry. The file as it arrived goes to the dead-letter folder, and
+        // its run says why. The download stays recorded (seenFiles), so the next poll does not pick it up again.
+        onException(PolicyFile.BadFileException.class).handled(true).maximumRedeliveries(0).useOriginalMessage()
+                .process(e -&gt; runs.finish(run(e), Runs.Status.DEAD_LETTERED, e.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class).getMessage()))
+                .to(deadLetter);
+
+        // Anything else (the broker is down, the disk is full) may pass: try the step again, then fail the run.
+        // Not handled, so the file is not recorded as processed and the next poll picks it up again.
+        onException(Exception.class).handled(false).maximumRedeliveries(redeliveries).redeliveryDelay(redeliveryDelay.toMillis())
+                .process(e -&gt; runs.finish(run(e), Runs.Status.FAILED, e.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class).getMessage()));
+
+        // noop: the bank&#x27;s folder is read-only to us, so files stay there and the poller must remember them itself.
+        // sortBy: when one poll finds several days&#x27; files, they go in date order (the date is in the name).
+        from(partner + &quot;&amp;noop=true&amp;include=.*\\.csv&amp;sortBy=file:name&amp;idempotentRepository=#seenFiles&quot;
+                + &quot;&amp;idempotentKey=${file:name}-${file:size}-${file:modified}&quot;)
+                .routeId(&quot;policy-files&quot;)
+                .process(this::start)
+                .idempotentConsumer(exchangeProperty(CHECKSUM), processedFiles).skipDuplicate(false)
+                .choice()
+                    .when(exchangeProperty(Exchange.DUPLICATE_MESSAGE).isEqualTo(true))
+                        .process(e -&gt; runs.finish(run(e), Runs.Status.DUPLICATE, &quot;The same content was already processed.&quot;))
+                    .otherwise()
+                        .process(this::validate)
+                        // Too much of a file of 10 lines or more is wrong: the bank&#x27;s export is probably broken. Send nothing; a person decides.
+                        .filter(this::tooManyRejected)
+                            .process(this::hold)
+                            .to(held)
+                            .stop()
+                        .end()
+                        .process(e -&gt; queue.sendAll(e.getMessage().getBody(PolicyFile.Parsed.class).accepted()))
+                        .process(e -&gt; runs.finish(run(e), Runs.Status.DONE, null))
+                .end();
+    }
+
+    private void start(Exchange e) throws NoSuchAlgorithmException {
+        byte[] content = e.getMessage().getBody(byte[].class);
+        String checksum = HexFormat.of().formatHex(MessageDigest.getInstance(&quot;SHA-256&quot;).digest(content));
+        e.setProperty(CHECKSUM, checksum);
+        e.setProperty(CONTENT, content);
+        e.setProperty(RUN, runs.start(e.getMessage().getHeader(Exchange.FILE_NAME_ONLY, String.class), checksum));
+    }
+
+    private void validate(Exchange e) {
+        PolicyFile.Parsed parsed = PolicyFile.parse(run(e).file, e.getMessage().getBody(byte[].class));
+        Runs.Run run = run(e);
+        run.lines = parsed.lines();
+        run.accepted = parsed.accepted().size();
+        run.rejected = parsed.rejected();
+        e.getMessage().setBody(parsed);
+    }
+
+    private boolean tooManyRejected(Exchange e) {
+        Runs.Run run = run(e);
+        return run.lines &gt;= 10 &amp;&amp; run.rejected.size() * 100 &gt; run.lines * maxRejectedPercent;
+    }
+
+    /** Records why, and puts the file back in the body as it arrived, for the held folder. */
+    private void hold(Exchange e) {
+        Runs.Run run = run(e);
+        runs.finish(run, Runs.Status.HELD, run.rejected.size() + &quot; of &quot; + run.lines + &quot; lines were rejected; the limit is &quot; + maxRejectedPercent + &quot;%.&quot;);
+        e.getMessage().setBody(e.getProperty(CONTENT, byte[].class));
+    }
+
+    private static Runs.Run run(Exchange e) {
+        return e.getProperty(RUN, Runs.Run.class);
+    }
+}</code></pre></div><p class="path">challenge/solution/Runs.java</p><div class="src"><pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Stream;
+
+/**
+ * One run per file picked up: what happened to it. Kept as JSON files in data/runs, numbered 1, 2, 3.
+ * shortcut: files on one server&#x27;s disk; with a database in the project, runs belong in a table.
+ */
+@Component
+class Runs {
+
+    enum Status { RUNNING, DONE, DUPLICATE, FAILED, DEAD_LETTERED, HELD }
+
+    static final class Run {
+        public long id;
+        public String file;
+        public String checksum;
+        public Status status;
+        public Instant startedAt;
+        public Instant finishedAt;
+        public int lines;
+        public int accepted;
+        public List&lt;PolicyFile.Rejected&gt; rejected = List.of();
+        public String error;
+    }
+
+    private final Path dir;
+    private final JsonMapper json;
+    private final AtomicLong last;
+
+    Runs(@Value(&quot;${bimaly.files.data}&quot;) String data, JsonMapper json) throws IOException {
+        this.dir = Files.createDirectories(Path.of(data, &quot;runs&quot;));
+        this.json = json;
+        try (Stream&lt;Path&gt; files = Files.list(dir)) {
+            last = new AtomicLong(files.map(f -&gt; f.getFileName().toString().replace(&quot;.json&quot;, &quot;&quot;))
+                    .filter(n -&gt; n.matches(&quot;\\d+&quot;)).mapToLong(Long::parseLong).max().orElse(0));
+        }
+    }
+
+    Run start(String file, String checksum) {
+        Run run = new Run();
+        run.id = last.incrementAndGet();
+        run.file = file;
+        run.checksum = checksum;
+        run.status = Status.RUNNING;
+        run.startedAt = Instant.now();
+        return save(run);
+    }
+
+    Run finish(Run run, Status status, String error) {
+        run.status = status;
+        run.error = error;
+        run.finishedAt = Instant.now();
+        return save(run);
+    }
+
+    Optional&lt;Run&gt; find(long id) {
+        Path f = dir.resolve(id + &quot;.json&quot;);
+        return Files.exists(f) ? Optional.of(json.readValue(f.toFile(), Run.class)) : Optional.empty();
+    }
+
+    /** Every run of one file name, oldest first (for tests and support). */
+    List&lt;Run&gt; forFile(String file) {
+        return Stream.iterate(1L, id -&gt; id &lt;= last.get(), id -&gt; id + 1).map(this::find).flatMap(Optional::stream)
+                .filter(r -&gt; r.file.equals(file)).toList();
+    }
+
+    private Run save(Run run) {
+        try {
+            Path tmp = Files.createTempFile(dir, &quot;run&quot;, &quot;.tmp&quot;);
+            json.writeValue(tmp.toFile(), run);
+            Files.move(tmp, dir.resolve(run.id + &quot;.json&quot;), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);   // a reader never sees half a file
+            return run;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>Two servers, one folder</h2>
+<p>For availability, the app now runs on two servers, and both poll the same bank folder. Each keeps its records on its own disk. Write down what happens when a file arrives, then design the fix: a shared store for the records (which, and what does "add if absent" need from it?), or only one server polling at a time (how is the other told to take over?). What does the issuance team see in each failure case?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: the route with <code>noop=true</code>, restarted.</li>
+<li>Record processed content on disk with an idempotent consumer; record downloaded files too.</li>
+<li>Validate: file-level errors as one exception type, line-level errors as rejected lines.</li>
+<li>Two <code>onException</code> blocks: dead letter for the first, retry-then-fail for everything else.</li>
+<li>Send with confirms and stable ids; record each run.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Idempotent consumer, records on disk</td><td>Two small files; one server only.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td><code>noop=true</code> alone</td><td>Remembers in memory: forgotten at the next restart.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Move or delete files after reading</td><td>Needs write access; a crash between send and move still repeats.</td><td><span class="pill warn">Where allowed, with a record</span></td></tr><tr><td>Records in a database (JDBC repository)</td><td>A database to run; works for several servers.</td><td><span class="pill warn">Next step at scale</span></td></tr><tr><td>One dead-letter channel for every error</td><td>A broker blip parks good files for a person.</td><td><span class="pill bad">Separate them</span></td></tr><tr><td>Keep the hand-written glue code</td><td>4,000 lines to maintain; each pattern written again.</td><td><span class="pill bad">Replace</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>No database in this station. What a table would hold is kept in files under <code>data/</code>:</p>
+<div class="scroll"><table class=""><thead><tr><th>File</th><th>Holds</th><th>Why</th></tr></thead><tbody><tr><td><code>processed-files.dat</code></td><td>SHA-256 of each processed file's content</td><td>The record that stops a second processing.</td></tr><tr><td><code>seen-files.dat</code></td><td>name-size-time of each downloaded file</td><td>Saves downloading every file after a restart.</td></tr><tr><td><code>runs/N.json</code></td><td>One run per file picked up</td><td>What happened, for people.</td></tr><tr><td><code>dead-letter/</code></td><td>Files that can never be processed, as they arrived</td><td>For a person to fix and ask the bank to resend.</td></tr></tbody></table></div>
+<p><strong>Boundaries:</strong> the content's key is added before the lines are sent and removed if sending fails, so a failed file is tried again. A file is <code>DONE</code> only after the broker confirmed every message.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>14. Operations: metric, alert, rollback, runbook, failure drill</li><li>15. Real-world considerations</li></ul><p class="rule">What changes when this runs for real.</p></aside>
+<h2>Real-world considerations</h2>
+<dl class="facts">
+<dt>Watching it</dt><dd>A file expected every night and not seen by 3 am is the alert that matters most: a missing file is silent. Count runs by status; any <code>DEAD_LETTERED</code> or repeated <code>FAILED</code> wants a person.</dd>
+<dt>Half-written files</dt><dd>Banks upload as <code>.part</code> and rename. If a bank cannot, use Camel's read locks (<code>readLock=changed</code>) so a file still growing is not read.</dd>
+<dt>Keys and secrets</dt><dd>An SSH key per bank, held in a secret store; the bank's host key pinned. Never <code>strictHostKeyChecking=no</code> outside a demo.</dd>
+<dt>Growth of the records</dt><dd><code>FileIdempotentRepository</code> keeps up to 32 MB by default and then drops the oldest entries. A file older than that, uploaded again, would be processed again: size it, or move the records to a database.</dd>
+<dt>More banks</dt><dd>One route per bank from the same builder, each with its own folder, user and records.</dd>
+<dt>Exactly once</dt><dd>Not on offer between a file and a queue. At least once, with <code>BANK:REFERENCE</code> as message id, lets the reader drop copies.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>What is Apache Camel for?</summary><p>Integration routes: ready components (SFTP, file, AMQP, HTTP and hundreds more) and enterprise integration patterns, so the glue is a few lines instead of thousands.</p></details><details class="qa"><summary>What does noop=true do on a file or SFTP consumer?</summary><p>Leaves files where they are and turns on an idempotent repository so each is read once: by default in memory, so a restart reads them again.</p></details><details class="qa"><summary>What is an idempotent consumer?</summary><p>It records a key for each message handled and skips messages whose key it has seen. The key and the store decide what &quot;the same&quot; and &quot;remembered&quot; mean.</p></details><details class="qa"><summary>Which errors go to a dead-letter channel?</summary><p>The ones that will never succeed as they are: a broken file. Ones that may pass, like a broker outage, get retries and then come back later.</p></details><details class="qa"><summary>How do you know the broker has the messages?</summary><p>Publisher confirms: wait until the broker acknowledges each message before marking the work done.</p></details><details class="qa"><summary>How do you test a restart?</summary><p>Really restart: start the app, process, stop it, start a new one on the same data, and check nothing happens twice.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 10 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>Idempotency</td><td>A persistent record.</td><td>You can say what counts as "the same file" and what the record's limits are.</td></tr><tr><td>Errors</td><td>Retries and a dead-letter folder.</td><td>Retryable and never-retry errors separated, each with a run status a person understands.</td></tr><tr><td>Camel</td><td>A working route.</td><td>You can read the route aloud as the business process it is.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate "simplifies" the route: "noop already makes it idempotent, and one dead-letter channel means nothing is ever lost". Read the file and list every problem before opening the findings.</p>
+<p class="path">review/PolicyFileRoute.java</p>
+<pre class="code"><code class="language-java">package com.bimaly.integration;
+
+import org.apache.camel.Exchange;
+import org.apache.camel.builder.RouteBuilder;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.util.HexFormat;
+
+/** The bank&#x27;s SFTP folder → validate each file → valid lines on the policy-requests queue. One run per file. */
+@Component
+class PolicyFileRoute extends RouteBuilder {
+
+    private static final String RUN = &quot;bimalyRun&quot;;
+    private final Runs runs;
+    private final PolicyQueue queue;
+    private final String partner;
+    private final String deadLetter;
+    private final int redeliveries;
+    private final Duration redeliveryDelay;
+
+    PolicyFileRoute(Runs runs, PolicyQueue queue,
+                    @Value(&quot;${bimaly.partner.uri}&quot;) String partner, @Value(&quot;${bimaly.files.data}&quot;) String data,
+                    @Value(&quot;${bimaly.files.redeliveries}&quot;) int redeliveries,
+                    @Value(&quot;${bimaly.files.redelivery-delay}&quot;) Duration redeliveryDelay) {
+        this.runs = runs;
+        this.queue = queue;
+        this.partner = partner;
+        this.deadLetter = &quot;file:&quot; + data + &quot;/dead-letter&quot;;
+        this.redeliveries = redeliveries;
+        this.redeliveryDelay = redeliveryDelay;
+    }
+
+    @Override
+    public void configure() {
+        // One error handler for everything: try again, then park the file in the dead-letter folder. Nothing is lost.
+        errorHandler(deadLetterChannel(&quot;direct:dead-letter&quot;).useOriginalMessage()
+                .maximumRedeliveries(redeliveries).redeliveryDelay(redeliveryDelay.toMillis()));
+        from(&quot;direct:dead-letter&quot;)
+                .process(e -&gt; runs.finish(run(e), Runs.Status.DEAD_LETTERED, e.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class).getMessage()))
+                .to(deadLetter);
+
+        // noop=true: Camel&#x27;s file components are idempotent with noop, so each file is only ever read once.
+        from(partner + &quot;&amp;noop=true&amp;include=.*\\.csv&amp;sortBy=file:name&quot;)
+                .routeId(&quot;policy-files&quot;)
+                .process(this::start)
+                .process(this::validate)
+                .process(e -&gt; queue.sendAll(e.getMessage().getBody(PolicyFile.Parsed.class).accepted()))
+                .process(e -&gt; runs.finish(run(e), Runs.Status.DONE, null));
+    }
+
+    private void start(Exchange e) throws NoSuchAlgorithmException {
+        byte[] content = e.getMessage().getBody(byte[].class);
+        String checksum = HexFormat.of().formatHex(MessageDigest.getInstance(&quot;SHA-256&quot;).digest(content));
+        e.setProperty(RUN, runs.start(e.getMessage().getHeader(Exchange.FILE_NAME_ONLY, String.class), checksum));
+    }
+
+    private void validate(Exchange e) {
+        PolicyFile.Parsed parsed = PolicyFile.parse(run(e).file, e.getMessage().getBody(byte[].class));
+        Runs.Run run = run(e);
+        run.lines = parsed.lines();
+        run.accepted = parsed.accepted().size();
+        run.rejected = parsed.rejected();
+        e.getMessage().setBody(parsed);
+    }
+
+    private static Runs.Run run(Exchange e) {
+        return e.getProperty(RUN, Runs.Run.class);
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>noop=true remembers in memory</summary><p>"Camel's file components are idempotent with noop, so each file is only ever read once": once per start. Its default record lives in memory. The next deployment reads the whole folder again, and every policy in it is sent a second time. A re-upload by the bank is not caught either.</p><p class="evidence"><b>Test evidence:</b> <code>theApiRemembersWhatItProcessedAcrossARestart</code>, <code>theSameFileUploadedAgainSendsNothingAndIsRecordedAsADuplicate</code> and <code>aCorrectedFileWithTheSameNameIsProcessed</code> fail.</p></details><details class="finding"><summary><span class="sev">2</span>A broker blip parks good files</summary><p>"One error handler for everything: nothing is lost": nothing is lost, but a file that failed only because the broker was busy for a minute is moved to the dead-letter folder and waits for a person, and its policies wait with it. Errors that pass should come back on their own.</p><p class="evidence"><b>Test evidence:</b> <code>aBrokerThatRefusesIsRetriedThenTheFileIsTriedAgainOnTheNextPoll</code> fails: the run is <code>DEAD_LETTERED</code>, never <code>DONE</code>.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the flawed file copied over the real one, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>IntegrationRunContractTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill ok">3 / 3</span></td></tr><tr><td><code>DuplicateFileReplayTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">0 / 2</span></td></tr><tr><td><code>FileRestartTrapTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">1 / 2</span></td></tr><tr><td><code>RetryAndDeadLetterMessagingTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill bad">2 / 3</span></td></tr></tbody></table></div>
+<p class="note">Until the first restart, the flawed version behaves. The first deployment after go-live is when the issuance team sees every policy twice.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
