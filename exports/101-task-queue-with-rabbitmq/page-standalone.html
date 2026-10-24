@@ -1,0 +1,1940 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>Station 101 · Task queue with RabbitMQ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 101</span>
+    <h1>Task queue with RabbitMQ</h1>
+    <p class="scenario">Lab report PDFs are generated in the request thread; at peak, reports are lost when a server restarts.</p>
+    <p class="sim"><b>Simulation</b><span>The lab is simulated: report LR-n has n pages, each taking a few milliseconds; LR-0013 always fails and LR-0042 fails once. The PDFs are real minimal files, kept on the local disk instead of object storage.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Healthcare</li>
+      <li><b>Types</b>Messaging · Idempotency</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>098 Invoice PDFs without blocking</p>
+      <p><span class="eyebrow">Builds toward</span><br>104 Enterprise integration with Apache Camel · 130 Push notifications to millions · 179 Order processing with Amazon SQS</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · RabbitMQ 4.1 · Spring AMQP 4.1 (@RabbitListener, publisher confirms, retry, dead-letter exchange) · Testcontainers · Awaitility</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Reports in the request</strong><p>At Mediqo, the doctor's "get report" click made the PDF in the request itself. At peak, requests waited; a server restart in the middle lost the reports being made.</p></li><li><strong>A queue that forgets</strong><p>A queue fixed the waiting. But the workers used auto-ack: RabbitMQ treated a report as done the moment it handed it to a worker. A worker that restarted mid-report took that report with it.</p></li><li><strong>The fix</strong><p>The broker confirms each message before the API says "accepted". A worker acknowledges only after the PDF is saved; if it dies, the broker gives the report to another worker. Reports that fail three times wait in a dead-letter queue with the reason.</p></li></ol>
+<p class="lesson">A message is safe only until someone says it is done. Say it after the work, never before.</p>
+
+<h2>What are we building?</h2>
+<p>A render queue for lab reports: the API puts a request on a durable queue, workers turn it into a PDF, and nothing is lost when a worker dies.</p>
+
+<h2>An everyday analogy</h2>
+<p>A courier signs for a parcel only when it is in the customer's hands. If the courier's van breaks down, the depot still has the parcel on its books and sends another courier. Parcels that cannot be delivered after three tries go to the returns office with a note.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Send</strong>: the API publishes the request and waits for the broker's confirmation, then answers <code>202</code>.</li>
+<li><strong>Take</strong>: a worker takes one message at a time (prefetch 1).</li>
+<li><strong>Finish</strong>: the worker saves the PDF; only then is the message acknowledged and deleted.</li>
+<li><strong>Give up well</strong>: after three failed tries, the message goes to the dead-letter queue and the report shows why.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: the worker saves the PDF, then dies before acknowledging. What happens?</summary><p>The broker gives the message to another worker, marked as redelivered. That worker finds the PDF already there and skips it. Delivery is at least once, so workers must be safe to repeat.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No real lab system.</strong> Rendering is simulated; the PDFs are minimal.</li>
+<li><strong>One machine's disk.</strong> Reports would go to object storage with several servers.</li>
+<li><strong>No sign-in.</strong> Access control is another station's topic.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Message broker</strong></td><td>A server that holds messages until a worker takes them.</td><td>A post office.</td><td>RabbitMQ</td></tr><tr><td><strong>Exchange and routing key</strong></td><td>Where a message is sent, and the label that decides which queue gets it.</td><td>The sorting desk and the PIN code.</td><td><code>lab-reports</code>, <code>render</code></td></tr><tr><td><strong>Queue</strong></td><td>Messages waiting, in order, for a worker.</td><td>A pile of letters for one postman.</td><td><code>report-render</code></td></tr><tr><td><strong>Acknowledgement</strong></td><td>The worker telling the broker "done, you can delete it".</td><td>The signature on a delivery slip.</td><td>after the listener returns</td></tr><tr><td><strong>Prefetch</strong></td><td>How many messages a worker may hold at once before acknowledging.</td><td>Letters a postman carries per round.</td><td>1</td></tr><tr><td><strong>Dead-letter queue</strong></td><td>Where messages go that no worker could handle, for a person.</td><td>The returned-letters office.</td><td><code>report-render.dlq</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Mediqo</strong> (a fictional diagnostics lab): lab report PDFs are generated in the request thread; at peak, reports are lost when a server restarts.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo rules: reports LR-0001 to LR-0500; 3 tries, 1 s then 2 s apart; one report per worker at a time; two workers.</p>
+<ol class="gwt">
+<li><b>Given</b> a known report, <b>then</b> <code>202</code> only after the broker has confirmed the message, and later <code>READY</code> with a PDF.</li>
+<li><b>Given</b> the broker unreachable or refusing the message, <b>then</b> <code>503</code>, and asking again tries again.</li>
+<li><b>Given</b> the same report asked for again, <b>then</b> <code>200</code> with its state and no second render.</li>
+<li><b>Given</b> a worker that dies mid-report, <b>then</b> another worker renders it; nothing is lost.</li>
+<li><b>Given</b> a passing failure, <b>then</b> a retry renders it; a lasting one ends <code>FAILED</code> with the reason, its message in the dead-letter queue.</li>
+<li><b>Given</b> a slow report, <b>then</b> the reports after it go to the other worker.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>Durable queues and persistent messages.</li>
+<li>Acknowledge after the work, not before.</li>
+<li>Every message ends rendered, or parked with a reason: never silently gone, never retried for ever.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Declare exchanges, queues, bindings and a dead-letter exchange.</li>
+<li>Choose acknowledgement mode and prefetch, and explain Spring's "auto" against RabbitMQ's autoAck.</li>
+<li>Use publisher confirms, listener retry and a message recoverer.</li>
+<li>Make a consumer idempotent, and test crashes against a real broker.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its RabbitMQ, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/lab-reports/{id}/render</code></td><td>Queue a render; <code>202</code> once the broker has it.</td></tr><tr><td><code>GET</code></td><td><code>/lab-reports/{id}</code></td><td>QUEUED, READY (with the PDF's link) or FAILED (with the reason).</td></tr><tr><td><code>GET</code></td><td><code>/lab-reports/{id}/pdf</code></td><td>The PDF.</td></tr><tr><td>worker</td><td>queue <code>report-render</code></td><td>Renders; acknowledges after the PDF is saved.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">202</span></td><td>Render queued and confirmed by the broker</td></tr><tr><td><span class="pill ok">200</span></td><td>Asked again: its state, nothing new sent; a read</td></tr><tr><td><span class="pill warn">400</span></td><td>Not a report id (LR-0000 form)</td></tr><tr><td><span class="pill warn">404</span></td><td>No such report; never requested; no PDF yet</td></tr><tr><td><span class="pill warn">503</span></td><td>The broker is unreachable or refused the message</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 24 Oct 2026, in this order, with the configured retry waits (1 s, 2 s). <code>Date</code>, connection and standard security headers are left out.</p>
+<section class="example"><h3>Case 1: render LR-0007</h3><p><b>Why:</b> <code>202</code> after the broker's confirmation.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /lab-reports/LR-0007/render HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 202 
+Location: /lab-reports/LR-0007
+Content-Type: application/json
+
+{
+  &quot;reportId&quot;: &quot;LR-0007&quot;,
+  &quot;status&quot;: &quot;QUEUED&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: a moment later</h3><p><b>Why:</b> a worker rendered it.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /lab-reports/LR-0007 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 75
+
+{
+  &quot;reportId&quot;: &quot;LR-0007&quot;,
+  &quot;status&quot;: &quot;READY&quot;,
+  &quot;pdfUrl&quot;: &quot;/lab-reports/LR-0007/pdf&quot;
+}</code></pre></div></div></section>
+<p class="muted">The PDF, read by poppler's <code>pdfinfo</code>, an independent reader:</p>
+<pre class="code"><code class="language-text">Pages:           7
+Page size:       595 x 842 pts (A4)
+PDF version:     1.4</code></pre><section class="example"><h3>Case 3: asked again</h3><p><b>Why:</b> <code>200</code>, ready: no second message.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /lab-reports/LR-0007/render HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+
+{
+  &quot;reportId&quot;: &quot;LR-0007&quot;,
+  &quot;status&quot;: &quot;READY&quot;,
+  &quot;pdfUrl&quot;: &quot;/lab-reports/LR-0007/pdf&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: LR-0042, whose lab system is busy once</h3><p><b>Why:</b> accepted like any other.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /lab-reports/LR-0042/render HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 202 
+Location: /lab-reports/LR-0042
+Content-Type: application/json
+
+{
+  &quot;reportId&quot;: &quot;LR-0042&quot;,
+  &quot;status&quot;: &quot;QUEUED&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: ready after a retry</h3><p><b>Why:</b> the first try failed; the second, 1 s later, worked.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /lab-reports/LR-0042 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 75
+
+{
+  &quot;reportId&quot;: &quot;LR-0042&quot;,
+  &quot;status&quot;: &quot;READY&quot;,
+  &quot;pdfUrl&quot;: &quot;/lab-reports/LR-0042/pdf&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: LR-0013, a damaged scan</h3><p><b>Why:</b> accepted; the worker will fail.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /lab-reports/LR-0013/render HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 202 
+Location: /lab-reports/LR-0013
+Content-Type: application/json
+
+{
+  &quot;reportId&quot;: &quot;LR-0013&quot;,
+  &quot;status&quot;: &quot;QUEUED&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: failed after three tries</h3><p><b>Why:</b> the reason, recorded by the recoverer before it dead-lettered the message.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /lab-reports/LR-0013 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 84
+
+{
+  &quot;reportId&quot;: &quot;LR-0013&quot;,
+  &quot;status&quot;: &quot;FAILED&quot;,
+  &quot;failure&quot;: &quot;The scan of LR-0013 is damaged.&quot;
+}</code></pre></div></div></section>
+<p class="muted">The parked message, read through the management API without taking it off the dead-letter queue. <code>x-death</code> is written by the broker:</p>
+<pre class="code"><code class="language-text">payload: {&quot;reportId&quot;:&quot;LR-0013&quot;}
+x-death: {&#x27;reason&#x27;: &#x27;rejected&#x27;, &#x27;queue&#x27;: &#x27;report-render&#x27;, &#x27;exchange&#x27;: &#x27;lab-reports&#x27;, &#x27;count&#x27;: 1}</code></pre><section class="example"><h3>Case 8: no such report</h3><p><b>Why:</b> <code>404</code>, nothing sent.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /lab-reports/LR-0999/render HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No such report.&quot;,
+  &quot;instance&quot;: &quot;/lab-reports/LR-0999/render&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Not Found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 9: not a report id</h3><p><b>Why:</b> <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /lab-reports/report-7/render HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;A report id looks like LR-0042.&quot;,
+  &quot;instance&quot;: &quot;/lab-reports/report-7/render&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section>
+<h2>The queues</h2>
+<p class="muted">At the end, from <code>rabbitmqctl list_queues</code> (the management API's counts can be a few seconds old):</p>
+<pre class="code"><code class="language-text">name	messages_ready	messages_unacknowledged	consumers
+report-render	0	0	2
+report-render.dlq	1	0	0</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>Auto-ack, the worker dies before rendering</td><td>The queue is empty: the report is gone</td><td><code>withAutoAckTheMessageIsGoneWithTheWorker</code></td></tr><tr><td>Acknowledge after the work, the same death</td><td>The message is back, flagged redelivered</td><td><code>withAcknowledgementsAfterTheWorkTheBrokerGivesItToTheNextWorker</code></td></tr><tr><td>A report</td><td><code>202</code>, then READY and a 7-page PDF</td><td><code>aReportIsQueuedThenRenderedByAWorker</code></td></tr><tr><td>Unknown, bad ids, never requested</td><td><code>404</code>, <code>400</code>, nothing sent</td><td><code>unknownReportsAre404AndBadIds400</code></td></tr><tr><td>A slow report first, two quick ones after</td><td>The quick ones are done while the slow one renders</td><td><code>aSlowReportDoesNotHoldUpTheOnesBehindIt</code></td></tr><tr><td>The broker refuses the message (exchange missing)</td><td><code>503</code>, then fine once it is back</td><td><code>aMessageTheBrokerDidNotTakeIs503</code></td></tr><tr><td>No broker at all</td><td><code>503</code>, twice: nothing marked as queued</td><td><code>withoutTheBrokerItIs503AndTheRequestCanBeTriedAgain</code></td></tr><tr><td>A failure that passes</td><td>Retried, rendered once, nothing parked</td><td><code>aBusyLabSystemIsRetriedAndTheReportIsRendered</code></td></tr><tr><td>A failure that lasts</td><td>FAILED with the reason; parked with <code>x-death</code></td><td><code>aDamagedReportEndsInTheDeadLetterQueueWithItsReason</code></td></tr><tr><td>The worker's connection cut mid-render</td><td>Redelivered; rendered once by the next worker</td><td><code>aWorkerCutOffMidRenderLosesNothing</code></td></tr><tr><td>The same request twice</td><td>One message, one render</td><td><code>theSameRequestTwiceIsOneMessageAndOneRender</code></td></tr><tr><td>A repeated message for a rendered report</td><td>Acknowledged and skipped</td><td><code>aRepeatedMessageForARenderedReportIsSkipped</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Auto-ack, so messages are lost when a worker crashes.</p>
+<ul>
+<li><strong>Auto-ack.</strong> With the plain RabbitMQ client: a worker consumes with <code>autoAck=true</code>, takes the message, and its channel closes before it renders. The queue is empty. The report will never be made, and nothing records that.</li>
+<li><strong>Acknowledge after the work.</strong> The same death with <code>autoAck=false</code>: the message is back in the queue, and the next worker sees it marked redelivered.</li>
+<li><strong>The app.</strong> Spring's <code>acknowledge-mode: auto</code> acknowledges after the listener returns. In <code>aWorkerCutOffMidRenderLosesNothing</code> the broker closes the app's connection in the middle of a 500-page report: the report is still rendered, once.</li>
+</ul>
+<p>While building, each part was undone once: <code>acknowledge-mode: none</code> turned 2 tests red; no retry 2; prefetch 250 1; no dead-letter exchange 1; no recoverer 1; no skip of rendered reports 1; no "requested" marker 1; no wait for the broker's confirmation 1; the marker kept after a refused publish 2. Two parts turned nothing red and stay, with their reasons: writing the PDF next to its name and moving it (so nobody reads half a PDF, which no test catches), and the worker stopping when its channel closes (see Tests).</p>
+</div>
+<pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.ConnectionFactory;
+import com.rabbitmq.client.GetResponse;
+import org.junit.jupiter.api.Test;
+
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+/**
+ * A worker takes a render request and its server restarts before the PDF is made. Written first, with the plain
+ * RabbitMQ client so nothing hides what the broker does.
+ */
+class AutoAckTrapTest extends ApiTest {
+
+    Connection connect() throws Exception {
+        ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost(rabbit.getHost());
+        factory.setPort(rabbit.getAmqpPort());
+        return factory.newConnection();
+    }
+
+    /** One worker takes the message, then dies (its channel closes) without rendering. What is left in the queue? */
+    long leftAfterAWorkerDies(String queue, boolean autoAck) throws Exception {
+        try (Connection connection = connect()) {
+            Channel setup = connection.createChannel();
+            setup.queueDeclare(queue, false, false, false, null);
+            setup.basicPublish(&quot;&quot;, queue, null, &quot;{\&quot;reportId\&quot;:\&quot;LR-0007\&quot;}&quot;.getBytes(StandardCharsets.UTF_8));
+            Channel worker = connection.createChannel();
+            List&lt;String&gt; taken = new CopyOnWriteArrayList&lt;&gt;();
+            worker.basicConsume(queue, autoAck, (tag, delivery) -&gt; taken.add(new String(delivery.getBody(), StandardCharsets.UTF_8)), tag -&gt; {
+            });
+            await().atMost(Duration.ofSeconds(5)).until(() -&gt; taken.size() == 1);
+            worker.close();   // the server restarts: no render, no acknowledgement
+            await().atMost(Duration.ofSeconds(5)).until(() -&gt; setup.messageCount(queue) == (autoAck ? 0 : 1));
+            if (!autoAck) {
+                GetResponse again = setup.basicGet(queue, true);
+                assertThat(again.getEnvelope().isRedeliver()).isTrue();   // the next worker is told it may be a repeat
+            }
+            long left = autoAck ? setup.messageCount(queue) : 1;
+            setup.queueDelete(queue);
+            return left;
+        }
+    }
+
+    @Test
+    void withAutoAckTheMessageIsGoneWithTheWorker() throws Exception {
+        assertThat(leftAfterAWorkerDies(&quot;trap.auto-ack&quot;, true)).isZero();   // the report is never rendered, and nothing says so
+    }
+
+    @Test
+    void withAcknowledgementsAfterTheWorkTheBrokerGivesItToTheNextWorker() throws Exception {
+        assertThat(leftAfterAWorkerDies(&quot;trap.manual-ack&quot;, false)).isEqualTo(1);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # RabbitMQ on localhost:5672, management UI on http://localhost:15672
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 12 tests; starts its own RabbitMQ container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Queue a long report and stop the app while it renders:</p>
+<pre class="code"><code class="language-bash">curl -X POST http://localhost:8080/lab-reports/LR-0500/render
+# within 10 s: stop the app (Ctrl+C), then start it again
+curl http://localhost:8080/lab-reports/LR-0500</code></pre>
+<p>The report is rendered after the restart: the broker kept the unacknowledged message. Open the management UI and watch <i>Unacked</i> go to 1 and back.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>PRECONDITION_FAILED - inequivalent arg</code></td><td>The queue exists with other arguments (for example without the dead-letter exchange).</td><td>Delete it, or declare a new queue; arguments cannot change in place.</td></tr><tr><td>Messages pile up as Unacked</td><td>A worker is stuck, or prefetch is high and one worker hoards them.</td><td>Prefetch 1 for long tasks; look at the worker.</td></tr><tr><td><code>Could not find a valid Docker environment</code></td><td>Docker is not running.</td><td>Start Docker Desktop or the Docker service.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/101-task-queue-with-rabbitmq/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/mediqo/reports/
+│   ├── ReportController.java   ├── ReportsApplication.java   ├── RenderWorker.java
+│   └── GiveUp.java   ├── LabReports.java   └── Pdf.java
+├── src/main/resources/application.yaml
+├── src/test/java/com/mediqo/reports/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the worker and what happens when it gives up.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">ReportController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">ReportsApplication.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">RenderWorker.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">GiveUp.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">LabReports.java</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">Pdf.java</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">compose.yaml</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/mediqo/reports/ReportController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The API.</dd><dt>Why</dt><dd>Checks the id, marks the report requested (once), publishes and waits for the broker's confirmation; reads state from the report files.</dd><dt>Without it</dt><dd>A <code>202</code> for a message the broker never got; two messages for one report.</dd></dl><ul><li>A refused confirmation arrives as the RabbitMQ client's <code>ShutdownSignalException</code>, not Spring's <code>AmqpException</code>: both are caught. Found while building.</li><li>If publishing fails, the marker is removed so the next request tries again.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.rabbitmq.client.ShutdownSignalException;
+import org.springframework.amqp.AmqpException;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.io.IOException;
+import java.net.URI;
+
+@RestController
+class ReportController {
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record ReportState(String reportId, LabReports.Status status, String pdfUrl, String failure) {
+    }
+
+    private final LabReports reports;
+    private final RabbitTemplate rabbit;
+
+    ReportController(LabReports reports, RabbitTemplate rabbit) {
+        this.reports = reports;
+        this.rabbit = rabbit;
+    }
+
+    /**
+     * 202 once the broker has confirmed the message; the render happens on a worker. Asking again for a report that is
+     * queued, ready or failed sends nothing new and answers 200 with its state.
+     */
+    @PostMapping(&quot;/lab-reports/{id}/render&quot;)
+    ResponseEntity&lt;ReportState&gt; render(@PathVariable String id) throws IOException {
+        known(id);
+        if (!reports.markRequested(id)) {
+            return ResponseEntity.ok(state(id));
+        }
+        try {
+            rabbit.invoke(ops -&gt; {
+                ops.convertAndSend(ReportsApplication.EXCHANGE, ReportsApplication.ROUTING_KEY, new RenderWorker.RenderRequest(id));
+                ops.waitForConfirmsOrDie(5_000);   // throws if the broker does not confirm in 5 s
+                return null;
+            });
+        } catch (AmqpException | ShutdownSignalException brokerDown) {   // a refused confirm arrives as the client&#x27;s own exception
+            reports.unmarkRequested(id);   // nothing was queued: a later request may try again
+            throw new ErrorResponseException(HttpStatus.SERVICE_UNAVAILABLE,
+                    ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, &quot;The render queue is not reachable. Try again shortly.&quot;), brokerDown);
+        }
+        return ResponseEntity.accepted().location(URI.create(&quot;/lab-reports/&quot; + id)).body(state(id));
+    }
+
+    @GetMapping(&quot;/lab-reports/{id}&quot;)
+    ReportState report(@PathVariable String id) throws IOException {
+        known(id);
+        if (reports.status(id).isEmpty()) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;This report has not been requested.&quot;);
+        }
+        return state(id);
+    }
+
+    @GetMapping(&quot;/lab-reports/{id}/pdf&quot;)
+    ResponseEntity&lt;Resource&gt; pdf(@PathVariable String id) {
+        known(id);
+        if (reports.status(id).orElse(null) != LabReports.Status.READY) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;No PDF for this report yet.&quot;);
+        }
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF).body(new FileSystemResource(reports.pdf(id)));
+    }
+
+    private void known(String id) {
+        if (!LabReports.ID.matcher(id).matches()) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;A report id looks like LR-0042.&quot;);
+        }
+        reports.pages(id).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such report.&quot;));
+    }
+
+    private ReportState state(String id) throws IOException {
+        LabReports.Status status = reports.status(id).orElseThrow();
+        return new ReportState(id, status, status == LabReports.Status.READY ? &quot;/lab-reports/&quot; + id + &quot;/pdf&quot; : null, reports.failure(id).orElse(null));
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/mediqo/reports/ReportsApplication.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The topology.</dd><dt>Why</dt><dd>A direct exchange, the durable work queue with its dead-letter exchange, and the dead-letter queue; JSON messages.</dd><dt>Without it</dt><dd>Messages lost with a restart of the broker, or dropped when rejected.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.Declarables;
+import org.springframework.amqp.core.DirectExchange;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.QueueBuilder;
+import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
+import org.springframework.amqp.support.converter.MessageConverter;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+@SpringBootApplication
+public class ReportsApplication {
+
+    static final String EXCHANGE = &quot;lab-reports&quot;;
+    static final String QUEUE = &quot;report-render&quot;;
+    static final String DEAD_LETTERS = &quot;lab-reports.dlx&quot;;
+    static final String DEAD_LETTER_QUEUE = &quot;report-render.dlq&quot;;
+    static final String ROUTING_KEY = &quot;render&quot;;
+
+    public static void main(String[] args) {
+        SpringApplication.run(ReportsApplication.class, args);
+    }
+
+    /**
+     * Declared on start-up if missing: a direct exchange routes &quot;render&quot; to the durable work queue; a message the
+     * worker gives up on goes to the dead-letter exchange and waits in its own queue for a person.
+     */
+    @Bean
+    Declarables topology() {
+        DirectExchange exchange = new DirectExchange(EXCHANGE);
+        DirectExchange deadLetters = new DirectExchange(DEAD_LETTERS);
+        Queue work = QueueBuilder.durable(QUEUE).deadLetterExchange(DEAD_LETTERS).deadLetterRoutingKey(ROUTING_KEY).build();
+        Queue parked = QueueBuilder.durable(DEAD_LETTER_QUEUE).build();
+        Binding route = BindingBuilder.bind(work).to(exchange).with(ROUTING_KEY);
+        Binding parkedRoute = BindingBuilder.bind(parked).to(deadLetters).with(ROUTING_KEY);
+        return new Declarables(exchange, deadLetters, work, parked, route, parkedRoute);
+    }
+
+    /** Messages as JSON, readable in the management UI. */
+    @Bean
+    MessageConverter json() {
+        return new JacksonJsonMessageConverter();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/mediqo/reports/RenderWorker.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The worker.</dd><dt>Why</dt><dd>Skips reports already rendered, renders page by page, saves the PDF; returns normally only when done.</dd><dt>Without it</dt><dd>Lost or doubled reports when workers die or messages repeat.</dd></dl><ul><li>If its channel is closed mid-render, the broker has already given the message to another worker: it stops instead of racing it.</li><li>The two simulated failures: LR-0013 always, LR-0042 once.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import com.rabbitmq.client.Channel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Takes render requests off the queue. The message is acknowledged only when this method returns: if the worker dies
+ * half way, the broker gives the message to another worker. So a message can arrive twice, and a report that is
+ * already rendered is skipped.
+ */
+@Component
+class RenderWorker {
+
+    record RenderRequest(String reportId) {
+    }
+
+    private static final Logger log = LoggerFactory.getLogger(RenderWorker.class);
+    private final LabReports reports;
+    private final long msPerPage;
+    private final Map&lt;String, AtomicInteger&gt; rendered = new ConcurrentHashMap&lt;&gt;();   // for the tests and the logs
+    private final Set&lt;String&gt; busyOnce = ConcurrentHashMap.newKeySet();
+
+    RenderWorker(LabReports reports, @Value(&quot;${mediqo.reports.ms-per-page}&quot;) long msPerPage) {
+        this.reports = reports;
+        this.msPerPage = msPerPage;
+    }
+
+    @RabbitListener(queues = ReportsApplication.QUEUE)
+    void render(RenderRequest request, Channel channel) throws IOException, InterruptedException {
+        String id = request.reportId();
+        int pages = reports.pages(id).orElseThrow(() -&gt; new IllegalArgumentException(&quot;Unknown report &quot; + id));
+        if (Files.exists(reports.pdf(id))) {
+            log.info(&quot;{} is already rendered: a repeated message, acknowledged and skipped&quot;, id);
+            return;
+        }
+        // Simulated lab troubles: LR-0013&#x27;s scan is damaged (fails every time); LR-0042&#x27;s lab system is busy once.
+        if (id.equals(&quot;LR-0013&quot;)) {
+            throw new IllegalStateException(&quot;The scan of LR-0013 is damaged.&quot;);
+        }
+        if (id.equals(&quot;LR-0042&quot;) &amp;&amp; busyOnce.add(id)) {
+            throw new IllegalStateException(&quot;The lab system did not answer.&quot;);
+        }
+        List&lt;String&gt; lines = new ArrayList&lt;&gt;();
+        for (int page = 1; page &lt;= pages; page++) {
+            if (!channel.isOpen()) {
+                // Cut off from the broker: it has already put the message back for another worker. Stop, do not race it.
+                log.warn(&quot;Lost the broker while rendering {}; another worker will take it&quot;, id);
+                return;
+            }
+            Thread.sleep(msPerPage);   // simulated: laying out one page
+            lines.add(&quot;Lab report &quot; + id + &quot; - page &quot; + page + &quot; of &quot; + pages);
+        }
+        reports.savePdf(id, Pdf.of(lines));
+        rendered.computeIfAbsent(id, k -&gt; new AtomicInteger()).incrementAndGet();
+    }
+
+    int timesRendered(String id) {
+        AtomicInteger n = rendered.get(id);
+        return n == null ? 0 : n.get();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/mediqo/reports/GiveUp.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>After the last retry.</dd><dt>Why</dt><dd>Writes the reason on the report, then rejects without requeue: the broker dead-letters it.</dd><dt>Without it</dt><dd>A report that fails silently, or a message retried for ever.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.retry.MessageRecoverer;
+import org.springframework.amqp.rabbit.retry.RejectAndDontRequeueRecoverer;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+
+/**
+ * After the last retry: record why on the report, then reject the message without requeueing, so the broker moves
+ * it to the dead-letter queue. It stays there for a person to look at or send back.
+ */
+@Component
+class GiveUp implements MessageRecoverer {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+    private final LabReports reports;
+    private final MessageRecoverer reject = new RejectAndDontRequeueRecoverer();
+
+    GiveUp(LabReports reports) {
+        this.reports = reports;
+    }
+
+    @Override
+    public void recover(Message message, Throwable cause) {
+        String id = JSON.readTree(message.getBody()).path(&quot;reportId&quot;).asString();
+        if (reports.pages(id).isPresent()) {
+            try {
+                reports.saveFailure(id, rootMessage(cause));
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
+        reject.recover(message, cause);
+    }
+
+    private static String rootMessage(Throwable t) {
+        while (t.getCause() != null) {
+            t = t.getCause();
+        }
+        return t.getMessage();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/java/com/mediqo/reports/LabReports.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Reports on disk.</dd><dt>Why</dt><dd>An atomic "requested" marker, the PDF written then moved, the failure note; ids checked before any file is touched.</dd><dt>Without it</dt><dd>Half-written PDFs; paths built from user input.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * The reports on disk, standing in for object storage: a marker when a render is requested, the PDF when it is done,
+ * a note when it failed for good. Files survive a restart, unlike memory. Simulated lab: report LR-n has n pages
+ * (LR-0001 to LR-0500).
+ * shortcut: one directory on one machine; use object storage (and a table for the state) with several servers.
+ */
+@Component
+class LabReports {
+
+    enum Status { QUEUED, READY, FAILED }
+
+    static final Pattern ID = Pattern.compile(&quot;LR-(\\d{4})&quot;);
+    private final Path dir;
+
+    LabReports(@Value(&quot;${mediqo.reports.dir}&quot;) Path dir) throws IOException {
+        this.dir = Files.createDirectories(dir);
+    }
+
+    /** Pages of a known report; empty for one the lab does not have. */
+    Optional&lt;Integer&gt; pages(String id) {
+        Matcher m = ID.matcher(id);
+        if (!m.matches()) {
+            return Optional.empty();
+        }
+        int n = Integer.parseInt(m.group(1));
+        return n &gt;= 1 &amp;&amp; n &lt;= 500 ? Optional.of(n) : Optional.empty();
+    }
+
+    /** True the first time for a report: only then is a message sent. Atomic across threads and processes. */
+    boolean markRequested(String id) {
+        try {
+            Files.createFile(file(id, &quot;requested&quot;));
+            return true;
+        } catch (FileAlreadyExistsException already) {
+            return false;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    void unmarkRequested(String id) throws IOException {
+        Files.deleteIfExists(file(id, &quot;requested&quot;));
+    }
+
+    Optional&lt;Status&gt; status(String id) {
+        if (Files.exists(pdf(id))) {
+            return Optional.of(Status.READY);
+        }
+        if (Files.exists(file(id, &quot;failed&quot;))) {
+            return Optional.of(Status.FAILED);
+        }
+        return Files.exists(file(id, &quot;requested&quot;)) ? Optional.of(Status.QUEUED) : Optional.empty();
+    }
+
+    Optional&lt;String&gt; failure(String id) throws IOException {
+        Path failed = file(id, &quot;failed&quot;);
+        return Files.exists(failed) ? Optional.of(Files.readString(failed)) : Optional.empty();
+    }
+
+    /** Written next to its final name, then moved: a reader never sees half a PDF. */
+    void savePdf(String id, byte[] pdf) throws IOException {
+        Path tmp = Files.write(file(id, &quot;pdf.tmp&quot;), pdf);
+        Files.move(tmp, pdf(id), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    void saveFailure(String id, String reason) throws IOException {
+        Files.writeString(file(id, &quot;failed&quot;), reason, StandardCharsets.UTF_8);
+    }
+
+    Path pdf(String id) {
+        return file(id, &quot;pdf&quot;);
+    }
+
+    private Path file(String id, String kind) {
+        return dir.resolve(id + &quot;.&quot; + kind);   // id is checked against ID before any file is touched
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/java/com/mediqo/reports/Pdf.java</p><div class="notes"><p>A minimal valid PDF, one line per page.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+
+final class Pdf {
+
+    private Pdf() {
+    }
+
+    /** A minimal, valid PDF: one line of Helvetica per page. */
+    static byte[] of(List&lt;String&gt; lines) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        List&lt;Integer&gt; offsets = new ArrayList&lt;&gt;();
+        int pages = lines.size();
+        int font = 3 + 2 * pages;
+        StringBuilder kids = new StringBuilder();
+        for (int i = 0; i &lt; pages; i++) {
+            kids.append(3 + 2 * i).append(&quot; 0 R &quot;);
+        }
+        write(out, &quot;%PDF-1.4\n&quot;);
+        object(out, offsets, 1, &quot;&lt;&lt; /Type /Catalog /Pages 2 0 R &gt;&gt;&quot;);
+        object(out, offsets, 2, &quot;&lt;&lt; /Type /Pages /Kids [&quot; + kids.toString().strip() + &quot;] /Count &quot; + pages + &quot; &gt;&gt;&quot;);
+        for (int i = 0; i &lt; pages; i++) {
+            String text = &quot;BT /F1 12 Tf 72 770 Td (&quot; + lines.get(i) + &quot;) Tj ET&quot;;
+            object(out, offsets, 3 + 2 * i, &quot;&lt;&lt; /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents &quot; + (4 + 2 * i)
+                    + &quot; 0 R /Resources &lt;&lt; /Font &lt;&lt; /F1 &quot; + font + &quot; 0 R &gt;&gt; &gt;&gt; &gt;&gt;&quot;);
+            object(out, offsets, 4 + 2 * i, &quot;&lt;&lt; /Length &quot; + text.length() + &quot; &gt;&gt;\nstream\n&quot; + text + &quot;\nendstream&quot;);
+        }
+        object(out, offsets, font, &quot;&lt;&lt; /Type /Font /Subtype /Type1 /BaseFont /Helvetica &gt;&gt;&quot;);
+        int xref = out.size();
+        StringBuilder table = new StringBuilder(&quot;xref\n0 &quot; + (offsets.size() + 1) + &quot;\n0000000000 65535 f \n&quot;);
+        offsets.forEach(o -&gt; table.append(String.format(java.util.Locale.ROOT, &quot;%010d 00000 n \n&quot;, o)));
+        write(out, table + &quot;trailer\n&lt;&lt; /Size &quot; + (offsets.size() + 1) + &quot; /Root 1 0 R &gt;&gt;\nstartxref\n&quot; + xref + &quot;\n%%EOF\n&quot;);
+        return out.toByteArray();
+    }
+
+    private static void object(ByteArrayOutputStream out, List&lt;Integer&gt; offsets, int number, String body) {
+        offsets.add(out.size());
+        write(out, number + &quot; 0 obj\n&quot; + body + &quot;\nendobj\n&quot;);
+    }
+
+    private static void write(ByteArrayOutputStream out, String s) {
+        out.writeBytes(s.getBytes(StandardCharsets.US_ASCII));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Publisher confirms, <code>acknowledge-mode: auto</code>, prefetch 1, two consumers, retry.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: mediqo-reports
+  mvc:
+    problemdetails:
+      enabled: true
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    # The POST waits until the broker confirms it has the message, so a 202 means it is safe on the broker.
+    publisher-confirm-type: simple
+    listener:
+      simple:
+        # Spring&#x27;s &quot;auto&quot;: the message is acknowledged only after the listener returns without an exception.
+        # Not RabbitMQ&#x27;s autoAck (&quot;none&quot; here), which treats a message as done the moment it is sent to the worker.
+        acknowledge-mode: auto
+        # One report at a time per worker: a slow report does not leave 250 others waiting behind it.
+        prefetch: 1
+        concurrency: 2
+        retry:
+          # Demo rules: three tries, 1 s then 2 s apart; after the third, the message goes to the dead-letter queue.
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1s
+          multiplier: 2
+
+mediqo:
+  reports:
+    dir: data/reports
+    # Simulated rendering speed: 20 ms a page.
+    ms-per-page: 20</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>RabbitMQ 4.1 with the management UI on port 15672 (guest / guest).</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  rabbitmq:
+    image: rabbitmq:4.1-management-alpine
+    ports:
+      - &quot;5672:5672&quot;
+      - &quot;15672:15672&quot;   # management UI: http://localhost:15672, guest / guest
+    healthcheck:
+      test: [&quot;CMD&quot;, &quot;rabbitmq-diagnostics&quot;, &quot;-q&quot;, &quot;check_port_connectivity&quot;]
+      interval: 3s
+      timeout: 5s
+      retries: 30</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>RenderContractTest</code> (4), <code>BrokerDownTest</code> (1)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>AutoAckTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Messaging</td><td>Duplicate delivery, retry and dead letter</td><td><code>RetryAndDeadLetterMessagingTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Idempotency</td><td>Replay: the same request twice gives one effect</td><td><code>DuplicateRenderReplayTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">A real RabbitMQ in Docker. To kill a worker the way a crash does, a test closes the app's connection from the broker's side through the management API; the broker puts the unacknowledged message back.</p>
+<p class="muted">Found while building, twice over: the first version of that test passed and proved nothing. The management API lists connections a few seconds late, so the test closed no connection at all; and once it did, a worker that had lost its connection kept rendering and saved the PDF anyway, so even <code>acknowledge-mode: none</code> passed. Now the test finds the app's connection before it starts, and the worker stops when its channel closes, as a crashed one would: with <code>none</code> the report is lost and the test fails.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, RabbitMQ 4.1 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.mediqo.reports.RetryAndDeadLetterMessagingTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.mediqo.reports.DuplicateRenderReplayTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.mediqo.reports.AutoAckTrapTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 -- in com.mediqo.reports.RenderContractTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0 -- in com.mediqo.reports.BrokerDownTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">AutoAckTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">RenderContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">BrokerDownTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">RetryAndDeadLetterMessagingTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">DuplicateRenderReplayTest.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-6-b" aria-controls="tests-6" aria-selected="false" data-group="tests">RabbitTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/mediqo/reports/AutoAckTrapTest.java</p><div class="notes"><p>Written first: auto-ack against acknowledging after the work, with the plain client.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.ConnectionFactory;
+import com.rabbitmq.client.GetResponse;
+import org.junit.jupiter.api.Test;
+
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+/**
+ * A worker takes a render request and its server restarts before the PDF is made. Written first, with the plain
+ * RabbitMQ client so nothing hides what the broker does.
+ */
+class AutoAckTrapTest extends ApiTest {
+
+    Connection connect() throws Exception {
+        ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost(rabbit.getHost());
+        factory.setPort(rabbit.getAmqpPort());
+        return factory.newConnection();
+    }
+
+    /** One worker takes the message, then dies (its channel closes) without rendering. What is left in the queue? */
+    long leftAfterAWorkerDies(String queue, boolean autoAck) throws Exception {
+        try (Connection connection = connect()) {
+            Channel setup = connection.createChannel();
+            setup.queueDeclare(queue, false, false, false, null);
+            setup.basicPublish(&quot;&quot;, queue, null, &quot;{\&quot;reportId\&quot;:\&quot;LR-0007\&quot;}&quot;.getBytes(StandardCharsets.UTF_8));
+            Channel worker = connection.createChannel();
+            List&lt;String&gt; taken = new CopyOnWriteArrayList&lt;&gt;();
+            worker.basicConsume(queue, autoAck, (tag, delivery) -&gt; taken.add(new String(delivery.getBody(), StandardCharsets.UTF_8)), tag -&gt; {
+            });
+            await().atMost(Duration.ofSeconds(5)).until(() -&gt; taken.size() == 1);
+            worker.close();   // the server restarts: no render, no acknowledgement
+            await().atMost(Duration.ofSeconds(5)).until(() -&gt; setup.messageCount(queue) == (autoAck ? 0 : 1));
+            if (!autoAck) {
+                GetResponse again = setup.basicGet(queue, true);
+                assertThat(again.getEnvelope().isRedeliver()).isTrue();   // the next worker is told it may be a repeat
+            }
+            long left = autoAck ? setup.messageCount(queue) : 1;
+            setup.queueDelete(queue);
+            return left;
+        }
+    }
+
+    @Test
+    void withAutoAckTheMessageIsGoneWithTheWorker() throws Exception {
+        assertThat(leftAfterAWorkerDies(&quot;trap.auto-ack&quot;, true)).isZero();   // the report is never rendered, and nothing says so
+    }
+
+    @Test
+    void withAcknowledgementsAfterTheWorkTheBrokerGivesItToTheNextWorker() throws Exception {
+        assertThat(leftAfterAWorkerDies(&quot;trap.manual-ack&quot;, false)).isEqualTo(1);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/mediqo/reports/RenderContractTest.java</p><div class="notes"><p>A report from request to PDF; bad and unknown ids; prefetch; a refused publish.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.junit.jupiter.api.Test;
+
+import java.nio.charset.StandardCharsets;
+import java.util.regex.Pattern;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class RenderContractTest extends ApiTest {
+
+    @Test
+    void aReportIsQueuedThenRenderedByAWorker() throws Exception {
+        render(&quot;LR-0007&quot;).andExpect(status().isAccepted()).andExpect(header().string(&quot;Location&quot;, &quot;/lab-reports/LR-0007&quot;))
+                .andExpect(jsonPath(&quot;$.status&quot;).value(&quot;QUEUED&quot;)).andExpect(jsonPath(&quot;$.pdfUrl&quot;).doesNotExist());
+        var ready = awaitStatus(&quot;LR-0007&quot;, &quot;READY&quot;);
+        assertThat(ready.path(&quot;pdfUrl&quot;).asString()).isEqualTo(&quot;/lab-reports/LR-0007/pdf&quot;);
+        var pdf = mvc.perform(get(&quot;/lab-reports/LR-0007/pdf&quot;)).andExpect(status().isOk())
+                .andExpect(header().string(&quot;Content-Type&quot;, &quot;application/pdf&quot;)).andReturn().getResponse().getContentAsByteArray();
+        String text = new String(pdf, StandardCharsets.US_ASCII);
+        assertThat(text).startsWith(&quot;%PDF-1.4&quot;).contains(&quot;(Lab report LR-0007 - page 7 of 7)&quot;);
+        assertThat(Pattern.compile(&quot;/Type /Page &quot;).matcher(text).results().count()).isEqualTo(7);
+    }
+
+    @Test
+    void unknownReportsAre404AndBadIds400() throws Exception {
+        render(&quot;LR-0501&quot;).andExpect(status().isNotFound());
+        render(&quot;LR-0000&quot;).andExpect(status().isNotFound());
+        render(&quot;lab-7&quot;).andExpect(status().isBadRequest());
+        render(&quot;..%2F..%2Fetc&quot;).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/lab-reports/LR-0008&quot;)).andExpect(status().isNotFound());   // never requested
+        mvc.perform(get(&quot;/lab-reports/LR-0008/pdf&quot;)).andExpect(status().isNotFound());
+        assertThat(waiting(ReportsApplication.QUEUE)).isZero();
+    }
+
+    /** Two workers, one slow report first: with prefetch 1 the quick ones go to the free worker, not behind the slow one. */
+    @Test
+    void aSlowReportDoesNotHoldUpTheOnesBehindIt() throws Exception {
+        render(&quot;LR-0350&quot;).andExpect(status().isAccepted());   // 1.75 s here
+        render(&quot;LR-0003&quot;).andExpect(status().isAccepted());
+        render(&quot;LR-0004&quot;).andExpect(status().isAccepted());
+        awaitStatus(&quot;LR-0004&quot;, &quot;READY&quot;);
+        assertThat(report(&quot;LR-0350&quot;).path(&quot;status&quot;).asString()).isEqualTo(&quot;QUEUED&quot;);   // still rendering
+        awaitStatus(&quot;LR-0350&quot;, &quot;READY&quot;);
+    }
+
+    /** The broker refuses the message (here: its exchange was deleted). Without waiting for its confirmation, this was a 202 for nothing. */
+    @Test
+    void aMessageTheBrokerDidNotTakeIs503() throws Exception {
+        admin.deleteExchange(ReportsApplication.EXCHANGE);
+        try {
+            render(&quot;LR-0010&quot;).andExpect(status().isServiceUnavailable());
+        } finally {
+            admin.initialize();   // declare the exchange and its binding again for the other tests
+        }
+        render(&quot;LR-0010&quot;).andExpect(status().isAccepted());
+        awaitStatus(&quot;LR-0010&quot;, &quot;READY&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/mediqo/reports/BrokerDownTest.java</p><div class="notes"><p>No broker: <code>503</code>, and the next request tries again.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** No broker at all (nothing listens on port 1): the API says so instead of answering 202 for a message it does not have. */
+@SpringBootTest(properties = {&quot;spring.rabbitmq.port=1&quot;, &quot;mediqo.reports.dir=target/test-reports-broker-down&quot;})
+@AutoConfigureMockMvc
+class BrokerDownTest {
+
+    @Autowired
+    MockMvc mvc;
+
+    @Test
+    void withoutTheBrokerItIs503AndTheRequestCanBeTriedAgain() throws Exception {
+        mvc.perform(post(&quot;/lab-reports/LR-0009/render&quot;)).andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;The render queue is not reachable. Try again shortly.&quot;));
+        mvc.perform(post(&quot;/lab-reports/LR-0009/render&quot;)).andExpect(status().isServiceUnavailable());   // not &quot;already queued&quot;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/mediqo/reports/RetryAndDeadLetterMessagingTest.java</p><div class="notes"><p>A retry that works; the dead-letter queue; a worker cut off mid-render.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import tools.jackson.databind.JsonNode;
+
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Base64;
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class RetryAndDeadLetterMessagingTest extends ApiTest {
+
+    @Autowired
+    RabbitTemplate template;
+
+    @Test
+    void aBusyLabSystemIsRetriedAndTheReportIsRendered() throws Exception {
+        render(&quot;LR-0042&quot;).andExpect(status().isAccepted());   // the lab system does not answer the first time
+        awaitStatus(&quot;LR-0042&quot;, &quot;READY&quot;);
+        assertThat(worker.timesRendered(&quot;LR-0042&quot;)).isEqualTo(1);
+        assertThat(waiting(ReportsApplication.DEAD_LETTER_QUEUE)).isZero();
+    }
+
+    @Test
+    void aDamagedReportEndsInTheDeadLetterQueueWithItsReason() throws Exception {
+        render(&quot;LR-0013&quot;).andExpect(status().isAccepted());
+        var failed = awaitStatus(&quot;LR-0013&quot;, &quot;FAILED&quot;);
+        assertThat(failed.path(&quot;failure&quot;).asString()).isEqualTo(&quot;The scan of LR-0013 is damaged.&quot;);
+        await().atMost(Duration.ofSeconds(5)).until(() -&gt; waiting(ReportsApplication.DEAD_LETTER_QUEUE) == 1);
+        Message parked = template.receive(ReportsApplication.DEAD_LETTER_QUEUE, 1_000);
+        assertThat(new String(parked.getBody(), StandardCharsets.UTF_8)).isEqualTo(&quot;{\&quot;reportId\&quot;:\&quot;LR-0013\&quot;}&quot;);
+        @SuppressWarnings(&quot;unchecked&quot;)
+        Map&lt;String, Object&gt; death = ((List&lt;Map&lt;String, Object&gt;&gt;) parked.getMessageProperties().getHeaders().get(&quot;x-death&quot;)).getFirst();
+        assertThat(death).containsEntry(&quot;reason&quot;, &quot;rejected&quot;).containsEntry(&quot;queue&quot;, ReportsApplication.QUEUE);
+        assertThat(waiting(ReportsApplication.QUEUE)).isZero();   // not retried for ever
+    }
+
+    /** The broker&#x27;s own view of a worker dying: its connection closed from the broker&#x27;s side, mid-render. */
+    @Test
+    void aWorkerCutOffMidRenderLosesNothing() throws Exception {
+        // The management API lists connections a few seconds late: find the app&#x27;s before the render starts.
+        JsonNode connections = await().atMost(Duration.ofSeconds(15)).until(() -&gt; management(&quot;GET&quot;, &quot;/api/connections&quot;), list -&gt; !list.isEmpty());
+        render(&quot;LR-0500&quot;).andExpect(status().isAccepted());   // 500 pages: 2.5 s here
+        // A worker has it and is not done: nothing waiting in the queue, and no PDF yet. (Prefetch 1: it holds just this one.)
+        await().atMost(Duration.ofSeconds(2)).until(() -&gt; waiting(ReportsApplication.QUEUE) == 0);
+        assertThat(report(&quot;LR-0500&quot;).path(&quot;status&quot;).asString()).isEqualTo(&quot;QUEUED&quot;);
+        for (JsonNode connection : connections) {
+            management(&quot;DELETE&quot;, &quot;/api/connections/&quot; + URLEncoder.encode(connection.path(&quot;name&quot;).asString(), StandardCharsets.UTF_8).replace(&quot;+&quot;, &quot;%20&quot;));
+        }
+        awaitStatus(&quot;LR-0500&quot;, &quot;READY&quot;);
+        await().atMost(Duration.ofSeconds(10)).until(() -&gt; waiting(ReportsApplication.QUEUE) == 0);
+        assertThat(worker.timesRendered(&quot;LR-0500&quot;)).isEqualTo(1);   // the cut-off worker stopped; the next one rendered it
+    }
+
+    JsonNode management(String method, String path) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(rabbit.getHttpUrl() + path))
+                .header(&quot;Authorization&quot;, &quot;Basic &quot; + Base64.getEncoder().encodeToString(&quot;guest:guest&quot;.getBytes()))
+                .method(method, HttpRequest.BodyPublishers.noBody()).build();
+        try (HttpClient http = HttpClient.newHttpClient()) {
+            String body = http.send(request, HttpResponse.BodyHandlers.ofString()).body();
+            return body.isBlank() ? JSON.createObjectNode() : JSON.readTree(body);
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/mediqo/reports/DuplicateRenderReplayTest.java</p><div class="notes"><p>The same request twice; a repeated message.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.time.Duration;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class DuplicateRenderReplayTest extends ApiTest {
+
+    @Autowired
+    RabbitTemplate template;
+
+    @Test
+    void theSameRequestTwiceIsOneMessageAndOneRender() throws Exception {
+        render(&quot;LR-0011&quot;).andExpect(status().isAccepted());
+        render(&quot;LR-0011&quot;).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.status&quot;).value(org.hamcrest.Matchers.oneOf(&quot;QUEUED&quot;, &quot;READY&quot;)));
+        awaitStatus(&quot;LR-0011&quot;, &quot;READY&quot;);
+        render(&quot;LR-0011&quot;).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.status&quot;).value(&quot;READY&quot;));
+        assertThat(worker.timesRendered(&quot;LR-0011&quot;)).isEqualTo(1);
+    }
+
+    @Test
+    void aRepeatedMessageForARenderedReportIsSkipped() throws Exception {
+        render(&quot;LR-0012&quot;).andExpect(status().isAccepted());
+        awaitStatus(&quot;LR-0012&quot;, &quot;READY&quot;);
+        // The broker delivers it again (a redelivery after a lost acknowledgement looks the same to the worker).
+        template.convertAndSend(ReportsApplication.EXCHANGE, ReportsApplication.ROUTING_KEY, new RenderWorker.RenderRequest(&quot;LR-0012&quot;));
+        await().atMost(Duration.ofSeconds(5)).until(() -&gt; waiting(ReportsApplication.QUEUE) == 0);
+        await().during(Duration.ofMillis(300)).until(() -&gt; worker.timesRendered(&quot;LR-0012&quot;) == 1);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/mediqo/reports/ApiTest.java</p><div class="notes"><p>Shared setup: empty queues and no report files before each test.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.Comparator;
+import java.util.stream.Stream;
+
+import static org.awaitility.Awaitility.await;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/**
+ * The whole app and a real RabbitMQ. Pages take 5 ms (20 ms in production) and retries wait 100 ms, then 200 ms
+ * (1 s, 2 s). Each test starts with empty queues and no report files; each uses its own report ids.
+ */
+@SpringBootTest(properties = {&quot;mediqo.reports.dir=target/test-reports&quot;, &quot;mediqo.reports.ms-per-page=5&quot;,
+        &quot;spring.rabbitmq.listener.simple.retry.initial-interval=100ms&quot;})
+@AutoConfigureMockMvc
+@Import(RabbitTestConfig.class)
+abstract class ApiTest {
+
+    static final JsonMapper JSON = JsonMapper.builder().build();
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    RabbitAdmin admin;
+    @Autowired
+    RabbitMQContainer rabbit;
+    @Autowired
+    RenderWorker worker;
+
+    @BeforeEach
+    void emptyQueuesAndNoFiles() throws IOException {
+        admin.purgeQueue(ReportsApplication.QUEUE);
+        admin.purgeQueue(ReportsApplication.DEAD_LETTER_QUEUE);
+        try (Stream&lt;Path&gt; files = Files.list(Path.of(&quot;target/test-reports&quot;))) {
+            files.sorted(Comparator.reverseOrder()).forEach(f -&gt; f.toFile().delete());
+        }
+    }
+
+    ResultActions render(String id) throws Exception {
+        return mvc.perform(post(&quot;/lab-reports/{id}/render&quot;, id));
+    }
+
+    JsonNode report(String id) throws Exception {
+        return JSON.readTree(mvc.perform(get(&quot;/lab-reports/{id}&quot;, id)).andReturn().getResponse().getContentAsString());
+    }
+
+    JsonNode awaitStatus(String id, String status) {
+        return await().atMost(Duration.ofSeconds(15)).pollInterval(Duration.ofMillis(50))
+                .until(() -&gt; report(id), r -&gt; status.equals(r.path(&quot;status&quot;).asString()));
+    }
+
+    long waiting(String queue) {
+        return admin.getQueueInfo(queue).getMessageCount();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-6" aria-labelledby="tests-6-b" hidden><p class="path">src/test/java/com/mediqo/reports/RabbitTestConfig.java</p><div class="notes"><p>RabbitMQ 4.1 with management, via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
+
+/** A real RabbitMQ 4.1 in Docker, with its management API (the tests use it to cut workers off). */
+@TestConfiguration(proxyBeanMethods = false)
+class RabbitTestConfig {
+
+    @Bean
+    @ServiceConnection
+    RabbitMQContainer rabbit() {
+        return new RabbitMQContainer(&quot;rabbitmq:4.1-management-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/mediqo/reports/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=ReplayDeadLettersChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 12 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 15 tests pass (12 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 30 minutes</p><h2>Send the dead letters back</h2><p><code>POST /dead-letters/replay</code> moves every parked message back to the work queue (after someone fixed the cause) and answers how many it moved; each report goes back to QUEUED. One surprise, found while building: RabbitMQ 4 starts <code>x-death</code> afresh for a message a client publishes again, so the broker does not count the rounds for you.</p><p><b>Done when:</b> both tests in <code>ReplayDeadLettersChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li><code>basicGet</code> without auto-ack, publish it again, then acknowledge: a crash in between repeats it rather than losing it.</li><li>Keep the message's properties when you publish it again; add your own header if you need to count replays.</li></ul></details><p class="path">challenge/ReplayDeadLettersChallengeTest.java</p><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: POST /dead-letters/replay moves every parked message back to the work queue (after someone fixed the
+ * cause) and answers how many it moved. The report goes back to QUEUED. Here the scan is still damaged, so it fails
+ * again and is parked again.
+ */
+class ReplayDeadLettersChallengeTest extends ApiTest {
+
+    @Autowired
+    RabbitTemplate template;
+
+    @Test
+    void parkedMessagesGoBackToTheWorkQueue() throws Exception {
+        render(&quot;LR-0013&quot;).andExpect(status().isAccepted());
+        awaitStatus(&quot;LR-0013&quot;, &quot;FAILED&quot;);
+        await().atMost(Duration.ofSeconds(5)).until(() -&gt; waiting(ReportsApplication.DEAD_LETTER_QUEUE) == 1);
+
+        mvc.perform(post(&quot;/dead-letters/replay&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.moved&quot;).value(1));
+        assertThat(waiting(ReportsApplication.DEAD_LETTER_QUEUE)).isZero();
+
+        awaitStatus(&quot;LR-0013&quot;, &quot;FAILED&quot;);   // failed again, after three more tries
+        await().atMost(Duration.ofSeconds(5)).until(() -&gt; waiting(ReportsApplication.DEAD_LETTER_QUEUE) == 1);
+        Message parked = template.receive(ReportsApplication.DEAD_LETTER_QUEUE, 1_000);
+        @SuppressWarnings(&quot;unchecked&quot;)
+        Map&lt;String, Object&gt; death = ((List&lt;Map&lt;String, Object&gt;&gt;) parked.getMessageProperties().getHeaders().get(&quot;x-death&quot;)).getFirst();
+        // RabbitMQ 4 does not take x-death from a message a client publishes: its history starts again at 1.
+        // Found while building; keep your own count in a header if you need one.
+        assertThat(((Number) death.get(&quot;count&quot;)).longValue()).isEqualTo(1);
+    }
+
+    @Test
+    void nothingParkedMovesNothing() throws Exception {
+        mvc.perform(post(&quot;/dead-letters/replay&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.moved&quot;).value(0));
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/ReportController.java</p><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.rabbitmq.client.GetResponse;
+import com.rabbitmq.client.ShutdownSignalException;
+import org.springframework.amqp.AmqpException;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.io.IOException;
+import java.net.URI;
+
+@RestController
+class ReportController {
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record ReportState(String reportId, LabReports.Status status, String pdfUrl, String failure) {
+    }
+
+    private final LabReports reports;
+    private final RabbitTemplate rabbit;
+
+    ReportController(LabReports reports, RabbitTemplate rabbit) {
+        this.reports = reports;
+        this.rabbit = rabbit;
+    }
+
+    /**
+     * 202 once the broker has confirmed the message; the render happens on a worker. Asking again for a report that is
+     * queued, ready or failed sends nothing new and answers 200 with its state.
+     */
+    @PostMapping(&quot;/lab-reports/{id}/render&quot;)
+    ResponseEntity&lt;ReportState&gt; render(@PathVariable String id, @RequestParam(defaultValue = &quot;false&quot;) boolean urgent) throws IOException {
+        known(id);
+        if (!reports.markRequested(id)) {
+            return ResponseEntity.ok(state(id));
+        }
+        try {
+            rabbit.invoke(ops -&gt; {
+                ops.convertAndSend(ReportsApplication.EXCHANGE, ReportsApplication.ROUTING_KEY, new RenderWorker.RenderRequest(id), message -&gt; {
+                    message.getMessageProperties().setPriority(urgent ? 9 : 0);   // challenge 2
+                    return message;
+                });
+                ops.waitForConfirmsOrDie(5_000);   // throws if the broker does not confirm in 5 s
+                return null;
+            });
+        } catch (AmqpException | ShutdownSignalException brokerDown) {   // a refused confirm arrives as the client&#x27;s own exception
+            reports.unmarkRequested(id);   // nothing was queued: a later request may try again
+            throw new ErrorResponseException(HttpStatus.SERVICE_UNAVAILABLE,
+                    ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, &quot;The render queue is not reachable. Try again shortly.&quot;), brokerDown);
+        }
+        return ResponseEntity.accepted().location(URI.create(&quot;/lab-reports/&quot; + id)).body(state(id));
+    }
+
+    record Replayed(int moved) {
+    }
+
+    /**
+     * Challenge 1: every parked message back to the work queue, x-death headers and all. Each one is published again
+     * before it is acknowledged on the dead-letter queue, so a crash in between duplicates it rather than losing it.
+     * shortcut: no sign-in in this station; an endpoint like this is for operators only.
+     */
+    @PostMapping(&quot;/dead-letters/replay&quot;)
+    Replayed replay() {
+        int moved = 0;
+        while (Boolean.TRUE.equals(rabbit.execute(channel -&gt; {
+            GetResponse parked = channel.basicGet(ReportsApplication.DEAD_LETTER_QUEUE, false);
+            if (parked == null) {
+                return false;
+            }
+            String id = tools.jackson.databind.json.JsonMapper.builder().build().readTree(parked.getBody()).path(&quot;reportId&quot;).asString();
+            if (reports.pages(id).isPresent()) {
+                reports.clearFailure(id);
+            }
+            channel.basicPublish(ReportsApplication.EXCHANGE, ReportsApplication.ROUTING_KEY, parked.getProps(), parked.getBody());
+            channel.basicAck(parked.getEnvelope().getDeliveryTag(), false);
+            return true;
+        }))) {
+            moved++;
+        }
+        return new Replayed(moved);
+    }
+
+    @GetMapping(&quot;/lab-reports/{id}&quot;)
+    ReportState report(@PathVariable String id) throws IOException {
+        known(id);
+        if (reports.status(id).isEmpty()) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;This report has not been requested.&quot;);
+        }
+        return state(id);
+    }
+
+    @GetMapping(&quot;/lab-reports/{id}/pdf&quot;)
+    ResponseEntity&lt;Resource&gt; pdf(@PathVariable String id) {
+        known(id);
+        if (reports.status(id).orElse(null) != LabReports.Status.READY) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;No PDF for this report yet.&quot;);
+        }
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF).body(new FileSystemResource(reports.pdf(id)));
+    }
+
+    private void known(String id) {
+        if (!LabReports.ID.matcher(id).matches()) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;A report id looks like LR-0042.&quot;);
+        }
+        reports.pages(id).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such report.&quot;));
+    }
+
+    private ReportState state(String id) throws IOException {
+        LabReports.Status status = reports.status(id).orElseThrow();
+        return new ReportState(id, status, status == LabReports.Status.READY ? &quot;/lab-reports/&quot; + id + &quot;/pdf&quot; : null, reports.failure(id).orElse(null));
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div><p class="path">challenge/solution/LabReports.java</p><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * The reports on disk, standing in for object storage: a marker when a render is requested, the PDF when it is done,
+ * a note when it failed for good. Files survive a restart, unlike memory. Simulated lab: report LR-n has n pages
+ * (LR-0001 to LR-0500).
+ * shortcut: one directory on one machine; use object storage (and a table for the state) with several servers.
+ */
+@Component
+class LabReports {
+
+    enum Status { QUEUED, READY, FAILED }
+
+    static final Pattern ID = Pattern.compile(&quot;LR-(\\d{4})&quot;);
+    private final Path dir;
+
+    LabReports(@Value(&quot;${mediqo.reports.dir}&quot;) Path dir) throws IOException {
+        this.dir = Files.createDirectories(dir);
+    }
+
+    /** Pages of a known report; empty for one the lab does not have. */
+    Optional&lt;Integer&gt; pages(String id) {
+        Matcher m = ID.matcher(id);
+        if (!m.matches()) {
+            return Optional.empty();
+        }
+        int n = Integer.parseInt(m.group(1));
+        return n &gt;= 1 &amp;&amp; n &lt;= 500 ? Optional.of(n) : Optional.empty();
+    }
+
+    /** True the first time for a report: only then is a message sent. Atomic across threads and processes. */
+    boolean markRequested(String id) {
+        try {
+            Files.createFile(file(id, &quot;requested&quot;));
+            return true;
+        } catch (FileAlreadyExistsException already) {
+            return false;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    void unmarkRequested(String id) throws IOException {
+        Files.deleteIfExists(file(id, &quot;requested&quot;));
+    }
+
+    Optional&lt;Status&gt; status(String id) {
+        if (Files.exists(pdf(id))) {
+            return Optional.of(Status.READY);
+        }
+        if (Files.exists(file(id, &quot;failed&quot;))) {
+            return Optional.of(Status.FAILED);
+        }
+        return Files.exists(file(id, &quot;requested&quot;)) ? Optional.of(Status.QUEUED) : Optional.empty();
+    }
+
+    Optional&lt;String&gt; failure(String id) throws IOException {
+        Path failed = file(id, &quot;failed&quot;);
+        return Files.exists(failed) ? Optional.of(Files.readString(failed)) : Optional.empty();
+    }
+
+    /** Written next to its final name, then moved: a reader never sees half a PDF. */
+    void savePdf(String id, byte[] pdf) throws IOException {
+        Path tmp = Files.write(file(id, &quot;pdf.tmp&quot;), pdf);
+        Files.move(tmp, pdf(id), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    void saveFailure(String id, String reason) throws IOException {
+        Files.writeString(file(id, &quot;failed&quot;), reason, StandardCharsets.UTF_8);
+    }
+
+    /** Challenge 1: a report sent back to the queue is no longer failed. */
+    void clearFailure(String id) throws IOException {
+        Files.deleteIfExists(file(id, &quot;failed&quot;));
+    }
+
+    Path pdf(String id) {
+        return file(id, &quot;pdf&quot;);
+    }
+
+    private Path file(String id, String kind) {
+        return dir.resolve(id + &quot;.&quot; + kind);   // id is checked against ID before any file is touched
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 35 minutes</p><h2>Urgent reports first</h2><p><code>POST /lab-reports/{id}/render?urgent=true</code> sends the message with a higher priority on a queue that supports priorities, so it is the next message any worker takes.</p><p><b>Done when:</b> the test in <code>UrgentReportsChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>The queue needs <code>x-max-priority</code>; a queue's arguments cannot change in place, so in production this is a new queue or a migration.</li><li>A message post-processor sets the priority when publishing.</li><li>Priority only reorders what is waiting; prefetch 1 keeps little waiting inside the workers.</li></ul></details><p class="path">challenge/UrgentReportsChallengeTest.java</p><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: an emergency ward cannot wait behind the morning&#x27;s routine reports. POST
+ * /lab-reports/{id}/render?urgent=true sends the message with a higher priority, on a queue that supports priorities,
+ * so it is the next one any worker takes.
+ */
+class UrgentReportsChallengeTest extends ApiTest {
+
+    @Test
+    void anUrgentReportJumpsTheQueue() throws Exception {
+        render(&quot;LR-0401&quot;).andExpect(status().isAccepted());   // both workers busy for 2 s
+        render(&quot;LR-0402&quot;).andExpect(status().isAccepted());
+        for (String routine : new String[]{&quot;LR-0201&quot;, &quot;LR-0202&quot;, &quot;LR-0203&quot;}) {
+            render(routine).andExpect(status().isAccepted());
+        }
+        mvc.perform(post(&quot;/lab-reports/LR-0005/render&quot;).param(&quot;urgent&quot;, &quot;true&quot;)).andExpect(status().isAccepted());
+
+        awaitStatus(&quot;LR-0005&quot;, &quot;READY&quot;);
+        // When the urgent one is done, none of the routine ones queued before it is.
+        long routineDone = java.util.stream.Stream.of(&quot;LR-0201&quot;, &quot;LR-0202&quot;, &quot;LR-0203&quot;)
+                .filter(id -&gt; {
+                    try {
+                        return report(id).path(&quot;status&quot;).asString().equals(&quot;READY&quot;);
+                    } catch (Exception e) {
+                        throw new IllegalStateException(e);
+                    }
+                }).count();
+        assertThat(routineDone).isZero();
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/ReportsApplication.java</p><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.Declarables;
+import org.springframework.amqp.core.DirectExchange;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.QueueBuilder;
+import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
+import org.springframework.amqp.support.converter.MessageConverter;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+@SpringBootApplication
+public class ReportsApplication {
+
+    static final String EXCHANGE = &quot;lab-reports&quot;;
+    static final String QUEUE = &quot;report-render&quot;;
+    static final String DEAD_LETTERS = &quot;lab-reports.dlx&quot;;
+    static final String DEAD_LETTER_QUEUE = &quot;report-render.dlq&quot;;
+    static final String ROUTING_KEY = &quot;render&quot;;
+
+    public static void main(String[] args) {
+        SpringApplication.run(ReportsApplication.class, args);
+    }
+
+    /**
+     * Declared on start-up if missing: a direct exchange routes &quot;render&quot; to the durable work queue; a message the
+     * worker gives up on goes to the dead-letter exchange and waits in its own queue for a person.
+     */
+    @Bean
+    Declarables topology() {
+        DirectExchange exchange = new DirectExchange(EXCHANGE);
+        DirectExchange deadLetters = new DirectExchange(DEAD_LETTERS);
+        // Challenge 2: a priority queue (0 to 10). Queue arguments cannot change on an existing queue: a new queue, or a migration.
+        Queue work = QueueBuilder.durable(QUEUE).deadLetterExchange(DEAD_LETTERS).deadLetterRoutingKey(ROUTING_KEY).maxPriority(10).build();
+        Queue parked = QueueBuilder.durable(DEAD_LETTER_QUEUE).build();
+        Binding route = BindingBuilder.bind(work).to(exchange).with(ROUTING_KEY);
+        Binding parkedRoute = BindingBuilder.bind(parked).to(deadLetters).with(ROUTING_KEY);
+        return new Declarables(exchange, deadLetters, work, parked, route, parkedRoute);
+    }
+
+    /** Messages as JSON, readable in the management UI. */
+    @Bean
+    MessageConverter json() {
+        return new JacksonJsonMessageConverter();
+    }
+}</code></pre></div><p class="path">challenge/solution/ReportController.java</p><div class="src"><pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.rabbitmq.client.GetResponse;
+import com.rabbitmq.client.ShutdownSignalException;
+import org.springframework.amqp.AmqpException;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.io.IOException;
+import java.net.URI;
+
+@RestController
+class ReportController {
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record ReportState(String reportId, LabReports.Status status, String pdfUrl, String failure) {
+    }
+
+    private final LabReports reports;
+    private final RabbitTemplate rabbit;
+
+    ReportController(LabReports reports, RabbitTemplate rabbit) {
+        this.reports = reports;
+        this.rabbit = rabbit;
+    }
+
+    /**
+     * 202 once the broker has confirmed the message; the render happens on a worker. Asking again for a report that is
+     * queued, ready or failed sends nothing new and answers 200 with its state.
+     */
+    @PostMapping(&quot;/lab-reports/{id}/render&quot;)
+    ResponseEntity&lt;ReportState&gt; render(@PathVariable String id, @RequestParam(defaultValue = &quot;false&quot;) boolean urgent) throws IOException {
+        known(id);
+        if (!reports.markRequested(id)) {
+            return ResponseEntity.ok(state(id));
+        }
+        try {
+            rabbit.invoke(ops -&gt; {
+                ops.convertAndSend(ReportsApplication.EXCHANGE, ReportsApplication.ROUTING_KEY, new RenderWorker.RenderRequest(id), message -&gt; {
+                    message.getMessageProperties().setPriority(urgent ? 9 : 0);   // challenge 2
+                    return message;
+                });
+                ops.waitForConfirmsOrDie(5_000);   // throws if the broker does not confirm in 5 s
+                return null;
+            });
+        } catch (AmqpException | ShutdownSignalException brokerDown) {   // a refused confirm arrives as the client&#x27;s own exception
+            reports.unmarkRequested(id);   // nothing was queued: a later request may try again
+            throw new ErrorResponseException(HttpStatus.SERVICE_UNAVAILABLE,
+                    ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, &quot;The render queue is not reachable. Try again shortly.&quot;), brokerDown);
+        }
+        return ResponseEntity.accepted().location(URI.create(&quot;/lab-reports/&quot; + id)).body(state(id));
+    }
+
+    record Replayed(int moved) {
+    }
+
+    /**
+     * Challenge 1: every parked message back to the work queue, x-death headers and all. Each one is published again
+     * before it is acknowledged on the dead-letter queue, so a crash in between duplicates it rather than losing it.
+     * shortcut: no sign-in in this station; an endpoint like this is for operators only.
+     */
+    @PostMapping(&quot;/dead-letters/replay&quot;)
+    Replayed replay() {
+        int moved = 0;
+        while (Boolean.TRUE.equals(rabbit.execute(channel -&gt; {
+            GetResponse parked = channel.basicGet(ReportsApplication.DEAD_LETTER_QUEUE, false);
+            if (parked == null) {
+                return false;
+            }
+            String id = tools.jackson.databind.json.JsonMapper.builder().build().readTree(parked.getBody()).path(&quot;reportId&quot;).asString();
+            if (reports.pages(id).isPresent()) {
+                reports.clearFailure(id);
+            }
+            channel.basicPublish(ReportsApplication.EXCHANGE, ReportsApplication.ROUTING_KEY, parked.getProps(), parked.getBody());
+            channel.basicAck(parked.getEnvelope().getDeliveryTag(), false);
+            return true;
+        }))) {
+            moved++;
+        }
+        return new Replayed(moved);
+    }
+
+    @GetMapping(&quot;/lab-reports/{id}&quot;)
+    ReportState report(@PathVariable String id) throws IOException {
+        known(id);
+        if (reports.status(id).isEmpty()) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;This report has not been requested.&quot;);
+        }
+        return state(id);
+    }
+
+    @GetMapping(&quot;/lab-reports/{id}/pdf&quot;)
+    ResponseEntity&lt;Resource&gt; pdf(@PathVariable String id) {
+        known(id);
+        if (reports.status(id).orElse(null) != LabReports.Status.READY) {
+            throw problem(HttpStatus.NOT_FOUND, &quot;No PDF for this report yet.&quot;);
+        }
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF).body(new FileSystemResource(reports.pdf(id)));
+    }
+
+    private void known(String id) {
+        if (!LabReports.ID.matcher(id).matches()) {
+            throw problem(HttpStatus.BAD_REQUEST, &quot;A report id looks like LR-0042.&quot;);
+        }
+        reports.pages(id).orElseThrow(() -&gt; problem(HttpStatus.NOT_FOUND, &quot;No such report.&quot;));
+    }
+
+    private ReportState state(String id) throws IOException {
+        LabReports.Status status = reports.status(id).orElseThrow();
+        return new ReportState(id, status, status == LabReports.Status.READY ? &quot;/lab-reports/&quot; + id + &quot;/pdf&quot; : null, reports.failure(id).orElse(null));
+    }
+
+    private static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>RabbitMQ or Kafka?</h2>
+<p>Mediqo also wants every lab result as an event that billing, the patient app and analytics read on their own, and can read again from last month. Which part stays a RabbitMQ work queue and which becomes a Kafka topic? Compare: who removes a message, whether consumers compete or each read everything, replay, ordering, and Kafka's newer share groups (queue-like consumption on a topic). Where does each one's dead letter go?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test with the plain client: auto-ack against manual ack.</li>
+<li>Declare the topology: exchange, durable queue, dead-letter exchange and queue.</li>
+<li>Publish with confirms; consume with acknowledgement after the work, prefetch 1.</li>
+<li>Add retry, the recoverer and idempotency; then cut a worker off in a test.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Acknowledge after the work, retry, dead-letter queue</td><td>Repeats are possible: the worker must skip them.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Auto-ack (<code>acknowledge-mode: none</code>)</td><td>A worker that dies loses its messages.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Requeue on every failure</td><td>A message that always fails loops for ever.</td><td><span class="pill bad">Avoid</span></td></tr><tr><td>@Async in the app (station 098's way)</td><td>No broker; jobs die with the server.</td><td><span class="pill warn">For work you can lose</span></td></tr><tr><td>Kafka</td><td>A log that consumers read at their own pace and can replay; work-queue semantics need share groups or care.</td><td><span class="pill warn">For events, see challenge 3</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<p>No database: the broker holds the work, the disk holds the reports. With several servers, report state moves to a table and files to object storage; the queue stays the same.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>15. Real-world considerations</li><li>14. Operations (Production Scale stations only)</li></ul><p class="rule">A Working Systems station: the considerations to know, no runbook.</p></aside>
+<dl class="facts">
+<dt>Quorum queues</dt><dd>On a RabbitMQ cluster, use quorum queues for work that must survive a node: classic queues live on one node.</dd>
+<dt>Watch</dt><dd>Queue depth, unacknowledged messages, consumer count and the dead-letter queue's size. A growing dead-letter queue is a bug report.</dd>
+<dt>Timeouts</dt><dd>RabbitMQ closes a channel whose delivery is not acknowledged within <code>consumer_timeout</code> (30 minutes by default): long tasks must fit, or be split.</dd>
+<dt>Poison messages</dt><dd>The retry limit is what keeps one bad message from blocking a worker for ever.</dd>
+<dt>Outbox</dt><dd>If the request also writes a database row, publish through an outbox table, or a crash between the two loses one of them.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>Why do messages get lost with auto-ack?</summary><p>The broker deletes a message as soon as it is sent to a consumer. If the consumer dies before finishing, nobody has it.</p></details><details class="qa"><summary>What does Spring AMQP&#x27;s acknowledge-mode auto mean?</summary><p>Spring acknowledges after the listener returns normally and rejects on an exception: the safe default. RabbitMQ&#x27;s autoAck is Spring&#x27;s NONE.</p></details><details class="qa"><summary>What is prefetch for?</summary><p>How many unacknowledged messages a consumer may hold. 1 spreads long tasks fairly; higher is faster for tiny ones.</p></details><details class="qa"><summary>How do you stop a poison message looping?</summary><p>Retry a few times, then reject without requeue so the broker dead-letters it.</p></details><details class="qa"><summary>How does the API know the broker has the message?</summary><p>Publisher confirms: wait for the broker&#x27;s ack before answering 202.</p></details><details class="qa"><summary>Why must consumers be idempotent?</summary><p>Delivery is at least once: a crash after the work and before the ack means the message comes again.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 12 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>Delivery</td><td>Durable queue, acks after work.</td><td>Publisher confirms, prefetch chosen on purpose, idempotent worker.</td></tr><tr><td>Failure</td><td>Retries.</td><td>A retry limit, a dead-letter queue, and the reason recorded.</td></tr><tr><td>Testing</td><td>A listener test.</td><td>A real broker, a worker cut off mid-task, and a test that fails without acknowledgements.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate "speeds up the workers": a listener container factory with <code>AcknowledgeMode.NONE</code>, "so the worker is simpler without acknowledgements". Read the file and list every problem before opening the findings.</p>
+<p class="path">review/ReportsApplication.java</p>
+<pre class="code"><code class="language-java">package com.mediqo.reports;
+
+import org.springframework.amqp.core.AcknowledgeMode;
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.Declarables;
+import org.springframework.amqp.core.DirectExchange;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.QueueBuilder;
+import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
+import org.springframework.amqp.support.converter.MessageConverter;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+@SpringBootApplication
+public class ReportsApplication {
+
+    static final String EXCHANGE = &quot;lab-reports&quot;;
+    static final String QUEUE = &quot;report-render&quot;;
+    static final String DEAD_LETTERS = &quot;lab-reports.dlx&quot;;
+    static final String DEAD_LETTER_QUEUE = &quot;report-render.dlq&quot;;
+    static final String ROUTING_KEY = &quot;render&quot;;
+
+    public static void main(String[] args) {
+        SpringApplication.run(ReportsApplication.class, args);
+    }
+
+    /**
+     * Declared on start-up if missing: a direct exchange routes &quot;render&quot; to the durable work queue; a message the
+     * worker gives up on goes to the dead-letter exchange and waits in its own queue for a person.
+     */
+    @Bean
+    Declarables topology() {
+        DirectExchange exchange = new DirectExchange(EXCHANGE);
+        DirectExchange deadLetters = new DirectExchange(DEAD_LETTERS);
+        Queue work = QueueBuilder.durable(QUEUE).deadLetterExchange(DEAD_LETTERS).deadLetterRoutingKey(ROUTING_KEY).build();
+        Queue parked = QueueBuilder.durable(DEAD_LETTER_QUEUE).build();
+        Binding route = BindingBuilder.bind(work).to(exchange).with(ROUTING_KEY);
+        Binding parkedRoute = BindingBuilder.bind(parked).to(deadLetters).with(ROUTING_KEY);
+        return new Declarables(exchange, deadLetters, work, parked, route, parkedRoute);
+    }
+
+    /** Auto-ack: faster, and the worker is simpler without acknowledgements. */
+    @Bean
+    SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(ConnectionFactory connections, MessageConverter json) {
+        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+        factory.setConnectionFactory(connections);
+        factory.setMessageConverter(json);
+        factory.setAcknowledgeMode(AcknowledgeMode.NONE);
+        factory.setConcurrentConsumers(2);
+        return factory;
+    }
+
+    /** Messages as JSON, readable in the management UI. */
+    @Bean
+    MessageConverter json() {
+        return new JacksonJsonMessageConverter();
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>AcknowledgeMode.NONE</summary><p>"Auto-ack: faster": the broker now deletes each message the moment a worker receives it. A worker that dies mid-report loses it, and a listener that throws loses it too: there is nothing left to retry or dead-letter.</p><p class="evidence"><b>Test evidence:</b> <code>aWorkerCutOffMidRenderLosesNothing</code> and <code>aDamagedReportEndsInTheDeadLetterQueueWithItsReason</code> fail.</p></details><details class="finding"><summary><span class="sev">2</span>A hand-made factory drops Spring Boot's settings</summary><p>Declaring <code>rabbitListenerContainerFactory</code> replaces the one Spring Boot builds from <code>application.yaml</code>: prefetch 1, the retry policy and the recoverer are all gone, with nothing in the code to say so.</p><p class="evidence"><b>Test evidence:</b> <code>aSlowReportDoesNotHoldUpTheOnesBehindIt</code> and <code>aBusyLabSystemIsRetriedAndTheReportIsRendered</code> fail: no prefetch 1, no retry.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the flawed file copied over the real one, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>AutoAckTrapTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill ok">2 / 2</span></td></tr><tr><td><code>BrokerDownTest</code></td><td><span class="pill ok">1 / 1</span></td><td><span class="pill ok">1 / 1</span></td></tr><tr><td><code>DuplicateRenderReplayTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill ok">2 / 2</span></td></tr><tr><td><code>RenderContractTest</code></td><td><span class="pill ok">4 / 4</span></td><td><span class="pill bad">3 / 4</span></td></tr><tr><td><code>RetryAndDeadLetterMessagingTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill bad">0 / 3</span></td></tr></tbody></table></div>
+<p class="note">On a calm day with healthy workers, every report is rendered. The flaw shows on the day a server restarts at peak: exactly the day in the story.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
+
+</body></html>
