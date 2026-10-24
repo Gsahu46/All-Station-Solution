@@ -6,6 +6,8 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.net.SocketTimeoutException;
+import java.net.http.HttpTimeoutException;
 import java.util.Map;
 
 /** The payment gateway over HTTP (simulated in tests and captures). A charge carries the order id as its Idempotency-Key. */
@@ -46,7 +48,10 @@ class PaymentGateway {
             }
             throw new Unavailable("The payment gateway answered " + e.getStatusCode().value() + ".", false, e);
         } catch (ResourceAccessException e) {   // could not connect, or no answer within the read timeout
-            boolean timedOut = e.getMessage() != null && e.getMessage().toLowerCase(java.util.Locale.ROOT).contains("timed out");
+            boolean timedOut = false;
+            for (Throwable t = e; t != null; t = t.getCause()) {
+                timedOut |= t instanceof HttpTimeoutException || t instanceof SocketTimeoutException;
+            }
             throw new Unavailable(timedOut ? "The payment gateway did not answer in time." : "The payment gateway is not reachable.", timedOut, e);
         }
     }

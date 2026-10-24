@@ -79,7 +79,7 @@ class PoolExhaustionTrapTest extends ApiTest {
         double before = poolTimeouts();
         List<String> outcomes = sixteenFansAtOnce(() -> oldOrders.place(1, "fan", 1));
         // Four charges at a time, 0.7 s each: the fans still waiting after 1 s get no connection at all.
-        assertThat(outcomes).contains("CannotGetJdbcConnectionException");
+        assertThat(outcomes).contains("CannotCreateTransactionException");   // no connection within 1 s
         assertThat(outcomes.stream().filter("PAID"::equals).count()).isLessThan(16);
         assertThat(poolTimeouts()).isGreaterThan(before);
     }

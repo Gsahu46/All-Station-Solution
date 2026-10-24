@@ -1,0 +1,1782 @@
+<title>Station 102 · Ticket sale when the pool runs dry</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 102</span>
+    <h1>Ticket sale when the pool runs dry</h1>
+    <p class="scenario">During a cricket ticket sale every request waits 30 seconds, then fails, while the database is idle.</p>
+    <p class="sim"><b>Simulation</b><span>The payment gateway is simulated: a small server answers each charge (no money moves). The sales and buyers are demo data.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Events</li>
+      <li><b>Types</b>Database · Operations</li>
+      <li><b>Reviewer view</b>No</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>055 Checkout as one transaction</p>
+      <p><span class="eyebrow">Builds toward</span><br>189 Troubleshooting a ticketing incident</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · HikariCP · TransactionTemplate · RestClient with timeouts · Actuator and Micrometer · PostgreSQL 17 · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Sale opens</strong><p>Tickets for India vs Australia go on sale. Thousands of fans press "Buy" at once.</p></li><li><strong>Thirty seconds, then an error</strong><p>Each order took a database connection, then called the payment gateway inside the same transaction. The gateway took a second or two. Ten slow charges held all ten connections; every other request waited 30 seconds for one and failed. The database itself was nearly idle.</p></li><li><strong>The fix</strong><p>The order is split: take the seats and commit, call the gateway with no connection held, then record the result in a second short transaction. A connection is held for milliseconds, and a request that cannot get one is told so in 2 seconds.</p></li></ol>
+<p class="lesson">Never hold a database connection while you wait for someone else. A pool runs dry long before the database does.</p>
+
+<h2>What are we building?</h2>
+<p>A ticket order that takes seats, charges the buyer and records the result, without holding a connection during the charge, with metrics and drills for the night of the sale.</p>
+
+<h2>An everyday analogy</h2>
+<p>A bank clerk who phones head office in the middle of serving you blocks the counter for everyone behind you. A good clerk takes your form, sends you to wait while head office answers, and calls the next customer.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Reserve</strong>: one short transaction takes the seats (only if they are there) and records the order as waiting for payment.</li>
+<li><strong>Charge</strong>: call the gateway with no connection held, for at most 3 seconds.</li>
+<li><strong>Record</strong>: a second short transaction marks the order paid, or failed and gives the seats back.</li>
+<li><strong>Watch</strong>: the pool's metrics show waiting requests and timeouts; the alerts read them.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: why not just make the pool bigger?</summary><p>A bigger pool only moves the wall: 10 or 100 connections, slow charges fill them all, and each connection costs the database memory. Holding none during the charge removes the wall.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No real payments.</strong> A test gateway answers.</li>
+<li><strong>No seat map.</strong> A sale is a count of seats.</li>
+<li><strong>No reconciliation job.</strong> A timed-out charge's seats are given back (a shortcut, see Code).</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Connection pool</strong></td><td>A few ready database connections the app lends to requests and takes back.</td><td>A bank with ten counters.</td><td>HikariCP, 10</td></tr><tr><td><strong>Connection timeout</strong></td><td>How long a request waits for a free connection before giving up.</td><td>How long you stand in the queue for a counter.</td><td>2 s (Hikari's default: 30 s)</td></tr><tr><td><strong>Transaction</strong></td><td>Work on the database that commits or rolls back together; it holds a connection until it ends.</td><td>Your time at the counter.</td><td><code>TransactionTemplate</code></td></tr><tr><td><strong>Remote call</strong></td><td>A request to another system over the network: slow, sometimes very slow.</td><td>The clerk phoning head office mid-transaction.</td><td>the payment gateway</td></tr><tr><td><strong>Pool metrics</strong></td><td>Numbers the pool publishes: waiting requests, timeouts, how long connections are held.</td><td>The token display over the counters.</td><td><code>hikaricp.connections.*</code></td></tr><tr><td><strong>Bulkhead</strong></td><td>A limit on how many requests may wait on one slow thing.</td><td>Only three customers allowed at the foreign-exchange desk.</td><td>challenge 2</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>SeatSure</strong> (a fictional ticketing site): during a cricket ticket sale every request waits 30 seconds, then fails, while the database is idle.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo rules: 10 connections, 2 s to get one; 1 to 6 seats per order; the gateway gets 1 s to connect and 3 s to answer.</p>
+<ol class="gwt">
+<li><b>Given</b> seats and a paying buyer, <b>then</b> <code>201</code>, PAID, the amount in paise and the charge id.</li>
+<li><b>Given</b> a declined payment, a gateway error or a gateway slower than 3 s, <b>then</b> <code>402</code>, <code>502</code> or <code>504</code>, and the seats are given back.</li>
+<li><b>Given</b> many orders while the gateway is slow, <b>then</b> no connection is held during charges, and other requests answer at once.</li>
+<li><b>Given</b> no free connection, <b>then</b> <code>503</code> with <code>Retry-After</code> within the pool's timeout, not after 30 s.</li>
+<li><b>Given</b> too few seats, an unknown sale or bad input, <b>then</b> <code>409</code>, <code>404</code>, <code>400</code>, and nothing charged.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>No transaction is open during a remote call.</li>
+<li>Never more seats sold than there are, in the database too.</li>
+<li>Pool metrics published; drills for the two failures that matter.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Size a Hikari pool and set its connection timeout.</li>
+<li>Split a request into short transactions around a remote call.</li>
+<li>Put timeouts on every remote call.</li>
+<li>Read pool metrics and write alerts and a runbook from them.</li>
+<li>Prove pool behaviour with concurrent tests and drills.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/sales/{id}/orders</code></td><td>Buy 1 to 6 seats: <code>{buyer, seats}</code>.</td></tr><tr><td><code>GET</code></td><td><code>/sales/{id}</code></td><td>Capacity, sold and left.</td></tr><tr><td><code>GET</code></td><td><code>/actuator/metrics/hikaricp.connections.*</code></td><td>The pool's metrics, for dashboards and alerts.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">201</span></td><td>Paid</td></tr><tr><td><span class="pill warn">400</span></td><td>No buyer; seats not 1 to 6</td></tr><tr><td><span class="pill warn">402</span></td><td>The payment was declined</td></tr><tr><td><span class="pill warn">404</span></td><td>No such sale</td></tr><tr><td><span class="pill warn">409</span></td><td>Not enough seats left</td></tr><tr><td><span class="pill warn">502</span> / <span class="pill warn">504</span></td><td>The gateway failed / did not answer within 3 s</td></tr><tr><td><span class="pill warn">503</span></td><td>No database connection within 2 s; <code>Retry-After: 5</code></td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 24 Oct 2026, in this order, against <code>docs/test-gateway.py</code>, a small simulated gateway. <code>Date</code>, connection and standard security headers are left out.</p>
+<section class="example"><h3>Case 1: two seats for the big match</h3><p><b>Why:</b> <code>201</code>, paid; 2 × ₹1,500 = 300000 paise.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /sales/1/orders HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;buyer&quot;: &quot;Priya Nair&quot;,
+  &quot;seats&quot;: 2
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /orders/1
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 1,
+  &quot;saleId&quot;: 1,
+  &quot;buyer&quot;: &quot;Priya Nair&quot;,
+  &quot;seats&quot;: 2,
+  &quot;amountPaise&quot;: 300000,
+  &quot;status&quot;: &quot;PAID&quot;,
+  &quot;chargeId&quot;: &quot;ch_1&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 2: the sale afterwards</h3><p><b>Why:</b> two seats fewer.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /sales/1 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 92
+
+{
+  &quot;id&quot;: 1,
+  &quot;name&quot;: &quot;India vs Australia, Wankhede, day 1&quot;,
+  &quot;capacity&quot;: 30000,
+  &quot;sold&quot;: 2,
+  &quot;left&quot;: 29998
+}</code></pre></div></div></section><section class="example"><h3>Case 3: all four seats of the small match</h3><p><b>Why:</b> <code>201</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /sales/2/orders HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;buyer&quot;: &quot;Ravi Kumar&quot;,
+  &quot;seats&quot;: 4
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /orders/2
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 2,
+  &quot;saleId&quot;: 2,
+  &quot;buyer&quot;: &quot;Ravi Kumar&quot;,
+  &quot;seats&quot;: 4,
+  &quot;amountPaise&quot;: 120000,
+  &quot;status&quot;: &quot;PAID&quot;,
+  &quot;chargeId&quot;: &quot;ch_2&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: one more</h3><p><b>Why:</b> <code>409</code>; nothing charged.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /sales/2/orders HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;buyer&quot;: &quot;Asha Rao&quot;,
+  &quot;seats&quot;: 1
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 409 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Not enough seats left.&quot;,
+  &quot;instance&quot;: &quot;/sales/2/orders&quot;,
+  &quot;status&quot;: 409,
+  &quot;title&quot;: &quot;Conflict&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: seven seats</h3><p><b>Why:</b> <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /sales/1/orders HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;buyer&quot;: &quot;Asha Rao&quot;,
+  &quot;seats&quot;: 7
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Invalid request content.&quot;,
+  &quot;instance&quot;: &quot;/sales/1/orders&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: no such sale</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /sales/9/orders HTTP/1.1
+Content-Type: application/json
+
+{
+  &quot;buyer&quot;: &quot;Asha Rao&quot;,
+  &quot;seats&quot;: 1
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;No such sale.&quot;,
+  &quot;instance&quot;: &quot;/sales/9/orders&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Not Found&quot;
+}</code></pre></div></div></section>
+<h2>The drill, captured</h2>
+<p class="muted"><code>docs/capture.sh</code> makes the gateway hang for 10 s, sends 20 orders at once (twice the pool), and reads the sale while they wait. Status codes of the 20, and the slowest one:</p>
+<pre class="code"><code class="language-text">504 x 20
+slowest: 3.1 s</code></pre><pre class="code"><code class="language-text">GET /sales/1 during the hang: 200 in 0.008001 s</code></pre><section class="example"><h3>Case 7: the sale after the drill</h3><p><b>Why:</b> the 20 failed orders gave their seats back.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /sales/1 HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 92
+
+{
+  &quot;id&quot;: 1,
+  &quot;name&quot;: &quot;India vs Australia, Wankhede, day 1&quot;,
+  &quot;capacity&quot;: 30000,
+  &quot;sold&quot;: 2,
+  &quot;left&quot;: 29998
+}</code></pre></div></div></section>
+<p class="muted">And the pool's metrics at the end:</p>
+<pre class="code"><code class="language-text">hikaricp.connections.timeout = 0.0
+hikaricp.connections.usage: count = 49 , max = 85.0 ms</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>The old way: 16 fans, pool 4, a 0.7 s gateway</td><td>Some get no connection; pool timeouts rise</td><td><code>theOldWayHoldsAConnectionThroughEachChargeAndFansTimeOut</code></td></tr><tr><td>The API, the same 16</td><td>All paid; no pool timeouts</td><td><code>theApiHoldsAConnectionForMillisecondsAndEveryFanGetsASeat</code></td></tr><tr><td>A paid order</td><td><code>201</code>, amount, charge id, Idempotency-Key</td><td><code>aPaidOrderTakesItsSeats</code></td></tr><tr><td>A declined payment</td><td><code>402</code>, order FAILED, seats back</td><td><code>aDeclinedPaymentGivesTheSeatsBack</code></td></tr><tr><td>0 or 7 seats, no buyer, no sale, too few seats</td><td><code>400</code>, <code>404</code>, <code>409</code>; nothing charged</td><td><code>badOrdersAre400UnknownSales404AndASoldOutSale409</code></td></tr><tr><td>Rules written by plain SQL</td><td>Refused by named constraints</td><td><code>saleAndOrderRulesHoldWithoutJava</code></td></tr><tr><td>An order that cannot be recorded</td><td>No seats taken</td><td><code>anOrderThatCannotBeRecordedTakesNoSeats</code></td></tr><tr><td>Drill: the gateway hangs</td><td><code>504</code> after 1 s each; reads answer at once; seats back</td><td><code>aHangingGatewayIsCutOffAndTheDatabaseStaysFree</code></td></tr><tr><td>Drill: the pool is held by something else</td><td><code>503</code> after about 1 s, logged; recovers</td><td><code>withNoConnectionFreeTheAnswerIs503AfterOneSecondNotThirty</code></td></tr><tr><td>The alerts' metrics</td><td>Published</td><td><code>theMetricsTheAlertsReadArePublished</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Calling remote services inside a transaction while holding a connection.</p>
+<ul>
+<li><strong>The old way.</strong> One <code>@Transactional</code> method takes the seats, charges the buyer and records the result. Sixteen fans at once, a pool of four, a gateway that takes 0.7 s: four charges at a time, each holding a connection, and the fans still waiting after 1 s get none. <code>hikaricp.connections.timeout</code> rises.</li>
+<li><strong>The API.</strong> The same sixteen: every one paid, and no request waited too long for a connection, because none was held during a charge.</li>
+</ul>
+<p>While building, each part was undone once: one transaction around the order turned 3 tests red; no read timeout 1; no seat check in the UPDATE 1; seats kept after a decline 1; seats kept after a gateway failure 1; no <code>503</code> for an empty pool 1; no Idempotency-Key 1; timeouts taken for other errors 1.</p>
+</div>
+<pre class="code"><code class="language-java">package com.seatsure.sales;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import static com.seatsure.sales.TestGateway.GATEWAY;
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** The sale opens: sixteen fans at once, a gateway that takes 0.7 s per charge, a pool of four. Written first. */
+@Import(PoolExhaustionTrapTest.OldWay.class)
+class PoolExhaustionTrapTest extends ApiTest {
+
+    /** The old way: one transaction around everything, so a connection is held while the gateway thinks. */
+    @TestConfiguration
+    static class OldWay {
+        @Bean
+        OldOrders oldOrders(TicketOrders orders, PaymentGateway gateway, JdbcClient jdbc) {
+            return new OldOrders(orders, gateway, jdbc);
+        }
+    }
+
+    static class OldOrders {
+        private final TicketOrders orders;
+        private final PaymentGateway gateway;
+        private final JdbcClient jdbc;
+
+        OldOrders(TicketOrders orders, PaymentGateway gateway, JdbcClient jdbc) {
+            this.orders = orders;
+            this.gateway = gateway;
+            this.jdbc = jdbc;
+        }
+
+        @Transactional
+        public String place(long saleId, String buyer, int seats) {
+            TicketOrders.Order pending = orders.reserve(saleId, buyer, seats);
+            PaymentGateway.Charge charge = gateway.charge(pending.id(), pending.amountPaise());
+            jdbc.sql(&quot;UPDATE orders SET status = &#x27;PAID&#x27;, charge_id = ? WHERE id = ?&quot;).params(charge.chargeId(), pending.id()).update();
+            return &quot;PAID&quot;;
+        }
+    }
+
+    @Autowired
+    OldOrders oldOrders;
+
+    List&lt;String&gt; sixteenFansAtOnce(Callable&lt;String&gt; buy) throws Exception {
+        CountDownLatch open = new CountDownLatch(1);
+        List&lt;Future&lt;String&gt;&gt; fans = new ArrayList&lt;&gt;();
+        try (var threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; 16; i++) {
+                fans.add(threads.submit(() -&gt; {
+                    open.await();
+                    try {
+                        return buy.call();
+                    } catch (Exception e) {
+                        return e.getClass().getSimpleName();
+                    }
+                }));
+            }
+            open.countDown();
+        }
+        return fans.stream().map(Future::resultNow).toList();
+    }
+
+    @Test
+    void theOldWayHoldsAConnectionThroughEachChargeAndFansTimeOut() throws Exception {
+        GATEWAY.delayMillis = 700;
+        double before = poolTimeouts();
+        List&lt;String&gt; outcomes = sixteenFansAtOnce(() -&gt; oldOrders.place(1, &quot;fan&quot;, 1));
+        // Four charges at a time, 0.7 s each: the fans still waiting after 1 s get no connection at all.
+        assertThat(outcomes).contains(&quot;CannotCreateTransactionException&quot;);   // no connection within 1 s
+        assertThat(outcomes.stream().filter(&quot;PAID&quot;::equals).count()).isLessThan(16);
+        assertThat(poolTimeouts()).isGreaterThan(before);
+    }
+
+    @Test
+    void theApiHoldsAConnectionForMillisecondsAndEveryFanGetsASeat() throws Exception {
+        GATEWAY.delayMillis = 700;
+        double before = poolTimeouts();
+        List&lt;String&gt; outcomes = sixteenFansAtOnce(() -&gt; String.valueOf(order(1, &quot;fan&quot;, 1).andReturn().getResponse().getStatus()));
+        assertThat(outcomes).containsOnly(&quot;201&quot;);
+        assertThat(sold(1)).isEqualTo(16);
+        assertThat(poolTimeouts()).isEqualTo(before);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Python 3</td><td>Only for the test gateway in Try it yourself</td><td><code>python3 --version</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d        # PostgreSQL 17 on localhost:5432
+python3 docs/test-gateway.py 9099 &amp;   # the simulated payment gateway
+./mvnw spring-boot:run      # the API on http://localhost:8080
+./mvnw test                 # all 10 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d
+Start-Process python -ArgumentList &#x27;docs/test-gateway.py&#x27;,&#x27;9099&#x27;
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Make the gateway hang, then watch the pool while orders wait:</p>
+<pre class="code"><code class="language-bash">curl -d &#x27;{&quot;seconds&quot;:10}&#x27; http://127.0.0.1:9099/delay
+for i in $(seq 1 20); do curl -s -o /dev/null -w &#x27;%{http_code}\n&#x27; -H &#x27;Content-Type: application/json&#x27; -d &#x27;{&quot;buyer&quot;:&quot;fan&quot;,&quot;seats&quot;:1}&#x27; localhost:8080/sales/1/orders &amp; done
+curl localhost:8080/actuator/metrics/hikaricp.connections.pending</code></pre>
+<p>Every order ends <code>504</code> after 3 s; <code>pending</code> stays 0. Then put the transaction back around the whole order (the Review tab's version) and try again.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>Requests fail after exactly 30 s</td><td>Hikari's default connection timeout; the pool is empty.</td><td>Find what holds connections (<code>hikaricp.connections.usage</code>); set a shorter timeout.</td></tr><tr><td><code>NumberFormatException: For input string: "2s"</code> at start-up</td><td>Hikari properties take milliseconds as numbers.</td><td><code>connection-timeout: 2000</code>.</td></tr><tr><td>Connections held for seconds</td><td>A remote call, a file, or a slow query inside a transaction.</td><td>Move it out; keep transactions short.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/102-ticket-sale-when-the-pool-runs-dry/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/seatsure/sales/
+│   ├── SaleController.java   ├── TicketOrders.java   ├── PaymentGateway.java   └── SalesApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__sales_and_orders.sql, V2__demo_sales.sql
+├── src/test/java/com/seatsure/sales/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, test gateway, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the configuration and the database.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">SaleController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">TicketOrders.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">PaymentGateway.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">SalesApplication.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">V1__sales_and_orders.sql</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">V2__demo_sales.sql</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">compose.yaml</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/seatsure/sales/SaleController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The endpoints, and the empty pool.</dd><dt>Why</dt><dd>Validates the order; turns "no connection within the pool's timeout" into <code>503</code> with <code>Retry-After</code>, logged at ERROR.</dd><dt>Without it</dt><dd>A 500 after 30 s; nobody knowing why.</dd></dl><ul><li>Inside a transaction, the pool's timeout arrives as <code>CannotCreateTransactionException</code>; outside one, as <code>CannotGetJdbcConnectionException</code>. Both are handled. Found while building.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.seatsure.sales;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+
+@RestController
+class SaleController {
+
+    record OrderRequest(@NotBlank @Size(max = 100) String buyer, @Min(1) @Max(6) int seats) {
+    }
+
+    record Availability(long id, String name, int capacity, int sold, int left) {
+    }
+
+    private static final Logger log = LoggerFactory.getLogger(SaleController.class);
+    private final TicketOrders orders;
+
+    SaleController(TicketOrders orders) {
+        this.orders = orders;
+    }
+
+    @PostMapping(&quot;/sales/{id}/orders&quot;)
+    ResponseEntity&lt;TicketOrders.Order&gt; order(@PathVariable long id, @Valid @RequestBody OrderRequest body) {
+        TicketOrders.Order order = orders.place(id, body.buyer().strip(), body.seats());
+        return ResponseEntity.created(URI.create(&quot;/orders/&quot; + order.id())).body(order);
+    }
+
+    @GetMapping(&quot;/sales/{id}&quot;)
+    Availability sale(@PathVariable long id) {
+        TicketOrders.Sale s = orders.sale(id).orElseThrow(() -&gt; TicketOrders.problem(HttpStatus.NOT_FOUND, &quot;No such sale.&quot;));
+        return new Availability(s.id(), s.name(), s.capacity(), s.sold(), s.capacity() - s.sold());
+    }
+
+    /**
+     * No free connection within the pool&#x27;s timeout (2 s): say so at once, instead of a 500 after 30 s. Through a
+     * transaction it arrives as CannotCreateTransactionException, without one as CannotGetJdbcConnectionException.
+     */
+    @ExceptionHandler({CannotGetJdbcConnectionException.class, CannotCreateTransactionException.class})
+    ResponseEntity&lt;ProblemDetail&gt; poolExhausted(org.springframework.core.NestedRuntimeException e) {
+        log.error(&quot;No database connection within the pool&#x27;s timeout: {}&quot;, e.getMostSpecificCause().getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header(&quot;Retry-After&quot;, &quot;5&quot;)
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, &quot;Too busy right now. Try again in a few seconds.&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/seatsure/sales/TicketOrders.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The order in three short transactions.</dd><dt>Why</dt><dd>Reserve and commit; charge with nothing open; record PAID, or FAILED and give the seats back.</dd><dt>Without it</dt><dd>A connection held for the length of a charge.</dd></dl><ul><li>Shortcut: a charge that timed out may still have gone through. Here the seats are given back; production asks the gateway about the order's Idempotency-Key first, or keeps the order pending until a reconciliation job does.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.seatsure.sales;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.ErrorResponseException;
+
+import java.util.Optional;
+
+/**
+ * An order in three short transactions: take the seats, charge the buyer with no transaction open, record the
+ * outcome. A database connection is held for milliseconds, never while the gateway thinks.
+ */
+@Service
+class TicketOrders {
+
+    record Order(long id, long saleId, String buyer, int seats, long amountPaise, String status, String chargeId) {
+    }
+
+    record Sale(long id, String name, int capacity, int sold) {
+    }
+
+    private final JdbcClient jdbc;
+    private final TransactionTemplate tx;
+    private final PaymentGateway gateway;
+
+    TicketOrders(JdbcClient jdbc, PlatformTransactionManager transactions, PaymentGateway gateway) {
+        this.jdbc = jdbc;
+        this.tx = new TransactionTemplate(transactions);
+        this.gateway = gateway;
+    }
+
+    Order place(long saleId, String buyer, int seats) {
+        Order pending = tx.execute(s -&gt; reserve(saleId, buyer, seats));
+        PaymentGateway.Charge charge;
+        try {
+            charge = gateway.charge(pending.id(), pending.amountPaise());
+        } catch (PaymentGateway.Declined declined) {
+            tx.executeWithoutResult(s -&gt; release(pending));
+            throw problem(HttpStatus.PAYMENT_REQUIRED, declined.getMessage());
+        } catch (PaymentGateway.Unavailable down) {
+            // shortcut: a timed-out charge may still have gone through; before giving the seats back, production asks
+            // the gateway about this order&#x27;s Idempotency-Key, or keeps the order pending until a reconciliation job does.
+            tx.executeWithoutResult(s -&gt; release(pending));
+            throw problem(down.timedOut ? HttpStatus.GATEWAY_TIMEOUT : HttpStatus.BAD_GATEWAY, down.getMessage());
+        }
+        return tx.execute(s -&gt; {
+            jdbc.sql(&quot;UPDATE orders SET status = &#x27;PAID&#x27;, charge_id = ? WHERE id = ?&quot;).params(charge.chargeId(), pending.id()).update();
+            return find(pending.id()).orElseThrow();
+        });
+    }
+
+    /** Takes the seats only if they are there, in one statement, and records the order as waiting for payment. */
+    Order reserve(long saleId, String buyer, int seats) {
+        Optional&lt;Long&gt; price = jdbc.sql(&quot;UPDATE sales SET sold = sold + ? WHERE id = ? AND sold + ? &lt;= capacity RETURNING price_paise&quot;)
+                .params(seats, saleId, seats).query(Long.class).optional();
+        if (price.isEmpty()) {
+            throw sale(saleId).isPresent() ? problem(HttpStatus.CONFLICT, &quot;Not enough seats left.&quot;) : problem(HttpStatus.NOT_FOUND, &quot;No such sale.&quot;);
+        }
+        long id = jdbc.sql(&quot;INSERT INTO orders (sale_id, buyer, seats, amount_paise, status) VALUES (?, ?, ?, ?, &#x27;PENDING_PAYMENT&#x27;) RETURNING id&quot;)
+                .params(saleId, buyer, seats, price.get() * seats).query(Long.class).single();
+        return find(id).orElseThrow();
+    }
+
+    void release(Order order) {
+        jdbc.sql(&quot;UPDATE orders SET status = &#x27;FAILED&#x27; WHERE id = ? AND status = &#x27;PENDING_PAYMENT&#x27;&quot;).param(order.id()).update();
+        jdbc.sql(&quot;UPDATE sales SET sold = sold - ? WHERE id = ?&quot;).params(order.seats(), order.saleId()).update();
+    }
+
+    Optional&lt;Order&gt; find(long id) {
+        return jdbc.sql(&quot;SELECT id, sale_id, buyer, seats, amount_paise, status, charge_id FROM orders WHERE id = ?&quot;).param(id).query(Order.class).optional();
+    }
+
+    Optional&lt;Sale&gt; sale(long id) {
+        return jdbc.sql(&quot;SELECT id, name, capacity, sold FROM sales WHERE id = ?&quot;).param(id).query(Sale.class).optional();
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/seatsure/sales/PaymentGateway.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The gateway client.</dd><dt>Why</dt><dd>Sends the order id as Idempotency-Key; tells a decline, a timeout and other failures apart.</dd><dt>Without it</dt><dd>A slow gateway taken for a broken one.</dd></dl><ul><li>A timeout is recognised by its cause (<code>HttpTimeoutException</code>), not by the words of its message: the first version looked for "timed out" and called every timeout a 502. Found while building.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.seatsure.sales;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
+
+import java.net.SocketTimeoutException;
+import java.net.http.HttpTimeoutException;
+import java.util.Map;
+
+/** The payment gateway over HTTP (simulated in tests and captures). A charge carries the order id as its Idempotency-Key. */
+@Component
+class PaymentGateway {
+
+    record Charge(String chargeId) {
+    }
+
+    static final class Declined extends RuntimeException {
+        Declined(String message) {
+            super(message);
+        }
+    }
+
+    static final class Unavailable extends RuntimeException {
+        final boolean timedOut;
+
+        Unavailable(String message, boolean timedOut, Throwable cause) {
+            super(message, cause);
+            this.timedOut = timedOut;
+        }
+    }
+
+    private final RestClient payments;
+
+    PaymentGateway(RestClient payments) {
+        this.payments = payments;
+    }
+
+    Charge charge(long orderId, long amountPaise) {
+        try {
+            return payments.post().uri(&quot;/charges&quot;).header(&quot;Idempotency-Key&quot;, &quot;order-&quot; + orderId)
+                    .body(Map.of(&quot;orderId&quot;, orderId, &quot;amountPaise&quot;, amountPaise)).retrieve().body(Charge.class);
+        } catch (RestClientResponseException e) {
+            if (e.getStatusCode().isSameCodeAs(HttpStatus.PAYMENT_REQUIRED)) {
+                throw new Declined(&quot;The payment was declined.&quot;);
+            }
+            throw new Unavailable(&quot;The payment gateway answered &quot; + e.getStatusCode().value() + &quot;.&quot;, false, e);
+        } catch (ResourceAccessException e) {   // could not connect, or no answer within the read timeout
+            boolean timedOut = false;
+            for (Throwable t = e; t != null; t = t.getCause()) {
+                timedOut |= t instanceof HttpTimeoutException || t instanceof SocketTimeoutException;
+            }
+            throw new Unavailable(timedOut ? &quot;The payment gateway did not answer in time.&quot; : &quot;The payment gateway is not reachable.&quot;, timedOut, e);
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/seatsure/sales/SalesApplication.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The gateway's HTTP client.</dd><dt>Why</dt><dd>Connect 1 s, read 3 s.</dd><dt>Without it</dt><dd>A request thread waiting for ever.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.seatsure.sales;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.web.client.RestClient;
+
+import java.net.http.HttpClient;
+import java.time.Duration;
+
+@SpringBootApplication
+public class SalesApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(SalesApplication.class, args);
+    }
+
+    /** The gateway&#x27;s client, with both timeouts: a slow gateway costs one request thread for at most 3 s, and no connection. */
+    @Bean
+    RestClient payments(@Value(&quot;${seatsure.payments.url}&quot;) String url, @Value(&quot;${seatsure.payments.connect-timeout}&quot;) Duration connect,
+                        @Value(&quot;${seatsure.payments.read-timeout}&quot;) Duration read) {
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(connect).build());
+        factory.setReadTimeout(read);
+        return RestClient.builder().baseUrl(url).requestFactory(factory).build();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The pool.</dd><dt>Why</dt><dd>10 connections, 2 s to get one; metrics exposed.</dd><dt>Without it</dt><dd>Hikari's default 30 s wait.</dd></dl><ul><li><code>spring.datasource.hikari.*</code> binds straight to Hikari's setters: <code>connection-timeout</code> is milliseconds as a number. <code>2s</code> stops the app at start-up. Found while building.</li></ul></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: seatsure-sales
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/seatsure
+    username: seatsure
+    password: seatsure
+    hikari:
+      # Demo rules. Ten connections; a request that cannot get one within 2 s is told so (Hikari&#x27;s default waits 30 s).
+      # These go straight to Hikari&#x27;s setters: milliseconds as a number (&quot;2s&quot; stops the app at start-up).
+      maximum-pool-size: 10
+      connection-timeout: 2000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, metrics
+
+seatsure:
+  payments:
+    # The payment gateway (simulated; docs/test-gateway.py in the captures). Each charge may take at most 3 s.
+    url: http://localhost:9099
+    connect-timeout: 1s
+    read-timeout: 3s</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/resources/db/migration/V1__sales_and_orders.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Sales and orders.</dd><dt>Why</dt><dd>Named constraints for seats, amounts and states.</dd><dt>Without it</dt><dd>Overselling from any writer.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">-- A sale: seats to sell and how many are taken. &quot;Never more taken than there are&quot; is checked here too.
+CREATE TABLE sales (
+    id          bigint PRIMARY KEY,
+    name        text   NOT NULL,
+    capacity    int    NOT NULL,
+    sold        int    NOT NULL DEFAULT 0,
+    price_paise bigint NOT NULL,
+    CONSTRAINT sales_sold_range CHECK (sold BETWEEN 0 AND capacity),
+    CONSTRAINT sales_price_positive CHECK (price_paise &gt; 0)
+);
+
+CREATE TABLE orders (
+    id           bigserial   PRIMARY KEY,
+    sale_id      bigint      NOT NULL REFERENCES sales,
+    buyer        text        NOT NULL,
+    seats        int         NOT NULL,
+    amount_paise bigint      NOT NULL,
+    status       text        NOT NULL,
+    charge_id    text,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT orders_seats_range CHECK (seats BETWEEN 1 AND 6),
+    CONSTRAINT orders_amount_positive CHECK (amount_paise &gt; 0),
+    CONSTRAINT orders_status CHECK (status IN (&#x27;PENDING_PAYMENT&#x27;, &#x27;PAID&#x27;, &#x27;FAILED&#x27;)),
+    CONSTRAINT orders_paid_has_charge CHECK ((status = &#x27;PAID&#x27;) = (charge_id IS NOT NULL))
+);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_sales.sql</p><div class="notes"><p>A big match and a small one.</p></div><div class="src"><pre class="code"><code class="language-sql">-- Demo sales: a big match and a small exhibition game.
+INSERT INTO sales (id, name, capacity, price_paise) VALUES
+    (1, &#x27;India vs Australia, Wankhede, day 1&#x27;, 30000, 150000),
+    (2, &#x27;Ranji exhibition match&#x27;, 4, 30000);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: seatsure
+      POSTGRES_USER: seatsure
+      POSTGRES_PASSWORD: seatsure
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U seatsure -d seatsure&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>TicketOrderContractTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>PoolExhaustionTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>TicketDatabaseTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Operations</td><td>Metric, alert, rollback, runbook; a controlled failure drill</td><td><code>OperationsDrillTest</code> (3), and the Production tab</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">A pool of 4, 1 s to get a connection, and a test gateway with a 1 s limit: a full pool and a hanging gateway are reached in a second instead of thirty. Concurrency is real: sixteen threads released together.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.seatsure.sales.OperationsDrillTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.seatsure.sales.TicketOrderContractTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.seatsure.sales.TicketDatabaseTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.seatsure.sales.PoolExhaustionTrapTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">PoolExhaustionTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">TicketOrderContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">TicketDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">OperationsDrillTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">TestGateway.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-6-b" aria-controls="tests-6" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/seatsure/sales/PoolExhaustionTrapTest.java</p><div class="notes"><p>Written first: the old one-transaction order against the API, sixteen fans at once.</p></div><div class="src"><pre class="code"><code class="language-java">package com.seatsure.sales;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import static com.seatsure.sales.TestGateway.GATEWAY;
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** The sale opens: sixteen fans at once, a gateway that takes 0.7 s per charge, a pool of four. Written first. */
+@Import(PoolExhaustionTrapTest.OldWay.class)
+class PoolExhaustionTrapTest extends ApiTest {
+
+    /** The old way: one transaction around everything, so a connection is held while the gateway thinks. */
+    @TestConfiguration
+    static class OldWay {
+        @Bean
+        OldOrders oldOrders(TicketOrders orders, PaymentGateway gateway, JdbcClient jdbc) {
+            return new OldOrders(orders, gateway, jdbc);
+        }
+    }
+
+    static class OldOrders {
+        private final TicketOrders orders;
+        private final PaymentGateway gateway;
+        private final JdbcClient jdbc;
+
+        OldOrders(TicketOrders orders, PaymentGateway gateway, JdbcClient jdbc) {
+            this.orders = orders;
+            this.gateway = gateway;
+            this.jdbc = jdbc;
+        }
+
+        @Transactional
+        public String place(long saleId, String buyer, int seats) {
+            TicketOrders.Order pending = orders.reserve(saleId, buyer, seats);
+            PaymentGateway.Charge charge = gateway.charge(pending.id(), pending.amountPaise());
+            jdbc.sql(&quot;UPDATE orders SET status = &#x27;PAID&#x27;, charge_id = ? WHERE id = ?&quot;).params(charge.chargeId(), pending.id()).update();
+            return &quot;PAID&quot;;
+        }
+    }
+
+    @Autowired
+    OldOrders oldOrders;
+
+    List&lt;String&gt; sixteenFansAtOnce(Callable&lt;String&gt; buy) throws Exception {
+        CountDownLatch open = new CountDownLatch(1);
+        List&lt;Future&lt;String&gt;&gt; fans = new ArrayList&lt;&gt;();
+        try (var threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; 16; i++) {
+                fans.add(threads.submit(() -&gt; {
+                    open.await();
+                    try {
+                        return buy.call();
+                    } catch (Exception e) {
+                        return e.getClass().getSimpleName();
+                    }
+                }));
+            }
+            open.countDown();
+        }
+        return fans.stream().map(Future::resultNow).toList();
+    }
+
+    @Test
+    void theOldWayHoldsAConnectionThroughEachChargeAndFansTimeOut() throws Exception {
+        GATEWAY.delayMillis = 700;
+        double before = poolTimeouts();
+        List&lt;String&gt; outcomes = sixteenFansAtOnce(() -&gt; oldOrders.place(1, &quot;fan&quot;, 1));
+        // Four charges at a time, 0.7 s each: the fans still waiting after 1 s get no connection at all.
+        assertThat(outcomes).contains(&quot;CannotCreateTransactionException&quot;);   // no connection within 1 s
+        assertThat(outcomes.stream().filter(&quot;PAID&quot;::equals).count()).isLessThan(16);
+        assertThat(poolTimeouts()).isGreaterThan(before);
+    }
+
+    @Test
+    void theApiHoldsAConnectionForMillisecondsAndEveryFanGetsASeat() throws Exception {
+        GATEWAY.delayMillis = 700;
+        double before = poolTimeouts();
+        List&lt;String&gt; outcomes = sixteenFansAtOnce(() -&gt; String.valueOf(order(1, &quot;fan&quot;, 1).andReturn().getResponse().getStatus()));
+        assertThat(outcomes).containsOnly(&quot;201&quot;);
+        assertThat(sold(1)).isEqualTo(16);
+        assertThat(poolTimeouts()).isEqualTo(before);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/seatsure/sales/TicketOrderContractTest.java</p><div class="notes"><p>Paid, declined, bad and unknown orders.</p></div><div class="src"><pre class="code"><code class="language-java">package com.seatsure.sales;
+
+import org.junit.jupiter.api.Test;
+
+import static com.seatsure.sales.TestGateway.GATEWAY;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class TicketOrderContractTest extends ApiTest {
+
+    @Test
+    void aPaidOrderTakesItsSeats() throws Exception {
+        order(1, &quot;Priya Nair&quot;, 2).andExpect(status().isCreated()).andExpect(header().string(&quot;Location&quot;, &quot;/orders/1&quot;))
+                .andExpect(jsonPath(&quot;$.status&quot;).value(&quot;PAID&quot;)).andExpect(jsonPath(&quot;$.amountPaise&quot;).value(300000))
+                .andExpect(jsonPath(&quot;$.chargeId&quot;).value(&quot;ch_1&quot;)).andExpect(jsonPath(&quot;$.seats&quot;).value(2));
+        mvc.perform(get(&quot;/sales/1&quot;)).andExpect(jsonPath(&quot;$.sold&quot;).value(2)).andExpect(jsonPath(&quot;$.left&quot;).value(29998));
+        assertThat(GATEWAY.idempotencyKeys).containsExactly(&quot;order-1&quot;);
+    }
+
+    @Test
+    void aDeclinedPaymentGivesTheSeatsBack() throws Exception {
+        GATEWAY.status = 402;
+        order(1, &quot;Priya Nair&quot;, 2).andExpect(status().isPaymentRequired()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;The payment was declined.&quot;));
+        assertThat(sold(1)).isZero();
+        assertThat(jdbc.sql(&quot;SELECT status FROM orders WHERE id = 1&quot;).query(String.class).single()).isEqualTo(&quot;FAILED&quot;);
+    }
+
+    @Test
+    void badOrdersAre400UnknownSales404AndASoldOutSale409() throws Exception {
+        order(1, &quot;Priya Nair&quot;, 0).andExpect(status().isBadRequest());
+        order(1, &quot;Priya Nair&quot;, 7).andExpect(status().isBadRequest());
+        order(1, &quot; &quot;, 2).andExpect(status().isBadRequest());
+        order(9, &quot;Priya Nair&quot;, 2).andExpect(status().isNotFound());
+        mvc.perform(get(&quot;/sales/9&quot;)).andExpect(status().isNotFound());
+        order(2, &quot;Priya Nair&quot;, 4).andExpect(status().isCreated());   // the small match has 4 seats
+        order(2, &quot;Ravi Kumar&quot;, 1).andExpect(status().isConflict()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Not enough seats left.&quot;));
+        assertThat(GATEWAY.idempotencyKeys).hasSize(1);   // nothing charged for refused orders
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/seatsure/sales/TicketDatabaseTest.java</p><div class="notes"><p>Named constraints with plain SQL; a rollback.</p></div><div class="src"><pre class="code"><code class="language-java">package com.seatsure.sales;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The rules hold for any writer, not only this API: plain SQL, no Java in between. */
+class TicketDatabaseTest extends ApiTest {
+
+    void violates(String constraint, String sql) {
+        assertThatThrownBy(() -&gt; jdbc.sql(sql).update()).hasMessageContaining(constraint);
+    }
+
+    @Test
+    void saleAndOrderRulesHoldWithoutJava() {
+        violates(&quot;sales_sold_range&quot;, &quot;UPDATE sales SET sold = capacity + 1 WHERE id = 2&quot;);
+        violates(&quot;sales_sold_range&quot;, &quot;UPDATE sales SET sold = -1 WHERE id = 1&quot;);
+        violates(&quot;sales_price_positive&quot;, &quot;UPDATE sales SET price_paise = 0 WHERE id = 1&quot;);
+        violates(&quot;orders_seats_range&quot;, &quot;INSERT INTO orders (sale_id, buyer, seats, amount_paise, status) VALUES (1, &#x27;x&#x27;, 7, 100, &#x27;PENDING_PAYMENT&#x27;)&quot;);
+        violates(&quot;orders_amount_positive&quot;, &quot;INSERT INTO orders (sale_id, buyer, seats, amount_paise, status) VALUES (1, &#x27;x&#x27;, 1, 0, &#x27;PENDING_PAYMENT&#x27;)&quot;);
+        violates(&quot;orders_status&quot;, &quot;INSERT INTO orders (sale_id, buyer, seats, amount_paise, status) VALUES (1, &#x27;x&#x27;, 1, 100, &#x27;SHIPPED&#x27;)&quot;);
+        violates(&quot;orders_paid_has_charge&quot;, &quot;INSERT INTO orders (sale_id, buyer, seats, amount_paise, status) VALUES (1, &#x27;x&#x27;, 1, 100, &#x27;PAID&#x27;)&quot;);
+    }
+
+    @Test
+    void anOrderThatCannotBeRecordedTakesNoSeats() throws Exception {
+        jdbc.sql(&quot;&quot;&quot;
+                CREATE FUNCTION refuse_order() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION &#x27;orders table read-only&#x27;; END $$ LANGUAGE plpgsql;
+                CREATE TRIGGER refuse_order BEFORE INSERT ON orders FOR EACH ROW EXECUTE FUNCTION refuse_order()&quot;&quot;&quot;).update();
+        try {
+            assertThatThrownBy(() -&gt; order(1, &quot;Priya Nair&quot;, 2)).hasRootCauseMessage(&quot;ERROR: orders table read-only\n  Where: PL/pgSQL function refuse_order() line 1 at RAISE&quot;);
+        } finally {
+            jdbc.sql(&quot;DROP TRIGGER refuse_order ON orders; DROP FUNCTION refuse_order()&quot;).update();
+        }
+        assertThat(sold(1)).isZero();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/seatsure/sales/OperationsDrillTest.java</p><div class="notes"><p>The drills: a hanging gateway, an empty pool; the metrics.</p></div><div class="src"><pre class="code"><code class="language-java">package com.seatsure.sales;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import static com.seatsure.sales.TestGateway.GATEWAY;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** The failure drills from the runbook, as tests: a gateway that hangs, and a pool with nothing left. */
+@ExtendWith(OutputCaptureExtension.class)
+class OperationsDrillTest extends ApiTest {
+
+    @Autowired
+    DataSource dataSource;
+
+    @Test
+    void aHangingGatewayIsCutOffAndTheDatabaseStaysFree() throws Exception {
+        GATEWAY.delayMillis = 3_000;   // longer than the 1 s limit here (3 s in production)
+        double before = poolTimeouts();
+        List&lt;Future&lt;Integer&gt;&gt; fans = new ArrayList&lt;&gt;();
+        try (var threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; 8; i++) {
+                fans.add(threads.submit(() -&gt; order(1, &quot;fan&quot;, 1).andReturn().getResponse().getStatus()));
+            }
+            // While the eight charges hang at the gateway, the rest of the app answers at once.
+            org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(2)).until(() -&gt; GATEWAY.idempotencyKeys.size() == 8);
+            long started = System.nanoTime();
+            mvc.perform(get(&quot;/sales/1&quot;)).andExpect(status().isOk());
+            assertThat((System.nanoTime() - started) / 1_000_000).isLessThan(500);
+        }
+        assertThat(fans).extracting(Future::resultNow).containsOnly(504);
+        assertThat(sold(1)).isZero();   // every seat given back
+        assertThat(poolTimeouts()).isEqualTo(before);
+    }
+
+    @Test
+    void withNoConnectionFreeTheAnswerIs503AfterOneSecondNotThirty(CapturedOutput output) throws Exception {
+        List&lt;Connection&gt; taken = new ArrayList&lt;&gt;();
+        try {
+            for (int i = 0; i &lt; 4; i++) {
+                taken.add(dataSource.getConnection());   // something else holds the whole pool
+            }
+            long started = System.nanoTime();
+            order(1, &quot;fan&quot;, 1).andExpect(status().isServiceUnavailable()).andExpect(header().string(&quot;Retry-After&quot;, &quot;5&quot;))
+                    .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Too busy right now. Try again in a few seconds.&quot;));
+            assertThat((System.nanoTime() - started) / 1_000_000).isBetween(900L, 3_000L);
+            assertThat(output.getOut()).contains(&quot;No database connection within the pool&#x27;s timeout&quot;);
+        } finally {
+            for (Connection c : taken) {
+                c.close();
+            }
+        }
+        order(1, &quot;fan&quot;, 1).andExpect(status().isCreated());   // and it recovers by itself
+    }
+
+    @Test
+    void theMetricsTheAlertsReadArePublished() throws Exception {
+        for (String metric : new String[]{&quot;hikaricp.connections.pending&quot;, &quot;hikaricp.connections.timeout&quot;, &quot;hikaricp.connections.usage&quot;}) {
+            mvc.perform(get(&quot;/actuator/metrics/&quot; + metric)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.name&quot;).value(metric));
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/seatsure/sales/TestGateway.java</p><div class="notes"><p>A gateway that answers when, and how, the test says.</p></div><div class="src"><pre class="code"><code class="language-java">package com.seatsure.sales;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/** A payment gateway for the tests: answers each charge after `delayMillis`, with `status` (201 authorised, 402 declined). */
+final class TestGateway {
+
+    static final TestGateway GATEWAY = new TestGateway();
+    final List&lt;String&gt; idempotencyKeys = new CopyOnWriteArrayList&lt;&gt;();
+    volatile long delayMillis;
+    volatile int status = 201;
+    private final HttpServer server;
+
+    private TestGateway() {
+        try {
+            server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+        server.createContext(&quot;/charges&quot;, this::charge);
+        server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
+        server.start();
+    }
+
+    String url() {
+        return &quot;http://127.0.0.1:&quot; + server.getAddress().getPort();
+    }
+
+    void reset() {
+        idempotencyKeys.clear();
+        delayMillis = 0;
+        status = 201;
+    }
+
+    private void charge(HttpExchange x) throws IOException {
+        idempotencyKeys.add(x.getRequestHeaders().getFirst(&quot;Idempotency-Key&quot;));
+        Matcher order = Pattern.compile(&quot;\&quot;orderId\&quot;:(\\d+)&quot;).matcher(new String(x.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+        try {
+            Thread.sleep(delayMillis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        byte[] body = (status == 201 ? &quot;{\&quot;chargeId\&quot;:\&quot;ch_&quot; + (order.find() ? order.group(1) : &quot;x&quot;) + &quot;\&quot;}&quot; : &quot;{\&quot;error\&quot;:\&quot;declined\&quot;}&quot;).getBytes(StandardCharsets.UTF_8);
+        x.getResponseHeaders().add(&quot;Content-Type&quot;, &quot;application/json&quot;);
+        try {
+            x.sendResponseHeaders(status, body.length);
+            x.getResponseBody().write(body);
+        } catch (IOException clientGaveUp) {
+            // the app timed out and closed the connection
+        }
+        x.close();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/seatsure/sales/ApiTest.java</p><div class="notes"><p>Shared setup: the small pool, the gateway's address, fresh sales.</p></div><div class="src"><pre class="code"><code class="language-java">package com.seatsure.sales;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import static com.seatsure.sales.TestGateway.GATEWAY;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/**
+ * Shared setup: the whole app on a real PostgreSQL with a small pool (4 connections, 1 s to get one) and a test
+ * gateway whose answers have a 1 s limit, so a full pool and a slow gateway are quick to reach. Seats and orders are
+ * reset before each test.
+ */
+@SpringBootTest(properties = {&quot;spring.datasource.hikari.maximum-pool-size=4&quot;, &quot;spring.datasource.hikari.connection-timeout=1000&quot;,
+        &quot;seatsure.payments.read-timeout=1s&quot;})
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    @DynamicPropertySource
+    static void gateway(DynamicPropertyRegistry registry) {
+        registry.add(&quot;seatsure.payments.url&quot;, GATEWAY::url);
+    }
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+    @Autowired
+    MeterRegistry metrics;
+
+    @BeforeEach
+    void freshSale() {
+        jdbc.sql(&quot;TRUNCATE orders RESTART IDENTITY&quot;).update();
+        jdbc.sql(&quot;UPDATE sales SET sold = 0&quot;).update();
+        GATEWAY.reset();
+    }
+
+    ResultActions order(long saleId, String buyer, int seats) throws Exception {
+        return mvc.perform(post(&quot;/sales/{id}/orders&quot;, saleId).contentType(MediaType.APPLICATION_JSON)
+                .content(&quot;{\&quot;buyer\&quot;:\&quot;&quot; + buyer + &quot;\&quot;,\&quot;seats\&quot;:&quot; + seats + &quot;}&quot;));
+    }
+
+    int sold(long saleId) {
+        return jdbc.sql(&quot;SELECT sold FROM sales WHERE id = ?&quot;).param(saleId).query(Integer.class).single();
+    }
+
+    /** Requests that gave up waiting for a connection, as Hikari counts them. */
+    double poolTimeouts() {
+        var c = metrics.find(&quot;hikaricp.connections.timeout&quot;).counter();
+        return c == null ? 0 : c.count();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-6" aria-labelledby="tests-6-b" hidden><p class="path">src/test/java/com/seatsure/sales/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.seatsure.sales;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker: constraints and row locks behave exactly as in production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/seatsure/sales/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=OrderOutcomeMetricChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 10 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 13 tests pass (10 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>How did the orders end?</h2><p>The pool's metrics say whether the database is coping; add one that says how orders end: a counter <code>ticket.orders</code> tagged <code>outcome</code> = paid, declined, gateway_timeout, gateway_error or no_seats.</p><p><b>Done when:</b> both tests in <code>OrderOutcomeMetricChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Inject <code>MeterRegistry</code>; <code>counter(name, "outcome", value).increment()</code> where each path ends.</li><li>Keep tag values few and fixed: never a buyer or an order id.</li></ul></details><p class="path">challenge/OrderOutcomeMetricChallengeTest.java</p><pre class="code"><code class="language-java">package com.seatsure.sales;
+
+import org.junit.jupiter.api.Test;
+
+import static com.seatsure.sales.TestGateway.GATEWAY;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 1: the pool&#x27;s metrics say the database is fine or not; this one says how orders end. A counter
+ * ticket.orders tagged outcome = paid, declined, gateway_timeout, gateway_error or no_seats, published at /actuator/metrics.
+ */
+class OrderOutcomeMetricChallengeTest extends ApiTest {
+
+    double outcome(String name) {
+        var c = metrics.find(&quot;ticket.orders&quot;).tag(&quot;outcome&quot;, name).counter();
+        return c == null ? 0 : c.count();
+    }
+
+    @Test
+    void everyOrderIsCountedByHowItEnded() throws Exception {
+        double paid = outcome(&quot;paid&quot;), declined = outcome(&quot;declined&quot;), noSeats = outcome(&quot;no_seats&quot;);
+        order(2, &quot;Priya Nair&quot;, 4).andExpect(status().isCreated());
+        order(2, &quot;Ravi Kumar&quot;, 1).andExpect(status().isConflict());
+        GATEWAY.status = 402;
+        order(1, &quot;Ravi Kumar&quot;, 1).andExpect(status().isPaymentRequired());
+        assertThat(outcome(&quot;paid&quot;)).isEqualTo(paid + 1);
+        assertThat(outcome(&quot;no_seats&quot;)).isEqualTo(noSeats + 1);
+        assertThat(outcome(&quot;declined&quot;)).isEqualTo(declined + 1);
+        mvc.perform(get(&quot;/actuator/metrics/ticket.orders&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.name&quot;).value(&quot;ticket.orders&quot;));
+    }
+
+    @Test
+    void aHangingGatewayIsCountedAsATimeout() throws Exception {
+        double before = outcome(&quot;gateway_timeout&quot;);
+        GATEWAY.delayMillis = 2_000;
+        order(1, &quot;Priya Nair&quot;, 1).andExpect(status().isGatewayTimeout());
+        assertThat(outcome(&quot;gateway_timeout&quot;)).isEqualTo(before + 1);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/TicketOrders.java</p><div class="src"><pre class="code"><code class="language-java">package com.seatsure.sales;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.ErrorResponseException;
+
+import java.util.Optional;
+import java.util.concurrent.Semaphore;
+
+/**
+ * An order in three short transactions: take the seats, charge the buyer with no transaction open, record the
+ * outcome. A database connection is held for milliseconds, never while the gateway thinks.
+ */
+@Service
+class TicketOrders {
+
+    record Order(long id, long saleId, String buyer, int seats, long amountPaise, String status, String chargeId) {
+    }
+
+    record Sale(long id, String name, int capacity, int sold) {
+    }
+
+    private final JdbcClient jdbc;
+    private final TransactionTemplate tx;
+    private final PaymentGateway gateway;
+    private final MeterRegistry metrics;
+    private final Semaphore charging;   // challenge 2: how many charges may wait on the gateway at once
+
+    TicketOrders(JdbcClient jdbc, PlatformTransactionManager transactions, PaymentGateway gateway, MeterRegistry metrics,
+                 @Value(&quot;${seatsure.payments.max-concurrent:100}&quot;) int maxConcurrent) {
+        this.jdbc = jdbc;
+        this.tx = new TransactionTemplate(transactions);
+        this.gateway = gateway;
+        this.metrics = metrics;
+        this.charging = new Semaphore(maxConcurrent);
+    }
+
+    /** Challenge 1: how each order ended. */
+    private void count(String outcome) {
+        metrics.counter(&quot;ticket.orders&quot;, &quot;outcome&quot;, outcome).increment();
+    }
+
+    Order place(long saleId, String buyer, int seats) {
+        Order pending;
+        try {
+            pending = tx.execute(s -&gt; reserve(saleId, buyer, seats));
+        } catch (ErrorResponseException refused) {
+            if (refused.getStatusCode().isSameCodeAs(HttpStatus.CONFLICT)) {
+                count(&quot;no_seats&quot;);
+            }
+            throw refused;
+        }
+        if (!charging.tryAcquire()) {   // challenge 2: the gateway already has as many charges as we let it hold
+            tx.executeWithoutResult(s -&gt; release(pending));
+            count(&quot;gateway_busy&quot;);
+            throw problem(HttpStatus.SERVICE_UNAVAILABLE, &quot;Payments are busy right now. Try again in a few seconds.&quot;);
+        }
+        PaymentGateway.Charge charge;
+        try {
+            charge = gateway.charge(pending.id(), pending.amountPaise());
+        } catch (PaymentGateway.Declined declined) {
+            tx.executeWithoutResult(s -&gt; release(pending));
+            count(&quot;declined&quot;);
+            throw problem(HttpStatus.PAYMENT_REQUIRED, declined.getMessage());
+        } catch (PaymentGateway.Unavailable down) {
+            count(down.timedOut ? &quot;gateway_timeout&quot; : &quot;gateway_error&quot;);
+            // shortcut: a timed-out charge may still have gone through; before giving the seats back, production asks
+            // the gateway about this order&#x27;s Idempotency-Key, or keeps the order pending until a reconciliation job does.
+            tx.executeWithoutResult(s -&gt; release(pending));
+            throw problem(down.timedOut ? HttpStatus.GATEWAY_TIMEOUT : HttpStatus.BAD_GATEWAY, down.getMessage());
+        } finally {
+            charging.release();
+        }
+        count(&quot;paid&quot;);
+        return tx.execute(s -&gt; {
+            jdbc.sql(&quot;UPDATE orders SET status = &#x27;PAID&#x27;, charge_id = ? WHERE id = ?&quot;).params(charge.chargeId(), pending.id()).update();
+            return find(pending.id()).orElseThrow();
+        });
+    }
+
+    /** Takes the seats only if they are there, in one statement, and records the order as waiting for payment. */
+    Order reserve(long saleId, String buyer, int seats) {
+        Optional&lt;Long&gt; price = jdbc.sql(&quot;UPDATE sales SET sold = sold + ? WHERE id = ? AND sold + ? &lt;= capacity RETURNING price_paise&quot;)
+                .params(seats, saleId, seats).query(Long.class).optional();
+        if (price.isEmpty()) {
+            throw sale(saleId).isPresent() ? problem(HttpStatus.CONFLICT, &quot;Not enough seats left.&quot;) : problem(HttpStatus.NOT_FOUND, &quot;No such sale.&quot;);
+        }
+        long id = jdbc.sql(&quot;INSERT INTO orders (sale_id, buyer, seats, amount_paise, status) VALUES (?, ?, ?, ?, &#x27;PENDING_PAYMENT&#x27;) RETURNING id&quot;)
+                .params(saleId, buyer, seats, price.get() * seats).query(Long.class).single();
+        return find(id).orElseThrow();
+    }
+
+    void release(Order order) {
+        jdbc.sql(&quot;UPDATE orders SET status = &#x27;FAILED&#x27; WHERE id = ? AND status = &#x27;PENDING_PAYMENT&#x27;&quot;).param(order.id()).update();
+        jdbc.sql(&quot;UPDATE sales SET sold = sold - ? WHERE id = ?&quot;).params(order.seats(), order.saleId()).update();
+    }
+
+    Optional&lt;Order&gt; find(long id) {
+        return jdbc.sql(&quot;SELECT id, sale_id, buyer, seats, amount_paise, status, charge_id FROM orders WHERE id = ?&quot;).param(id).query(Order.class).optional();
+    }
+
+    Optional&lt;Sale&gt; sale(long id) {
+        return jdbc.sql(&quot;SELECT id, name, capacity, sold FROM sales WHERE id = ?&quot;).param(id).query(Sale.class).optional();
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 30 minutes</p><h2>A bulkhead for the gateway</h2><p>No connection is held during a charge, but a request thread is. Let at most <code>seatsure.payments.max-concurrent</code> charges wait on the gateway at once (4 in the test); the next order is refused at once with <code>503</code> and its seats are given back.</p><p><b>Done when:</b> the test in <code>GatewayBulkheadChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>A <code>Semaphore</code> with <code>tryAcquire()</code>: refuse instead of queueing.</li><li>Release it in a <code>finally</code>, or one exception leaks a place for good.</li><li>A generous default (100) keeps normal days unaffected.</li></ul></details><p class="path">challenge/GatewayBulkheadChallengeTest.java</p><pre class="code"><code class="language-java">package com.seatsure.sales;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.test.context.TestPropertySource;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import static com.seatsure.sales.TestGateway.GATEWAY;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: no connection is held while the gateway thinks, but a request thread still is. A bulkhead lets at
+ * most seatsure.payments.max-concurrent charges wait on the gateway (4 in this test); the next order is refused at
+ * once with 503, and its seats are given back, instead of one more thread hanging for the full timeout.
+ */
+@TestPropertySource(properties = &quot;seatsure.payments.max-concurrent=4&quot;)
+class GatewayBulkheadChallengeTest extends ApiTest {
+
+    @Test
+    void beyondTheLimitOrdersAreRefusedAtOnce() throws Exception {
+        GATEWAY.delayMillis = 3_000;   // hangs past the 1 s limit
+        CountDownLatch open = new CountDownLatch(1);
+        List&lt;Future&lt;Integer&gt;&gt; fans = new ArrayList&lt;&gt;();
+        try (var threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; 8; i++) {
+                fans.add(threads.submit(() -&gt; {
+                    open.await();
+                    return order(1, &quot;fan&quot;, 1).andReturn().getResponse().getStatus();
+                }));
+            }
+            open.countDown();
+        }
+        assertThat(fans).extracting(Future::resultNow).filteredOn(s -&gt; s == 504).hasSize(4);
+        assertThat(fans).extracting(Future::resultNow).filteredOn(s -&gt; s == 503).hasSize(4);
+        assertThat(GATEWAY.idempotencyKeys).hasSize(4);   // the refused four never reached the gateway
+        assertThat(sold(1)).isZero();
+
+        GATEWAY.delayMillis = 0;
+        order(1, &quot;fan&quot;, 1).andExpect(status().isCreated());   // places freed again
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/TicketOrders.java</p><div class="src"><pre class="code"><code class="language-java">package com.seatsure.sales;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.ErrorResponseException;
+
+import java.util.Optional;
+import java.util.concurrent.Semaphore;
+
+/**
+ * An order in three short transactions: take the seats, charge the buyer with no transaction open, record the
+ * outcome. A database connection is held for milliseconds, never while the gateway thinks.
+ */
+@Service
+class TicketOrders {
+
+    record Order(long id, long saleId, String buyer, int seats, long amountPaise, String status, String chargeId) {
+    }
+
+    record Sale(long id, String name, int capacity, int sold) {
+    }
+
+    private final JdbcClient jdbc;
+    private final TransactionTemplate tx;
+    private final PaymentGateway gateway;
+    private final MeterRegistry metrics;
+    private final Semaphore charging;   // challenge 2: how many charges may wait on the gateway at once
+
+    TicketOrders(JdbcClient jdbc, PlatformTransactionManager transactions, PaymentGateway gateway, MeterRegistry metrics,
+                 @Value(&quot;${seatsure.payments.max-concurrent:100}&quot;) int maxConcurrent) {
+        this.jdbc = jdbc;
+        this.tx = new TransactionTemplate(transactions);
+        this.gateway = gateway;
+        this.metrics = metrics;
+        this.charging = new Semaphore(maxConcurrent);
+    }
+
+    /** Challenge 1: how each order ended. */
+    private void count(String outcome) {
+        metrics.counter(&quot;ticket.orders&quot;, &quot;outcome&quot;, outcome).increment();
+    }
+
+    Order place(long saleId, String buyer, int seats) {
+        Order pending;
+        try {
+            pending = tx.execute(s -&gt; reserve(saleId, buyer, seats));
+        } catch (ErrorResponseException refused) {
+            if (refused.getStatusCode().isSameCodeAs(HttpStatus.CONFLICT)) {
+                count(&quot;no_seats&quot;);
+            }
+            throw refused;
+        }
+        if (!charging.tryAcquire()) {   // challenge 2: the gateway already has as many charges as we let it hold
+            tx.executeWithoutResult(s -&gt; release(pending));
+            count(&quot;gateway_busy&quot;);
+            throw problem(HttpStatus.SERVICE_UNAVAILABLE, &quot;Payments are busy right now. Try again in a few seconds.&quot;);
+        }
+        PaymentGateway.Charge charge;
+        try {
+            charge = gateway.charge(pending.id(), pending.amountPaise());
+        } catch (PaymentGateway.Declined declined) {
+            tx.executeWithoutResult(s -&gt; release(pending));
+            count(&quot;declined&quot;);
+            throw problem(HttpStatus.PAYMENT_REQUIRED, declined.getMessage());
+        } catch (PaymentGateway.Unavailable down) {
+            count(down.timedOut ? &quot;gateway_timeout&quot; : &quot;gateway_error&quot;);
+            // shortcut: a timed-out charge may still have gone through; before giving the seats back, production asks
+            // the gateway about this order&#x27;s Idempotency-Key, or keeps the order pending until a reconciliation job does.
+            tx.executeWithoutResult(s -&gt; release(pending));
+            throw problem(down.timedOut ? HttpStatus.GATEWAY_TIMEOUT : HttpStatus.BAD_GATEWAY, down.getMessage());
+        } finally {
+            charging.release();
+        }
+        count(&quot;paid&quot;);
+        return tx.execute(s -&gt; {
+            jdbc.sql(&quot;UPDATE orders SET status = &#x27;PAID&#x27;, charge_id = ? WHERE id = ?&quot;).params(charge.chargeId(), pending.id()).update();
+            return find(pending.id()).orElseThrow();
+        });
+    }
+
+    /** Takes the seats only if they are there, in one statement, and records the order as waiting for payment. */
+    Order reserve(long saleId, String buyer, int seats) {
+        Optional&lt;Long&gt; price = jdbc.sql(&quot;UPDATE sales SET sold = sold + ? WHERE id = ? AND sold + ? &lt;= capacity RETURNING price_paise&quot;)
+                .params(seats, saleId, seats).query(Long.class).optional();
+        if (price.isEmpty()) {
+            throw sale(saleId).isPresent() ? problem(HttpStatus.CONFLICT, &quot;Not enough seats left.&quot;) : problem(HttpStatus.NOT_FOUND, &quot;No such sale.&quot;);
+        }
+        long id = jdbc.sql(&quot;INSERT INTO orders (sale_id, buyer, seats, amount_paise, status) VALUES (?, ?, ?, ?, &#x27;PENDING_PAYMENT&#x27;) RETURNING id&quot;)
+                .params(saleId, buyer, seats, price.get() * seats).query(Long.class).single();
+        return find(id).orElseThrow();
+    }
+
+    void release(Order order) {
+        jdbc.sql(&quot;UPDATE orders SET status = &#x27;FAILED&#x27; WHERE id = ? AND status = &#x27;PENDING_PAYMENT&#x27;&quot;).param(order.id()).update();
+        jdbc.sql(&quot;UPDATE sales SET sold = sold - ? WHERE id = ?&quot;).params(order.seats(), order.saleId()).update();
+    }
+
+    Optional&lt;Order&gt; find(long id) {
+        return jdbc.sql(&quot;SELECT id, sale_id, buyer, seats, amount_paise, status, charge_id FROM orders WHERE id = ?&quot;).param(id).query(Order.class).optional();
+    }
+
+    Optional&lt;Sale&gt; sale(long id) {
+        return jdbc.sql(&quot;SELECT id, name, capacity, sold FROM sales WHERE id = ?&quot;).param(id).query(Sale.class).optional();
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>The final, ten times bigger</h2>
+<p>The World Cup final sale expects ten times the traffic, on eight servers against one PostgreSQL that allows 200 connections. Work out the pool per server, what happens when the gateway slows to 5 s, and where a queue (a virtual waiting room) belongs. Which number would you alert on first, and at what value?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: the one-transaction order, sixteen at once, a small pool.</li>
+<li>Split the order into reserve, charge (nothing open), record.</li>
+<li>Timeouts on the gateway; a short pool timeout and a <code>503</code> for it.</li>
+<li>Metrics, alerts and drills.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>Short transactions around the remote call</td><td>Two writes per order; a pending state to handle.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>One transaction around everything</td><td>A connection per waiting charge: the pool empties.</td><td><span class="pill bad">The trap</span></td></tr><tr><td>A bigger pool</td><td>More database memory; the wall moves, it does not go away.</td><td><span class="pill warn">Not a fix</span></td></tr><tr><td>Charge asynchronously (queue, webhook)</td><td>The buyer waits for a callback; more moving parts.</td><td><span class="pill warn">For very slow gateways</span></td></tr><tr><td>Hikari's default 30 s timeout</td><td>Users wait 30 s for an error.</td><td><span class="pill bad">Shorten it</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Object</th><th>What</th><th>Why</th></tr></thead><tbody><tr><td><code>sales_sold_range</code></td><td>CHECK sold BETWEEN 0 AND capacity</td><td>No overselling, no negative counts, for any writer.</td></tr><tr><td><code>orders_seats_range</code>, <code>orders_amount_positive</code></td><td>CHECKs</td><td>1 to 6 seats; a real amount.</td></tr><tr><td><code>orders_status</code>, <code>orders_paid_has_charge</code></td><td>CHECKs</td><td>Known states; paid exactly when a charge id exists.</td></tr></tbody></table></div>
+<p><strong>Transaction boundaries:</strong> reserve (seats and pending order) commits on its own; no transaction is open during the charge; the outcome (paid, or failed with seats back) commits on its own.</p>
+<pre class="code"><code class="language-sql">-- A sale: seats to sell and how many are taken. &quot;Never more taken than there are&quot; is checked here too.
+CREATE TABLE sales (
+    id          bigint PRIMARY KEY,
+    name        text   NOT NULL,
+    capacity    int    NOT NULL,
+    sold        int    NOT NULL DEFAULT 0,
+    price_paise bigint NOT NULL,
+    CONSTRAINT sales_sold_range CHECK (sold BETWEEN 0 AND capacity),
+    CONSTRAINT sales_price_positive CHECK (price_paise &gt; 0)
+);
+
+CREATE TABLE orders (
+    id           bigserial   PRIMARY KEY,
+    sale_id      bigint      NOT NULL REFERENCES sales,
+    buyer        text        NOT NULL,
+    seats        int         NOT NULL,
+    amount_paise bigint      NOT NULL,
+    status       text        NOT NULL,
+    charge_id    text,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT orders_seats_range CHECK (seats BETWEEN 1 AND 6),
+    CONSTRAINT orders_amount_positive CHECK (amount_paise &gt; 0),
+    CONSTRAINT orders_status CHECK (status IN (&#x27;PENDING_PAYMENT&#x27;, &#x27;PAID&#x27;, &#x27;FAILED&#x27;)),
+    CONSTRAINT orders_paid_has_charge CHECK ((status = &#x27;PAID&#x27;) = (charge_id IS NOT NULL))
+);</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>14. Operations: metric, alert, rollback, runbook, failure drill</li><li>15. Real-world considerations</li></ul><p class="rule">An Operations station: everything someone on call needs, and a drill to prove it works.</p></aside>
+<h2>Operations</h2>
+<dl class="facts">
+<dt>Metrics</dt><dd><code>hikaricp.connections.pending</code> (requests waiting for a connection), <code>hikaricp.connections.timeout</code> (requests that gave up), <code>hikaricp.connections.usage</code> (how long connections are held). With challenge 1, <code>ticket.orders{outcome}</code>.</dd>
+<dt>Alerts</dt><dd>Page when <code>timeout</code> rises at all during a sale, or <code>pending</code> stays above 0 for 1 minute. Warn when the 99th percentile of <code>usage</code> passes 100 ms: something is holding connections. (Starting points; tune them on real traffic.)</dd>
+<dt>Rollback</dt><dd>No data shape changes in this release: rolling back is redeploying the previous version. If a release puts a remote call back inside a transaction, <code>usage</code> jumps from milliseconds to seconds: roll back first, investigate after.</dd>
+</dl>
+<h2>Runbook: "orders are failing during the sale"</h2>
+<ol class="steps">
+<li>Look at the status codes. <code>503</code>s: the pool is empty. <code>504</code>s: the gateway is slow. <code>409</code>s: sold out, not an incident.</li>
+<li>For <code>503</code>s: check <code>hikaricp.connections.usage</code>. Connections held for seconds mean a slow query or a remote call inside a transaction; the ERROR line "No database connection within the pool's timeout" marks each refusal.</li>
+<li>For <code>504</code>s: check the gateway's status page; reads and other pages should still answer at once. If they do not, connections are being held after all: see step 2.</li>
+<li>Tell fans to retry: the <code>503</code> says <code>Retry-After: 5</code>. Never raise the pool to fix a slow gateway.</li>
+</ol>
+<h2>Failure drills</h2>
+<ol class="steps">
+<li><strong>Gateway hangs.</strong> Make the test gateway wait 10 s (<code>POST /delay</code>), send 20 orders at once: all <code>504</code> after 3 s, <code>GET /sales/1</code> answers at once, <code>timeout</code> stays 0. (Captured on the API contract tab.)</li>
+<li><strong>Pool held.</strong> Take every connection from outside the app (a long query, or a test holding them): orders get <code>503</code> after 2 s, the ERROR line appears, and orders work again once the connections are released.</li>
+</ol>
+<p class="muted">Both drills run on every build as <code>OperationsDrillTest</code> (3 tests, passing in <code>docs/test-run.txt</code>).</p>
+<h2>Real-world considerations</h2>
+<dl class="facts">
+<dt>Pool size</dt><dd>Start small: connections ≈ cores × 2 on the database, divided across servers. Eight servers × 10 = 80 connections.</dd>
+<dt>Virtual threads</dt><dd>They make waiting threads cheap, not connections: the pool is still the limit.</dd>
+<dt>Leak detection</dt><dd><code>leak-detection-threshold</code> logs a stack trace when a connection is held too long: useful in staging.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>Why do requests time out while the database is idle?</summary><p>The connection pool is empty: every connection is held by a request doing something else (here, waiting on a remote call).</p></details><details class="qa"><summary>What does Hikari&#x27;s connection timeout do?</summary><p>How long a request waits for a free connection before an exception. The default 30 s is far too long for a web request.</p></details><details class="qa"><summary>How do you call a payment gateway safely from an order?</summary><p>Commit the reservation, call it with no transaction open and with timeouts, then record the result in a new short transaction.</p></details><details class="qa"><summary>Is a bigger pool the fix?</summary><p>No: the slow calls fill any size, and connections cost database memory.</p></details><details class="qa"><summary>Which metrics show this problem?</summary><p>Pending requests and timeouts on the pool, and how long connections are held.</p></details><details class="qa"><summary>How do you test it?</summary><p>A small pool, a slow fake gateway, and many concurrent requests: count the pool timeouts.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 10 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>Transactions</td><td>Short ones.</td><td>No transaction during any remote call, with the pending state handled.</td></tr><tr><td>Timeouts</td><td>On the gateway.</td><td>On the gateway and the pool, each with an honest answer to the user.</td></tr><tr><td>Operations</td><td>Metrics exposed.</td><td>Alerts, a runbook and drills that run on every build.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate "simplifies" the order: one <code>@Transactional</code> method, "so if anything fails, everything rolls back, seats included, and the release code can go". Read the file and list every problem before opening the findings.</p>
+<p class="path">review/TicketOrders.java</p>
+<pre class="code"><code class="language-java">package com.seatsure.sales;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.ErrorResponseException;
+
+import java.util.Optional;
+
+/**
+ * An order: take the seats, charge the buyer, record the outcome.
+ */
+@Service
+class TicketOrders {
+
+    record Order(long id, long saleId, String buyer, int seats, long amountPaise, String status, String chargeId) {
+    }
+
+    record Sale(long id, String name, int capacity, int sold) {
+    }
+
+    private final JdbcClient jdbc;
+    private final TransactionTemplate tx;
+    private final PaymentGateway gateway;
+
+    TicketOrders(JdbcClient jdbc, PlatformTransactionManager transactions, PaymentGateway gateway) {
+        this.jdbc = jdbc;
+        this.tx = new TransactionTemplate(transactions);
+        this.gateway = gateway;
+    }
+
+    /** One transaction: if anything fails, everything rolls back, seats included. No release code needed. */
+    @Transactional
+    public Order place(long saleId, String buyer, int seats) {
+        Order pending = reserve(saleId, buyer, seats);
+        PaymentGateway.Charge charge;
+        try {
+            charge = gateway.charge(pending.id(), pending.amountPaise());
+        } catch (PaymentGateway.Declined declined) {
+            throw problem(HttpStatus.PAYMENT_REQUIRED, declined.getMessage());
+        } catch (PaymentGateway.Unavailable down) {
+            throw problem(down.timedOut ? HttpStatus.GATEWAY_TIMEOUT : HttpStatus.BAD_GATEWAY, down.getMessage());
+        }
+        jdbc.sql(&quot;UPDATE orders SET status = &#x27;PAID&#x27;, charge_id = ? WHERE id = ?&quot;).params(charge.chargeId(), pending.id()).update();
+        return find(pending.id()).orElseThrow();
+    }
+
+    /** Takes the seats only if they are there, in one statement, and records the order as waiting for payment. */
+    Order reserve(long saleId, String buyer, int seats) {
+        Optional&lt;Long&gt; price = jdbc.sql(&quot;UPDATE sales SET sold = sold + ? WHERE id = ? AND sold + ? &lt;= capacity RETURNING price_paise&quot;)
+                .params(seats, saleId, seats).query(Long.class).optional();
+        if (price.isEmpty()) {
+            throw sale(saleId).isPresent() ? problem(HttpStatus.CONFLICT, &quot;Not enough seats left.&quot;) : problem(HttpStatus.NOT_FOUND, &quot;No such sale.&quot;);
+        }
+        long id = jdbc.sql(&quot;INSERT INTO orders (sale_id, buyer, seats, amount_paise, status) VALUES (?, ?, ?, ?, &#x27;PENDING_PAYMENT&#x27;) RETURNING id&quot;)
+                .params(saleId, buyer, seats, price.get() * seats).query(Long.class).single();
+        return find(id).orElseThrow();
+    }
+
+    void release(Order order) {
+        jdbc.sql(&quot;UPDATE orders SET status = &#x27;FAILED&#x27; WHERE id = ? AND status = &#x27;PENDING_PAYMENT&#x27;&quot;).param(order.id()).update();
+        jdbc.sql(&quot;UPDATE sales SET sold = sold - ? WHERE id = ?&quot;).params(order.seats(), order.saleId()).update();
+    }
+
+    Optional&lt;Order&gt; find(long id) {
+        return jdbc.sql(&quot;SELECT id, sale_id, buyer, seats, amount_paise, status, charge_id FROM orders WHERE id = ?&quot;).param(id).query(Order.class).optional();
+    }
+
+    Optional&lt;Sale&gt; sale(long id) {
+        return jdbc.sql(&quot;SELECT id, name, capacity, sold FROM sales WHERE id = ?&quot;).param(id).query(Sale.class).optional();
+    }
+
+    static ErrorResponseException problem(HttpStatus status, String detail) {
+        return new ErrorResponseException(status, ProblemDetail.forStatusAndDetail(status, detail), null);
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>A connection held through every charge</summary><p>"One transaction: if anything fails, everything rolls back. No release code needed": true, and while the gateway thinks, the order holds a database connection. On the night of the sale, slow charges hold the whole pool, and every other request, even a read, waits for one.</p><p class="evidence"><b>Test evidence:</b> <code>theApiHoldsAConnectionForMillisecondsAndEveryFanGetsASeat</code> and <code>aHangingGatewayIsCutOffAndTheDatabaseStaysFree</code> fail.</p></details><details class="finding"><summary><span class="sev">2</span>A declined order vanishes</summary><p>The rollback also removes the order row: there is no record that the buyer tried and was declined, nothing for support to look up, nothing to count.</p><p class="evidence"><b>Test evidence:</b> <code>aDeclinedPaymentGivesTheSeatsBack</code> fails: there is no FAILED order.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the flawed file copied over the real one, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>TicketDatabaseTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill ok">2 / 2</span></td></tr><tr><td><code>OperationsDrillTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill bad">2 / 3</span></td></tr><tr><td><code>PoolExhaustionTrapTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">1 / 2</span></td></tr><tr><td><code>TicketOrderContractTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill bad">2 / 3</span></td></tr></tbody></table></div>
+<p class="note">With a fast gateway and a few buyers, the flawed version is correct and even simpler. It fails only on the one night that matters: the sale.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>

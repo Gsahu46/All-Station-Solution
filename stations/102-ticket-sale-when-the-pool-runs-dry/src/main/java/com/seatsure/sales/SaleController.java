@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.CannotGetJdbcConnectionException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -48,9 +49,12 @@ class SaleController {
         return new Availability(s.id(), s.name(), s.capacity(), s.sold(), s.capacity() - s.sold());
     }
 
-    /** No free connection within the pool's timeout (2 s): say so at once, instead of a 500 after 30 s. */
-    @ExceptionHandler(CannotGetJdbcConnectionException.class)
-    ResponseEntity<ProblemDetail> poolExhausted(CannotGetJdbcConnectionException e) {
+    /**
+     * No free connection within the pool's timeout (2 s): say so at once, instead of a 500 after 30 s. Through a
+     * transaction it arrives as CannotCreateTransactionException, without one as CannotGetJdbcConnectionException.
+     */
+    @ExceptionHandler({CannotGetJdbcConnectionException.class, CannotCreateTransactionException.class})
+    ResponseEntity<ProblemDetail> poolExhausted(org.springframework.core.NestedRuntimeException e) {
         log.error("No database connection within the pool's timeout: {}", e.getMostSpecificCause().getMessage());
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header("Retry-After", "5")
                 .body(ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "Too busy right now. Try again in a few seconds."));

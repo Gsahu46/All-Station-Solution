@@ -21,7 +21,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * gateway whose answers have a 1 s limit, so a full pool and a slow gateway are quick to reach. Seats and orders are
  * reset before each test.
  */
-@SpringBootTest(properties = {"spring.datasource.hikari.maximum-pool-size=4", "spring.datasource.hikari.connection-timeout=1s",
+@SpringBootTest(properties = {"spring.datasource.hikari.maximum-pool-size=4", "spring.datasource.hikari.connection-timeout=1000",
         "seatsure.payments.read-timeout=1s"})
 @AutoConfigureMockMvc
 @Import(PostgresTestConfig.class)
