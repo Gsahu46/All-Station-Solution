@@ -1,0 +1,1905 @@
+<title>Station 110 · Account deletion and data export</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 110</span>
+    <h1>Account deletion and data export</h1>
+    <p class="scenario">A user asked for their data and for deletion under the DPDP Act; their phone number still sat in 9 tables.</p>
+    <p class="sim"><b>Simulation</b><span>Members, posts, invoices and phone numbers are demo data; nothing is sent to anyone. The legal points are summarised for learning, not legal advice: the retention periods and the 90-day deadline here are demo rules.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>Social</li>
+      <li><b>Types</b>Database · Security</li>
+      <li><b>Reviewer view</b>Yes</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>054 Archiving seller products · 078 Customers see only their own accounts</p>
+      <p><span class="eyebrow">Builds toward</span><br>195 Loan checks with Account Aggregator consent</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · JdbcClient · @Scheduled jobs · Spring Security with database users · PostgreSQL 17 (jsonb, information_schema) · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Delete my account</strong><p>A Chaupal member asked for a copy of their data and then for their account to be deleted, as India's data protection law lets them.</p></li><li><strong>Still in nine tables</strong><p>The deletion code followed the member's user id. Weeks later their phone number was still in the table of sign-in codes, in another member's address-book upload, in a queue of unsent notifications and in old support tickets: tables that know the number, not the id.</p></li><li><strong>The fix</strong><p>An inventory of every table, checked against the database on every build. Deleting runs the whole inventory in one transaction; what the law requires is kept, and says why; and a test searches every text column of every table for the number afterwards.</p></li></ol>
+<p class="lesson">You can only delete what you know you have. Keep the list of where personal data lives, and make the build fail when it is incomplete.</p>
+
+<h2>What are we building?</h2>
+<p>A data export and an account deletion that reach every copy of a person's data, keep only what the law requires, and prove it.</p>
+
+<h2>An everyday analogy</h2>
+<p>Moving out of a flat: you do not just take your name off the door. You collect your post, cancel deliveries, take your number off the building's contact list, and leave only the rent receipts the landlord must keep.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Inventory</strong>: every table is listed with how it points at a person and what happens to it.</li>
+<li><strong>Close</strong>: <code>DELETE /me</code> closes the account at once and books the erasure.</li>
+<li><strong>Erase</strong>: a job runs the inventory in one transaction: delete, anonymise, or keep with a reason.</li>
+<li><strong>Prove</strong>: a test searches every text column for the person afterwards; another fails when a table is missing from the inventory.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: why not delete the user row and let ON DELETE CASCADE do the rest?</summary><p>Cascades follow foreign keys. The sign-in codes, others' address books and the notification queue hold the phone number with no key to the user row, so nothing cascades to them. And the invoices, which do have a key, must not be deleted at all.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>Not legal advice.</strong> The law is summarised with its status; the numbers are demo rules.</li>
+<li><strong>No backups or log files.</strong> They are discussed in Production and challenge 3, not simulated.</li>
+<li><strong>No consent screens.</strong> Consent notices are another part of the DPDP Rules.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Personal data</strong></td><td>Anything that identifies a person: name, phone, email, what they wrote, where they signed in from.</td><td>Your name on a parcel.</td><td>phone, posts, sign-ins</td></tr><tr><td><strong>Data inventory</strong></td><td>A list of every place personal data is kept and what happens to it.</td><td>A list of every cupboard in the house, and what is in it.</td><td><code>PersonalData</code></td></tr><tr><td><strong>Delete or anonymise</strong></td><td>Remove the row, or keep the row with nothing that identifies the person in it.</td><td>Shredding a form, or blacking out the name on it.</td><td>posts deleted; the user row anonymised</td></tr><tr><td><strong>Keeping what the law requires</strong></td><td>Some records must stay for a set time, deletion request or not.</td><td>A shop keeps its sales receipts for the tax office.</td><td>invoices, sign-in records</td></tr><tr><td><strong>Export as a job</strong></td><td>Collecting someone's data takes a while; it is prepared in the background and fetched later.</td><td>Ordering a photo print and picking it up.</td><td><code>POST /me/data-export</code></td></tr><tr><td><strong>DPDP Act</strong></td><td>India's Digital Personal Data Protection Act, 2023, and its Rules of 2025.</td><td>The rulebook for how a business treats your data.</td><td>the station's reason</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Chaupal</strong> (a fictional community app): a member's phone number survived their deletion request in nine tables.</p>
+
+<h2>Acceptance criteria</h2>
+<p class="muted">Demo rules: erasure due within 90 days of the request (done by the next job run, every 5 s here); sign-in records kept 180 days; invoices kept until their retention date.</p>
+<ol class="gwt">
+<li><b>Given</b> a member, <b>then</b> <code>POST /me/data-export</code> answers <code>202</code>; the export becomes READY and holds their own data, not others' address books that mention them.</li>
+<li><b>Given</b> <code>DELETE /me</code>, <b>then</b> <code>202</code>; from that moment the account cannot sign in.</li>
+<li><b>Given</b> the erasure has run, <b>then</b> the person's phone, email and name appear only in invoices, and nowhere else in any table.</li>
+<li><b>Given</b> another member's export id, or an unknown one, <b>then</b> <code>404</code>; not ready, <code>409</code>; a support account, <code>403</code>; no sign-in, <code>401</code>.</li>
+<li><b>Given</b> a new table, <b>then</b> the build fails until the inventory says what to do with it.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>The erasure is all or nothing.</li>
+<li>A deleted account's row holds nothing that identifies the person: a named CHECK.</li>
+<li>Logs never hold the data being erased.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Build a personal data inventory and keep it true with a test.</li>
+<li>Choose delete, anonymise or keep, per table, with a reason.</li>
+<li>Run exports and erasures as background jobs.</li>
+<li>Prove an erasure by searching the data, not by trusting the code.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody><tr><td><code>POST</code></td><td><code>/me/data-export</code></td><td>Ask for a copy of your data: <code>202</code> and its address.</td></tr><tr><td><code>GET</code></td><td><code>/me/data-exports/{id}</code></td><td>PENDING or READY.</td></tr><tr><td><code>GET</code></td><td><code>/me/data-exports/{id}/file</code></td><td>The JSON, as an attachment.</td></tr><tr><td><code>DELETE</code></td><td><code>/me</code></td><td>Close the account and book the erasure: <code>202</code> with its due date.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">202</span> / <span class="pill ok">200</span></td><td>Accepted as a job / read</td></tr><tr><td><span class="pill warn">400</span></td><td>An id that is not a number</td></tr><tr><td><span class="pill warn">401</span></td><td>Not signed in, or the account is closed</td></tr><tr><td><span class="pill warn">403</span></td><td>A support account: it has no "me"</td></tr><tr><td><span class="pill warn">404</span></td><td>No such export of yours</td></tr><tr><td><span class="pill warn">409</span></td><td>The export is not ready yet</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 25 Oct 2026, in this order. <code>Date</code>, connection and standard security headers are left out.</p>
+<pre class="code"><code class="language-text">Rows holding 9811122233, by table and column, before:
+contact_uploads.contact_phone: 1
+invoices.buyer_phone: 1
+notification_outbox.phone: 1
+otp_requests.phone: 1
+posts.body: 1
+support_tickets.phone: 1
+users.phone: 1</code></pre><section class="example"><h3>Case 1: Imran asks for his data</h3><p><b>Why:</b> <code>202</code>: a job.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /me/data-export HTTP/1.1
+Authorization: Basic aW1yYW46aW1yYW4tZGVtby1wYXNz</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 202 
+Location: /me/data-exports/1
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 1,
+  &quot;status&quot;: &quot;PENDING&quot;,
+  &quot;requestedAt&quot;: &quot;2026-10-25T04:08:28.229919Z&quot;,
+  &quot;readyAt&quot;: null
+}</code></pre></div></div></section><section class="example"><h3>Case 2: a moment later</h3><p><b>Why:</b> READY.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /me/data-exports/1 HTTP/1.1
+Authorization: Basic aW1yYW46aW1yYW4tZGVtby1wYXNz</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 109
+
+{
+  &quot;id&quot;: 1,
+  &quot;status&quot;: &quot;READY&quot;,
+  &quot;requestedAt&quot;: &quot;2026-10-25T04:08:28.229919Z&quot;,
+  &quot;readyAt&quot;: &quot;2026-10-25T04:08:32.616521Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 3: the file</h3><p><b>Why:</b> his account, profile, posts, comments, invoices, sign-ins, tickets and his own address book; not Zoya's upload that mentions him.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /me/data-exports/1/file HTTP/1.1
+Authorization: Basic aW1yYW46aW1yYW4tZGVtby1wYXNz</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Disposition: attachment; filename=&quot;chaupal-data-1.json&quot;
+Content-Type: application/json
+Content-Length: 930
+
+{
+  &quot;posts&quot;: [
+    {
+      &quot;id&quot;: 1,
+      &quot;body&quot;: &quot;Anyone up for cricket at Gomti Nagar on Sunday? Call me on +919811122233.&quot;,
+      &quot;created_at&quot;: &quot;2026-10-25T04:08:26.617Z&quot;
+    }
+  ],
+  &quot;account&quot;: [
+    {
+      &quot;name&quot;: &quot;Imran Qureshi&quot;,
+      &quot;email&quot;: &quot;imran.q@example.com&quot;,
+      &quot;phone&quot;: &quot;+919811122233&quot;
+    }
+  ],
+  &quot;profile&quot;: [
+    {
+      &quot;bio&quot;: &quot;Weekend cricket and old Hindi songs&quot;,
+      &quot;city&quot;: &quot;Lucknow&quot;,
+      &quot;date_of_birth&quot;: &quot;1990-02-14T00:00:00.000Z&quot;
+    }
+  ],
+  &quot;signIns&quot;: [
+    {
+      &quot;at&quot;: &quot;2026-04-08T04:08:26.617Z&quot;,
+      &quot;ip&quot;: &quot;203.0.113.10&quot;
+    },
+    {
+      &quot;at&quot;: &quot;2026-10-23T04:08:26.617Z&quot;,
+      &quot;ip&quot;: &quot;203.0.113.11&quot;
+    }
+  ],
+  &quot;comments&quot;: [
+    {
+      &quot;id&quot;: 2,
+      &quot;body&quot;: &quot;I will bring snacks.&quot;,
+      &quot;post_id&quot;: 2,
+      &quot;created_at&quot;: &quot;2026-10-25T04:08:26.617Z&quot;
+    }
+  ],
+  &quot;invoices&quot;: [
+    {
+      &quot;id&quot;: 1,
+      &quot;issued_on&quot;: &quot;2026-04-01T00:00:00.000Z&quot;,
+      &quot;buyer_name&quot;: &quot;Imran Qureshi&quot;,
+      &quot;buyer_phone&quot;: &quot;+919811122233&quot;,
+      &quot;amount_paise&quot;: 49900
+    }
+  ],
+  &quot;supportTickets&quot;: [
+    {
+      &quot;id&quot;: 1,
+      &quot;message&quot;: &quot;I cannot change my profile photo.&quot;
+    }
+  ],
+  &quot;contactsYouUploaded&quot;: [
+    {
+      &quot;contact_name&quot;: &quot;Zoya&quot;,
+      &quot;contact_phone&quot;: &quot;+919822233344&quot;
+    }
+  ]
+}</code></pre></div></div></section><section class="example"><h3>Case 4: Zoya asks for export 1</h3><p><b>Why:</b> <code>404</code>: it is not hers.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /me/data-exports/1 HTTP/1.1
+Authorization: Basic em95YTp6b3lhLWRlbW8tcGFzcw==</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;instance&quot;: &quot;/me/data-exports/1&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Not Found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: a support account calls <code>DELETE /me</code></h3><p><b>Why:</b> <code>403</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">DELETE /me HTTP/1.1
+Authorization: Basic c3VwcG9ydDpzdXBwb3J0LWRlbW8tcGFzcw==</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 403 
+Content-Type: application/problem+json
+Content-Length: 93
+
+{
+  &quot;title&quot;: &quot;Not allowed&quot;,
+  &quot;status&quot;: 403,
+  &quot;detail&quot;: &quot;This sign-in cannot do this.&quot;,
+  &quot;instance&quot;: &quot;/me&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: Imran deletes his account</h3><p><b>Why:</b> <code>202</code>; due within 90 days.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">DELETE /me HTTP/1.1
+Authorization: Basic aW1yYW46aW1yYW4tZGVtby1wYXNz</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 202 
+Content-Type: application/json
+
+{
+  &quot;status&quot;: &quot;DELETION_REQUESTED&quot;,
+  &quot;dueBy&quot;: &quot;2027-01-23T04:08:33.176577Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: Imran signs in again</h3><p><b>Why:</b> <code>401</code>: closed at once.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /me/data-exports/1 HTTP/1.1
+Authorization: Basic aW1yYW46aW1yYW4tZGVtby1wYXNz</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 401 
+Content-Type: application/problem+json
+Content-Length: 120
+
+{
+  &quot;title&quot;: &quot;Sign-in required&quot;,
+  &quot;status&quot;: 401,
+  &quot;detail&quot;: &quot;Send a valid username and password.&quot;,
+  &quot;instance&quot;: &quot;/me/data-exports/1&quot;
+}</code></pre></div></div></section>
+<h2>After the erasure</h2>
+<p class="muted">The same search of every text column, then his row and the ledger:</p>
+<pre class="code"><code class="language-text">Rows holding 9811122233, by table and column, after:
+invoices.buyer_phone: 1</code></pre><pre class="code"><code class="language-text">id | login | name | phone | email | status  
+----+-------+------+-------+-------+---------
+  1 |       |      |       |       | DELETED
+(1 row)
+
+ user_id | requested_at |   due_by   | done 
+---------+--------------+------------+------
+       1 | 2026-10-25   | 2027-01-23 | t
+(1 row)</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>The old delete by user id</td><td>The number left in 3 tables besides invoices</td><td><code>theOldWayLeavesHisNumberInTablesThatDoNotKnowHisUserId</code></td></tr><tr><td>The API's erasure</td><td>Phone and name only in invoices; email, posts gone; Zoya's post kept; the account closed</td><td><code>theApiErasesHimEverywhereExceptWhatTheLawKeeps</code></td></tr><tr><td>An export</td><td>A job; the person's own data, not others' that mention them</td><td><code>anExportIsAJobAndHoldsThePersonsOwnDataOnly</code></td></tr><tr><td>Deleting</td><td>Closed at once; due within 90 days; recent sign-ins kept, old ones gone</td><td><code>deletingClosesTheAccountAtOnceAndBooksTheErasureWithin90Days</code></td></tr><tr><td>Unknown export; bad id</td><td><code>404</code>; <code>400</code></td><td><code>anUnknownExportIs404AndABadIdIs400</code></td></tr><tr><td>No sign-in; a support account</td><td><code>401</code>; <code>403</code></td><td><code>noSignInIs401AndASupportAccountHasNoMe</code></td></tr><tr><td>Another member's export</td><td><code>404</code></td><td><code>onePersonCannotReadAnothersExport</code></td></tr><tr><td>Not ready</td><td><code>409</code></td><td><code>anExportNotYetReadyIs409</code></td></tr><tr><td>A table missing from the inventory</td><td>The build fails</td><td><code>everyTableHasAnEntryInTheInventoryAndEveryEntryATable</code></td></tr><tr><td>An entry with no reason or no SQL</td><td>The build fails</td><td><code>everyEntryThatKeepsOrDeletesSaysWhy</code></td></tr><tr><td>Plain SQL against the rules</td><td>Named constraints</td><td><code>theRulesAreNamedConstraintsInTheDatabase</code></td></tr><tr><td>An erasure that fails half-way</td><td>Nothing erased</td><td><code>anErasureThatFailsHalfWayErasesNothing</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Deleting from one table while copies remain in logs, backups and other tables.</p>
+<ul>
+<li><strong>The old way.</strong> Delete every row that hangs off the user id, blank the user row. Every table that knows the id is clean. The test then searches every text column of every table for his number: it is still in other members' address-book uploads, the unsent notification queue and the sign-in codes, besides the invoices the law keeps.</li>
+<li><strong>The API.</strong> The same search after <code>DELETE /me</code> finds the number in the invoices only.</li>
+</ul>
+<p>While building, each part was undone once: the sign-in codes left out turned 1 test red; others' address books left out 1; the user row not anonymised 2; no transaction around the erasure 1; deleted accounts still able to sign in 1; others' address books in the export 1; another member's export readable 1; recent sign-in records deleted 1; a table missing from the inventory 1.</p>
+</div>
+<pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Imran asks Chaupal to delete his account. Where is his phone number afterwards? Written first. */
+class AccountDeletionTrapTest extends ApiTest {
+
+    /** The old way: delete what hangs off his user id, blank his row. Every table found through the user id is clean. */
+    void oldDelete(long user) {
+        for (String table : new String[]{&quot;profiles&quot;, &quot;comments&quot;, &quot;posts&quot;, &quot;login_events&quot;, &quot;support_tickets&quot;, &quot;data_exports&quot;}) {
+            jdbc.sql(&quot;DELETE FROM &quot; + table + &quot; WHERE user_id = ?&quot;).param(user).update();
+        }
+        jdbc.sql(&quot;UPDATE users SET login = NULL, password_hash = NULL, name = NULL, phone = NULL, email = NULL, status = &#x27;DELETED&#x27;, deleted_at = now() WHERE id = ?&quot;)
+                .param(user).update();
+    }
+
+    @Test
+    void theOldWayLeavesHisNumberInTablesThatDoNotKnowHisUserId() {
+        assertThat(foundIn(IMRANS_DIGITS)).hasSizeGreaterThan(5);   // before: everywhere
+        oldDelete(1);
+        assertThat(foundIn(IMRANS_DIGITS)).containsExactlyInAnyOrder(
+                &quot;contact_uploads.contact_phone&quot;,   // in Zoya&#x27;s address book upload
+                &quot;invoices.buyer_phone&quot;,            // kept by law: fine
+                &quot;notification_outbox.phone&quot;,       // a message still waiting to be sent to him
+                &quot;otp_requests.phone&quot;);             // his sign-in codes
+    }
+
+    @Test
+    void theApiErasesHimEverywhereExceptWhatTheLawKeeps() throws Exception {
+        deleteMe(&quot;imran&quot;).andExpect(status().isAccepted());
+        eraseNow(1);
+        assertThat(foundIn(IMRANS_DIGITS)).containsExactly(&quot;invoices.buyer_phone&quot;);
+        assertThat(foundIn(&quot;Imran Qureshi&quot;)).containsExactly(&quot;invoices.buyer_name&quot;);
+        assertThat(foundIn(&quot;imran.q@example.com&quot;)).isEmpty();
+        assertThat(foundIn(&quot;Gomti Nagar&quot;)).as(&quot;his post&quot;).isEmpty();
+        assertThat(foundIn(&quot;Book club&quot;)).as(&quot;Zoya&#x27;s post is hers&quot;).isNotEmpty();
+        as(&quot;imran&quot;, get(&quot;/me/data-exports/1&quot;)).andExpect(status().isUnauthorized());   // the account is closed
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d --wait   # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run        # the API on http://localhost:8080
+./mvnw test                   # all 12 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d --wait
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Add a table that holds a phone number, without touching <code>PersonalData</code>, and run the tests:</p>
+<pre class="code"><code class="language-bash">printf &#x27;CREATE TABLE referral_invites (id BIGSERIAL PRIMARY KEY, phone TEXT NOT NULL);\n&#x27; &gt; src/main/resources/db/migration/V3__invites.sql
+./mvnw test -Dtest=PersonalDataInventoryTest   # fails: referral_invites has no entry</code></pre>
+<p>Then decide what happens to it, add the entry, and run the trap test too.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td><code>PersonalDataInventoryTest</code> fails after a migration</td><td>A new table with no decision.</td><td>Add an entry: action, reason, SQL.</td></tr><tr><td>An erasure keeps failing in the log</td><td>Something blocks a delete (a new foreign key, for instance); it rolls back and retries.</td><td>Add the new table to the inventory, in the right order.</td></tr><tr><td><code>401</code> right after <code>DELETE /me</code></td><td>Expected: the account is closed.</td><td></td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/110-account-deletion-and-data-export/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/chaupal/accounts/
+│   ├── PersonalData.java   ├── Accounts.java   ├── MeController.java   ├── SecurityConfig.java
+│   └── ProblemResponses.java, AccountsApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__chaupal.sql, V2__demo_data.sql
+├── src/test/java/com/chaupal/accounts/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">The inventory first, then in the order a request travels.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">PersonalData.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">Accounts.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">MeController.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">SecurityConfig.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">V1__chaupal.sql</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">V2__demo_data.sql</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">compose.yaml</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/chaupal/accounts/PersonalData.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The inventory.</dd><dt>Why</dt><dd>Every table: what links it to a person, the action, the reason, the SQL. The erasure runs it in order.</dd><dt>Without it</dt><dd>A table nobody remembered.</dd></dl><ul><li>Tables found by phone, not user id, are the ones the old code missed: <code>otp_requests</code>, <code>notification_outbox</code>, and <code>contact_uploads.contact_phone</code> in other members' rows.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import java.util.List;
+
+/**
+ * The personal data inventory: every table, what in it points at a person, and what happens to it when they delete
+ * their account. PersonalDataInventoryTest compares this list with the database, so a new table cannot be forgotten.
+ * The SQL runs in order, in one transaction, with :user (the account&#x27;s id) and :phone (its number).
+ */
+final class PersonalData {
+
+    enum Action { DELETE, KEEP_FOR_LAW, ANONYMISE, NONE }
+
+    record Entry(String table, String findsBy, Action action, String why, String sql) {
+    }
+
+    static final List&lt;Entry&gt; INVENTORY = List.of(
+            new Entry(&quot;profiles&quot;, &quot;user_id&quot;, Action.DELETE, &quot;Bio, city, date of birth.&quot;,
+                    &quot;DELETE FROM profiles WHERE user_id = :user&quot;),
+            new Entry(&quot;comments&quot;, &quot;user_id&quot;, Action.DELETE, &quot;Their comments; others&#x27; comments under their posts go with the posts.&quot;,
+                    &quot;DELETE FROM comments WHERE user_id = :user&quot;),
+            new Entry(&quot;posts&quot;, &quot;user_id&quot;, Action.DELETE, &quot;Their posts, which can hold anything, phone numbers included.&quot;,
+                    &quot;DELETE FROM posts WHERE user_id = :user&quot;),
+            new Entry(&quot;otp_requests&quot;, &quot;phone&quot;, Action.DELETE, &quot;Keyed by phone: a delete by user id misses them.&quot;,
+                    &quot;DELETE FROM otp_requests WHERE phone = :phone&quot;),
+            new Entry(&quot;contact_uploads&quot;, &quot;uploader_id, contact_phone&quot;, Action.DELETE,
+                    &quot;Their own address book, and their number in other members&#x27; uploads.&quot;,
+                    &quot;DELETE FROM contact_uploads WHERE uploader_id = :user OR contact_phone = :phone&quot;),
+            new Entry(&quot;support_tickets&quot;, &quot;user_id, phone&quot;, Action.DELETE, &quot;Their tickets, by account or by the number they wrote from.&quot;,
+                    &quot;DELETE FROM support_tickets WHERE user_id = :user OR phone = :phone&quot;),
+            new Entry(&quot;notification_outbox&quot;, &quot;phone&quot;, Action.DELETE, &quot;Messages not yet sent to them.&quot;,
+                    &quot;DELETE FROM notification_outbox WHERE phone = :phone&quot;),
+            new Entry(&quot;data_exports&quot;, &quot;user_id&quot;, Action.DELETE, &quot;Copies of their data made earlier.&quot;,
+                    &quot;DELETE FROM data_exports WHERE user_id = :user&quot;),
+            new Entry(&quot;login_events&quot;, &quot;user_id&quot;, Action.KEEP_FOR_LAW,
+                    &quot;Kept 180 days for security; older ones go now, the rest when LoginEventPurge reaches them.&quot;,
+                    &quot;DELETE FROM login_events WHERE user_id = :user AND at &lt; now() - interval &#x27;180 days&#x27;&quot;),
+            new Entry(&quot;invoices&quot;, &quot;user_id, buyer_phone&quot;, Action.KEEP_FOR_LAW,
+                    &quot;Tax invoices must be kept until retain_until, deletion request or not; not shown to anyone but finance.&quot;, null),
+            new Entry(&quot;users&quot;, &quot;id&quot;, Action.ANONYMISE, &quot;The row stays so that kept records still point somewhere; nothing in it identifies the person.&quot;,
+                    &quot;UPDATE users SET login = NULL, password_hash = NULL, name = NULL, phone = NULL, email = NULL, &quot;
+                            + &quot;status = &#x27;DELETED&#x27;, deleted_at = now() WHERE id = :user&quot;),
+            new Entry(&quot;erasures&quot;, &quot;user_id&quot;, Action.NONE, &quot;The record that an erasure was asked for and done: no personal data.&quot;, null),
+            new Entry(&quot;flyway_schema_history&quot;, &quot;-&quot;, Action.NONE, &quot;Migrations.&quot;, null));
+
+    private PersonalData() {
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/chaupal/accounts/Accounts.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Exports and erasures.</dd><dt>Why</dt><dd>Exports built from a list of the person's own data; the erasure runs the inventory in one transaction; a nightly purge of old sign-ins.</dd><dt>Without it</dt><dd>Half an erasure; one failing account holding up the others.</dd></dl><ul><li>The job calls <code>erase</code> through the Spring proxy (<code>self</code>), so each account gets its own transaction; called directly, <code>@Transactional</code> would be skipped.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
+
+/** Data exports and account deletion, both as background jobs. */
+@Service
+class Accounts {
+
+    record Export(long id, String status, Instant requestedAt, Instant readyAt) {
+    }
+
+    record Deletion(String status, Instant dueBy) {
+    }
+
+    private static final Logger log = LoggerFactory.getLogger(Accounts.class);
+    // What a person gets in their export: their own data. Others&#x27; address books that hold their number are not theirs.
+    private static final Map&lt;String, String&gt; EXPORTED = new LinkedHashMap&lt;&gt;();
+
+    static {
+        EXPORTED.put(&quot;account&quot;, &quot;SELECT name, phone, email FROM users WHERE id = :user&quot;);
+        EXPORTED.put(&quot;profile&quot;, &quot;SELECT bio, city, date_of_birth FROM profiles WHERE user_id = :user&quot;);
+        EXPORTED.put(&quot;posts&quot;, &quot;SELECT id, body, created_at FROM posts WHERE user_id = :user ORDER BY id&quot;);
+        EXPORTED.put(&quot;comments&quot;, &quot;SELECT id, post_id, body, created_at FROM comments WHERE user_id = :user ORDER BY id&quot;);
+        EXPORTED.put(&quot;contactsYouUploaded&quot;, &quot;SELECT contact_name, contact_phone FROM contact_uploads WHERE uploader_id = :user ORDER BY id&quot;);
+        EXPORTED.put(&quot;invoices&quot;, &quot;SELECT id, buyer_name, buyer_phone, amount_paise, issued_on FROM invoices WHERE user_id = :user ORDER BY id&quot;);
+        EXPORTED.put(&quot;signIns&quot;, &quot;SELECT ip, at FROM login_events WHERE user_id = :user ORDER BY at&quot;);
+        EXPORTED.put(&quot;supportTickets&quot;, &quot;SELECT id, message FROM support_tickets WHERE user_id = :user ORDER BY id&quot;);
+    }
+
+    private final JdbcClient jdbc;
+    private final JsonMapper json;
+    private final Accounts self;   // through the proxy, so erase() runs in its own transaction
+
+    Accounts(JdbcClient jdbc, JsonMapper json, @Lazy Accounts self) {
+        this.jdbc = jdbc;
+        this.json = json;
+        this.self = self;
+    }
+
+    long idOf(String login) {
+        return jdbc.sql(&quot;SELECT id FROM users WHERE login = ?&quot;).param(login).query(Long.class).single();
+    }
+
+    Export requestExport(long user) {
+        long id = jdbc.sql(&quot;INSERT INTO data_exports (user_id) VALUES (?) RETURNING id&quot;).param(user).query(Long.class).single();
+        return export(user, id).orElseThrow();
+    }
+
+    /** Another person&#x27;s export is not found, the same as one that does not exist. */
+    Optional&lt;Export&gt; export(long user, long id) {
+        return jdbc.sql(&quot;SELECT id, status, requested_at, ready_at FROM data_exports WHERE id = ? AND user_id = ?&quot;).params(id, user)
+                .query(Export.class).optional();
+    }
+
+    Optional&lt;String&gt; exportFile(long user, long id) {
+        return jdbc.sql(&quot;SELECT content::text FROM data_exports WHERE id = ? AND user_id = ? AND status = &#x27;READY&#x27;&quot;).params(id, user)
+                .query(String.class).optional();
+    }
+
+    /** Signs the person out for good (status is no longer ACTIVE) and books the erasure, due within 90 days. */
+    @Transactional
+    Deletion requestDeletion(long user) {
+        jdbc.sql(&quot;UPDATE users SET status = &#x27;DELETION_REQUESTED&#x27;, deletion_requested_at = now() WHERE id = ? AND status = &#x27;ACTIVE&#x27;&quot;).param(user).update();
+        jdbc.sql(&quot;INSERT INTO erasures (user_id, requested_at, due_by) VALUES (?, now(), now() + interval &#x27;90 days&#x27;) ON CONFLICT DO NOTHING&quot;).param(user).update();
+        return jdbc.sql(&quot;SELECT u.status, e.due_by FROM users u JOIN erasures e ON e.user_id = u.id WHERE u.id = ?&quot;).param(user).query(Deletion.class).single();
+    }
+
+    @Scheduled(fixedDelayString = &quot;${chaupal.jobs.every}&quot;)
+    void runJobs() {
+        jdbc.sql(&quot;SELECT id, user_id FROM data_exports WHERE status = &#x27;PENDING&#x27; ORDER BY id&quot;)
+                .query((rs, n) -&gt; new long[]{rs.getLong(1), rs.getLong(2)}).list().forEach(e -&gt; buildExport(e[0], e[1]));
+        for (long user : jdbc.sql(&quot;SELECT id FROM users WHERE status = &#x27;DELETION_REQUESTED&#x27; ORDER BY id&quot;).query(Long.class).list()) {
+            try {
+                self.erase(user);
+            } catch (RuntimeException e) {
+                // One account that cannot be erased must not hold up the others; it is tried again next time.
+                log.error(&quot;Erasure of account {} failed and was rolled back: {}&quot;, user, e.getMessage());
+            }
+        }
+    }
+
+    void buildExport(long id, long user) {
+        Map&lt;String, Object&gt; content = new LinkedHashMap&lt;&gt;();
+        EXPORTED.forEach((name, sql) -&gt; content.put(name, jdbc.sql(sql).param(&quot;user&quot;, user).query().listOfRows()));
+        jdbc.sql(&quot;UPDATE data_exports SET status = &#x27;READY&#x27;, content = ?::jsonb, ready_at = now() WHERE id = ? AND status = &#x27;PENDING&#x27;&quot;)
+                .params(json.writeValueAsString(content), id).update();
+    }
+
+    /** Every entry of the inventory, in order, in one transaction: all of it is erased, or none of it. */
+    @Transactional
+    void erase(long user) {
+        String phone = jdbc.sql(&quot;SELECT phone FROM users WHERE id = ?&quot;).param(user).query(String.class).single();
+        for (PersonalData.Entry entry : PersonalData.INVENTORY) {
+            if (entry.sql() != null) {
+                var statement = jdbc.sql(entry.sql()).param(&quot;user&quot;, user);
+                if (entry.sql().contains(&quot;:phone&quot;)) {
+                    statement = statement.param(&quot;phone&quot;, phone);
+                }
+                statement.update();
+            }
+        }
+        jdbc.sql(&quot;UPDATE erasures SET completed_at = now() WHERE user_id = ?&quot;).param(user).update();
+        log.info(&quot;Account {} erased&quot;, user);   // the id only: logs are not a place for the data being erased
+    }
+
+    /** Sign-in records older than 180 days, for everyone. */
+    @Scheduled(cron = &quot;${chaupal.jobs.purge-cron}&quot;)
+    void purgeLoginEvents() {
+        jdbc.sql(&quot;DELETE FROM login_events WHERE at &lt; now() - interval &#x27;180 days&#x27;&quot;).update();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/chaupal/accounts/MeController.java</p><div class="notes"><p>The four endpoints; "me" is always the signed-in account.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+
+/** The person&#x27;s own data: &quot;me&quot; is always the signed-in account, never an id in the request. */
+@RestController
+class MeController {
+
+    private final Accounts accounts;
+
+    MeController(Accounts accounts) {
+        this.accounts = accounts;
+    }
+
+    @PostMapping(&quot;/me/data-export&quot;)
+    ResponseEntity&lt;Accounts.Export&gt; requestExport(Authentication me) {
+        Accounts.Export e = accounts.requestExport(accounts.idOf(me.getName()));
+        return ResponseEntity.accepted().location(URI.create(&quot;/me/data-exports/&quot; + e.id())).body(e);
+    }
+
+    @GetMapping(&quot;/me/data-exports/{id}&quot;)
+    Accounts.Export export(Authentication me, @PathVariable long id) {
+        return accounts.export(accounts.idOf(me.getName()), id).orElseThrow(() -&gt; new ErrorResponseException(HttpStatus.NOT_FOUND));
+    }
+
+    @GetMapping(&quot;/me/data-exports/{id}/file&quot;)
+    ResponseEntity&lt;String&gt; exportFile(Authentication me, @PathVariable long id) {
+        long user = accounts.idOf(me.getName());
+        accounts.export(user, id).orElseThrow(() -&gt; new ErrorResponseException(HttpStatus.NOT_FOUND));
+        String content = accounts.exportFile(user, id).orElseThrow(() -&gt; new ErrorResponseException(HttpStatus.CONFLICT,
+                ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, &quot;The export is not ready yet.&quot;), null));
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.CONTENT_DISPOSITION, &quot;attachment; filename=\&quot;chaupal-data-&quot; + id + &quot;.json\&quot;&quot;).body(content);
+    }
+
+    /** 202: the account is closed now; the erasure job removes the data shortly after, and within 90 days at most. */
+    @DeleteMapping(&quot;/me&quot;)
+    ResponseEntity&lt;Accounts.Deletion&gt; delete(Authentication me) {
+        return ResponseEntity.accepted().body(accounts.requestDeletion(accounts.idOf(me.getName())));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/chaupal/accounts/SecurityConfig.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Sign-in.</dd><dt>Why</dt><dd>Accounts from the database, ACTIVE only: a deletion request closes the account at once.</dd><dt>Without it</dt><dd>Signing in to an account being erased.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems) throws Exception {
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(&quot;/me&quot;, &quot;/me/**&quot;).hasRole(&quot;MEMBER&quot;)
+                        .requestMatchers(&quot;/error&quot;).permitAll()
+                        .anyRequest().denyAll())
+                .httpBasic(b -&gt; b.authenticationEntryPoint(problems::unauthenticated))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable());   // credentials in a header with every request, no cookie a browser sends by itself
+        return http.build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+
+    /** Only ACTIVE accounts sign in: from the moment deletion is asked for, the account is closed. */
+    @Bean
+    UserDetailsService users(JdbcClient jdbc) {
+        return login -&gt; jdbc.sql(&quot;SELECT login, password_hash, role FROM users WHERE login = ? AND status = &#x27;ACTIVE&#x27;&quot;).param(login)
+                .query((rs, n) -&gt; User.withUsername(rs.getString(1)).password(rs.getString(2)).roles(rs.getString(3)).build())
+                .optional().orElseThrow(() -&gt; new UsernameNotFoundException(&quot;no active account&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/resources/db/migration/V1__chaupal.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Tables.</dd><dt>Why</dt><dd>Named CHECKs: a deleted user holds nothing; erasures due within 90 days; invoices kept past their date of issue.</dd><dt>Without it</dt><dd>A "deleted" account with its phone number still in it.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">-- Chaupal, a community app. Every table that holds personal data is listed in PersonalData.java with what happens to
+-- it when a person deletes their account; PersonalDataInventoryTest fails the build when a table is not listed.
+CREATE TABLE users (
+    id                    BIGSERIAL PRIMARY KEY,
+    login                 TEXT UNIQUE,
+    password_hash         TEXT,
+    role                  TEXT NOT NULL DEFAULT &#x27;MEMBER&#x27; CONSTRAINT users_role CHECK (role IN (&#x27;MEMBER&#x27;, &#x27;SUPPORT&#x27;)),
+    name                  TEXT,
+    phone                 TEXT CONSTRAINT users_phone_unique UNIQUE,
+    email                 TEXT,
+    status                TEXT NOT NULL DEFAULT &#x27;ACTIVE&#x27; CONSTRAINT users_status CHECK (status IN (&#x27;ACTIVE&#x27;, &#x27;DELETION_REQUESTED&#x27;, &#x27;DELETED&#x27;)),
+    deletion_requested_at TIMESTAMPTZ,
+    deleted_at            TIMESTAMPTZ,
+    -- The id stays, so others&#x27; rows that point at it stay valid; nothing that identifies the person does.
+    CONSTRAINT users_deleted_holds_nothing CHECK (status &lt;&gt; &#x27;DELETED&#x27;
+        OR (login IS NULL AND password_hash IS NULL AND name IS NULL AND phone IS NULL AND email IS NULL AND deleted_at IS NOT NULL))
+);
+
+CREATE TABLE profiles (
+    user_id       BIGINT PRIMARY KEY REFERENCES users (id),
+    bio           TEXT,
+    city          TEXT,
+    date_of_birth DATE
+);
+
+CREATE TABLE posts (
+    id         BIGSERIAL PRIMARY KEY,
+    user_id    BIGINT NOT NULL REFERENCES users (id),
+    body       TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE comments (
+    id         BIGSERIAL PRIMARY KEY,
+    post_id    BIGINT NOT NULL REFERENCES posts (id) ON DELETE CASCADE,
+    user_id    BIGINT NOT NULL REFERENCES users (id),
+    body       TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Tax invoices for paid memberships: the law says how long they must be kept, deletion or not.
+CREATE TABLE invoices (
+    id           BIGSERIAL PRIMARY KEY,
+    user_id      BIGINT NOT NULL REFERENCES users (id),
+    buyer_name   TEXT NOT NULL,
+    buyer_phone  TEXT NOT NULL,
+    amount_paise BIGINT NOT NULL CONSTRAINT invoices_amount_positive CHECK (amount_paise &gt; 0),
+    issued_on    DATE NOT NULL,
+    retain_until DATE NOT NULL,
+    CONSTRAINT invoices_retained_after_issue CHECK (retain_until &gt; issued_on)
+);
+
+-- Sign-in records, kept for security for 180 days (demo rule; see the Production tab).
+CREATE TABLE login_events (
+    id      BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users (id),
+    ip      TEXT NOT NULL,
+    at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Keyed by phone, not by user: a lookup by user id never finds these.
+CREATE TABLE otp_requests (
+    id        BIGSERIAL PRIMARY KEY,
+    phone     TEXT NOT NULL,
+    code_hash TEXT NOT NULL,
+    at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Other members&#x27; address books: this person&#x27;s number may be in someone else&#x27;s upload.
+CREATE TABLE contact_uploads (
+    id            BIGSERIAL PRIMARY KEY,
+    uploader_id   BIGINT NOT NULL REFERENCES users (id),
+    contact_name  TEXT,
+    contact_phone TEXT NOT NULL
+);
+
+CREATE TABLE support_tickets (
+    id      BIGSERIAL PRIMARY KEY,
+    user_id BIGINT REFERENCES users (id),
+    phone   TEXT,
+    message TEXT NOT NULL
+);
+
+CREATE TABLE notification_outbox (
+    id     BIGSERIAL PRIMARY KEY,
+    phone  TEXT NOT NULL,
+    text   TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT &#x27;PENDING&#x27;
+);
+
+CREATE TABLE data_exports (
+    id           BIGSERIAL PRIMARY KEY,
+    user_id      BIGINT NOT NULL REFERENCES users (id),
+    status       TEXT NOT NULL DEFAULT &#x27;PENDING&#x27; CONSTRAINT data_exports_status CHECK (status IN (&#x27;PENDING&#x27;, &#x27;READY&#x27;)),
+    content      JSONB,
+    requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    ready_at     TIMESTAMPTZ,
+    CONSTRAINT data_exports_ready_has_content CHECK (status &lt;&gt; &#x27;READY&#x27; OR content IS NOT NULL)
+);
+
+-- The record of each erasure, with no personal data: proof it was done, and the list to re-apply after a backup
+-- is restored. Demo rule: done within 90 days of the request.
+CREATE TABLE erasures (
+    user_id      BIGINT PRIMARY KEY REFERENCES users (id),
+    requested_at TIMESTAMPTZ NOT NULL,
+    due_by       TIMESTAMPTZ NOT NULL,
+    completed_at TIMESTAMPTZ,
+    CONSTRAINT erasures_within_90_days CHECK (due_by &lt;= requested_at + interval &#x27;90 days&#x27;)
+);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_data.sql</p><div class="notes"><p>Imran, Zoya and a support account; Imran's number is in seven columns of seven tables (the scan before, on the API contract tab).</p></div><div class="src"><pre class="code"><code class="language-sql">-- Demo members (made up): Imran, who will delete his account, and Zoya; and a support agent. Passwords &quot;name-demo-pass&quot;.
+INSERT INTO users (login, password_hash, role, name, phone, email) VALUES
+    (&#x27;imran&#x27;, &#x27;{bcrypt}$2a$10$BNBnKBjnnmkSV2yuTGTxh.BSk4Q2hvK8R1HyP4kllGiji63hL7Ay.&#x27;, &#x27;MEMBER&#x27;, &#x27;Imran Qureshi&#x27;, &#x27;+919811122233&#x27;, &#x27;imran.q@example.com&#x27;),
+    (&#x27;zoya&#x27;, &#x27;{bcrypt}$2a$10$ZZXW6UBoaRTR9rA1tZmGGOT6u3.Vn7lEOhILi4LPmCpXdh6MfYL4e&#x27;, &#x27;MEMBER&#x27;, &#x27;Zoya Sen&#x27;, &#x27;+919822233344&#x27;, &#x27;zoya.sen@example.com&#x27;),
+    (&#x27;support&#x27;, &#x27;{bcrypt}$2a$10$qYkPhexCVVT4.rZMRg1sp.1n9tnJ8AyHgW49SsadF39nBzMEY2g7.&#x27;, &#x27;SUPPORT&#x27;, &#x27;Support Desk&#x27;, NULL, NULL);
+INSERT INTO profiles VALUES (1, &#x27;Weekend cricket and old Hindi songs&#x27;, &#x27;Lucknow&#x27;, &#x27;1990-02-14&#x27;), (2, &#x27;Book club organiser&#x27;, &#x27;Pune&#x27;, &#x27;1993-08-30&#x27;);
+INSERT INTO posts (user_id, body) VALUES (1, &#x27;Anyone up for cricket at Gomti Nagar on Sunday? Call me on +919811122233.&#x27;), (2, &#x27;Book club meets Friday at 7.&#x27;);
+INSERT INTO comments (post_id, user_id, body) VALUES (1, 2, &#x27;Count me in!&#x27;), (2, 1, &#x27;I will bring snacks.&#x27;);
+INSERT INTO invoices (user_id, buyer_name, buyer_phone, amount_paise, issued_on, retain_until) VALUES
+    (1, &#x27;Imran Qureshi&#x27;, &#x27;+919811122233&#x27;, 49900, &#x27;2026-04-01&#x27;, &#x27;2033-03-31&#x27;);
+INSERT INTO login_events (user_id, ip, at) VALUES (1, &#x27;203.0.113.10&#x27;, now() - interval &#x27;200 days&#x27;), (1, &#x27;203.0.113.11&#x27;, now() - interval &#x27;2 days&#x27;);
+INSERT INTO otp_requests (phone, code_hash) VALUES (&#x27;+919811122233&#x27;, &#x27;sha256:9f2c...&#x27;), (&#x27;+919822233344&#x27;, &#x27;sha256:41ab...&#x27;);
+INSERT INTO contact_uploads (uploader_id, contact_name, contact_phone) VALUES (1, &#x27;Zoya&#x27;, &#x27;+919822233344&#x27;), (2, &#x27;Imran cricket&#x27;, &#x27;+919811122233&#x27;);
+INSERT INTO support_tickets (user_id, phone, message) VALUES (1, &#x27;+919811122233&#x27;, &#x27;I cannot change my profile photo.&#x27;);
+INSERT INTO notification_outbox (phone, text) VALUES (&#x27;+919811122233&#x27;, &#x27;Zoya commented on your post&#x27;);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>Job timings.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: chaupal-accounts
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/chaupal
+    username: chaupal
+    password: chaupal
+
+chaupal:
+  jobs:
+    # Exports and erasures are picked up every 5 s (demo rule); sign-in records older than 180 days go nightly at 03:10.
+    every: 5s
+    purge-cron: &quot;0 10 3 * * *&quot;</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: chaupal
+      POSTGRES_USER: chaupal
+      POSTGRES_PASSWORD: chaupal
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U chaupal -d chaupal&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>AccountContractTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>AccountDeletionTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>AccountDatabaseTest</code> (2), <code>PersonalDataInventoryTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Security</td><td>401, 403, another user's data, malicious input</td><td><code>AccountSecurityTest</code> (3), and the 400 in the contract test</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">The trap test does not trust the deletion code: it lists every text column of every table from <code>information_schema</code> and searches each one for the person's number, name and email. The jobs run when a test calls them, not on their timer: the first version let the 100 ms job run beside each test's reset of the data, and a mutation run ended in a database deadlock between the two.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.accounts.PersonalDataInventoryTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.accounts.AccountContractTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.accounts.AccountSecurityTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.accounts.AccountDatabaseTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.chaupal.accounts.AccountDeletionTrapTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">AccountDeletionTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">PersonalDataInventoryTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">AccountContractTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">AccountSecurityTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">AccountDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-6-b" aria-controls="tests-6" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/chaupal/accounts/AccountDeletionTrapTest.java</p><div class="notes"><p>Written first: the old delete and the API, searched column by column.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Imran asks Chaupal to delete his account. Where is his phone number afterwards? Written first. */
+class AccountDeletionTrapTest extends ApiTest {
+
+    /** The old way: delete what hangs off his user id, blank his row. Every table found through the user id is clean. */
+    void oldDelete(long user) {
+        for (String table : new String[]{&quot;profiles&quot;, &quot;comments&quot;, &quot;posts&quot;, &quot;login_events&quot;, &quot;support_tickets&quot;, &quot;data_exports&quot;}) {
+            jdbc.sql(&quot;DELETE FROM &quot; + table + &quot; WHERE user_id = ?&quot;).param(user).update();
+        }
+        jdbc.sql(&quot;UPDATE users SET login = NULL, password_hash = NULL, name = NULL, phone = NULL, email = NULL, status = &#x27;DELETED&#x27;, deleted_at = now() WHERE id = ?&quot;)
+                .param(user).update();
+    }
+
+    @Test
+    void theOldWayLeavesHisNumberInTablesThatDoNotKnowHisUserId() {
+        assertThat(foundIn(IMRANS_DIGITS)).hasSizeGreaterThan(5);   // before: everywhere
+        oldDelete(1);
+        assertThat(foundIn(IMRANS_DIGITS)).containsExactlyInAnyOrder(
+                &quot;contact_uploads.contact_phone&quot;,   // in Zoya&#x27;s address book upload
+                &quot;invoices.buyer_phone&quot;,            // kept by law: fine
+                &quot;notification_outbox.phone&quot;,       // a message still waiting to be sent to him
+                &quot;otp_requests.phone&quot;);             // his sign-in codes
+    }
+
+    @Test
+    void theApiErasesHimEverywhereExceptWhatTheLawKeeps() throws Exception {
+        deleteMe(&quot;imran&quot;).andExpect(status().isAccepted());
+        eraseNow(1);
+        assertThat(foundIn(IMRANS_DIGITS)).containsExactly(&quot;invoices.buyer_phone&quot;);
+        assertThat(foundIn(&quot;Imran Qureshi&quot;)).containsExactly(&quot;invoices.buyer_name&quot;);
+        assertThat(foundIn(&quot;imran.q@example.com&quot;)).isEmpty();
+        assertThat(foundIn(&quot;Gomti Nagar&quot;)).as(&quot;his post&quot;).isEmpty();
+        assertThat(foundIn(&quot;Book club&quot;)).as(&quot;Zoya&#x27;s post is hers&quot;).isNotEmpty();
+        as(&quot;imran&quot;, get(&quot;/me/data-exports/1&quot;)).andExpect(status().isUnauthorized());   // the account is closed
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/chaupal/accounts/PersonalDataInventoryTest.java</p><div class="notes"><p>The inventory against the database.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** The inventory and the database must list the same tables: a new table needs a decision before it ships. */
+class PersonalDataInventoryTest extends ApiTest {
+
+    @Test
+    void everyTableHasAnEntryInTheInventoryAndEveryEntryATable() {
+        List&lt;String&gt; tables = jdbc.sql(&quot;SELECT table_name FROM information_schema.tables WHERE table_schema = &#x27;public&#x27; ORDER BY 1&quot;)
+                .query(String.class).list();
+        List&lt;String&gt; listed = PersonalData.INVENTORY.stream().map(PersonalData.Entry::table).sorted().toList();
+        assertThat(listed).containsExactlyElementsOf(tables);
+    }
+
+    @Test
+    void everyEntryThatKeepsOrDeletesSaysWhy() {
+        assertThat(PersonalData.INVENTORY).allMatch(e -&gt; !e.why().isBlank());
+        assertThat(PersonalData.INVENTORY).filteredOn(e -&gt; e.action() == PersonalData.Action.DELETE).allMatch(e -&gt; e.sql() != null);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/chaupal/accounts/AccountContractTest.java</p><div class="notes"><p>Exports, deletion, bad ids.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.time.Duration;
+import java.time.Instant;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class AccountContractTest extends ApiTest {
+
+    static final JsonMapper JSON = JsonMapper.builder().build();
+
+    @Test
+    void anExportIsAJobAndHoldsThePersonsOwnDataOnly() throws Exception {
+        requestExport(&quot;imran&quot;).andExpect(status().isAccepted()).andExpect(header().string(&quot;Location&quot;, &quot;/me/data-exports/1&quot;))
+                .andExpect(jsonPath(&quot;$.status&quot;).value(&quot;PENDING&quot;));
+        accounts.runJobs();
+        as(&quot;imran&quot;, get(&quot;/me/data-exports/1&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.status&quot;).value(&quot;READY&quot;));
+
+        var file = exportFile(&quot;imran&quot;, 1).andExpect(status().isOk())
+                .andExpect(header().string(&quot;Content-Disposition&quot;, &quot;attachment; filename=\&quot;chaupal-data-1.json\&quot;&quot;)).andReturn().getResponse();
+        JsonNode data = JSON.readTree(file.getContentAsString());
+        assertThat(data.path(&quot;account&quot;).get(0).path(&quot;phone&quot;).asString()).isEqualTo(&quot;+919811122233&quot;);
+        assertThat(data.path(&quot;posts&quot;)).hasSize(1);
+        assertThat(data.path(&quot;comments&quot;)).hasSize(1);
+        assertThat(data.path(&quot;invoices&quot;)).hasSize(1);
+        assertThat(data.path(&quot;contactsYouUploaded&quot;).get(0).path(&quot;contact_name&quot;).asString()).isEqualTo(&quot;Zoya&quot;);
+        assertThat(file.getContentAsString()).as(&quot;Zoya&#x27;s address book is hers, even where it names Imran&quot;).doesNotContain(&quot;Imran cricket&quot;);
+    }
+
+    @Test
+    void deletingClosesTheAccountAtOnceAndBooksTheErasureWithin90Days() throws Exception {
+        var answer = deleteMe(&quot;imran&quot;).andExpect(status().isAccepted()).andExpect(jsonPath(&quot;$.status&quot;).value(&quot;DELETION_REQUESTED&quot;));
+        Instant dueBy = Instant.parse(JSON.readTree(answer.andReturn().getResponse().getContentAsString()).path(&quot;dueBy&quot;).asString());
+        assertThat(dueBy).isBetween(Instant.now().plus(Duration.ofDays(89)), Instant.now().plus(Duration.ofDays(91)));
+        deleteMe(&quot;imran&quot;).andExpect(status().isUnauthorized());
+        eraseNow(1);
+        assertThat(jdbc.sql(&quot;SELECT status FROM users WHERE id = 1&quot;).query(String.class).single()).isEqualTo(&quot;DELETED&quot;);
+        assertThat(jdbc.sql(&quot;SELECT count(*) FROM login_events WHERE user_id = 1&quot;).query(Integer.class).single())
+                .as(&quot;the sign-in from 2 days ago is kept for security; the one from 200 days ago is gone&quot;).isEqualTo(1);
+    }
+
+    @Test
+    void anUnknownExportIs404AndABadIdIs400() throws Exception {
+        as(&quot;zoya&quot;, get(&quot;/me/data-exports/{id}&quot;, 99)).andExpect(status().isNotFound());
+        exportFile(&quot;zoya&quot;, 99).andExpect(status().isNotFound());
+        as(&quot;zoya&quot;, get(&quot;/me/data-exports/{id}&quot;, &quot;1 OR 1=1&quot;)).andExpect(status().isBadRequest());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/chaupal/accounts/AccountSecurityTest.java</p><div class="notes"><p>Sign-in, roles, another member's export.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class AccountSecurityTest extends ApiTest {
+
+    @Test
+    void noSignInIs401AndASupportAccountHasNoMe() throws Exception {
+        mvc.perform(delete(&quot;/me&quot;)).andExpect(status().isUnauthorized());
+        mvc.perform(get(&quot;/me/data-exports/1&quot;).with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic(&quot;imran&quot;, &quot;wrong&quot;)))
+                .andExpect(status().isUnauthorized());
+        deleteMe(&quot;support&quot;).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void onePersonCannotReadAnothersExport() throws Exception {
+        requestExport(&quot;imran&quot;).andExpect(status().isAccepted());
+        accounts.runJobs();
+        exportFile(&quot;imran&quot;, 1).andExpect(status().isOk());
+        as(&quot;zoya&quot;, get(&quot;/me/data-exports/{id}&quot;, 1)).andExpect(status().isNotFound());
+        exportFile(&quot;zoya&quot;, 1).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void anExportNotYetReadyIs409() throws Exception {
+        requestExport(&quot;zoya&quot;).andExpect(status().isAccepted());
+        exportFile(&quot;zoya&quot;, 1).andExpect(status().isConflict()).andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;The export is not ready yet.&quot;));
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/chaupal/accounts/AccountDatabaseTest.java</p><div class="notes"><p>Named constraints; an erasure that fails half-way.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The rules hold for any writer, and an erasure is all or nothing. */
+class AccountDatabaseTest extends ApiTest {
+
+    @Test
+    void theRulesAreNamedConstraintsInTheDatabase() {
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;UPDATE users SET status = &#x27;DELETED&#x27;, deleted_at = now() WHERE id = 2&quot;).update())
+                .hasMessageContaining(&quot;users_deleted_holds_nothing&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO erasures (user_id, requested_at, due_by) VALUES (2, now(), now() + interval &#x27;120 days&#x27;)&quot;).update())
+                .hasMessageContaining(&quot;erasures_within_90_days&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;UPDATE invoices SET retain_until = issued_on&quot;).update())
+                .hasMessageContaining(&quot;invoices_retained_after_issue&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO data_exports (user_id, status) VALUES (2, &#x27;READY&#x27;)&quot;).update())
+                .hasMessageContaining(&quot;data_exports_ready_has_content&quot;);
+    }
+
+    @Test
+    void anErasureThatFailsHalfWayErasesNothing() {
+        // Something new points at Imran&#x27;s post and refuses to let it go: the erasure must stop, and undo what it did.
+        jdbc.sql(&quot;CREATE TABLE post_reports (post_id BIGINT REFERENCES posts (id))&quot;).update();
+        try {
+            jdbc.sql(&quot;INSERT INTO post_reports VALUES (1)&quot;).update();
+            accounts.requestDeletion(1);
+            assertThatThrownBy(() -&gt; accounts.erase(1)).hasMessageContaining(&quot;post_reports&quot;);
+            assertThat(foundIn(IMRANS_DIGITS)).contains(&quot;otp_requests.phone&quot;, &quot;users.phone&quot;);
+            assertThat(jdbc.sql(&quot;SELECT count(*) FROM profiles WHERE user_id = 1&quot;).query(Integer.class).single()).isEqualTo(1);
+        } finally {
+            jdbc.sql(&quot;DROP TABLE post_reports&quot;).update();
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/chaupal/accounts/ApiTest.java</p><div class="notes"><p>Shared setup and the search of every column.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/**
+ * The whole app on a real PostgreSQL. The jobs do not run on their own (every hour here, 5 s in production): tests run
+ * them when they choose, so a job never races a test&#x27;s own SQL. Each test starts from the demo data.
+ */
+@SpringBootTest(properties = &quot;chaupal.jobs.every=1h&quot;)
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    static final String IMRANS_DIGITS = &quot;9811122233&quot;;
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+    @Autowired
+    Accounts accounts;
+
+    @BeforeEach
+    void demoData() throws IOException {
+        List&lt;String&gt; tables = jdbc.sql(&quot;SELECT table_name FROM information_schema.tables WHERE table_schema = &#x27;public&#x27; AND table_name &lt;&gt; &#x27;flyway_schema_history&#x27;&quot;)
+                .query(String.class).list();
+        jdbc.sql(&quot;TRUNCATE &quot; + String.join(&quot;, &quot;, tables) + &quot; RESTART IDENTITY CASCADE&quot;).update();
+        try (var in = getClass().getResourceAsStream(&quot;/db/migration/V2__demo_data.sql&quot;)) {
+            jdbc.sql(new String(in.readAllBytes(), StandardCharsets.UTF_8)).update();
+        }
+    }
+
+    ResultActions as(String user, org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder request) throws Exception {
+        return mvc.perform(request.with(httpBasic(user, user + &quot;-demo-pass&quot;)));
+    }
+
+    ResultActions deleteMe(String user) throws Exception {
+        return as(user, delete(&quot;/me&quot;));
+    }
+
+    ResultActions requestExport(String user) throws Exception {
+        return as(user, post(&quot;/me/data-export&quot;));
+    }
+
+    ResultActions exportFile(String user, long id) throws Exception {
+        return as(user, get(&quot;/me/data-exports/{id}/file&quot;, id));
+    }
+
+    /** Runs the jobs, as the scheduler would, and checks the erasure is recorded as done. */
+    void eraseNow(long user) {
+        accounts.runJobs();
+        if (!jdbc.sql(&quot;SELECT completed_at IS NOT NULL FROM erasures WHERE user_id = ?&quot;).param(user).query(Boolean.class).optional().orElse(false)) {
+            throw new AssertionError(&quot;account &quot; + user + &quot; was not erased&quot;);
+        }
+    }
+
+    /** Every text column of every table, searched for the text: where does it still appear? */
+    List&lt;String&gt; foundIn(String text) {
+        List&lt;String&gt; found = new ArrayList&lt;&gt;();
+        jdbc.sql(&quot;&quot;&quot;
+                SELECT table_name, column_name FROM information_schema.columns
+                WHERE table_schema = &#x27;public&#x27; AND table_name &lt;&gt; &#x27;flyway_schema_history&#x27; AND data_type IN (&#x27;text&#x27;, &#x27;character varying&#x27;, &#x27;jsonb&#x27;)
+                ORDER BY table_name, column_name&quot;&quot;&quot;).query((rs, n) -&gt; new String[]{rs.getString(1), rs.getString(2)}).list()
+                .forEach(c -&gt; {
+                    int n = jdbc.sql(&quot;SELECT count(*) FROM &quot; + c[0] + &quot; WHERE &quot; + c[1] + &quot;::text ILIKE ?&quot;).param(&quot;%&quot; + text + &quot;%&quot;).query(Integer.class).single();
+                    if (n &gt; 0) {
+                        found.add(c[0] + &quot;.&quot; + c[1]);
+                    }
+                });
+        return found;
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-6" aria-labelledby="tests-6-b" hidden><p class="path">src/test/java/com/chaupal/accounts/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker: constraints and row locks behave exactly as in production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/chaupal/accounts/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=ExportExpiryChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 12 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 15 tests pass (12 station tests and 3 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 25 minutes</p><h2>Exports expire</h2><p>An export is a full copy of a person's data. Seven days after it is ready, the file answers <code>410 Gone</code>, and the job empties its content.</p><p><b>Done when:</b> the test in <code>ExportExpiryChallengeTest</code> passes.</p><details class="qa"><summary>Hints</summary><ul><li>Compare <code>ready_at</code> with now in the query that reads the file.</li><li>An emptied export is no longer READY with content: mind the <code>data_exports_ready_has_content</code> CHECK (a new status, EXPIRED).</li></ul></details><p class="path">challenge/ExportExpiryChallengeTest.java</p><pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Challenge 1: an export is a copy of everything about a person; it should not sit there for ever. 7 days, then 410. */
+class ExportExpiryChallengeTest extends ApiTest {
+
+    @Test
+    void aReadyExportCanBeDownloadedForSevenDaysThenItIsGone() throws Exception {
+        requestExport(&quot;zoya&quot;).andExpect(status().isAccepted());
+        accounts.runJobs();
+        exportFile(&quot;zoya&quot;, 1).andExpect(status().isOk());
+
+        jdbc.sql(&quot;UPDATE data_exports SET ready_at = now() - interval &#x27;8 days&#x27; WHERE id = 1&quot;).update();
+        exportFile(&quot;zoya&quot;, 1).andExpect(status().isGone());
+        accounts.runJobs();
+        assertThat(jdbc.sql(&quot;SELECT content IS NULL FROM data_exports WHERE id = 1&quot;).query(Boolean.class).single()).isTrue();
+        assertThat(foundIn(&quot;meets Friday&quot;)).as(&quot;the copy inside the export is gone too&quot;).containsExactly(&quot;posts.body&quot;);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/V3__expiry_and_inactivity.sql</p><div class="src"><pre class="code"><code class="language-sql">-- Challenge 1: exports expire. Challenge 2: when the inactivity notice was sent.
+ALTER TABLE data_exports DROP CONSTRAINT data_exports_status;
+ALTER TABLE data_exports ADD CONSTRAINT data_exports_status CHECK (status IN (&#x27;PENDING&#x27;, &#x27;READY&#x27;, &#x27;EXPIRED&#x27;));
+ALTER TABLE users ADD COLUMN inactivity_notice_at TIMESTAMPTZ;</code></pre></div><p class="path">challenge/solution/Accounts.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
+
+/** Data exports and account deletion, both as background jobs. */
+@Service
+class Accounts {
+
+    record Export(long id, String status, Instant requestedAt, Instant readyAt) {
+    }
+
+    record Deletion(String status, Instant dueBy) {
+    }
+
+    private static final Logger log = LoggerFactory.getLogger(Accounts.class);
+    // What a person gets in their export: their own data. Others&#x27; address books that hold their number are not theirs.
+    private static final Map&lt;String, String&gt; EXPORTED = new LinkedHashMap&lt;&gt;();
+
+    static {
+        EXPORTED.put(&quot;account&quot;, &quot;SELECT name, phone, email FROM users WHERE id = :user&quot;);
+        EXPORTED.put(&quot;profile&quot;, &quot;SELECT bio, city, date_of_birth FROM profiles WHERE user_id = :user&quot;);
+        EXPORTED.put(&quot;posts&quot;, &quot;SELECT id, body, created_at FROM posts WHERE user_id = :user ORDER BY id&quot;);
+        EXPORTED.put(&quot;comments&quot;, &quot;SELECT id, post_id, body, created_at FROM comments WHERE user_id = :user ORDER BY id&quot;);
+        EXPORTED.put(&quot;contactsYouUploaded&quot;, &quot;SELECT contact_name, contact_phone FROM contact_uploads WHERE uploader_id = :user ORDER BY id&quot;);
+        EXPORTED.put(&quot;invoices&quot;, &quot;SELECT id, buyer_name, buyer_phone, amount_paise, issued_on FROM invoices WHERE user_id = :user ORDER BY id&quot;);
+        EXPORTED.put(&quot;signIns&quot;, &quot;SELECT ip, at FROM login_events WHERE user_id = :user ORDER BY at&quot;);
+        EXPORTED.put(&quot;supportTickets&quot;, &quot;SELECT id, message FROM support_tickets WHERE user_id = :user ORDER BY id&quot;);
+    }
+
+    private final JdbcClient jdbc;
+    private final JsonMapper json;
+    private final Accounts self;   // through the proxy, so erase() runs in its own transaction
+
+    Accounts(JdbcClient jdbc, JsonMapper json, @Lazy Accounts self) {
+        this.jdbc = jdbc;
+        this.json = json;
+        this.self = self;
+    }
+
+    long idOf(String login) {
+        return jdbc.sql(&quot;SELECT id FROM users WHERE login = ?&quot;).param(login).query(Long.class).single();
+    }
+
+    Export requestExport(long user) {
+        long id = jdbc.sql(&quot;INSERT INTO data_exports (user_id) VALUES (?) RETURNING id&quot;).param(user).query(Long.class).single();
+        return export(user, id).orElseThrow();
+    }
+
+    /** Another person&#x27;s export is not found, the same as one that does not exist. */
+    Optional&lt;Export&gt; export(long user, long id) {
+        return jdbc.sql(&quot;SELECT id, status, requested_at, ready_at FROM data_exports WHERE id = ? AND user_id = ?&quot;).params(id, user)
+                .query(Export.class).optional();
+    }
+
+    /** An export is downloadable for 7 days after it is ready. */
+    private static final String EXPIRED = &quot;ready_at &lt; now() - interval &#x27;7 days&#x27;&quot;;
+
+    Optional&lt;String&gt; exportFile(long user, long id) {
+        return jdbc.sql(&quot;SELECT content::text FROM data_exports WHERE id = ? AND user_id = ? AND status = &#x27;READY&#x27; AND NOT (&quot; + EXPIRED + &quot;)&quot;)
+                .params(id, user).query(String.class).optional();
+    }
+
+    boolean expired(long user, long id) {
+        return jdbc.sql(&quot;SELECT count(*) FROM data_exports WHERE id = ? AND user_id = ? AND (status = &#x27;EXPIRED&#x27; OR &quot; + EXPIRED + &quot;)&quot;)
+                .params(id, user).query(Integer.class).single() &gt; 0;
+    }
+
+    /** Signs the person out for good (status is no longer ACTIVE) and books the erasure, due within 90 days. */
+    @Transactional
+    Deletion requestDeletion(long user) {
+        jdbc.sql(&quot;UPDATE users SET status = &#x27;DELETION_REQUESTED&#x27;, deletion_requested_at = now() WHERE id = ? AND status = &#x27;ACTIVE&#x27;&quot;).param(user).update();
+        jdbc.sql(&quot;INSERT INTO erasures (user_id, requested_at, due_by) VALUES (?, now(), now() + interval &#x27;90 days&#x27;) ON CONFLICT DO NOTHING&quot;).param(user).update();
+        return jdbc.sql(&quot;SELECT u.status, e.due_by FROM users u JOIN erasures e ON e.user_id = u.id WHERE u.id = ?&quot;).param(user).query(Deletion.class).single();
+    }
+
+    @Scheduled(fixedDelayString = &quot;${chaupal.jobs.every}&quot;)
+    void runJobs() {
+        jdbc.sql(&quot;SELECT id, user_id FROM data_exports WHERE status = &#x27;PENDING&#x27; ORDER BY id&quot;)
+                .query((rs, n) -&gt; new long[]{rs.getLong(1), rs.getLong(2)}).list().forEach(e -&gt; buildExport(e[0], e[1]));
+        // The copy inside an expired export is personal data too: emptied, not kept.
+        jdbc.sql(&quot;UPDATE data_exports SET status = &#x27;EXPIRED&#x27;, content = NULL WHERE status = &#x27;READY&#x27; AND &quot; + EXPIRED).update();
+        for (long user : jdbc.sql(&quot;SELECT id FROM users WHERE status = &#x27;DELETION_REQUESTED&#x27; ORDER BY id&quot;).query(Long.class).list()) {
+            try {
+                self.erase(user);
+            } catch (RuntimeException e) {
+                // One account that cannot be erased must not hold up the others; it is tried again next time.
+                log.error(&quot;Erasure of account {} failed and was rolled back: {}&quot;, user, e.getMessage());
+            }
+        }
+    }
+
+    void buildExport(long id, long user) {
+        Map&lt;String, Object&gt; content = new LinkedHashMap&lt;&gt;();
+        EXPORTED.forEach((name, sql) -&gt; content.put(name, jdbc.sql(sql).param(&quot;user&quot;, user).query().listOfRows()));
+        jdbc.sql(&quot;UPDATE data_exports SET status = &#x27;READY&#x27;, content = ?::jsonb, ready_at = now() WHERE id = ? AND status = &#x27;PENDING&#x27;&quot;)
+                .params(json.writeValueAsString(content), id).update();
+    }
+
+    /** Every entry of the inventory, in order, in one transaction: all of it is erased, or none of it. */
+    @Transactional
+    void erase(long user) {
+        String phone = jdbc.sql(&quot;SELECT phone FROM users WHERE id = ?&quot;).param(user).query(String.class).single();
+        for (PersonalData.Entry entry : PersonalData.INVENTORY) {
+            if (entry.sql() != null) {
+                var statement = jdbc.sql(entry.sql()).param(&quot;user&quot;, user);
+                if (entry.sql().contains(&quot;:phone&quot;)) {
+                    statement = statement.param(&quot;phone&quot;, phone);
+                }
+                statement.update();
+            }
+        }
+        jdbc.sql(&quot;UPDATE erasures SET completed_at = now() WHERE user_id = ?&quot;).param(user).update();
+        log.info(&quot;Account {} erased&quot;, user);   // the id only: logs are not a place for the data being erased
+    }
+
+    /**
+     * Accounts with no sign-in for three years: one notice, then, 48 hours later and still no sign-in, the erasure is
+     * booked. A sign-in after the notice cancels it.
+     */
+    void sweepInactive() {
+        String lastSeen = &quot;(SELECT max(at) FROM login_events l WHERE l.user_id = u.id)&quot;;
+        jdbc.sql(&quot;UPDATE users u SET inactivity_notice_at = NULL WHERE inactivity_notice_at IS NOT NULL AND &quot; + lastSeen + &quot; &gt; inactivity_notice_at&quot;).update();
+        jdbc.sql(&quot;SELECT id FROM users u WHERE status = &#x27;ACTIVE&#x27; AND role = &#x27;MEMBER&#x27; AND inactivity_notice_at &lt; now() - interval &#x27;48 hours&#x27;&quot;)
+                .query(Long.class).list().forEach(this::requestDeletion);
+        jdbc.sql(&quot;WITH quiet AS (UPDATE users u SET inactivity_notice_at = now() WHERE status = &#x27;ACTIVE&#x27; AND role = &#x27;MEMBER&#x27; &quot;
+                + &quot;AND inactivity_notice_at IS NULL AND coalesce(&quot; + lastSeen + &quot;, &#x27;-infinity&#x27;) &lt; now() - interval &#x27;3 years&#x27; RETURNING phone) &quot;
+                + &quot;INSERT INTO notification_outbox (phone, text) SELECT phone, &quot;
+                + &quot;&#x27;Your Chaupal account has not been used for 3 years and will be erased in 48 hours unless you sign in.&#x27; FROM quiet&quot;).update();
+    }
+
+    /** Sign-in records older than 180 days, for everyone. */
+    @Scheduled(cron = &quot;${chaupal.jobs.purge-cron}&quot;)
+    void purgeLoginEvents() {
+        jdbc.sql(&quot;DELETE FROM login_events WHERE at &lt; now() - interval &#x27;180 days&#x27;&quot;).update();
+    }
+}</code></pre></div><p class="path">challenge/solution/MeController.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+
+/** The person&#x27;s own data: &quot;me&quot; is always the signed-in account, never an id in the request. */
+@RestController
+class MeController {
+
+    private final Accounts accounts;
+
+    MeController(Accounts accounts) {
+        this.accounts = accounts;
+    }
+
+    @PostMapping(&quot;/me/data-export&quot;)
+    ResponseEntity&lt;Accounts.Export&gt; requestExport(Authentication me) {
+        Accounts.Export e = accounts.requestExport(accounts.idOf(me.getName()));
+        return ResponseEntity.accepted().location(URI.create(&quot;/me/data-exports/&quot; + e.id())).body(e);
+    }
+
+    @GetMapping(&quot;/me/data-exports/{id}&quot;)
+    Accounts.Export export(Authentication me, @PathVariable long id) {
+        return accounts.export(accounts.idOf(me.getName()), id).orElseThrow(() -&gt; new ErrorResponseException(HttpStatus.NOT_FOUND));
+    }
+
+    @GetMapping(&quot;/me/data-exports/{id}/file&quot;)
+    ResponseEntity&lt;String&gt; exportFile(Authentication me, @PathVariable long id) {
+        long user = accounts.idOf(me.getName());
+        accounts.export(user, id).orElseThrow(() -&gt; new ErrorResponseException(HttpStatus.NOT_FOUND));
+        if (accounts.expired(user, id)) {
+            throw new ErrorResponseException(HttpStatus.GONE, ProblemDetail.forStatusAndDetail(HttpStatus.GONE,
+                    &quot;This export has expired. Ask for a new one.&quot;), null);
+        }
+        String content = accounts.exportFile(user, id).orElseThrow(() -&gt; new ErrorResponseException(HttpStatus.CONFLICT,
+                ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, &quot;The export is not ready yet.&quot;), null));
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.CONTENT_DISPOSITION, &quot;attachment; filename=\&quot;chaupal-data-&quot; + id + &quot;.json\&quot;&quot;).body(content);
+    }
+
+    /** 202: the account is closed now; the erasure job removes the data shortly after, and within 90 days at most. */
+    @DeleteMapping(&quot;/me&quot;)
+    ResponseEntity&lt;Accounts.Deletion&gt; delete(Authentication me) {
+        return ResponseEntity.accepted().body(accounts.requestDeletion(accounts.idOf(me.getName())));
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 40 minutes</p><h2>Accounts nobody uses</h2><p><code>Accounts.sweepInactive()</code>: a member with no sign-in for three years gets one notice ("... erased in 48 hours unless you sign in"); 48 hours after it, still with no sign-in, their erasure is booked. A sign-in after the notice keeps the account.</p><p><b>Done when:</b> both tests in <code>InactiveAccountChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>Record when the notice went out (a column, in a new migration), so one sweep never sends two.</li><li>"No sign-in since" is the newest <code>login_events.at</code>.</li><li>Reuse <code>requestDeletion</code>.</li></ul></details><p class="path">challenge/InactiveAccountChallengeTest.java</p><pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Challenge 2: accounts nobody has used for three years are erased, after a notice 48 hours before. Accounts.sweepInactive()
+ * sends the notice once, and books the erasure when the 48 hours have passed with no sign-in.
+ */
+class InactiveAccountChallengeTest extends ApiTest {
+
+    String status(long user) {
+        return jdbc.sql(&quot;SELECT status FROM users WHERE id = ?&quot;).param(user).query(String.class).single();
+    }
+
+    int notices(String phone) {
+        return jdbc.sql(&quot;SELECT count(*) FROM notification_outbox WHERE phone = ? AND text LIKE &#x27;%48 hours%&#x27;&quot;).param(phone).query(Integer.class).single();
+    }
+
+    @Test
+    void threeQuietYearsANoticeThen48HoursThenErasure() {
+        jdbc.sql(&quot;INSERT INTO login_events (user_id, ip, at) VALUES (2, &#x27;198.51.100.7&#x27;, now() - interval &#x27;3 years 1 day&#x27;)&quot;).update();
+        accounts.sweepInactive();
+        accounts.sweepInactive();
+        assertThat(notices(&quot;+919822233344&quot;)).as(&quot;one notice, not one per sweep&quot;).isEqualTo(1);
+        assertThat(status(2)).isEqualTo(&quot;ACTIVE&quot;);
+
+        jdbc.sql(&quot;UPDATE users SET inactivity_notice_at = now() - interval &#x27;49 hours&#x27; WHERE id = 2&quot;).update();
+        accounts.sweepInactive();
+        assertThat(status(2)).isIn(&quot;DELETION_REQUESTED&quot;, &quot;DELETED&quot;);
+    }
+
+    @Test
+    void signingInAfterTheNoticeKeepsTheAccount() {
+        jdbc.sql(&quot;INSERT INTO login_events (user_id, ip, at) VALUES (2, &#x27;198.51.100.7&#x27;, now() - interval &#x27;3 years 1 day&#x27;)&quot;).update();
+        accounts.sweepInactive();
+        jdbc.sql(&quot;UPDATE users SET inactivity_notice_at = now() - interval &#x27;49 hours&#x27; WHERE id = 2&quot;).update();
+        jdbc.sql(&quot;INSERT INTO login_events (user_id, ip, at) VALUES (2, &#x27;198.51.100.7&#x27;, now() - interval &#x27;1 hour&#x27;)&quot;).update();
+        accounts.sweepInactive();
+        assertThat(status(2)).isEqualTo(&quot;ACTIVE&quot;);
+        assertThat(status(1)).as(&quot;Imran signed in 2 days ago&quot;).isEqualTo(&quot;ACTIVE&quot;);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/V3__expiry_and_inactivity.sql</p><div class="src"><pre class="code"><code class="language-sql">-- Challenge 1: exports expire. Challenge 2: when the inactivity notice was sent.
+ALTER TABLE data_exports DROP CONSTRAINT data_exports_status;
+ALTER TABLE data_exports ADD CONSTRAINT data_exports_status CHECK (status IN (&#x27;PENDING&#x27;, &#x27;READY&#x27;, &#x27;EXPIRED&#x27;));
+ALTER TABLE users ADD COLUMN inactivity_notice_at TIMESTAMPTZ;</code></pre></div><p class="path">challenge/solution/Accounts.java</p><div class="src"><pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
+
+/** Data exports and account deletion, both as background jobs. */
+@Service
+class Accounts {
+
+    record Export(long id, String status, Instant requestedAt, Instant readyAt) {
+    }
+
+    record Deletion(String status, Instant dueBy) {
+    }
+
+    private static final Logger log = LoggerFactory.getLogger(Accounts.class);
+    // What a person gets in their export: their own data. Others&#x27; address books that hold their number are not theirs.
+    private static final Map&lt;String, String&gt; EXPORTED = new LinkedHashMap&lt;&gt;();
+
+    static {
+        EXPORTED.put(&quot;account&quot;, &quot;SELECT name, phone, email FROM users WHERE id = :user&quot;);
+        EXPORTED.put(&quot;profile&quot;, &quot;SELECT bio, city, date_of_birth FROM profiles WHERE user_id = :user&quot;);
+        EXPORTED.put(&quot;posts&quot;, &quot;SELECT id, body, created_at FROM posts WHERE user_id = :user ORDER BY id&quot;);
+        EXPORTED.put(&quot;comments&quot;, &quot;SELECT id, post_id, body, created_at FROM comments WHERE user_id = :user ORDER BY id&quot;);
+        EXPORTED.put(&quot;contactsYouUploaded&quot;, &quot;SELECT contact_name, contact_phone FROM contact_uploads WHERE uploader_id = :user ORDER BY id&quot;);
+        EXPORTED.put(&quot;invoices&quot;, &quot;SELECT id, buyer_name, buyer_phone, amount_paise, issued_on FROM invoices WHERE user_id = :user ORDER BY id&quot;);
+        EXPORTED.put(&quot;signIns&quot;, &quot;SELECT ip, at FROM login_events WHERE user_id = :user ORDER BY at&quot;);
+        EXPORTED.put(&quot;supportTickets&quot;, &quot;SELECT id, message FROM support_tickets WHERE user_id = :user ORDER BY id&quot;);
+    }
+
+    private final JdbcClient jdbc;
+    private final JsonMapper json;
+    private final Accounts self;   // through the proxy, so erase() runs in its own transaction
+
+    Accounts(JdbcClient jdbc, JsonMapper json, @Lazy Accounts self) {
+        this.jdbc = jdbc;
+        this.json = json;
+        this.self = self;
+    }
+
+    long idOf(String login) {
+        return jdbc.sql(&quot;SELECT id FROM users WHERE login = ?&quot;).param(login).query(Long.class).single();
+    }
+
+    Export requestExport(long user) {
+        long id = jdbc.sql(&quot;INSERT INTO data_exports (user_id) VALUES (?) RETURNING id&quot;).param(user).query(Long.class).single();
+        return export(user, id).orElseThrow();
+    }
+
+    /** Another person&#x27;s export is not found, the same as one that does not exist. */
+    Optional&lt;Export&gt; export(long user, long id) {
+        return jdbc.sql(&quot;SELECT id, status, requested_at, ready_at FROM data_exports WHERE id = ? AND user_id = ?&quot;).params(id, user)
+                .query(Export.class).optional();
+    }
+
+    /** An export is downloadable for 7 days after it is ready. */
+    private static final String EXPIRED = &quot;ready_at &lt; now() - interval &#x27;7 days&#x27;&quot;;
+
+    Optional&lt;String&gt; exportFile(long user, long id) {
+        return jdbc.sql(&quot;SELECT content::text FROM data_exports WHERE id = ? AND user_id = ? AND status = &#x27;READY&#x27; AND NOT (&quot; + EXPIRED + &quot;)&quot;)
+                .params(id, user).query(String.class).optional();
+    }
+
+    boolean expired(long user, long id) {
+        return jdbc.sql(&quot;SELECT count(*) FROM data_exports WHERE id = ? AND user_id = ? AND (status = &#x27;EXPIRED&#x27; OR &quot; + EXPIRED + &quot;)&quot;)
+                .params(id, user).query(Integer.class).single() &gt; 0;
+    }
+
+    /** Signs the person out for good (status is no longer ACTIVE) and books the erasure, due within 90 days. */
+    @Transactional
+    Deletion requestDeletion(long user) {
+        jdbc.sql(&quot;UPDATE users SET status = &#x27;DELETION_REQUESTED&#x27;, deletion_requested_at = now() WHERE id = ? AND status = &#x27;ACTIVE&#x27;&quot;).param(user).update();
+        jdbc.sql(&quot;INSERT INTO erasures (user_id, requested_at, due_by) VALUES (?, now(), now() + interval &#x27;90 days&#x27;) ON CONFLICT DO NOTHING&quot;).param(user).update();
+        return jdbc.sql(&quot;SELECT u.status, e.due_by FROM users u JOIN erasures e ON e.user_id = u.id WHERE u.id = ?&quot;).param(user).query(Deletion.class).single();
+    }
+
+    @Scheduled(fixedDelayString = &quot;${chaupal.jobs.every}&quot;)
+    void runJobs() {
+        jdbc.sql(&quot;SELECT id, user_id FROM data_exports WHERE status = &#x27;PENDING&#x27; ORDER BY id&quot;)
+                .query((rs, n) -&gt; new long[]{rs.getLong(1), rs.getLong(2)}).list().forEach(e -&gt; buildExport(e[0], e[1]));
+        // The copy inside an expired export is personal data too: emptied, not kept.
+        jdbc.sql(&quot;UPDATE data_exports SET status = &#x27;EXPIRED&#x27;, content = NULL WHERE status = &#x27;READY&#x27; AND &quot; + EXPIRED).update();
+        for (long user : jdbc.sql(&quot;SELECT id FROM users WHERE status = &#x27;DELETION_REQUESTED&#x27; ORDER BY id&quot;).query(Long.class).list()) {
+            try {
+                self.erase(user);
+            } catch (RuntimeException e) {
+                // One account that cannot be erased must not hold up the others; it is tried again next time.
+                log.error(&quot;Erasure of account {} failed and was rolled back: {}&quot;, user, e.getMessage());
+            }
+        }
+    }
+
+    void buildExport(long id, long user) {
+        Map&lt;String, Object&gt; content = new LinkedHashMap&lt;&gt;();
+        EXPORTED.forEach((name, sql) -&gt; content.put(name, jdbc.sql(sql).param(&quot;user&quot;, user).query().listOfRows()));
+        jdbc.sql(&quot;UPDATE data_exports SET status = &#x27;READY&#x27;, content = ?::jsonb, ready_at = now() WHERE id = ? AND status = &#x27;PENDING&#x27;&quot;)
+                .params(json.writeValueAsString(content), id).update();
+    }
+
+    /** Every entry of the inventory, in order, in one transaction: all of it is erased, or none of it. */
+    @Transactional
+    void erase(long user) {
+        String phone = jdbc.sql(&quot;SELECT phone FROM users WHERE id = ?&quot;).param(user).query(String.class).single();
+        for (PersonalData.Entry entry : PersonalData.INVENTORY) {
+            if (entry.sql() != null) {
+                var statement = jdbc.sql(entry.sql()).param(&quot;user&quot;, user);
+                if (entry.sql().contains(&quot;:phone&quot;)) {
+                    statement = statement.param(&quot;phone&quot;, phone);
+                }
+                statement.update();
+            }
+        }
+        jdbc.sql(&quot;UPDATE erasures SET completed_at = now() WHERE user_id = ?&quot;).param(user).update();
+        log.info(&quot;Account {} erased&quot;, user);   // the id only: logs are not a place for the data being erased
+    }
+
+    /**
+     * Accounts with no sign-in for three years: one notice, then, 48 hours later and still no sign-in, the erasure is
+     * booked. A sign-in after the notice cancels it.
+     */
+    void sweepInactive() {
+        String lastSeen = &quot;(SELECT max(at) FROM login_events l WHERE l.user_id = u.id)&quot;;
+        jdbc.sql(&quot;UPDATE users u SET inactivity_notice_at = NULL WHERE inactivity_notice_at IS NOT NULL AND &quot; + lastSeen + &quot; &gt; inactivity_notice_at&quot;).update();
+        jdbc.sql(&quot;SELECT id FROM users u WHERE status = &#x27;ACTIVE&#x27; AND role = &#x27;MEMBER&#x27; AND inactivity_notice_at &lt; now() - interval &#x27;48 hours&#x27;&quot;)
+                .query(Long.class).list().forEach(this::requestDeletion);
+        jdbc.sql(&quot;WITH quiet AS (UPDATE users u SET inactivity_notice_at = now() WHERE status = &#x27;ACTIVE&#x27; AND role = &#x27;MEMBER&#x27; &quot;
+                + &quot;AND inactivity_notice_at IS NULL AND coalesce(&quot; + lastSeen + &quot;, &#x27;-infinity&#x27;) &lt; now() - interval &#x27;3 years&#x27; RETURNING phone) &quot;
+                + &quot;INSERT INTO notification_outbox (phone, text) SELECT phone, &quot;
+                + &quot;&#x27;Your Chaupal account has not been used for 3 years and will be erased in 48 hours unless you sign in.&#x27; FROM quiet&quot;).update();
+    }
+
+    /** Sign-in records older than 180 days, for everyone. */
+    @Scheduled(cron = &quot;${chaupal.jobs.purge-cron}&quot;)
+    void purgeLoginEvents() {
+        jdbc.sql(&quot;DELETE FROM login_events WHERE at &lt; now() - interval &#x27;180 days&#x27;&quot;).update();
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>The backup from last week</h2>
+<p>The database is restored from a backup taken eight days ago. Five accounts erased since then are back, with their data. Design what happens next using the <code>erasures</code> ledger (it holds no personal data, so it can live outside the backup), how long backups are kept, and what you tell a member who asks whether their data is "really" gone.</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: delete the old way, then search every column.</li>
+<li>Write the inventory, every table, with a test that compares it with the database.</li>
+<li>Run it as one transaction; anonymise the user row; keep what the law requires.</li>
+<li>Exports as jobs, from a list of the person's own data.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Approach</th><th>What it costs</th><th>Verdict</th></tr></thead><tbody><tr><td>An explicit inventory checked against the schema</td><td>A list to keep up; the test makes it impossible to forget.</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Follow foreign keys to users</td><td>No list; misses everything keyed by phone or email, and deletes what the law keeps.</td><td><span class="pill bad">See Review</span></td></tr><tr><td>Delete the user row with ON DELETE CASCADE</td><td>Same blind spots, and no way to keep invoices.</td><td><span class="pill bad">Avoid</span></td></tr><tr><td>Anonymise everything, delete nothing</td><td>Content can still identify (a post with a phone number in it).</td><td><span class="pill warn">Only where content is not personal</span></td></tr><tr><td>Crypto-shredding (encrypt per person, delete the key)</td><td>Reaches backups too; every read decrypts.</td><td><span class="pill warn">For large systems</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Object</th><th>Rule</th><th>Why</th></tr></thead><tbody><tr><td><code>users_deleted_holds_nothing</code></td><td>DELETED means login, password, name, phone, email are NULL</td><td>"Deleted" cannot be a label on a full row.</td></tr><tr><td><code>erasures_within_90_days</code></td><td>due_by ≤ requested_at + 90 days</td><td>The deadline is part of the record.</td></tr><tr><td><code>invoices_retained_after_issue</code></td><td>retain_until &gt; issued_on</td><td>A kept record says until when.</td></tr><tr><td><code>data_exports_ready_has_content</code></td><td>READY means content</td><td>No empty "ready" exports.</td></tr></tbody></table></div>
+<p><strong>Transaction boundaries:</strong> the deletion request (close the account, book the erasure) is one transaction; each account's erasure is another, all or nothing; an export is built in its own.</p>
+</section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>14. Operations: metric, alert, rollback, runbook, failure drill</li><li>15. Real-world considerations</li></ul><p class="rule">What changes when this runs for real.</p></aside>
+<h2>Real-world considerations</h2>
+<dl class="facts">
+<dt>The law, with its status</dt><dd>India's Digital Personal Data Protection Act, 2023 gives people the right to have their data erased. The DPDP Rules, 2025 were notified in November 2025 and apply in phases; the duties on keeping and erasing data are due to apply from May 2027. They include erasing data once its purpose is served or consent is withdrawn, unless a law requires keeping it, and, for some large platforms, erasing after three years of inactivity with notice 48 hours before. This station's 90-day deadline is a demo rule, not a figure taken from the law. Not legal advice: read the current text with counsel.</dd>
+<dt>Keeping what the law requires</dt><dd>Tax invoices: India's GST law asks for accounts and records to be kept for years (72 months from the due date of the annual return under the CGST Act). Security logs: CERT-In's directions of April 2022 ask for system logs to be kept for 180 days. Keep these, restrict who can read them, and delete them when the period ends.</dd>
+<dt>Logs</dt><dd>Do not write personal data into application logs at all: then there is nothing to erase there. This station logs account ids only.</dd>
+<dt>Backups</dt><dd>You cannot edit a backup. Keep backups for a short, stated period, and re-apply the erasure ledger after any restore (challenge 3).</dd>
+<dt>Other systems</dt><dd>Search indexes, analytics, the email provider, the data warehouse: each needs its own entry in the inventory and its own erasure step.</dd>
+<dt>Watching it</dt><dd>Alert on any erasure not completed one day after its request, long before its due date.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>How do you make sure a deletion reaches every copy?</summary><p>An inventory of every place personal data is kept, checked against the schema in a test, and a test that searches the data afterwards.</p></details><details class="qa"><summary>Delete or anonymise?</summary><p>Delete what has no reason to stay; anonymise rows others depend on (keep the id, remove what identifies); keep what a law requires, with an end date.</p></details><details class="qa"><summary>Why is an export a background job?</summary><p>Collecting everything can be slow and large; a job can be retried, and the result fetched when ready.</p></details><details class="qa"><summary>What about backups?</summary><p>Short retention, and a ledger of erasures re-applied after any restore; or crypto-shredding.</p></details><details class="qa"><summary>What must not be in an export?</summary><p>Other people&#x27;s data, even when it mentions the person: someone else&#x27;s address book is theirs.</p></details><details class="qa"><summary>How do you stop a deleted account being used during the erasure?</summary><p>Close it in the same request: sign-in only for ACTIVE accounts.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 12 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>Inventory</td><td>Tables listed.</td><td>The build fails when one is missing, and each entry says why.</td></tr><tr><td>Erasure</td><td>Rows deleted.</td><td>All or nothing, proven by searching every column, with the kept records named.</td></tr><tr><td>The law</td><td>Knows there is a right to erasure.</td><td>Can say what the Rules require, when they apply, and what to keep.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate replaces the hand-written inventory: "read the foreign keys to <code>users</code> from the database, and no table is ever forgotten". Read the file and list every problem before opening the findings.</p>
+<p class="path">review/Accounts.java</p>
+<pre class="code"><code class="language-java">package com.chaupal.accounts;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+/** Data exports and account deletion, both as background jobs. */
+@Service
+class Accounts {
+
+    record Export(long id, String status, Instant requestedAt, Instant readyAt) {
+    }
+
+    record Deletion(String status, Instant dueBy) {
+    }
+
+    private static final Logger log = LoggerFactory.getLogger(Accounts.class);
+    // What a person gets in their export: their own data. Others&#x27; address books that hold their number are not theirs.
+    private static final Map&lt;String, String&gt; EXPORTED = new LinkedHashMap&lt;&gt;();
+
+    static {
+        EXPORTED.put(&quot;account&quot;, &quot;SELECT name, phone, email FROM users WHERE id = :user&quot;);
+        EXPORTED.put(&quot;profile&quot;, &quot;SELECT bio, city, date_of_birth FROM profiles WHERE user_id = :user&quot;);
+        EXPORTED.put(&quot;posts&quot;, &quot;SELECT id, body, created_at FROM posts WHERE user_id = :user ORDER BY id&quot;);
+        EXPORTED.put(&quot;comments&quot;, &quot;SELECT id, post_id, body, created_at FROM comments WHERE user_id = :user ORDER BY id&quot;);
+        EXPORTED.put(&quot;contactsYouUploaded&quot;, &quot;SELECT contact_name, contact_phone FROM contact_uploads WHERE uploader_id = :user ORDER BY id&quot;);
+        EXPORTED.put(&quot;invoices&quot;, &quot;SELECT id, buyer_name, buyer_phone, amount_paise, issued_on FROM invoices WHERE user_id = :user ORDER BY id&quot;);
+        EXPORTED.put(&quot;signIns&quot;, &quot;SELECT ip, at FROM login_events WHERE user_id = :user ORDER BY at&quot;);
+        EXPORTED.put(&quot;supportTickets&quot;, &quot;SELECT id, message FROM support_tickets WHERE user_id = :user ORDER BY id&quot;);
+    }
+
+    private final JdbcClient jdbc;
+    private final JsonMapper json;
+    private final Accounts self;   // through the proxy, so erase() runs in its own transaction
+
+    Accounts(JdbcClient jdbc, JsonMapper json, @Lazy Accounts self) {
+        this.jdbc = jdbc;
+        this.json = json;
+        this.self = self;
+    }
+
+    long idOf(String login) {
+        return jdbc.sql(&quot;SELECT id FROM users WHERE login = ?&quot;).param(login).query(Long.class).single();
+    }
+
+    Export requestExport(long user) {
+        long id = jdbc.sql(&quot;INSERT INTO data_exports (user_id) VALUES (?) RETURNING id&quot;).param(user).query(Long.class).single();
+        return export(user, id).orElseThrow();
+    }
+
+    /** Another person&#x27;s export is not found, the same as one that does not exist. */
+    Optional&lt;Export&gt; export(long user, long id) {
+        return jdbc.sql(&quot;SELECT id, status, requested_at, ready_at FROM data_exports WHERE id = ? AND user_id = ?&quot;).params(id, user)
+                .query(Export.class).optional();
+    }
+
+    Optional&lt;String&gt; exportFile(long user, long id) {
+        return jdbc.sql(&quot;SELECT content::text FROM data_exports WHERE id = ? AND user_id = ? AND status = &#x27;READY&#x27;&quot;).params(id, user)
+                .query(String.class).optional();
+    }
+
+    /** Signs the person out for good (status is no longer ACTIVE) and books the erasure, due within 90 days. */
+    @Transactional
+    Deletion requestDeletion(long user) {
+        jdbc.sql(&quot;UPDATE users SET status = &#x27;DELETION_REQUESTED&#x27;, deletion_requested_at = now() WHERE id = ? AND status = &#x27;ACTIVE&#x27;&quot;).param(user).update();
+        jdbc.sql(&quot;INSERT INTO erasures (user_id, requested_at, due_by) VALUES (?, now(), now() + interval &#x27;90 days&#x27;) ON CONFLICT DO NOTHING&quot;).param(user).update();
+        return jdbc.sql(&quot;SELECT u.status, e.due_by FROM users u JOIN erasures e ON e.user_id = u.id WHERE u.id = ?&quot;).param(user).query(Deletion.class).single();
+    }
+
+    @Scheduled(fixedDelayString = &quot;${chaupal.jobs.every}&quot;)
+    void runJobs() {
+        jdbc.sql(&quot;SELECT id, user_id FROM data_exports WHERE status = &#x27;PENDING&#x27; ORDER BY id&quot;)
+                .query((rs, n) -&gt; new long[]{rs.getLong(1), rs.getLong(2)}).list().forEach(e -&gt; buildExport(e[0], e[1]));
+        for (long user : jdbc.sql(&quot;SELECT id FROM users WHERE status = &#x27;DELETION_REQUESTED&#x27; ORDER BY id&quot;).query(Long.class).list()) {
+            try {
+                self.erase(user);
+            } catch (RuntimeException e) {
+                // One account that cannot be erased must not hold up the others; it is tried again next time.
+                log.error(&quot;Erasure of account {} failed and was rolled back: {}&quot;, user, e.getMessage());
+            }
+        }
+    }
+
+    void buildExport(long id, long user) {
+        Map&lt;String, Object&gt; content = new LinkedHashMap&lt;&gt;();
+        EXPORTED.forEach((name, sql) -&gt; content.put(name, jdbc.sql(sql).param(&quot;user&quot;, user).query().listOfRows()));
+        jdbc.sql(&quot;UPDATE data_exports SET status = &#x27;READY&#x27;, content = ?::jsonb, ready_at = now() WHERE id = ? AND status = &#x27;PENDING&#x27;&quot;)
+                .params(json.writeValueAsString(content), id).update();
+    }
+
+    /**
+     * Everything personal points at users, so the foreign keys say where it is: read them from the database, delete
+     * the person&#x27;s rows in each table, then blank the account. No hand-kept list to forget a table in.
+     */
+    @Transactional
+    void erase(long user) {
+        List&lt;String[]&gt; references = jdbc.sql(&quot;&quot;&quot;
+                        SELECT kcu.table_name, kcu.column_name
+                        FROM information_schema.referential_constraints rc
+                        JOIN information_schema.key_column_usage kcu ON kcu.constraint_name = rc.constraint_name
+                        JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = rc.unique_constraint_name
+                        WHERE ccu.table_name = &#x27;users&#x27; AND kcu.table_name &lt;&gt; &#x27;erasures&#x27;
+                        ORDER BY kcu.table_name&quot;&quot;&quot;)
+                .query((rs, n) -&gt; new String[]{rs.getString(1), rs.getString(2)}).list();
+        for (String[] r : references) {
+            jdbc.sql(&quot;DELETE FROM &quot; + r[0] + &quot; WHERE &quot; + r[1] + &quot; = ?&quot;).param(user).update();
+        }
+        jdbc.sql(&quot;UPDATE users SET login = NULL, password_hash = NULL, name = NULL, phone = NULL, email = NULL, &quot;
+                + &quot;status = &#x27;DELETED&#x27;, deleted_at = now() WHERE id = ?&quot;).param(user).update();
+        jdbc.sql(&quot;UPDATE erasures SET completed_at = now() WHERE user_id = ?&quot;).param(user).update();
+        log.info(&quot;Account {} erased&quot;, user);
+    }
+
+    /** Sign-in records older than 180 days, for everyone. */
+    @Scheduled(cron = &quot;${chaupal.jobs.purge-cron}&quot;)
+    void purgeLoginEvents() {
+        jdbc.sql(&quot;DELETE FROM login_events WHERE at &lt; now() - interval &#x27;180 days&#x27;&quot;).update();
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>Following foreign keys misses what is keyed by phone</summary><p>"Everything personal points at users, so read the foreign keys and nothing is ever forgotten": the sign-in codes, the notification queue and other members' address books hold the phone number with no foreign key. They are never reached.</p><p class="evidence"><b>Test evidence:</b> <code>theApiErasesHimEverywhereExceptWhatTheLawKeeps</code> fails: the number is still in the codes, the queue and Zoya's upload.</p></details><details class="finding"><summary><span class="sev">2</span>It deletes what the law keeps</summary><p>The same loop deletes every row that points at the user: the invoices, which must be kept for years, and the recent sign-in records kept for security.</p><p class="evidence"><b>Test evidence:</b> <code>deletingClosesTheAccountAtOnceAndBooksTheErasureWithin90Days</code> fails: the sign-in from two days ago is gone; and the invoice the trap test expects to remain has been deleted.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the flawed file copied over the real one, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>AccountDatabaseTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill ok">2 / 2</span></td></tr><tr><td><code>AccountSecurityTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill ok">3 / 3</span></td></tr><tr><td><code>PersonalDataInventoryTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill ok">2 / 2</span></td></tr><tr><td><code>AccountContractTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill bad">2 / 3</span></td></tr><tr><td><code>AccountDeletionTrapTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">1 / 2</span></td></tr></tbody></table></div>
+<p class="note">The flawed version looks more thorough than a hand-written list, and it does clean every table that knows the user id. The search of every column is what shows the difference.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
