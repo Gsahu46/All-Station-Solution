@@ -1,0 +1,1867 @@
+<title>Station 109 · Tenant isolation in a CRM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; station header, page blueprint, sticky tab bar, one panel at a time.
+   Code always sits on a dark slate, like a terminal, in both themes. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #586a7a;
+  --line: #d9e1e8;
+  --accent: #0a7a63;
+  --accent-soft: #e0f2ec;
+  --warn: #9a5200;
+  --warn-soft: #fbefdc;
+  --bad: #b42318;
+  --bad-soft: #fde7e4;
+  --ok: #146c38;
+  --ok-soft: #e1f3e7;
+  --code-bg: #101b25;
+  --code-fg: #d7e2ea;
+  --code-dim: #7f93a3;
+  --code-key: #7fd1b9;
+  --code-str: #f2c879;
+  --code-type: #9cc4ff;
+  --code-num: #f59e8b;
+  --font-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+    --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+    --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+    --code-bg: #0a1117; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a; --surface: #121c25; --ink: #e2eaf0; --muted: #93a5b4; --line: #243341;
+  --accent: #45c9a6; --accent-soft: #11322b; --warn: #f0a650; --warn-soft: #36270f;
+  --bad: #ff8577; --bad-soft: #3b1815; --ok: #5bd394; --ok-soft: #12301f;
+  --code-bg: #0a1117; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--font-body); padding-inline: 16px; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.4rem; font-weight: 700; margin-top: 2.2rem; margin-bottom: .7rem; }
+h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1.6rem; margin-bottom: .5rem; }
+p, ul, ol, dl { margin: 0 0 .9rem; }
+p, li, dd { max-width: 72ch; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Station header */
+.station { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.station .num { font: 800 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .04em; }
+.station h1 { font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 800; letter-spacing: -.01em; }
+.station .scenario { font-size: 1.15rem; color: var(--muted); margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.meta li { font-size: .88rem; border: 1px solid var(--line); background: var(--surface); padding: 3px 10px; border-radius: 999px; }
+.meta li b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; font-size: .95rem; }
+.links p { margin: 0; }
+.chip { display: inline-block; font-size: .82rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 999px; }
+
+/* Blueprint */
+.blueprint { margin: 22px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px; }
+.blueprint > summary { cursor: pointer; padding: 12px 0; font: 700 1rem var(--font-display); }
+.blueprint > p { color: var(--muted); font-size: .95rem; }
+
+/* Tabs */
+.tabbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); margin: 26px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { flex: 0 0 auto; font: 600 .95rem var(--font-body); color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 8px 10px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .grp { flex: 0 0 auto; align-self: center; font: 700 .68rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding: 0 4px 0 10px; white-space: nowrap; }
+.tabs .grp:first-child { padding-left: 0; }
+
+/* Simulation banner, retry rule, class walkthrough */
+.sim { display: flex; gap: 10px; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); font-size: .95rem; }
+.sim b { color: var(--warn); white-space: nowrap; }
+.rulebox { border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; margin: 0 0 1rem; background: var(--surface); }
+.rulebox .eyebrow { color: var(--accent); }
+.rulebox ul { margin-bottom: .6rem; }
+.rulebox p:last-child { margin-bottom: 0; font-weight: 600; }
+.dwn { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 .6rem; font-size: .95rem; }
+.dwn dt { font: 700 .74rem/1.9 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.dwn dd { margin: 0; }
+details.check { border-color: var(--ok); margin-top: 1.2rem; }
+.limit { padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); font-size: .95rem; }
+.limit b { color: var(--warn); }
+.panel { padding-top: 22px; }
+.panel > h2:first-of-type { margin-top: 1.4rem; }
+
+.belongs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 28px; border: 1px dashed var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.belongs .eyebrow { grid-column: 1 / -1; color: var(--accent); }
+.belongs ul { margin: 0; padding-left: 1.1rem; font-size: .95rem; }
+.belongs .rule { margin: 0; font-size: .95rem; }
+
+/* Beginner layer */
+.level { display: inline-block; margin: 1.6rem 0 0; font: 700 .76rem/1 var(--font-body); letter-spacing: .09em; text-transform: uppercase; padding: 6px 10px; border-radius: 6px; }
+.level.start { color: var(--ok); background: var(--ok-soft); }
+.level.deep { color: var(--accent); background: var(--accent-soft); margin-top: 2.6rem; }
+.level + h2 { margin-top: .9rem; }
+.story { list-style: none; counter-reset: story; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.story li { counter-increment: story; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.story li::before { content: "Step " counter(story); display: block; font: 600 .74rem var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.story li strong { font-family: var(--font-display); font-size: 1.05rem; }
+.story li p { margin: 6px 0 0; font-size: .95rem; }
+.story li:last-child { border-color: var(--ok); }
+.lesson { font: 700 1.1rem/1.4 var(--font-display); }
+.scope li { margin-bottom: .5rem; }
+.challenge { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: .4rem; }
+.challenge h2 { margin-top: .3rem; }
+
+/* Content blocks */
+.gwt li, .rules li, .steps li { margin-bottom: .5rem; }
+.gwt b { font-family: var(--font-display); font-weight: 700; color: var(--accent); }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); }
+.scroll { overflow-x: auto; margin: 0 0 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+table.narrow { width: auto; min-width: 320px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 .74rem var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 600 .8rem/1.4 var(--font-mono); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); }
+.pill.warn { color: var(--warn); background: var(--warn-soft); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); }
+
+pre { margin: 0 0 1rem; }
+pre.code, pre.console, pre.tree { background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 400 .82rem/1.55 var(--font-mono); }
+pre.code code, pre.console, pre.tree { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+pre.console { color: var(--code-key); }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-meta .hljs-keyword { color: var(--code-key); }
+.hljs-string, .hljs-attr + .hljs-string { color: var(--code-str); }
+.hljs-title, .hljs-type, .hljs-title.class_ { color: var(--code-type); }
+.hljs-number { color: var(--code-num); }
+.hljs-comment, .hljs-doctag { color: var(--code-dim); font-style: italic; }
+.hljs-meta, .hljs-attr, .hljs-attribute, .hljs-section, .hljs-name, .hljs-tag { color: var(--code-type); }
+
+.example { margin-bottom: 1.4rem; }
+.example h3 { margin-top: 1.2rem; }
+.example > p { color: var(--muted); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.pair > div { min-width: 0; }
+
+.trap { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 1rem; }
+.trap .eyebrow { color: var(--warn); }
+.trap .lead { font: 700 1.15rem/1.35 var(--font-display); }
+.trap p:last-child { margin-bottom: 0; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; font: .8rem/1.5 var(--font-mono); }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 22px; }
+.facts dt { font: 700 1rem var(--font-display); }
+.facts dd { margin: 0; }
+
+.files { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.file-list { display: flex; flex-direction: column; gap: 2px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 56px); }
+.file-btn { text-align: left; font: 400 .82rem var(--font-mono); color: var(--muted); background: none; border: 0; border-left: 3px solid transparent; padding: 7px 10px; cursor: pointer; border-radius: 0 6px 6px 0; overflow-wrap: anywhere; }
+.file-btn:hover { color: var(--ink); background: var(--surface); }
+.file-btn[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); background: var(--surface); }
+.file-body { min-width: 0; }
+.path { font: 400 .8rem var(--font-mono); color: var(--muted); margin-bottom: .4rem; overflow-wrap: anywhere; }
+.notes ul { padding-left: 1.1rem; font-size: .95rem; }
+.notes p { font-size: .95rem; }
+
+details.qa, details.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; margin-bottom: 8px; }
+details.qa > summary, details.finding > summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+details.qa[open] > summary, details.finding[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.finding .sev { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; margin-right: 10px; border-radius: 50%; font: 700 .8rem var(--font-mono); color: var(--bad); background: var(--bad-soft); }
+.finding .evidence { font-size: .95rem; color: var(--muted); }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .pair, .files, .belongs, .story, .dwn { grid-template-columns: minmax(0, 1fr); }
+  .sim { flex-direction: column; gap: 2px; }
+  .file-list { position: static; flex-direction: row; flex-wrap: wrap; }
+  .file-btn { border-left: 0; border-bottom: 2px solid transparent; border-radius: 6px; }
+  .file-btn[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="station">
+    <span class="num">STATION 109</span>
+    <h1>Tenant isolation in a CRM</h1>
+    <p class="scenario">A missing WHERE clause showed one company&#x27;s leads to another.</p>
+    <p class="sim"><b>Simulation</b><span>The companies, people and leads are demo data. Sign-in is a fixed list of demo users; a real identity provider would put the tenant in a signed token.</span></p>
+    <ul class="meta">
+      <li><b>Stage</b>Working Systems</li>
+      <li><b>Experience</b>0–2 years</li>
+      <li><b>Track</b>Core</li>
+      <li><b>Industry</b>SaaS</li>
+      <li><b>Types</b>Database · Security</li>
+      <li><b>Reviewer view</b>Yes</li>
+    </ul>
+    <div class="links">
+      <p><span class="eyebrow">Before this</span><br>073 Login with JWT for a fitness app · 078 Customers see only their own accounts</p>
+      <p><span class="eyebrow">Builds toward</span><br>141 Cell-based architecture for a SaaS</p>
+      <p><span class="eyebrow">Stack</span><br>Spring Boot 4.1.1 · Java 25 · Spring Security (HTTP Basic) · JdbcClient · PostgreSQL 17 row-level security · Flyway · Testcontainers</p>
+    </div>
+  </header>
+
+  <nav class="tabbar" aria-label="Station sections">
+    <div class="tabs" role="tablist"><span class="grp" role="presentation">1 · Understand</span><button role="tab" id="tab-understand" aria-controls="panel-understand" aria-selected="true" tabindex="0" data-tab="understand">Understand</button><span class="grp" role="presentation">2 · Build</span><button role="tab" id="tab-spec" aria-controls="panel-spec" aria-selected="false" tabindex="-1" data-tab="spec">Spec</button><button role="tab" id="tab-api" aria-controls="panel-api" aria-selected="false" tabindex="-1" data-tab="api">API contract</button><button role="tab" id="tab-trap" aria-controls="panel-trap" aria-selected="false" tabindex="-1" data-tab="trap">Edge cases & trap</button><button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1" data-tab="code">Set up & code</button><button role="tab" id="tab-tests" aria-controls="panel-tests" aria-selected="false" tabindex="-1" data-tab="tests">Tests</button><button role="tab" id="tab-practice" aria-controls="panel-practice" aria-selected="false" tabindex="-1" data-tab="practice">Practice</button><span class="grp" role="presentation">3 · Go deeper</span><button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false" tabindex="-1" data-tab="design">Design</button><button role="tab" id="tab-production" aria-controls="panel-production" aria-selected="false" tabindex="-1" data-tab="production">Production</button><button role="tab" id="tab-interview" aria-controls="panel-interview" aria-selected="false" tabindex="-1" data-tab="interview">Interview</button><button role="tab" id="tab-review" aria-controls="panel-review" aria-selected="false" tabindex="-1" data-tab="review">Review</button></div>
+  </nav>
+
+  <main><section role="tabpanel" id="panel-understand" aria-labelledby="tab-understand" class="panel"><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>The real-life problem as a 3-step story</li><li>What we are building, and an everyday analogy</li><li>How it works in 4 steps</li><li>One question to check yourself</li><li>What this station is not</li><li>Key terms</li></ul><p class="rule">Level 1, about 5 minutes. Plain language: no code.</p></aside>
+<h2>The problem in real life</h2>
+<ol class="story"><li><strong>Many companies, one CRM</strong><p>Taskloom's CRM keeps sales leads for hundreds of small companies in the same tables, each row marked with its company.</p></li><li><strong>One forgotten WHERE</strong><p>A new "find lead by email" lookup forgot the company filter. A salesperson at one company saw another company's notes on a shared contact. Elsewhere, an endpoint read the company from the request body: changing one word put a lead into someone else's CRM.</p></li><li><strong>The fix</strong><p>The company comes from the sign-in only. Every query filters by it, and underneath, the database itself filters by it: a query that forgets returns nothing from anyone else.</p></li></ol>
+<p class="lesson">Isolation that depends on every developer remembering every WHERE clause will fail once. Put a second guard where nobody can forget it.</p>
+
+<h2>What are we building?</h2>
+<p>A leads API for many companies at once, where each company sees and writes only its own leads, enforced in the code and in the database.</p>
+
+<h2>An everyday analogy</h2>
+<p>An apartment block: your key decides which flat you enter, not the number you say at the gate; and even if someone leaves a door open, the lift only stops at your floor.</p>
+
+<h2>How it works in 4 steps</h2>
+<ol class="steps">
+<li><strong>Sign in</strong>: the user's company is part of their account.</li>
+<li><strong>Open a tenant transaction</strong>: the database is told the company, and switches to the application's limited role.</li>
+<li><strong>Query</strong>: every query filters by the company.</li>
+<li><strong>Underneath</strong>: the database's policy filters again; writes for another company are refused.</li>
+</ol>
+
+<details class="qa check"><summary>Check yourself: if the policy filters anyway, why keep the WHERE clause?</summary><p>Two guards: the WHERE clause is what developers read and indexes use; the policy catches the day one is missing. Remove either and one mistake is no longer harmless.</p></details>
+
+<h2>What this station is not</h2>
+<ul class="scope">
+<li><strong>No identity provider.</strong> Demo users; the tenant would be a claim in a signed token.</li>
+<li><strong>No admin view across companies.</strong> That is a separate, audited tool, not a parameter.</li>
+<li><strong>One tenancy model.</strong> Shared tables; schema or database per tenant are compared in Design.</li>
+</ul>
+
+<h2>Key terms</h2>
+<div class="scroll"><table class=""><thead><tr><th>Term</th><th>Simple meaning</th><th>Everyday example</th><th>In this project</th></tr></thead><tbody><tr><td><strong>Tenant</strong></td><td>One customer company using the shared software, with its own data.</td><td>One flat in an apartment block.</td><td><code>zestful</code>, <code>brightpath</code></td></tr><tr><td><strong>Multi-tenancy</strong></td><td>Many customers on one system, each seeing only their own data.</td><td>One building, many locked flats.</td><td>shared tables with a <code>tenant_id</code></td></tr><tr><td><strong>Tenant from the token</strong></td><td>Which company you are is decided by your sign-in, never by what the request says.</td><td>Your key opens your flat; saying a flat number does not.</td><td><code>SecurityConfig.tenant</code></td></tr><tr><td><strong>Row-level security</strong></td><td>A rule in the database that hides other tenants' rows from every query.</td><td>A lift that only stops at your floor.</td><td><code>leads_tenant_isolation</code></td></tr><tr><td><strong>Defence in depth</strong></td><td>Two independent guards, so one mistake is not a leak.</td><td>A locked flat in a building with a guard.</td><td>WHERE clause + policy</td></tr><tr><td><strong>Isolation test</strong></td><td>A test that signs in as one tenant and tries to reach another's data.</td><td>Trying your key in the neighbour's door.</td><td><code>LeadSecurityTest</code></td></tr></tbody></table></div></section><section role="tabpanel" id="panel-spec" aria-labelledby="tab-spec" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>1. Business problem</li><li>2. Acceptance criteria</li><li>3. Requirements</li><li>4. Learning objectives</li></ul><p class="rule">Level 2. What a teammate hands you before you build.</p></aside>
+<h2>Business problem</h2>
+<p><strong>Taskloom</strong> (a fictional SaaS company): a missing WHERE clause in its CRM showed one customer company's leads to another.</p>
+
+<h2>Acceptance criteria</h2>
+<ol class="gwt">
+<li><b>Given</b> a signed-in user, <b>then</b> <code>GET /leads</code> lists only their company's leads, filtered by status and text.</li>
+<li><b>Given</b> a lead id of another company, <b>then</b> <code>404</code>, the same as a lead that does not exist.</li>
+<li><b>Given</b> <code>POST /leads</code> from a salesperson, <b>then</b> <code>201</code> in their company; an email already a lead of theirs, <code>409</code>; the same email at another company is fine.</li>
+<li><b>Given</b> a company named in the body or the query string, <b>then</b> it is ignored.</li>
+<li><b>Given</b> no sign-in, a viewer writing, or bad input, <b>then</b> <code>401</code>, <code>403</code>, <code>400</code>.</li>
+<li><b>Given</b> any SQL in the application's role, <b>then</b> only the transaction's company's rows can be read or written.</li>
+</ol>
+
+<h2>Requirements</h2>
+<ul class="rules">
+<li>The tenant comes from the sign-in only.</li>
+<li>Every query filters by tenant, and a database policy filters underneath.</li>
+<li>The tenant setting ends with its transaction: a pooled connection never carries it on.</li>
+</ul>
+
+<h2>Learning objectives</h2>
+<ul>
+<li>Compare tenancy models: shared tables, schema per tenant, database per tenant.</li>
+<li>Take the tenant from the identity, never the request.</li>
+<li>Use PostgreSQL row-level security with a non-owner role.</li>
+<li>Write isolation tests that try to cross tenants, by API and by SQL.</li>
+</ul>
+</section><section role="tabpanel" id="panel-api" aria-labelledby="tab-api" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>5. API contract</li><li>Real request/response examples captured from the running app</li></ul><p class="rule">Examples are captured with curl from the running app and its PostgreSQL, never typed by hand.</p></aside>
+<h2>Endpoints</h2>
+<div class="scroll"><table class=""><thead><tr><th>Method</th><th>Path</th><th>Who</th><th>Purpose</th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/leads?status=&amp;q=</code></td><td>sales, viewer</td><td>The company's leads, at most 50, newest first; <code>q</code> matches name, company or email as plain text.</td></tr><tr><td><code>GET</code></td><td><code>/leads/{id}</code></td><td>sales, viewer</td><td>One of the company's leads.</td></tr><tr><td><code>POST</code></td><td><code>/leads</code></td><td>sales</td><td><code>{name, email, company?, status?}</code>.</td></tr></tbody></table></div>
+<h2>Status codes</h2>
+<div class="scroll"><table class=""><thead><tr><th>Status</th><th>When</th></tr></thead><tbody><tr><td><span class="pill ok">200</span> / <span class="pill ok">201</span></td><td>Listed / created</td></tr><tr><td><span class="pill warn">400</span></td><td>Bad email, unknown status, search text too long</td></tr><tr><td><span class="pill warn">401</span> / <span class="pill warn">403</span></td><td>Not signed in / a viewer writing</td></tr><tr><td><span class="pill warn">404</span></td><td>No such lead in your company (whether or not it exists elsewhere)</td></tr><tr><td><span class="pill warn">409</span></td><td>Your company already has a lead with this email</td></tr></tbody></table></div>
+<h2>Captured examples</h2>
+<p class="muted">Captured with curl from the running app on 25 Oct 2026, in this order. Ananya and Kabir work at Zestful Foods, Farhan at Brightpath Tutors. <code>Date</code>, connection and standard security headers are left out.</p>
+<section class="example"><h3>Case 1: Ananya lists her leads</h3><p><b>Why:</b> Zestful's two.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /leads HTTP/1.1
+Authorization: Basic YW5hbnlhOmFuYW55YS1kZW1vLXBhc3M=</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 333
+
+[
+  {
+    &quot;id&quot;: 2,
+    &quot;name&quot;: &quot;Leela Thomas&quot;,
+    &quot;email&quot;: &quot;leela@greenbowl.example&quot;,
+    &quot;company&quot;: &quot;Green Bowl Cafe&quot;,
+    &quot;status&quot;: &quot;NEW&quot;,
+    &quot;owner&quot;: &quot;ananya&quot;,
+    &quot;createdAt&quot;: &quot;2026-10-25T03:48:54.087647Z&quot;
+  },
+  {
+    &quot;id&quot;: 1,
+    &quot;name&quot;: &quot;Rahul Mehta&quot;,
+    &quot;email&quot;: &quot;rahul@spicehub.example&quot;,
+    &quot;company&quot;: &quot;Spice Hub&quot;,
+    &quot;status&quot;: &quot;QUALIFIED&quot;,
+    &quot;owner&quot;: &quot;ananya&quot;,
+    &quot;createdAt&quot;: &quot;2026-10-25T03:48:54.087647Z&quot;
+  }
+]</code></pre></div></div></section><section class="example"><h3>Case 2: Farhan lists his</h3><p><b>Why:</b> Brightpath's two; Rahul Mehta is a lead of both, as two separate rows.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /leads HTTP/1.1
+Authorization: Basic ZmFyaGFuOmZhcmhhbi1kZW1vLXBhc3M=</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 327
+
+[
+  {
+    &quot;id&quot;: 4,
+    &quot;name&quot;: &quot;Rahul Mehta&quot;,
+    &quot;email&quot;: &quot;rahul@spicehub.example&quot;,
+    &quot;company&quot;: &quot;Spice Hub&quot;,
+    &quot;status&quot;: &quot;NEW&quot;,
+    &quot;owner&quot;: &quot;farhan&quot;,
+    &quot;createdAt&quot;: &quot;2026-10-25T03:48:54.087647Z&quot;
+  },
+  {
+    &quot;id&quot;: 3,
+    &quot;name&quot;: &quot;Sunil Rao&quot;,
+    &quot;email&quot;: &quot;sunil.rao@example.org&quot;,
+    &quot;company&quot;: &quot;Sunrise School&quot;,
+    &quot;status&quot;: &quot;CONTACTED&quot;,
+    &quot;owner&quot;: &quot;farhan&quot;,
+    &quot;createdAt&quot;: &quot;2026-10-25T03:48:54.087647Z&quot;
+  }
+]</code></pre></div></div></section><section class="example"><h3>Case 3: Ananya adds a lead</h3><p><b>Why:</b> <code>201</code>; the email lower-cased.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /leads HTTP/1.1
+Authorization: Basic YW5hbnlhOmFuYW55YS1kZW1vLXBhc3M=
+Content-Type: application/json
+
+{
+  &quot;name&quot;: &quot;Divya Kapoor&quot;,
+  &quot;email&quot;: &quot;Divya@MasalaBox.example&quot;,
+  &quot;company&quot;: &quot;Masala Box&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /leads/5
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 5,
+  &quot;name&quot;: &quot;Divya Kapoor&quot;,
+  &quot;email&quot;: &quot;divya@masalabox.example&quot;,
+  &quot;company&quot;: &quot;Masala Box&quot;,
+  &quot;status&quot;: &quot;NEW&quot;,
+  &quot;owner&quot;: &quot;ananya&quot;,
+  &quot;createdAt&quot;: &quot;2026-10-25T03:48:56.137135Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 4: the same email again</h3><p><b>Why:</b> <code>409</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /leads HTTP/1.1
+Authorization: Basic YW5hbnlhOmFuYW55YS1kZW1vLXBhc3M=
+Content-Type: application/json
+
+{
+  &quot;name&quot;: &quot;Divya K&quot;,
+  &quot;email&quot;: &quot;divya@masalabox.example&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 409 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Your company already has a lead with this email.&quot;,
+  &quot;instance&quot;: &quot;/leads&quot;,
+  &quot;status&quot;: 409,
+  &quot;title&quot;: &quot;Conflict&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 5: Farhan adds the same person</h3><p><b>Why:</b> <code>201</code>: unique per company, not across.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /leads HTTP/1.1
+Authorization: Basic ZmFyaGFuOmZhcmhhbi1kZW1vLXBhc3M=
+Content-Type: application/json
+
+{
+  &quot;name&quot;: &quot;Divya Kapoor&quot;,
+  &quot;email&quot;: &quot;divya@masalabox.example&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /leads/7
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 7,
+  &quot;name&quot;: &quot;Divya Kapoor&quot;,
+  &quot;email&quot;: &quot;divya@masalabox.example&quot;,
+  &quot;company&quot;: null,
+  &quot;status&quot;: &quot;NEW&quot;,
+  &quot;owner&quot;: &quot;farhan&quot;,
+  &quot;createdAt&quot;: &quot;2026-10-25T03:48:56.392395Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 6: a body naming Brightpath</h3><p><b>Why:</b> the body's tenant is not read: the lead is Zestful's (it appears among Zestful's rows in the psql listing below).</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /leads HTTP/1.1
+Authorization: Basic YW5hbnlhOmFuYW55YS1kZW1vLXBhc3M=
+Content-Type: application/json
+
+{
+  &quot;tenantId&quot;: &quot;brightpath&quot;,
+  &quot;name&quot;: &quot;Planted Lead&quot;,
+  &quot;email&quot;: &quot;planted@example.com&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 201 
+Location: /leads/8
+Content-Type: application/json
+
+{
+  &quot;id&quot;: 8,
+  &quot;name&quot;: &quot;Planted Lead&quot;,
+  &quot;email&quot;: &quot;planted@example.com&quot;,
+  &quot;company&quot;: null,
+  &quot;status&quot;: &quot;NEW&quot;,
+  &quot;owner&quot;: &quot;ananya&quot;,
+  &quot;createdAt&quot;: &quot;2026-10-25T03:48:56.495276Z&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 7: <code>?tenant=brightpath</code></h3><p><b>Why:</b> ignored: Zestful's Rahul only.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /leads?q=rahul&amp;tenant=brightpath HTTP/1.1
+Authorization: Basic YW5hbnlhOmFuYW55YS1kZW1vLXBhc3M=</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 166
+
+[
+  {
+    &quot;id&quot;: 1,
+    &quot;name&quot;: &quot;Rahul Mehta&quot;,
+    &quot;email&quot;: &quot;rahul@spicehub.example&quot;,
+    &quot;company&quot;: &quot;Spice Hub&quot;,
+    &quot;status&quot;: &quot;QUALIFIED&quot;,
+    &quot;owner&quot;: &quot;ananya&quot;,
+    &quot;createdAt&quot;: &quot;2026-10-25T03:48:54.087647Z&quot;
+  }
+]</code></pre></div></div></section><section class="example"><h3>Case 8: Brightpath's lead 3, by id</h3><p><b>Why:</b> <code>404</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /leads/3 HTTP/1.1
+Authorization: Basic YW5hbnlhOmFuYW55YS1kZW1vLXBhc3M=</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 404 
+Content-Type: application/problem+json
+
+{
+  &quot;instance&quot;: &quot;/leads/3&quot;,
+  &quot;status&quot;: 404,
+  &quot;title&quot;: &quot;Not Found&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 9: Kabir, a viewer, adds a lead</h3><p><b>Why:</b> <code>403</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /leads HTTP/1.1
+Authorization: Basic a2FiaXI6a2FiaXItZGVtby1wYXNz
+Content-Type: application/json
+
+{
+  &quot;name&quot;: &quot;X&quot;,
+  &quot;email&quot;: &quot;x@example.com&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 403 
+Content-Type: application/problem+json
+Content-Length: 96
+
+{
+  &quot;title&quot;: &quot;Not allowed&quot;,
+  &quot;status&quot;: 403,
+  &quot;detail&quot;: &quot;This sign-in cannot do this.&quot;,
+  &quot;instance&quot;: &quot;/leads&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 10: no sign-in</h3><p><b>Why:</b> <code>401</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /leads HTTP/1.1</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 401 
+Content-Type: application/problem+json
+Content-Length: 108
+
+{
+  &quot;title&quot;: &quot;Sign-in required&quot;,
+  &quot;status&quot;: 401,
+  &quot;detail&quot;: &quot;Send a valid username and password.&quot;,
+  &quot;instance&quot;: &quot;/leads&quot;
+}</code></pre></div></div></section><section class="example"><h3>Case 11: searching for %</h3><p><b>Why:</b> a literal %, not "anything": nothing found.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">GET /leads?q=%25 HTTP/1.1
+Authorization: Basic YW5hbnlhOmFuYW55YS1kZW1vLXBhc3M=</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 200 
+Content-Type: application/json
+Content-Length: 2
+
+[]</code></pre></div></div></section><section class="example"><h3>Case 12: a bad email</h3><p><b>Why:</b> <code>400</code>.</p><div class="pair"><div><p class="eyebrow">Request</p><pre class="code"><code class="language-http">POST /leads HTTP/1.1
+Authorization: Basic YW5hbnlhOmFuYW55YS1kZW1vLXBhc3M=
+Content-Type: application/json
+
+{
+  &quot;name&quot;: &quot;X&quot;,
+  &quot;email&quot;: &quot;not-an-email&quot;
+}</code></pre></div><div><p class="eyebrow">Response</p><pre class="code"><code class="language-http">HTTP/1.1 400 
+Content-Type: application/problem+json
+
+{
+  &quot;detail&quot;: &quot;Invalid request content.&quot;,
+  &quot;instance&quot;: &quot;/leads&quot;,
+  &quot;status&quot;: 400,
+  &quot;title&quot;: &quot;Bad Request&quot;
+}</code></pre></div></div></section>
+<h2>The policy, in psql</h2>
+<p class="muted">The same database, as the application's role, with queries that have no WHERE at all:</p>
+<pre class="code"><code class="language-text">-- as crm_app, no tenant set:
+ leads_visible 
+---------------
+             0
+(1 row)
+
+-- as crm_app, tenant zestful:
+ tenant  
+---------
+ zestful
+(1 row)
+
+     name     |          email          
+--------------+-------------------------
+ Rahul Mehta  | rahul@spicehub.example
+ Leela Thomas | leela@greenbowl.example
+ Divya Kapoor | divya@masalabox.example
+ Planted Lead | planted@example.com
+(4 rows)
+
+-- as crm_app, tenant zestful, writing a row for brightpath:
+ tenant  
+---------
+ zestful
+(1 row)
+
+ERROR:  new row violates row-level security policy for table &quot;leads&quot;</code></pre></section><section role="tabpanel" id="panel-trap" aria-labelledby="tab-trap" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>6. Edge cases and failure cases</li><li>7. The trap, shown failing with a test</li></ul><p class="rule">Every edge case points at the test that proves it.</p></aside>
+<h2>Edge cases</h2>
+<div class="scroll"><table class=""><thead><tr><th>Case</th><th>What happens</th><th>Proved by</th></tr></thead><tbody><tr><td>The old code: tenant from the body; a lookup without tenant</td><td>A lead planted at Brightpath; both companies' rows returned</td><td><code>theOldCodeTrustedTheBodysTenantAndForgotTheTenantInOneQuery</code></td></tr><tr><td>The API: the same body, a tenant in the query, the same forgetful query</td><td>Zestful's lead; Zestful's rows only</td><td><code>theApiTakesTheTenantFromTheSignInAndTheDatabaseFiltersWhatACodeForgets</code></td></tr><tr><td>Listing and filtering</td><td>Own leads only</td><td><code>aTenantListsAndFiltersItsOwnLeads</code></td></tr><tr><td>Create; duplicate; same email elsewhere</td><td><code>201</code>; <code>409</code>; <code>201</code></td><td><code>aLeadIsCreatedOnceAnEmailPerTenant</code></td></tr><tr><td>Bad input; unknown id</td><td><code>400</code>; <code>404</code></td><td><code>badInputIs400AndAnUnknownLeadIs404</code></td></tr><tr><td>No sign-in; a viewer writing</td><td><code>401</code>; <code>403</code></td><td><code>noSignInIs401AndAViewerCannotCreate</code></td></tr><tr><td>Another company's lead by id or search</td><td><code>404</code>; not listed</td><td><code>anotherTenantsLeadIsNotFoundByIdOrBySearch</code></td></tr><tr><td>%, _, and SQL in the search text</td><td>Plain text; nothing extra found</td><td><code>searchTextIsTextNotSqlOrAPattern</code></td></tr><tr><td>SQL with no WHERE, as the app's role</td><td>Only the transaction's tenant; no tenant, no rows; other tenant's writes refused</td><td><code>thePolicyShowsAndWritesOnlyTheTransactionsTenant</code></td></tr><tr><td>Plain SQL against the rules</td><td>Named constraints</td><td><code>theRulesAreNamedConstraints</code></td></tr><tr><td>A failed write; pooled connections</td><td>Rolled back; the tenant does not stay on the connection</td><td><code>theTenantEndsWithItsTransactionAndAFailedWriteLeavesNothing</code></td></tr></tbody></table></div>
+<h2>The trap</h2>
+<div class="trap">
+<p class="eyebrow">Plausible but wrong</p>
+<p class="lead">Taking the tenant id from the request body, or forgetting it in one query.</p>
+<ul>
+<li><strong>The old way.</strong> The repository took the tenant it was given by the request, and one lookup by email had no tenant at all. Ananya's request plants a lead in Brightpath's CRM, and the lookup returns both companies' rows for Rahul Mehta.</li>
+<li><strong>The API.</strong> The same body lands in Zestful. A tenant in the query string is ignored. And the very same forgetful lookup, run inside Zestful's transaction, returns Zestful's row only: the policy filtered what the code forgot.</li>
+</ul>
+<p>While building, each part was undone once. Removing the WHERE clause alone turned <b>0</b> tests red: the policy still filtered every query, which is the point of a second guard, and also why it was undone together with the role switch, which turned 6 red. Then: no role switch alone 2; no tenant setting 7; LIKE wildcards not escaped 1; emails not lower-cased 1; viewers allowed to write 1; a <code>?tenant=</code> parameter honoured 1.</p>
+</div>
+<pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Ananya works at Zestful Foods. Rahul Mehta is a lead of Zestful&#x27;s and of Brightpath&#x27;s. Written first. */
+class TenantLeakTrapTest extends ApiTest {
+
+    @Autowired
+    TenantScope scope;
+
+    /** The old repository: the tenant came in the request, and one lookup forgot it. Ran as the database owner. */
+    void oldCreate(String tenantFromBody, String email) {
+        jdbc.sql(&quot;INSERT INTO leads (tenant_id, name, email, status, owner) VALUES (?, &#x27;Planted Lead&#x27;, ?, &#x27;NEW&#x27;, &#x27;ananya&#x27;)&quot;)
+                .params(tenantFromBody, email).update();
+    }
+
+    List&lt;String&gt; oldFindByEmail(String email) {
+        return jdbc.sql(&quot;SELECT tenant_id || &#x27;:&#x27; || company FROM leads WHERE email = ? ORDER BY tenant_id&quot;).param(email).query(String.class).list();
+    }
+
+    @Test
+    void theOldCodeTrustedTheBodysTenantAndForgotTheTenantInOneQuery() {
+        oldCreate(&quot;brightpath&quot;, &quot;planted@example.com&quot;);   // Ananya&#x27;s request, a tenant she typed in
+        assertThat(tenantOf(&quot;planted@example.com&quot;)).isEqualTo(&quot;brightpath&quot;);
+        assertThat(oldFindByEmail(&quot;rahul@spicehub.example&quot;)).as(&quot;Ananya sees Brightpath&#x27;s notes on the lead&quot;)
+                .containsExactly(&quot;brightpath:Spice Hub&quot;, &quot;zestful:Spice Hub&quot;);
+    }
+
+    @Test
+    void theApiTakesTheTenantFromTheSignInAndTheDatabaseFiltersWhatACodeForgets() throws Exception {
+        create(&quot;ananya&quot;, &quot;{\&quot;tenantId\&quot;:\&quot;brightpath\&quot;,\&quot;name\&quot;:\&quot;Planted Lead\&quot;,\&quot;email\&quot;:\&quot;planted@example.com\&quot;}&quot;)
+                .andExpect(status().isCreated());
+        assertThat(tenantOf(&quot;planted@example.com&quot;)).isEqualTo(&quot;zestful&quot;);
+
+        list(&quot;ananya&quot;, &quot;?q=rahul&amp;tenant=brightpath&quot;).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.length()&quot;).value(1)).andExpect(jsonPath(&quot;$[0].owner&quot;).value(&quot;ananya&quot;));
+
+        // The same forgetful query as before, but inside a tenant&#x27;s transaction: the policy filters it.
+        List&lt;String&gt; found = scope.run(&quot;zestful&quot;, () -&gt; oldFindByEmail(&quot;rahul@spicehub.example&quot;));
+        assertThat(found).containsExactly(&quot;zestful:Spice Hub&quot;);
+    }
+}</code></pre></section><section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>Set up and run: commands for Windows and macOS/Linux, troubleshooting</li><li>Try it yourself</li><li>10. Complete working code, in the order a request travels</li><li>11. Code explanation</li></ul><p class="rule">Level 2. Every command here was run and gave the results shown.</p></aside>
+<h2>Set up and run</h2>
+<div class="scroll"><table class=""><thead><tr><th>You need</th><th>Version</th><th>Check with</th></tr></thead><tbody><tr><td>JDK</td><td>25 (recommended). JDK 21 also works, see below</td><td><code>java -version</code></td></tr><tr><td>Docker</td><td>Docker Desktop (Windows, macOS) or Docker Engine (Linux), running</td><td><code>docker info</code></td></tr><tr><td>Maven</td><td>Not needed: the project ships the Maven wrapper</td><td></td></tr></tbody></table></div>
+<p><strong>macOS / Linux</strong></p>
+<pre class="code"><code class="language-bash">docker compose up -d --wait   # PostgreSQL 17 on localhost:5432
+./mvnw spring-boot:run        # the API on http://localhost:8080
+./mvnw test                   # all 11 tests; starts its own PostgreSQL container</code></pre>
+<p><strong>Windows (PowerShell)</strong></p>
+<pre class="code"><code class="language-powershell">docker compose up -d --wait
+.\mvnw.cmd spring-boot:run
+.\mvnw.cmd test</code></pre>
+<p class="muted">On JDK 21, add <code>-Djava.version=21</code>. Nothing here needs a Java 25 feature.</p>
+<h2>Try it yourself</h2>
+<p>Ask the database directly, as the application's role, with and without a tenant:</p>
+<pre class="code"><code class="language-bash">docker compose exec postgres psql -U crm -d crm -c &quot;BEGIN; SET LOCAL ROLE crm_app; SELECT count(*) FROM leads; COMMIT;&quot;
+docker compose exec postgres psql -U crm -d crm -c &quot;BEGIN; SET LOCAL ROLE crm_app; SELECT set_config(&#x27;app.tenant&#x27;,&#x27;zestful&#x27;,true); SELECT name FROM leads; COMMIT;&quot;</code></pre>
+<p>0 rows, then Zestful's. As <code>crm</code> (the owner, a superuser) without <code>SET ROLE</code>, all four: the policy does not bind superusers, which is why the application must not be one.</p>
+<h2>Troubleshooting</h2>
+<div class="scroll"><table class=""><thead><tr><th>You see</th><th>Cause</th><th>Fix</th></tr></thead><tbody><tr><td>Every list is empty</td><td><code>app.tenant</code> not set in the transaction, or set outside it.</td><td>Run queries through <code>TenantScope</code>.</td></tr><tr><td>Another company's rows appear</td><td>The connection is a superuser or the table owner, and the role was not switched.</td><td>Connect as <code>crm_app</code>, or <code>SET LOCAL ROLE crm_app</code>; keep <code>FORCE ROW LEVEL SECURITY</code>.</td></tr><tr><td><code>new row violates row-level security policy</code></td><td>A write for a tenant other than the transaction's.</td><td>The tenant must come from the sign-in.</td></tr></tbody></table></div>
+<h2>Project layout</h2>
+<pre class="tree">stations/109-tenant-isolation-in-a-crm/
+├── pom.xml, mvnw, mvnw.cmd, .mvn/, compose.yaml
+├── src/main/java/com/taskloom/crm/
+│   ├── LeadController.java   ├── Leads.java   ├── TenantScope.java   ├── SecurityConfig.java
+│   └── ProblemResponses.java, CrmApplication.java
+├── src/main/resources/
+│   ├── application.yaml
+│   └── db/migration/   V1__tenants_and_leads.sql, V2__demo_tenants.sql
+├── src/test/java/com/taskloom/crm/   (see Tests)
+├── challenge/                Practice tests; solutions ship separately
+├── review/                   The flawed version (see Review)
+└── docs/                     capture script, captures, saved runs</pre>
+<h2>Code walkthrough</h2>
+<p class="muted">In the order a request travels, then the database.</p>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="code-0-b" aria-controls="code-0" aria-selected="true" data-group="code">LeadController.java</button><button class="file-btn" role="tab" id="code-1-b" aria-controls="code-1" aria-selected="false" data-group="code">Leads.java</button><button class="file-btn" role="tab" id="code-2-b" aria-controls="code-2" aria-selected="false" data-group="code">TenantScope.java</button><button class="file-btn" role="tab" id="code-3-b" aria-controls="code-3" aria-selected="false" data-group="code">SecurityConfig.java</button><button class="file-btn" role="tab" id="code-4-b" aria-controls="code-4" aria-selected="false" data-group="code">V1__tenants_and_leads.sql</button><button class="file-btn" role="tab" id="code-5-b" aria-controls="code-5" aria-selected="false" data-group="code">V2__demo_tenants.sql</button><button class="file-btn" role="tab" id="code-6-b" aria-controls="code-6" aria-selected="false" data-group="code">application.yaml</button><button class="file-btn" role="tab" id="code-7-b" aria-controls="code-7" aria-selected="false" data-group="code">compose.yaml</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="code-0" aria-labelledby="code-0-b"><p class="path">src/main/java/com/taskloom/crm/LeadController.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The endpoints.</dd><dt>Why</dt><dd>The tenant from the sign-in, every time; validation; email lower-cased with <code>Locale.ROOT</code>.</dd><dt>Without it</dt><dd>A tenant chosen by the caller.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.util.List;
+import java.util.Locale;
+
+/** The tenant always comes from the sign-in. A tenant in the body or the query string is not read. */
+@RestController
+class LeadController {
+
+    static final String STATUSES = &quot;NEW|CONTACTED|QUALIFIED|LOST&quot;;
+
+    record NewLead(@NotBlank @Size(max = 100) String name, @NotBlank @Email @Size(max = 254) String email,
+                   @Size(max = 100) String company, @Pattern(regexp = STATUSES) String status) {
+    }
+
+    private final Leads leads;
+
+    LeadController(Leads leads) {
+        this.leads = leads;
+    }
+
+    @GetMapping(&quot;/leads&quot;)
+    List&lt;Leads.Lead&gt; search(Authentication user, @RequestParam(required = false) @Pattern(regexp = STATUSES) String status,
+                            @RequestParam(required = false) @Size(min = 1, max = 100) String q) {
+        return leads.search(SecurityConfig.tenant(user), status, q);
+    }
+
+    @GetMapping(&quot;/leads/{id}&quot;)
+    Leads.Lead lead(Authentication user, @PathVariable long id) {
+        return leads.find(SecurityConfig.tenant(user), id).orElseThrow(() -&gt; new ErrorResponseException(HttpStatus.NOT_FOUND));
+    }
+
+    @PostMapping(&quot;/leads&quot;)
+    ResponseEntity&lt;Leads.Lead&gt; create(Authentication user, @Valid @RequestBody NewLead body) {
+        Leads.Lead lead = leads.create(SecurityConfig.tenant(user), body.name().strip(), body.email().strip().toLowerCase(Locale.ROOT),
+                body.company() == null || body.company().isBlank() ? null : body.company().strip(),
+                body.status() == null ? &quot;NEW&quot; : body.status(), user.getName());
+        return ResponseEntity.created(URI.create(&quot;/leads/&quot; + lead.id())).body(lead);
+    }
+
+    @ExceptionHandler(Leads.EmailTaken.class)
+    ProblemDetail emailTaken() {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, &quot;Your company already has a lead with this email.&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-1" aria-labelledby="code-1-b" hidden><p class="path">src/main/java/com/taskloom/crm/Leads.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The queries.</dd><dt>Why</dt><dd>Each says <code>WHERE tenant_id</code> and runs inside a tenant transaction; LIKE wildcards in search text are escaped.</dd><dt>Without it</dt><dd>A lookup that forgets the tenant; a % that matches everything.</dd></dl></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Leads, always of one tenant. Every query says WHERE tenant_id = :tenant itself, and runs inside TenantScope, where the
+ * database&#x27;s policy filters by the same tenant underneath: forgetting one does not leak, it returns nothing.
+ */
+@Component
+class Leads {
+
+    record Lead(long id, String name, String email, String company, String status, String owner, Instant createdAt) {
+    }
+
+    static final class EmailTaken extends RuntimeException {
+    }
+
+    private static final String COLUMNS = &quot;id, name, email, company, status, owner, created_at&quot;;
+    private final JdbcClient jdbc;
+    private final TenantScope scope;
+
+    Leads(JdbcClient jdbc, TenantScope scope) {
+        this.jdbc = jdbc;
+        this.scope = scope;
+    }
+
+    /** At most 50, newest first. query matches name, company or email; its % and _ are plain characters. */
+    List&lt;Lead&gt; search(String tenant, String status, String query) {
+        String like = query == null ? null : &quot;%&quot; + query.replace(&quot;\\&quot;, &quot;\\\\&quot;).replace(&quot;%&quot;, &quot;\\%&quot;).replace(&quot;_&quot;, &quot;\\_&quot;) + &quot;%&quot;;
+        return scope.run(tenant, () -&gt; jdbc.sql(&quot;SELECT &quot; + COLUMNS + &quot; FROM leads WHERE tenant_id = :tenant&quot;
+                        + &quot; AND (CAST(:status AS TEXT) IS NULL OR status = :status)&quot;
+                        + &quot; AND (CAST(:like AS TEXT) IS NULL OR name ILIKE :like OR company ILIKE :like OR email ILIKE :like)&quot;
+                        + &quot; ORDER BY created_at DESC, id DESC LIMIT 50&quot;)
+                .param(&quot;tenant&quot;, tenant).param(&quot;status&quot;, status).param(&quot;like&quot;, like).query(Lead.class).list());
+    }
+
+    Optional&lt;Lead&gt; find(String tenant, long id) {
+        return scope.run(tenant, () -&gt; jdbc.sql(&quot;SELECT &quot; + COLUMNS + &quot; FROM leads WHERE tenant_id = ? AND id = ?&quot;)
+                .params(tenant, id).query(Lead.class).optional());
+    }
+
+    Lead create(String tenant, String name, String email, String company, String status, String owner) {
+        try {
+            return scope.run(tenant, () -&gt; jdbc.sql(&quot;INSERT INTO leads (tenant_id, name, email, company, status, owner) VALUES (?, ?, ?, ?, ?, ?) RETURNING &quot; + COLUMNS)
+                    .params(tenant, name, email, company, status, owner).query(Lead.class).single());
+        } catch (DuplicateKeyException e) {
+            throw new EmailTaken();
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-2" aria-labelledby="code-2-b" hidden><p class="path">src/main/java/com/taskloom/crm/TenantScope.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>The tenant transaction.</dd><dt>Why</dt><dd><code>SET LOCAL ROLE crm_app</code> and <code>set_config('app.tenant', ..., true)</code>, then the work.</dd><dt>Without it</dt><dd>A connection that bypasses the policy; a tenant left on a pooled connection.</dd></dl><ul><li>Superusers and table owners skip row-level security. The test database's user is a superuser, so the scope switches to <code>crm_app</code>: without that line, 2 tests go red (the policy test and the trap's forgetful query). Production connects as <code>crm_app</code> from the start.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.function.Supplier;
+
+/**
+ * Runs work in a transaction that the database knows belongs to one tenant: as crm_app (so the row-level policy
+ * applies, even when the connection itself is a superuser&#x27;s) and with app.tenant set. Both are LOCAL: they end with the
+ * transaction, so a pooled connection never carries one tenant into the next request.
+ */
+@Component
+class TenantScope {
+
+    private final JdbcClient jdbc;
+    private final TransactionTemplate tx;
+
+    TenantScope(JdbcClient jdbc, TransactionTemplate tx) {
+        this.jdbc = jdbc;
+        this.tx = tx;
+    }
+
+    &lt;T&gt; T run(String tenant, Supplier&lt;T&gt; work) {
+        return tx.execute(status -&gt; {
+            jdbc.sql(&quot;SET LOCAL ROLE crm_app&quot;).update();
+            jdbc.sql(&quot;SELECT set_config(&#x27;app.tenant&#x27;, ?, true)&quot;).param(tenant).query().singleValue();
+            return work.get();
+        });
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-3" aria-labelledby="code-3-b" hidden><p class="path">src/main/java/com/taskloom/crm/SecurityConfig.java</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Users and tenants.</dd><dt>Why</dt><dd>Each user carries a <code>TENANT_</code> authority; roles decide reading and writing.</dd><dt>Without it</dt><dd>A tenant from the request.</dd></dl><ul><li>Shortcut: a fixed list of demo users; with an identity provider, the tenant is a claim in the token.</li></ul></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+class SecurityConfig {
+
+    private static final String TENANT = &quot;TENANT_&quot;;
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems) throws Exception {
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(HttpMethod.GET, &quot;/leads&quot;, &quot;/leads/*&quot;).hasAnyRole(&quot;SALES&quot;, &quot;VIEWER&quot;)
+                        .requestMatchers(HttpMethod.POST, &quot;/leads&quot;).hasRole(&quot;SALES&quot;)
+                        .requestMatchers(&quot;/error&quot;).permitAll()
+                        .anyRequest().denyAll())
+                .httpBasic(b -&gt; b.authenticationEntryPoint(problems::unauthenticated))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable());   // credentials in a header with every request, no cookie a browser sends by itself
+        return http.build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+
+    /**
+     * Demo users, password &quot;name-demo-pass&quot;: ananya (sales) and kabir (viewer) at Zestful Foods, farhan (sales) at
+     * Brightpath Tutors. The tenant is part of the sign-in; nothing in a request can change it.
+     * shortcut: a fixed list; with a real identity provider the tenant is a claim in the signed token.
+     */
+    @Bean
+    InMemoryUserDetailsManager users(PasswordEncoder encoder) {
+        return new InMemoryUserDetailsManager(user(encoder, &quot;ananya&quot;, &quot;zestful&quot;, &quot;SALES&quot;), user(encoder, &quot;kabir&quot;, &quot;zestful&quot;, &quot;VIEWER&quot;),
+                user(encoder, &quot;farhan&quot;, &quot;brightpath&quot;, &quot;SALES&quot;));
+    }
+
+    private static UserDetails user(PasswordEncoder encoder, String name, String tenant, String role) {
+        return User.withUsername(name).password(encoder.encode(name + &quot;-demo-pass&quot;)).authorities(&quot;ROLE_&quot; + role, TENANT + tenant).build();
+    }
+
+    static String tenant(Authentication user) {
+        return user.getAuthorities().stream().map(GrantedAuthority::getAuthority).filter(a -&gt; a.startsWith(TENANT))
+                .map(a -&gt; a.substring(TENANT.length())).findFirst().orElseThrow();
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-4" aria-labelledby="code-4-b" hidden><p class="path">src/main/resources/db/migration/V1__tenants_and_leads.sql</p><div class="notes"><dl class="dwn"><dt>Does</dt><dd>Tables, role and policy.</dd><dt>Why</dt><dd><code>tenant_id</code> on every lead, uniqueness per tenant, <code>crm_app</code> without DELETE, and <code>FORCE ROW LEVEL SECURITY</code> with USING and WITH CHECK.</dd><dt>Without it</dt><dd>Any query, from any code, seeing another company.</dd></dl></div><div class="src"><pre class="code"><code class="language-sql">-- Every row belongs to one tenant (one Taskloom customer company). Shared tables, a tenant_id column, and the
+-- database itself filtering by it (row-level security) under whatever the application forgets.
+CREATE TABLE tenants (
+    id   TEXT PRIMARY KEY CONSTRAINT tenants_id_format CHECK (id ~ &#x27;^[a-z][a-z0-9-]{1,30}$&#x27;),
+    name TEXT NOT NULL
+);
+
+CREATE TABLE leads (
+    id         BIGSERIAL PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants (id),
+    name       VARCHAR(100) NOT NULL,
+    email      VARCHAR(254) NOT NULL,
+    company    VARCHAR(100),
+    status     TEXT NOT NULL DEFAULT &#x27;NEW&#x27; CONSTRAINT leads_status CHECK (status IN (&#x27;NEW&#x27;, &#x27;CONTACTED&#x27;, &#x27;QUALIFIED&#x27;, &#x27;LOST&#x27;)),
+    owner      TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- The same person may be a lead of two companies; within one company, once.
+    CONSTRAINT leads_email_unique_per_tenant UNIQUE (tenant_id, email)
+);
+CREATE INDEX leads_by_tenant ON leads (tenant_id, created_at DESC);
+
+-- The role the application works as. Not the owner and not a superuser, so the policy below applies to it.
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = &#x27;crm_app&#x27;) THEN
+        CREATE ROLE crm_app LOGIN PASSWORD &#x27;crm_app&#x27;;
+    END IF;
+END $$;
+GRANT SELECT ON tenants TO crm_app;
+GRANT SELECT, INSERT, UPDATE ON leads TO crm_app;
+GRANT USAGE ON SEQUENCE leads_id_seq TO crm_app;
+
+-- Rows of the tenant named in this transaction&#x27;s app.tenant setting, and no others: for reads, and for writes.
+-- No setting means no rows (current_setting(..., true) is NULL).
+ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE leads FORCE ROW LEVEL SECURITY;
+CREATE POLICY leads_tenant_isolation ON leads
+    USING (tenant_id = current_setting(&#x27;app.tenant&#x27;, true))
+    WITH CHECK (tenant_id = current_setting(&#x27;app.tenant&#x27;, true));</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-5" aria-labelledby="code-5-b" hidden><p class="path">src/main/resources/db/migration/V2__demo_tenants.sql</p><div class="notes"><p>Two companies and their leads, written with each tenant set: the policy applies to migrations too.</p></div><div class="src"><pre class="code"><code class="language-sql">-- Two demo customer companies and their leads (made up). The policy applies to these inserts too: each tenant&#x27;s rows
+-- are written with that tenant set.
+INSERT INTO tenants (id, name) VALUES (&#x27;zestful&#x27;, &#x27;Zestful Foods&#x27;), (&#x27;brightpath&#x27;, &#x27;Brightpath Tutors&#x27;);
+
+SELECT set_config(&#x27;app.tenant&#x27;, &#x27;zestful&#x27;, true);
+INSERT INTO leads (tenant_id, name, email, company, status, owner) VALUES
+    (&#x27;zestful&#x27;, &#x27;Rahul Mehta&#x27;, &#x27;rahul@spicehub.example&#x27;, &#x27;Spice Hub&#x27;, &#x27;QUALIFIED&#x27;, &#x27;ananya&#x27;),
+    (&#x27;zestful&#x27;, &#x27;Leela Thomas&#x27;, &#x27;leela@greenbowl.example&#x27;, &#x27;Green Bowl Cafe&#x27;, &#x27;NEW&#x27;, &#x27;ananya&#x27;);
+
+SELECT set_config(&#x27;app.tenant&#x27;, &#x27;brightpath&#x27;, true);
+INSERT INTO leads (tenant_id, name, email, company, status, owner) VALUES
+    (&#x27;brightpath&#x27;, &#x27;Sunil Rao&#x27;, &#x27;sunil.rao@example.org&#x27;, &#x27;Sunrise School&#x27;, &#x27;CONTACTED&#x27;, &#x27;farhan&#x27;),
+    (&#x27;brightpath&#x27;, &#x27;Rahul Mehta&#x27;, &#x27;rahul@spicehub.example&#x27;, &#x27;Spice Hub&#x27;, &#x27;NEW&#x27;, &#x27;farhan&#x27;);</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-6" aria-labelledby="code-6-b" hidden><p class="path">src/main/resources/application.yaml</p><div class="notes"><p>The database.</p></div><div class="src"><pre class="code"><code class="language-yaml">spring:
+  application:
+    name: taskloom-crm
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:
+    # Production connects as crm_app itself. Here the compose user owns the tables and runs Flyway; every request&#x27;s
+    # transaction switches to crm_app (SET LOCAL ROLE), so the row-level policy applies either way.
+    url: jdbc:postgresql://localhost:5432/crm
+    username: crm
+    password: crm</code></pre></div></div><div class="file-pane" role="tabpanel" id="code-7" aria-labelledby="code-7-b" hidden><p class="path">compose.yaml</p><div class="notes"><p>PostgreSQL 17 for running the app.</p></div><div class="src"><pre class="code"><code class="language-yaml">services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: crm
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: crm
+    ports:
+      - &quot;5432:5432&quot;
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U crm -d crm&quot;]
+      interval: 2s
+      timeout: 3s
+      retries: 20</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-tests" aria-labelledby="tab-tests" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>13. Testing: each required test named, with what it proves</li><li>Real run output</li></ul><p class="rule">The trap test was written first.</p></aside>
+<h2>Required tests for this station</h2>
+<div class="scroll"><table class=""><thead><tr><th>Required by</th><th>Requirement</th><th>Test class</th><th>Result</th></tr></thead><tbody><tr><td>Every station</td><td>HTTP contract: valid, invalid, not found</td><td><code>LeadContractTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Every station</td><td>Reproduce the failure before the fix</td><td><code>TenantLeakTrapTest</code> (2)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Database</td><td>Rollback and constraint tests against a real database</td><td><code>LeadDatabaseTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr><tr><td>Security</td><td>401, 403, another user's data, malicious input</td><td><code>LeadSecurityTest</code> (3)</td><td><span class="pill ok">pass</span></td></tr></tbody></table></div>
+<p class="muted">The database tests run plain SQL as <code>crm_app</code> with no WHERE at all, so they test the policy, not the Java filters. The tests' own connection is a superuser, which is how they set up and inspect every tenant's rows.</p>
+<h2>Run output</h2>
+<p class="muted">JDK 25.0.1, Spring Boot 4.1.1, PostgreSQL 17 in Testcontainers. Nothing skipped. Saved in <code>docs/test-run.txt</code>.</p>
+<pre class="console">[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.taskloom.crm.LeadDatabaseTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.taskloom.crm.LeadContractTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in com.taskloom.crm.LeadSecurityTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in com.taskloom.crm.TenantLeakTrapTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS</pre>
+<h2>Test files</h2>
+<div class="files"><div class="file-list" role="tablist" aria-label="Files"><button class="file-btn" role="tab" id="tests-0-b" aria-controls="tests-0" aria-selected="true" data-group="tests">TenantLeakTrapTest.java</button><button class="file-btn" role="tab" id="tests-1-b" aria-controls="tests-1" aria-selected="false" data-group="tests">LeadContractTest.java</button><button class="file-btn" role="tab" id="tests-2-b" aria-controls="tests-2" aria-selected="false" data-group="tests">LeadSecurityTest.java</button><button class="file-btn" role="tab" id="tests-3-b" aria-controls="tests-3" aria-selected="false" data-group="tests">LeadDatabaseTest.java</button><button class="file-btn" role="tab" id="tests-4-b" aria-controls="tests-4" aria-selected="false" data-group="tests">ApiTest.java</button><button class="file-btn" role="tab" id="tests-5-b" aria-controls="tests-5" aria-selected="false" data-group="tests">PostgresTestConfig.java</button></div><div class="file-body"><div class="file-pane" role="tabpanel" id="tests-0" aria-labelledby="tests-0-b"><p class="path">src/test/java/com/taskloom/crm/TenantLeakTrapTest.java</p><div class="notes"><p>Written first: the old repository and the API.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Ananya works at Zestful Foods. Rahul Mehta is a lead of Zestful&#x27;s and of Brightpath&#x27;s. Written first. */
+class TenantLeakTrapTest extends ApiTest {
+
+    @Autowired
+    TenantScope scope;
+
+    /** The old repository: the tenant came in the request, and one lookup forgot it. Ran as the database owner. */
+    void oldCreate(String tenantFromBody, String email) {
+        jdbc.sql(&quot;INSERT INTO leads (tenant_id, name, email, status, owner) VALUES (?, &#x27;Planted Lead&#x27;, ?, &#x27;NEW&#x27;, &#x27;ananya&#x27;)&quot;)
+                .params(tenantFromBody, email).update();
+    }
+
+    List&lt;String&gt; oldFindByEmail(String email) {
+        return jdbc.sql(&quot;SELECT tenant_id || &#x27;:&#x27; || company FROM leads WHERE email = ? ORDER BY tenant_id&quot;).param(email).query(String.class).list();
+    }
+
+    @Test
+    void theOldCodeTrustedTheBodysTenantAndForgotTheTenantInOneQuery() {
+        oldCreate(&quot;brightpath&quot;, &quot;planted@example.com&quot;);   // Ananya&#x27;s request, a tenant she typed in
+        assertThat(tenantOf(&quot;planted@example.com&quot;)).isEqualTo(&quot;brightpath&quot;);
+        assertThat(oldFindByEmail(&quot;rahul@spicehub.example&quot;)).as(&quot;Ananya sees Brightpath&#x27;s notes on the lead&quot;)
+                .containsExactly(&quot;brightpath:Spice Hub&quot;, &quot;zestful:Spice Hub&quot;);
+    }
+
+    @Test
+    void theApiTakesTheTenantFromTheSignInAndTheDatabaseFiltersWhatACodeForgets() throws Exception {
+        create(&quot;ananya&quot;, &quot;{\&quot;tenantId\&quot;:\&quot;brightpath\&quot;,\&quot;name\&quot;:\&quot;Planted Lead\&quot;,\&quot;email\&quot;:\&quot;planted@example.com\&quot;}&quot;)
+                .andExpect(status().isCreated());
+        assertThat(tenantOf(&quot;planted@example.com&quot;)).isEqualTo(&quot;zestful&quot;);
+
+        list(&quot;ananya&quot;, &quot;?q=rahul&amp;tenant=brightpath&quot;).andExpect(status().isOk())
+                .andExpect(jsonPath(&quot;$.length()&quot;).value(1)).andExpect(jsonPath(&quot;$[0].owner&quot;).value(&quot;ananya&quot;));
+
+        // The same forgetful query as before, but inside a tenant&#x27;s transaction: the policy filters it.
+        List&lt;String&gt; found = scope.run(&quot;zestful&quot;, () -&gt; oldFindByEmail(&quot;rahul@spicehub.example&quot;));
+        assertThat(found).containsExactly(&quot;zestful:Spice Hub&quot;);
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-1" aria-labelledby="tests-1-b" hidden><p class="path">src/test/java/com/taskloom/crm/LeadContractTest.java</p><div class="notes"><p>Listing, creating, bad input.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class LeadContractTest extends ApiTest {
+
+    @Test
+    void aTenantListsAndFiltersItsOwnLeads() throws Exception {
+        list(&quot;ananya&quot;, &quot;&quot;).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.length()&quot;).value(2));
+        list(&quot;ananya&quot;, &quot;?status=QUALIFIED&quot;).andExpect(jsonPath(&quot;$.length()&quot;).value(1)).andExpect(jsonPath(&quot;$[0].name&quot;).value(&quot;Rahul Mehta&quot;));
+        list(&quot;ananya&quot;, &quot;?q=BOWL&quot;).andExpect(jsonPath(&quot;$.length()&quot;).value(1)).andExpect(jsonPath(&quot;$[0].company&quot;).value(&quot;Green Bowl Cafe&quot;));
+        list(&quot;farhan&quot;, &quot;?q=sunrise&quot;).andExpect(jsonPath(&quot;$[0].email&quot;).value(&quot;sunil.rao@example.org&quot;));
+    }
+
+    @Test
+    void aLeadIsCreatedOnceAnEmailPerTenant() throws Exception {
+        var created = create(&quot;ananya&quot;, &quot;{\&quot;name\&quot;:\&quot; Divya Kapoor \&quot;,\&quot;email\&quot;:\&quot;Divya@MasalaBox.example\&quot;,\&quot;company\&quot;:\&quot;Masala Box\&quot;}&quot;)
+                .andExpect(status().isCreated()).andExpect(jsonPath(&quot;$.email&quot;).value(&quot;divya@masalabox.example&quot;))
+                .andExpect(jsonPath(&quot;$.name&quot;).value(&quot;Divya Kapoor&quot;)).andExpect(jsonPath(&quot;$.status&quot;).value(&quot;NEW&quot;))
+                .andExpect(jsonPath(&quot;$.owner&quot;).value(&quot;ananya&quot;));
+        long id = Long.parseLong(created.andReturn().getResponse().getContentAsString().replaceAll(&quot;.*\&quot;id\&quot;:(\\d+).*&quot;, &quot;$1&quot;));
+        created.andExpect(header().string(&quot;Location&quot;, &quot;/leads/&quot; + id));
+        mvc.perform(get(&quot;/leads/{id}&quot;, id).with(httpBasic(&quot;kabir&quot;, &quot;kabir-demo-pass&quot;))).andExpect(status().isOk());
+
+        create(&quot;ananya&quot;, &quot;{\&quot;name\&quot;:\&quot;Divya K\&quot;,\&quot;email\&quot;:\&quot;divya@masalabox.example\&quot;}&quot;).andExpect(status().isConflict())
+                .andExpect(jsonPath(&quot;$.detail&quot;).value(&quot;Your company already has a lead with this email.&quot;));
+        create(&quot;farhan&quot;, &quot;{\&quot;name\&quot;:\&quot;Divya Kapoor\&quot;,\&quot;email\&quot;:\&quot;divya@masalabox.example\&quot;}&quot;).andExpect(status().isCreated());
+    }
+
+    @Test
+    void badInputIs400AndAnUnknownLeadIs404() throws Exception {
+        create(&quot;ananya&quot;, &quot;{\&quot;name\&quot;:\&quot;X\&quot;,\&quot;email\&quot;:\&quot;not-an-email\&quot;}&quot;).andExpect(status().isBadRequest());
+        create(&quot;ananya&quot;, &quot;{\&quot;name\&quot;:\&quot;X\&quot;,\&quot;email\&quot;:\&quot;x@example.com\&quot;,\&quot;status\&quot;:\&quot;WON\&quot;}&quot;).andExpect(status().isBadRequest());
+        create(&quot;ananya&quot;, &quot;{\&quot;email\&quot;:\&quot;x@example.com\&quot;}&quot;).andExpect(status().isBadRequest());
+        list(&quot;ananya&quot;, &quot;?status=WON&quot;).andExpect(status().isBadRequest());
+        list(&quot;ananya&quot;, &quot;?q=&quot; + &quot;a&quot;.repeat(101)).andExpect(status().isBadRequest());
+        mvc.perform(get(&quot;/leads/{id}&quot;, 99999).with(httpBasic(&quot;ananya&quot;, &quot;ananya-demo-pass&quot;))).andExpect(status().isNotFound());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-2" aria-labelledby="tests-2-b" hidden><p class="path">src/test/java/com/taskloom/crm/LeadSecurityTest.java</p><div class="notes"><p>Sign-in, roles, other tenants, hostile search text.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import org.junit.jupiter.api.Test;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class LeadSecurityTest extends ApiTest {
+
+    @Test
+    void noSignInIs401AndAViewerCannotCreate() throws Exception {
+        mvc.perform(get(&quot;/leads&quot;)).andExpect(status().isUnauthorized());
+        mvc.perform(get(&quot;/leads&quot;).with(httpBasic(&quot;ananya&quot;, &quot;wrong&quot;))).andExpect(status().isUnauthorized());
+        create(&quot;kabir&quot;, &quot;{\&quot;name\&quot;:\&quot;X\&quot;,\&quot;email\&quot;:\&quot;x@example.com\&quot;}&quot;).andExpect(status().isForbidden());
+        list(&quot;kabir&quot;, &quot;&quot;).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.length()&quot;).value(2));
+    }
+
+    @Test
+    void anotherTenantsLeadIsNotFoundByIdOrBySearch() throws Exception {
+        long brightpathLead = jdbc.sql(&quot;SELECT id FROM leads WHERE tenant_id = &#x27;brightpath&#x27; AND email = &#x27;sunil.rao@example.org&#x27;&quot;).query(Long.class).single();
+        mvc.perform(get(&quot;/leads/{id}&quot;, brightpathLead).with(httpBasic(&quot;ananya&quot;, &quot;ananya-demo-pass&quot;))).andExpect(status().isNotFound());
+        list(&quot;ananya&quot;, &quot;?q=sunil&quot;).andExpect(jsonPath(&quot;$.length()&quot;).value(0));
+        list(&quot;farhan&quot;, &quot;?q=green&quot;).andExpect(jsonPath(&quot;$.length()&quot;).value(0));
+    }
+
+    @Test
+    void searchTextIsTextNotSqlOrAPattern() throws Exception {
+        searchFor(&quot;ananya&quot;, &quot;%&quot;).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.length()&quot;).value(0));   // a literal %, not &quot;anything&quot;
+        searchFor(&quot;ananya&quot;, &quot;_&quot;).andExpect(jsonPath(&quot;$.length()&quot;).value(0));
+        searchFor(&quot;ananya&quot;, &quot;&#x27; OR &#x27;1&#x27;=&#x27;1&quot;).andExpect(jsonPath(&quot;$.length()&quot;).value(0));
+        searchFor(&quot;ananya&quot;, &quot;x&#x27; OR tenant_id &lt;&gt; &#x27;zestful&quot;).andExpect(jsonPath(&quot;$.length()&quot;).value(0));
+        searchFor(&quot;ananya&quot;, &quot;a&quot;).andExpect(jsonPath(&quot;$.length()&quot;).value(2));   // and ordinary text still finds
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-3" aria-labelledby="tests-3-b" hidden><p class="path">src/test/java/com/taskloom/crm/LeadDatabaseTest.java</p><div class="notes"><p>The policy and the constraints with plain SQL; a rollback.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** The isolation rule in the database itself: plain SQL, as crm_app, no Java filters. */
+class LeadDatabaseTest extends ApiTest {
+
+    @Autowired
+    TenantScope scope;
+    @Autowired
+    TransactionTemplate tx;
+
+    int countAsApp(String tenantOrNull) {
+        return tx.execute(s -&gt; {
+            jdbc.sql(&quot;SET LOCAL ROLE crm_app&quot;).update();
+            if (tenantOrNull != null) {
+                jdbc.sql(&quot;SELECT set_config(&#x27;app.tenant&#x27;, ?, true)&quot;).param(tenantOrNull).query().singleValue();
+            }
+            return jdbc.sql(&quot;SELECT count(*) FROM leads&quot;).query(Integer.class).single();   // no WHERE at all
+        });
+    }
+
+    @Test
+    void thePolicyShowsAndWritesOnlyTheTransactionsTenant() {
+        assertThat(countAsApp(&quot;zestful&quot;)).isEqualTo(2);
+        assertThat(countAsApp(&quot;brightpath&quot;)).isEqualTo(2);
+        assertThat(countAsApp(null)).as(&quot;no tenant set, no rows&quot;).isZero();
+        assertThat(countAsApp(&quot;nobody&quot;)).isZero();
+
+        assertThatThrownBy(() -&gt; scope.run(&quot;zestful&quot;, () -&gt; jdbc.sql(
+                        &quot;INSERT INTO leads (tenant_id, name, email, owner) VALUES (&#x27;brightpath&#x27;, &#x27;X&#x27;, &#x27;x@example.com&#x27;, &#x27;ananya&#x27;)&quot;).update()))
+                .rootCause().hasMessageContaining(&quot;violates row-level security policy&quot;);   // Spring wraps it as &quot;bad SQL grammar&quot;
+        int updated = scope.run(&quot;zestful&quot;, () -&gt; jdbc.sql(&quot;UPDATE leads SET status = &#x27;LOST&#x27; WHERE email = &#x27;sunil.rao@example.org&#x27;&quot;).update());
+        assertThat(updated).as(&quot;Brightpath&#x27;s lead is invisible to Zestful&#x27;s UPDATE&quot;).isZero();
+        assertThatThrownBy(() -&gt; scope.run(&quot;zestful&quot;, () -&gt; jdbc.sql(&quot;DELETE FROM leads&quot;).update()))
+                .rootCause().hasMessageContaining(&quot;permission denied&quot;);   // crm_app was never granted DELETE
+    }
+
+    @Test
+    void theRulesAreNamedConstraints() {
+        assertThatThrownBy(() -&gt; scope.run(&quot;zestful&quot;, () -&gt; jdbc.sql(
+                        &quot;INSERT INTO leads (tenant_id, name, email, owner) VALUES (&#x27;zestful&#x27;, &#x27;X&#x27;, &#x27;rahul@spicehub.example&#x27;, &#x27;ananya&#x27;)&quot;).update()))
+                .hasMessageContaining(&quot;leads_email_unique_per_tenant&quot;);
+        assertThatThrownBy(() -&gt; scope.run(&quot;zestful&quot;, () -&gt; jdbc.sql(
+                        &quot;INSERT INTO leads (tenant_id, name, email, status, owner) VALUES (&#x27;zestful&#x27;, &#x27;X&#x27;, &#x27;y@example.com&#x27;, &#x27;WON&#x27;, &#x27;ananya&#x27;)&quot;).update()))
+                .hasMessageContaining(&quot;leads_status&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO tenants (id, name) VALUES (&#x27;Bad Tenant&#x27;, &#x27;x&#x27;)&quot;).update())
+                .hasMessageContaining(&quot;tenants_id_format&quot;);
+    }
+
+    @Test
+    void theTenantEndsWithItsTransactionAndAFailedWriteLeavesNothing() {
+        assertThatThrownBy(() -&gt; scope.run(&quot;zestful&quot;, () -&gt; {
+            jdbc.sql(&quot;INSERT INTO leads (tenant_id, name, email, owner) VALUES (&#x27;zestful&#x27;, &#x27;A&#x27;, &#x27;a@example.com&#x27;, &#x27;ananya&#x27;)&quot;).update();
+            return jdbc.sql(&quot;INSERT INTO leads (tenant_id, name, email, owner) VALUES (&#x27;zestful&#x27;, &#x27;B&#x27;, &#x27;a@example.com&#x27;, &#x27;ananya&#x27;)&quot;).update();
+        })).hasMessageContaining(&quot;leads_email_unique_per_tenant&quot;);
+        assertThat(tenantOf(&quot;a@example.com&quot;)).as(&quot;rolled back&quot;).isEmpty();
+        // The same pooled connections, a new transaction with nothing set: the last tenant did not stay behind.
+        for (int i = 0; i &lt; 12; i++) {
+            assertThat(countAsApp(null)).isZero();
+        }
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-4" aria-labelledby="tests-4-b" hidden><p class="path">src/test/java/com/taskloom/crm/ApiTest.java</p><div class="notes"><p>Shared setup.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/**
+ * The whole app on a real PostgreSQL. The tests&#x27; own JdbcClient connects as the container&#x27;s superuser, which the
+ * row-level policy does not bind: that is how they look at every tenant&#x27;s rows, and how the old code ran.
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(PostgresTestConfig.class)
+abstract class ApiTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JdbcClient jdbc;
+
+    @BeforeEach
+    void onlyTheDemoLeads() {
+        jdbc.sql(&quot;DELETE FROM leads WHERE id &gt; 4&quot;).update();
+    }
+
+    ResultActions list(String user, String query) throws Exception {
+        return mvc.perform(get(&quot;/leads&quot; + query).with(httpBasic(user, user + &quot;-demo-pass&quot;)));
+    }
+
+    /** GET /leads?q=..., the text sent exactly as given. */
+    ResultActions searchFor(String user, String q) throws Exception {
+        return mvc.perform(get(&quot;/leads&quot;).param(&quot;q&quot;, q).with(httpBasic(user, user + &quot;-demo-pass&quot;)));
+    }
+
+    ResultActions create(String user, String json) throws Exception {
+        return mvc.perform(post(&quot;/leads&quot;).with(httpBasic(user, user + &quot;-demo-pass&quot;)).contentType(MediaType.APPLICATION_JSON).content(json));
+    }
+
+    String tenantOf(String email) {
+        return String.join(&quot;,&quot;, jdbc.sql(&quot;SELECT tenant_id FROM leads WHERE email = ? ORDER BY tenant_id&quot;).param(email).query(String.class).list());
+    }
+}</code></pre></div></div><div class="file-pane" role="tabpanel" id="tests-5" aria-labelledby="tests-5-b" hidden><p class="path">src/test/java/com/taskloom/crm/PostgresTestConfig.java</p><div class="notes"><p>PostgreSQL 17 in Docker via Testcontainers.</p></div><div class="src"><pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+/** A real PostgreSQL 17 in Docker: constraints and row locks behave exactly as in production. */
+@TestConfiguration(proxyBeanMethods = false)
+class PostgresTestConfig {
+
+    @Bean
+    @ServiceConnection
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer(&quot;postgres:17-alpine&quot;);
+    }
+}</code></pre></div></div></div></div></section><section role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>19. Practice challenges with ready tests and hidden solutions</li><li>One design-on-paper task</li></ul><p class="rule">Every challenge test is run against its solution before the station ships.</p></aside>
+<h2>How to do a challenge</h2>
+<ol class="steps">
+<li>Copy the challenge test from <code>challenge/</code> into <code>src/test/java/com/taskloom/crm/</code>.</li>
+<li>Run it and watch it fail: <code>./mvnw test -Dtest=LeadStatusChallengeTest</code> (Docker must be running).</li>
+<li>Change the code until it passes, then run <code>./mvnw test</code> to check the other 11 tests.</li>
+</ol>
+<p class="muted">Checked (<code>docs/challenge-run.txt</code>): with the reference solutions copied in, all 15 tests pass (11 station tests and 4 challenge tests).</p>
+<section class="challenge"><p class="eyebrow">Challenge 1 · Beginner-friendly · about 20 minutes</p><h2>Move a lead along</h2><p>Add <code>PATCH /leads/{id} {status}</code> for salespeople: their company's lead only; another company's id is <code>404</code> and stays unchanged; a viewer gets <code>403</code>.</p><p><b>Done when:</b> both tests in <code>LeadStatusChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li><code>UPDATE ... WHERE tenant_id = ? AND id = ? RETURNING ...</code> inside <code>TenantScope</code>: no row means 404.</li><li>The policy would also make another company's row invisible to the UPDATE: try it without the WHERE.</li></ul></details><p class="path">challenge/LeadStatusChallengeTest.java</p><pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** Challenge 1: PATCH /leads/{id} {status}: a salesperson moves their company&#x27;s lead along; nobody else&#x27;s. */
+class LeadStatusChallengeTest extends ApiTest {
+
+    long id(String tenant, String email) {
+        return jdbc.sql(&quot;SELECT id FROM leads WHERE tenant_id = ? AND email = ?&quot;).params(tenant, email).query(Long.class).single();
+    }
+
+    @Test
+    void aSalespersonChangesTheirOwnLeadsStatus() throws Exception {
+        long lead = id(&quot;zestful&quot;, &quot;leela@greenbowl.example&quot;);
+        mvc.perform(patch(&quot;/leads/{id}&quot;, lead).with(httpBasic(&quot;ananya&quot;, &quot;ananya-demo-pass&quot;)).contentType(MediaType.APPLICATION_JSON)
+                .content(&quot;{\&quot;status\&quot;:\&quot;CONTACTED\&quot;}&quot;)).andExpect(status().isOk()).andExpect(jsonPath(&quot;$.status&quot;).value(&quot;CONTACTED&quot;));
+        mvc.perform(patch(&quot;/leads/{id}&quot;, lead).with(httpBasic(&quot;ananya&quot;, &quot;ananya-demo-pass&quot;)).contentType(MediaType.APPLICATION_JSON)
+                .content(&quot;{\&quot;status\&quot;:\&quot;WON\&quot;}&quot;)).andExpect(status().isBadRequest());
+        mvc.perform(patch(&quot;/leads/{id}&quot;, lead).with(httpBasic(&quot;kabir&quot;, &quot;kabir-demo-pass&quot;)).contentType(MediaType.APPLICATION_JSON)
+                .content(&quot;{\&quot;status\&quot;:\&quot;LOST\&quot;}&quot;)).andExpect(status().isForbidden());
+        jdbc.sql(&quot;UPDATE leads SET status = &#x27;NEW&#x27; WHERE id = ?&quot;).param(lead).update();
+    }
+
+    @Test
+    void anotherTenantsLeadIsNotFoundAndUnchanged() throws Exception {
+        long theirs = id(&quot;brightpath&quot;, &quot;sunil.rao@example.org&quot;);
+        mvc.perform(patch(&quot;/leads/{id}&quot;, theirs).with(httpBasic(&quot;ananya&quot;, &quot;ananya-demo-pass&quot;)).contentType(MediaType.APPLICATION_JSON)
+                .content(&quot;{\&quot;status\&quot;:\&quot;LOST\&quot;}&quot;)).andExpect(status().isNotFound());
+        assertThat(jdbc.sql(&quot;SELECT status FROM leads WHERE id = ?&quot;).param(theirs).query(String.class).single()).isEqualTo(&quot;CONTACTED&quot;);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/LeadController.java</p><div class="src"><pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.util.List;
+import java.util.Locale;
+
+/** The tenant always comes from the sign-in. A tenant in the body or the query string is not read. */
+@RestController
+class LeadController {
+
+    static final String STATUSES = &quot;NEW|CONTACTED|QUALIFIED|LOST&quot;;
+
+    record NewLead(@NotBlank @Size(max = 100) String name, @NotBlank @Email @Size(max = 254) String email,
+                   @Size(max = 100) String company, @Pattern(regexp = STATUSES) String status) {
+    }
+
+    record StatusChange(@NotBlank @Pattern(regexp = STATUSES) String status) {
+    }
+
+    record NewNote(@NotBlank @Size(max = 1000) String text) {
+    }
+
+    private final Leads leads;
+
+    LeadController(Leads leads) {
+        this.leads = leads;
+    }
+
+    @GetMapping(&quot;/leads&quot;)
+    List&lt;Leads.Lead&gt; search(Authentication user, @RequestParam(required = false) @Pattern(regexp = STATUSES) String status,
+                            @RequestParam(required = false) @Size(min = 1, max = 100) String q) {
+        return leads.search(SecurityConfig.tenant(user), status, q);
+    }
+
+    @GetMapping(&quot;/leads/{id}&quot;)
+    Leads.Lead lead(Authentication user, @PathVariable long id) {
+        return leads.find(SecurityConfig.tenant(user), id).orElseThrow(() -&gt; new ErrorResponseException(HttpStatus.NOT_FOUND));
+    }
+
+    @PostMapping(&quot;/leads&quot;)
+    ResponseEntity&lt;Leads.Lead&gt; create(Authentication user, @Valid @RequestBody NewLead body) {
+        Leads.Lead lead = leads.create(SecurityConfig.tenant(user), body.name().strip(), body.email().strip().toLowerCase(Locale.ROOT),
+                body.company() == null || body.company().isBlank() ? null : body.company().strip(),
+                body.status() == null ? &quot;NEW&quot; : body.status(), user.getName());
+        return ResponseEntity.created(URI.create(&quot;/leads/&quot; + lead.id())).body(lead);
+    }
+
+    @PatchMapping(&quot;/leads/{id}&quot;)
+    Leads.Lead changeStatus(Authentication user, @PathVariable long id, @Valid @RequestBody StatusChange body) {
+        return leads.updateStatus(SecurityConfig.tenant(user), id, body.status()).orElseThrow(() -&gt; new ErrorResponseException(HttpStatus.NOT_FOUND));
+    }
+
+    @PostMapping(&quot;/leads/{id}/notes&quot;)
+    ResponseEntity&lt;Leads.Note&gt; addNote(Authentication user, @PathVariable long id, @Valid @RequestBody NewNote body) {
+        Leads.Note note = leads.addNote(SecurityConfig.tenant(user), id, user.getName(), body.text().strip())
+                .orElseThrow(() -&gt; new ErrorResponseException(HttpStatus.NOT_FOUND));
+        return ResponseEntity.status(HttpStatus.CREATED).body(note);
+    }
+
+    @ExceptionHandler(Leads.EmailTaken.class)
+    ProblemDetail emailTaken() {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, &quot;Your company already has a lead with this email.&quot;);
+    }
+}</code></pre></div><p class="path">challenge/solution/Leads.java</p><div class="src"><pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Leads, always of one tenant. Every query says WHERE tenant_id = :tenant itself, and runs inside TenantScope, where the
+ * database&#x27;s policy filters by the same tenant underneath: forgetting one does not leak, it returns nothing.
+ */
+@Component
+class Leads {
+
+    record Lead(long id, String name, String email, String company, String status, String owner, Instant createdAt) {
+    }
+
+    record Note(long id, long leadId, String author, String text, Instant createdAt) {
+    }
+
+    static final class EmailTaken extends RuntimeException {
+    }
+
+    private static final String COLUMNS = &quot;id, name, email, company, status, owner, created_at&quot;;
+    private final JdbcClient jdbc;
+    private final TenantScope scope;
+
+    Leads(JdbcClient jdbc, TenantScope scope) {
+        this.jdbc = jdbc;
+        this.scope = scope;
+    }
+
+    /** At most 50, newest first. query matches name, company or email; its % and _ are plain characters. */
+    List&lt;Lead&gt; search(String tenant, String status, String query) {
+        String like = query == null ? null : &quot;%&quot; + query.replace(&quot;\\&quot;, &quot;\\\\&quot;).replace(&quot;%&quot;, &quot;\\%&quot;).replace(&quot;_&quot;, &quot;\\_&quot;) + &quot;%&quot;;
+        return scope.run(tenant, () -&gt; jdbc.sql(&quot;SELECT &quot; + COLUMNS + &quot; FROM leads WHERE tenant_id = :tenant&quot;
+                        + &quot; AND (CAST(:status AS TEXT) IS NULL OR status = :status)&quot;
+                        + &quot; AND (CAST(:like AS TEXT) IS NULL OR name ILIKE :like OR company ILIKE :like OR email ILIKE :like)&quot;
+                        + &quot; ORDER BY created_at DESC, id DESC LIMIT 50&quot;)
+                .param(&quot;tenant&quot;, tenant).param(&quot;status&quot;, status).param(&quot;like&quot;, like).query(Lead.class).list());
+    }
+
+    Optional&lt;Lead&gt; find(String tenant, long id) {
+        return scope.run(tenant, () -&gt; jdbc.sql(&quot;SELECT &quot; + COLUMNS + &quot; FROM leads WHERE tenant_id = ? AND id = ?&quot;)
+                .params(tenant, id).query(Lead.class).optional());
+    }
+
+    Optional&lt;Lead&gt; updateStatus(String tenant, long id, String status) {
+        return scope.run(tenant, () -&gt; jdbc.sql(&quot;UPDATE leads SET status = ? WHERE tenant_id = ? AND id = ? RETURNING &quot; + COLUMNS)
+                .params(status, tenant, id).query(Lead.class).optional());
+    }
+
+    /** Empty when the lead is not this tenant&#x27;s: the same as a lead that does not exist. */
+    Optional&lt;Note&gt; addNote(String tenant, long leadId, String author, String text) {
+        return scope.run(tenant, () -&gt; jdbc.sql(&quot;SELECT count(*) FROM leads WHERE tenant_id = ? AND id = ?&quot;).params(tenant, leadId)
+                .query(Integer.class).single() == 0 ? Optional.&lt;Note&gt;empty()
+                : Optional.of(jdbc.sql(&quot;INSERT INTO lead_notes (tenant_id, lead_id, author, text) VALUES (?, ?, ?, ?) RETURNING id, lead_id, author, text, created_at&quot;)
+                        .params(tenant, leadId, author, text).query(Note.class).single()));
+    }
+
+    Lead create(String tenant, String name, String email, String company, String status, String owner) {
+        try {
+            return scope.run(tenant, () -&gt; jdbc.sql(&quot;INSERT INTO leads (tenant_id, name, email, company, status, owner) VALUES (?, ?, ?, ?, ?, ?) RETURNING &quot; + COLUMNS)
+                    .params(tenant, name, email, company, status, owner).query(Lead.class).single());
+        } catch (DuplicateKeyException e) {
+            throw new EmailTaken();
+        }
+    }
+}</code></pre></div><p class="path">challenge/solution/SecurityConfig.java</p><div class="src"><pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+class SecurityConfig {
+
+    private static final String TENANT = &quot;TENANT_&quot;;
+
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, ProblemResponses problems) throws Exception {
+        http.authorizeHttpRequests(a -&gt; a
+                        .requestMatchers(HttpMethod.GET, &quot;/leads&quot;, &quot;/leads/*&quot;).hasAnyRole(&quot;SALES&quot;, &quot;VIEWER&quot;)
+                        .requestMatchers(HttpMethod.POST, &quot;/leads&quot;, &quot;/leads/*/notes&quot;).hasRole(&quot;SALES&quot;)
+                        .requestMatchers(HttpMethod.PATCH, &quot;/leads/*&quot;).hasRole(&quot;SALES&quot;)
+                        .requestMatchers(&quot;/error&quot;).permitAll()
+                        .anyRequest().denyAll())
+                .httpBasic(b -&gt; b.authenticationEntryPoint(problems::unauthenticated))
+                .exceptionHandling(x -&gt; x.authenticationEntryPoint(problems::unauthenticated).accessDeniedHandler(problems::forbidden))
+                .sessionManagement(s -&gt; s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(csrf -&gt; csrf.disable());   // credentials in a header with every request, no cookie a browser sends by itself
+        return http.build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+
+    /**
+     * Demo users, password &quot;name-demo-pass&quot;: ananya (sales) and kabir (viewer) at Zestful Foods, farhan (sales) at
+     * Brightpath Tutors. The tenant is part of the sign-in; nothing in a request can change it.
+     * shortcut: a fixed list; with a real identity provider the tenant is a claim in the signed token.
+     */
+    @Bean
+    InMemoryUserDetailsManager users(PasswordEncoder encoder) {
+        return new InMemoryUserDetailsManager(user(encoder, &quot;ananya&quot;, &quot;zestful&quot;, &quot;SALES&quot;), user(encoder, &quot;kabir&quot;, &quot;zestful&quot;, &quot;VIEWER&quot;),
+                user(encoder, &quot;farhan&quot;, &quot;brightpath&quot;, &quot;SALES&quot;));
+    }
+
+    private static UserDetails user(PasswordEncoder encoder, String name, String tenant, String role) {
+        return User.withUsername(name).password(encoder.encode(name + &quot;-demo-pass&quot;)).authorities(&quot;ROLE_&quot; + role, TENANT + tenant).build();
+    }
+
+    static String tenant(Authentication user) {
+        return user.getAuthorities().stream().map(GrantedAuthority::getAuthority).filter(a -&gt; a.startsWith(TENANT))
+                .map(a -&gt; a.substring(TENANT.length())).findFirst().orElseThrow();
+    }
+}</code></pre></div></details></section><section class="challenge"><p class="eyebrow">Challenge 2 · Go deeper · about 35 minutes</p><h2>Notes that cannot cross</h2><p>Add notes: <code>POST /leads/{id}/notes {text}</code>. In a new table, with the database guaranteeing a note's tenant is its lead's tenant (<code>lead_notes_lead_of_same_tenant</code>) and the same row-level policy as leads.</p><p><b>Done when:</b> both tests in <code>LeadNotesChallengeTest</code> pass.</p><details class="qa"><summary>Hints</summary><ul><li>A foreign key on two columns, <code>(lead_id, tenant_id)</code>, needs a UNIQUE on <code>leads (id, tenant_id)</code>.</li><li>New tables need their own GRANTs, ENABLE and FORCE, and policy: nothing is inherited.</li><li>A migration of its own: <code>V3__lead_notes.sql</code>.</li></ul></details><p class="path">challenge/LeadNotesChallengeTest.java</p><pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Challenge 2: notes on a lead, in a new table. The note&#x27;s tenant must be its lead&#x27;s tenant, in the database: a
+ * foreign key on (lead_id, tenant_id), and the same row-level policy as leads.
+ */
+class LeadNotesChallengeTest extends ApiTest {
+
+    @BeforeEach
+    void noNotes() {
+        jdbc.sql(&quot;DELETE FROM lead_notes&quot;).update();
+    }
+
+    long id(String tenant, String email) {
+        return jdbc.sql(&quot;SELECT id FROM leads WHERE tenant_id = ? AND email = ?&quot;).params(tenant, email).query(Long.class).single();
+    }
+
+    @Test
+    void aNoteGoesOnYourOwnLeadOnly() throws Exception {
+        mvc.perform(post(&quot;/leads/{id}/notes&quot;, id(&quot;zestful&quot;, &quot;rahul@spicehub.example&quot;)).with(httpBasic(&quot;ananya&quot;, &quot;ananya-demo-pass&quot;))
+                        .contentType(MediaType.APPLICATION_JSON).content(&quot;{\&quot;text\&quot;:\&quot;Wants a tasting for 40 people in November.\&quot;}&quot;))
+                .andExpect(status().isCreated()).andExpect(jsonPath(&quot;$.author&quot;).value(&quot;ananya&quot;));
+        mvc.perform(post(&quot;/leads/{id}/notes&quot;, id(&quot;brightpath&quot;, &quot;rahul@spicehub.example&quot;)).with(httpBasic(&quot;ananya&quot;, &quot;ananya-demo-pass&quot;))
+                        .contentType(MediaType.APPLICATION_JSON).content(&quot;{\&quot;text\&quot;:\&quot;Hello\&quot;}&quot;))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void theDatabaseRefusesANoteWhoseTenantIsNotItsLeads() {
+        long theirs = id(&quot;brightpath&quot;, &quot;sunil.rao@example.org&quot;);
+        assertThatThrownBy(() -&gt; jdbc.sql(&quot;INSERT INTO lead_notes (tenant_id, lead_id, author, text) VALUES (&#x27;zestful&#x27;, ?, &#x27;ananya&#x27;, &#x27;x&#x27;)&quot;)
+                .param(theirs).update()).hasMessageContaining(&quot;lead_notes_lead_of_same_tenant&quot;);
+    }
+}</code></pre><details class="qa solution"><summary>Solution (open after trying)</summary><p class="path">challenge/solution/V3__lead_notes.sql</p><div class="src"><pre class="code"><code class="language-sql">-- Challenge 2: notes on leads. A note&#x27;s tenant must be its lead&#x27;s tenant: a foreign key on both columns.
+ALTER TABLE leads ADD CONSTRAINT leads_id_tenant_unique UNIQUE (id, tenant_id);
+
+CREATE TABLE lead_notes (
+    id         BIGSERIAL PRIMARY KEY,
+    tenant_id  TEXT NOT NULL,
+    lead_id    BIGINT NOT NULL,
+    author     TEXT NOT NULL,
+    text       VARCHAR(1000) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT lead_notes_lead_of_same_tenant FOREIGN KEY (lead_id, tenant_id) REFERENCES leads (id, tenant_id)
+);
+GRANT SELECT, INSERT ON lead_notes TO crm_app;
+GRANT USAGE ON SEQUENCE lead_notes_id_seq TO crm_app;
+ALTER TABLE lead_notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lead_notes FORCE ROW LEVEL SECURITY;
+CREATE POLICY lead_notes_tenant_isolation ON lead_notes
+    USING (tenant_id = current_setting(&#x27;app.tenant&#x27;, true))
+    WITH CHECK (tenant_id = current_setting(&#x27;app.tenant&#x27;, true));</code></pre></div><p class="path">challenge/solution/Leads.java</p><div class="src"><pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Leads, always of one tenant. Every query says WHERE tenant_id = :tenant itself, and runs inside TenantScope, where the
+ * database&#x27;s policy filters by the same tenant underneath: forgetting one does not leak, it returns nothing.
+ */
+@Component
+class Leads {
+
+    record Lead(long id, String name, String email, String company, String status, String owner, Instant createdAt) {
+    }
+
+    record Note(long id, long leadId, String author, String text, Instant createdAt) {
+    }
+
+    static final class EmailTaken extends RuntimeException {
+    }
+
+    private static final String COLUMNS = &quot;id, name, email, company, status, owner, created_at&quot;;
+    private final JdbcClient jdbc;
+    private final TenantScope scope;
+
+    Leads(JdbcClient jdbc, TenantScope scope) {
+        this.jdbc = jdbc;
+        this.scope = scope;
+    }
+
+    /** At most 50, newest first. query matches name, company or email; its % and _ are plain characters. */
+    List&lt;Lead&gt; search(String tenant, String status, String query) {
+        String like = query == null ? null : &quot;%&quot; + query.replace(&quot;\\&quot;, &quot;\\\\&quot;).replace(&quot;%&quot;, &quot;\\%&quot;).replace(&quot;_&quot;, &quot;\\_&quot;) + &quot;%&quot;;
+        return scope.run(tenant, () -&gt; jdbc.sql(&quot;SELECT &quot; + COLUMNS + &quot; FROM leads WHERE tenant_id = :tenant&quot;
+                        + &quot; AND (CAST(:status AS TEXT) IS NULL OR status = :status)&quot;
+                        + &quot; AND (CAST(:like AS TEXT) IS NULL OR name ILIKE :like OR company ILIKE :like OR email ILIKE :like)&quot;
+                        + &quot; ORDER BY created_at DESC, id DESC LIMIT 50&quot;)
+                .param(&quot;tenant&quot;, tenant).param(&quot;status&quot;, status).param(&quot;like&quot;, like).query(Lead.class).list());
+    }
+
+    Optional&lt;Lead&gt; find(String tenant, long id) {
+        return scope.run(tenant, () -&gt; jdbc.sql(&quot;SELECT &quot; + COLUMNS + &quot; FROM leads WHERE tenant_id = ? AND id = ?&quot;)
+                .params(tenant, id).query(Lead.class).optional());
+    }
+
+    Optional&lt;Lead&gt; updateStatus(String tenant, long id, String status) {
+        return scope.run(tenant, () -&gt; jdbc.sql(&quot;UPDATE leads SET status = ? WHERE tenant_id = ? AND id = ? RETURNING &quot; + COLUMNS)
+                .params(status, tenant, id).query(Lead.class).optional());
+    }
+
+    /** Empty when the lead is not this tenant&#x27;s: the same as a lead that does not exist. */
+    Optional&lt;Note&gt; addNote(String tenant, long leadId, String author, String text) {
+        return scope.run(tenant, () -&gt; jdbc.sql(&quot;SELECT count(*) FROM leads WHERE tenant_id = ? AND id = ?&quot;).params(tenant, leadId)
+                .query(Integer.class).single() == 0 ? Optional.&lt;Note&gt;empty()
+                : Optional.of(jdbc.sql(&quot;INSERT INTO lead_notes (tenant_id, lead_id, author, text) VALUES (?, ?, ?, ?) RETURNING id, lead_id, author, text, created_at&quot;)
+                        .params(tenant, leadId, author, text).query(Note.class).single()));
+    }
+
+    Lead create(String tenant, String name, String email, String company, String status, String owner) {
+        try {
+            return scope.run(tenant, () -&gt; jdbc.sql(&quot;INSERT INTO leads (tenant_id, name, email, company, status, owner) VALUES (?, ?, ?, ?, ?, ?) RETURNING &quot; + COLUMNS)
+                    .params(tenant, name, email, company, status, owner).query(Lead.class).single());
+        } catch (DuplicateKeyException e) {
+            throw new EmailTaken();
+        }
+    }
+}</code></pre></div><p class="path">challenge/solution/LeadController.java</p><div class="src"><pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.util.List;
+import java.util.Locale;
+
+/** The tenant always comes from the sign-in. A tenant in the body or the query string is not read. */
+@RestController
+class LeadController {
+
+    static final String STATUSES = &quot;NEW|CONTACTED|QUALIFIED|LOST&quot;;
+
+    record NewLead(@NotBlank @Size(max = 100) String name, @NotBlank @Email @Size(max = 254) String email,
+                   @Size(max = 100) String company, @Pattern(regexp = STATUSES) String status) {
+    }
+
+    record StatusChange(@NotBlank @Pattern(regexp = STATUSES) String status) {
+    }
+
+    record NewNote(@NotBlank @Size(max = 1000) String text) {
+    }
+
+    private final Leads leads;
+
+    LeadController(Leads leads) {
+        this.leads = leads;
+    }
+
+    @GetMapping(&quot;/leads&quot;)
+    List&lt;Leads.Lead&gt; search(Authentication user, @RequestParam(required = false) @Pattern(regexp = STATUSES) String status,
+                            @RequestParam(required = false) @Size(min = 1, max = 100) String q) {
+        return leads.search(SecurityConfig.tenant(user), status, q);
+    }
+
+    @GetMapping(&quot;/leads/{id}&quot;)
+    Leads.Lead lead(Authentication user, @PathVariable long id) {
+        return leads.find(SecurityConfig.tenant(user), id).orElseThrow(() -&gt; new ErrorResponseException(HttpStatus.NOT_FOUND));
+    }
+
+    @PostMapping(&quot;/leads&quot;)
+    ResponseEntity&lt;Leads.Lead&gt; create(Authentication user, @Valid @RequestBody NewLead body) {
+        Leads.Lead lead = leads.create(SecurityConfig.tenant(user), body.name().strip(), body.email().strip().toLowerCase(Locale.ROOT),
+                body.company() == null || body.company().isBlank() ? null : body.company().strip(),
+                body.status() == null ? &quot;NEW&quot; : body.status(), user.getName());
+        return ResponseEntity.created(URI.create(&quot;/leads/&quot; + lead.id())).body(lead);
+    }
+
+    @PatchMapping(&quot;/leads/{id}&quot;)
+    Leads.Lead changeStatus(Authentication user, @PathVariable long id, @Valid @RequestBody StatusChange body) {
+        return leads.updateStatus(SecurityConfig.tenant(user), id, body.status()).orElseThrow(() -&gt; new ErrorResponseException(HttpStatus.NOT_FOUND));
+    }
+
+    @PostMapping(&quot;/leads/{id}/notes&quot;)
+    ResponseEntity&lt;Leads.Note&gt; addNote(Authentication user, @PathVariable long id, @Valid @RequestBody NewNote body) {
+        Leads.Note note = leads.addNote(SecurityConfig.tenant(user), id, user.getName(), body.text().strip())
+                .orElseThrow(() -&gt; new ErrorResponseException(HttpStatus.NOT_FOUND));
+        return ResponseEntity.status(HttpStatus.CREATED).body(note);
+    }
+
+    @ExceptionHandler(Leads.EmailTaken.class)
+    ProblemDetail emailTaken() {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, &quot;Your company already has a lead with this email.&quot;);
+    }
+}</code></pre></div></details></section>
+<section class="challenge"><p class="eyebrow">Challenge 3 · design on paper, no code</p>
+<h2>"We want our own database"</h2>
+<p>A large customer asks for its data in a separate database, in a region of its choice. Compare shared tables (this station), a schema per tenant and a database per tenant for this customer and for the hundreds of small ones: isolation, migrations, backups and restores of one tenant, cost, and how the application picks the right connection. Which would you offer, and at what price point?</p>
+</section>
+</section><section role="tabpanel" id="panel-design" aria-labelledby="tab-design" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>8. Implementation approach</li><li>9. Design alternatives and trade-offs</li><li>12. Database design: tables, constraints, transaction boundary</li></ul><p class="rule">The learner decides the design here, before opening the Code tab.</p></aside>
+<h2>Implementation approach</h2>
+<ol class="steps">
+<li>Write the trap test: the old repository's two mistakes.</li>
+<li>Take the tenant from the sign-in; drop it from every request shape.</li>
+<li>Filter every query; add the policy, FORCE'd, with a non-owner role.</li>
+<li>Test the policy with SQL that has no WHERE.</li>
+</ol>
+<h2>Design alternatives and trade-offs</h2>
+<div class="scroll"><table class=""><thead><tr><th>Model</th><th>Isolation</th><th>Cost and effort</th><th>Verdict</th></tr></thead><tbody><tr><td>Shared tables + tenant column + row-level security</td><td>Good, with two guards</td><td>Cheapest; one schema to migrate</td><td><span class="pill ok">Chosen</span></td></tr><tr><td>Shared tables + tenant column only</td><td>One forgotten WHERE from a leak</td><td>Cheapest</td><td><span class="pill bad">The trap</span></td></tr><tr><td>Schema per tenant</td><td>Strong; search_path must be right</td><td>Migrations per schema; hundreds of schemas</td><td><span class="pill warn">Mid-size customers</span></td></tr><tr><td>Database per tenant</td><td>Strongest; separate backups and regions</td><td>Most expensive; connection per tenant</td><td><span class="pill warn">Large customers</span></td></tr><tr><td>Tenant from the request</td><td>None</td><td>None</td><td><span class="pill bad">Never</span></td></tr></tbody></table></div>
+<h2>Database design</h2>
+<div class="scroll"><table class=""><thead><tr><th>Object</th><th>What</th><th>Why</th></tr></thead><tbody><tr><td><code>leads_tenant_isolation</code></td><td>Policy: USING and WITH CHECK <code>tenant_id = current_setting('app.tenant', true)</code></td><td>Reads and writes of the transaction's tenant only; no setting, no rows.</td></tr><tr><td><code>FORCE ROW LEVEL SECURITY</code></td><td>The policy binds the table owner too</td><td>Only superusers and BYPASSRLS roles skip it.</td></tr><tr><td><code>crm_app</code></td><td>SELECT, INSERT, UPDATE; no DELETE</td><td>The application cannot delete leads at all.</td></tr><tr><td><code>leads_email_unique_per_tenant</code></td><td>UNIQUE (tenant_id, email)</td><td>Once per company, not across companies.</td></tr><tr><td><code>leads_status</code>, <code>tenants_id_format</code></td><td>CHECKs</td><td>Known states; clean tenant ids.</td></tr></tbody></table></div>
+<p><strong>Transaction boundaries:</strong> every request's database work is one transaction that starts with the role and the tenant (both LOCAL), so neither outlives it.</p>
+<pre class="code"><code class="language-sql">-- Every row belongs to one tenant (one Taskloom customer company). Shared tables, a tenant_id column, and the
+-- database itself filtering by it (row-level security) under whatever the application forgets.
+CREATE TABLE tenants (
+    id   TEXT PRIMARY KEY CONSTRAINT tenants_id_format CHECK (id ~ &#x27;^[a-z][a-z0-9-]{1,30}$&#x27;),
+    name TEXT NOT NULL
+);
+
+CREATE TABLE leads (
+    id         BIGSERIAL PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants (id),
+    name       VARCHAR(100) NOT NULL,
+    email      VARCHAR(254) NOT NULL,
+    company    VARCHAR(100),
+    status     TEXT NOT NULL DEFAULT &#x27;NEW&#x27; CONSTRAINT leads_status CHECK (status IN (&#x27;NEW&#x27;, &#x27;CONTACTED&#x27;, &#x27;QUALIFIED&#x27;, &#x27;LOST&#x27;)),
+    owner      TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- The same person may be a lead of two companies; within one company, once.
+    CONSTRAINT leads_email_unique_per_tenant UNIQUE (tenant_id, email)
+);
+CREATE INDEX leads_by_tenant ON leads (tenant_id, created_at DESC);
+
+-- The role the application works as. Not the owner and not a superuser, so the policy below applies to it.
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = &#x27;crm_app&#x27;) THEN
+        CREATE ROLE crm_app LOGIN PASSWORD &#x27;crm_app&#x27;;
+    END IF;
+END $$;
+GRANT SELECT ON tenants TO crm_app;
+GRANT SELECT, INSERT, UPDATE ON leads TO crm_app;
+GRANT USAGE ON SEQUENCE leads_id_seq TO crm_app;
+
+-- Rows of the tenant named in this transaction&#x27;s app.tenant setting, and no others: for reads, and for writes.
+-- No setting means no rows (current_setting(..., true) is NULL).
+ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE leads FORCE ROW LEVEL SECURITY;
+CREATE POLICY leads_tenant_isolation ON leads
+    USING (tenant_id = current_setting(&#x27;app.tenant&#x27;, true))
+    WITH CHECK (tenant_id = current_setting(&#x27;app.tenant&#x27;, true));</code></pre></section><section role="tabpanel" id="panel-production" aria-labelledby="tab-production" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>14. Operations: metric, alert, rollback, runbook, failure drill</li><li>15. Real-world considerations</li></ul><p class="rule">What changes when this runs for real.</p></aside>
+<h2>Real-world considerations</h2>
+<dl class="facts">
+<dt>Connection role</dt><dd>Connect as <code>crm_app</code>; run migrations as the owner. Never give the application role BYPASSRLS.</dd>
+<dt>Support access</dt><dd>When staff must see a customer's data, use a separate tool that sets the tenant from an approved, logged support ticket, never a parameter on the customer API.</dd>
+<dt>Every new table</dt><dd>Needs its tenant column, its policy and its isolation test. A check in CI that lists tables without a policy catches the one that was forgotten.</dd>
+<dt>Caches and search indexes</dt><dd>Anything outside the database (caches, search, exports, logs) needs the tenant in its key too; the policy does not reach there.</dd>
+<dt>Performance</dt><dd>The policy adds a condition the planner uses with <code>leads_by_tenant</code>; check plans on the largest tenant.</dd>
+</dl>
+</section><section role="tabpanel" id="panel-interview" aria-labelledby="tab-interview" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>16. Interview takeaways</li><li>17. Self-check rubric</li></ul><p class="rule">Answers are hidden until opened, so the learner tries first.</p></aside>
+<h2>Interview takeaways</h2>
+<details class="qa"><summary>Where should the tenant id come from?</summary><p>From the authenticated identity (a claim in the token, or the user&#x27;s account), never from the body, path or query.</p></details><details class="qa"><summary>What is row-level security in PostgreSQL?</summary><p>Policies on a table that add a condition to every query and write; with FORCE, they bind the owner too. Superusers and BYPASSRLS roles skip them.</p></details><details class="qa"><summary>How do you pass the tenant to the database safely with a pool?</summary><p>SET LOCAL / set_config(..., true) inside the transaction, so it ends with the transaction.</p></details><details class="qa"><summary>Shared tables, schema per tenant or database per tenant?</summary><p>Shared tables for many small tenants; schemas or databases where isolation, regions or per-tenant restores matter enough to pay for.</p></details><details class="qa"><summary>How do you test isolation?</summary><p>Sign in as one tenant and try every way to reach another&#x27;s data, and run SQL without WHERE as the app role.</p></details><details class="qa"><summary>Why return 404, not 403, for another tenant&#x27;s id?</summary><p>403 confirms the id exists; 404 tells nothing.</p></details>
+<h2>Self-check rubric</h2>
+<div class="scroll"><table class=""><thead><tr><th>Area</th><th>Meets the bar</th><th>Above the bar</th></tr></thead><tbody><tr><td>Correctness</td><td>All 11 tests pass.</td><td>You ran the flawed version and explained each failure.</td></tr><tr><td>Tenant source</td><td>From the sign-in.</td><td>No request field can name a tenant, and a test proves it.</td></tr><tr><td>Isolation</td><td>WHERE on every query.</td><td>A FORCE'd policy under it, a non-owner role, and SQL tests without WHERE.</td></tr><tr><td>Tenancy models</td><td>Knows shared tables.</td><td>Can argue schema or database per tenant for a given customer.</td></tr></tbody></table></div></section><section role="tabpanel" id="panel-review" aria-labelledby="tab-review" class="panel" hidden><aside class="belongs"><p class="eyebrow">Belongs in this tab</p><ul><li>18. Reviewer view: a flawed version to find and fix, with the reasoning</li></ul><p class="rule">Real code review practice. The flawed version is run against the same tests, and the real failures are shown.</p></aside>
+<h2>The pull request</h2>
+<p>A teammate "simplifies" the scope and adds a support feature: "the WHERE clauses already isolate tenants, and support needs to switch companies". Read both files and list every problem before opening the findings.</p>
+<p class="path">review/TenantScope.java</p>
+<pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.function.Supplier;
+
+/**
+ * Runs work in a transaction with app.tenant set. Switching roles is not needed: every query in Leads already says
+ * WHERE tenant_id = :tenant.
+ */
+@Component
+class TenantScope {
+
+    private final JdbcClient jdbc;
+    private final TransactionTemplate tx;
+
+    TenantScope(JdbcClient jdbc, TransactionTemplate tx) {
+        this.jdbc = jdbc;
+        this.tx = tx;
+    }
+
+    &lt;T&gt; T run(String tenant, Supplier&lt;T&gt; work) {
+        return tx.execute(status -&gt; {
+            jdbc.sql(&quot;SELECT set_config(&#x27;app.tenant&#x27;, ?, true)&quot;).param(tenant).query().singleValue();
+            return work.get();
+        });
+    }
+}</code></pre>
+<p class="path">review/LeadController.java</p>
+<pre class="code"><code class="language-java">package com.taskloom.crm;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.util.List;
+import java.util.Locale;
+
+/** The tenant comes from the sign-in, or from ?tenant= when someone needs another company&#x27;s view. */
+@RestController
+class LeadController {
+
+    static final String STATUSES = &quot;NEW|CONTACTED|QUALIFIED|LOST&quot;;
+
+    record NewLead(@NotBlank @Size(max = 100) String name, @NotBlank @Email @Size(max = 254) String email,
+                   @Size(max = 100) String company, @Pattern(regexp = STATUSES) String status) {
+    }
+
+    private final Leads leads;
+
+    LeadController(Leads leads) {
+        this.leads = leads;
+    }
+
+    @GetMapping(&quot;/leads&quot;)
+    List&lt;Leads.Lead&gt; search(Authentication user, @RequestParam(required = false) @Pattern(regexp = STATUSES) String status,
+                            @RequestParam(required = false) @Size(min = 1, max = 100) String q,
+                            @RequestParam(required = false) String tenant) {
+        // Support staff look at customers&#x27; CRMs: ?tenant= lets them switch company; everyone else gets their own.
+        return leads.search(tenant != null ? tenant : SecurityConfig.tenant(user), status, q);
+    }
+
+    @GetMapping(&quot;/leads/{id}&quot;)
+    Leads.Lead lead(Authentication user, @PathVariable long id) {
+        return leads.find(SecurityConfig.tenant(user), id).orElseThrow(() -&gt; new ErrorResponseException(HttpStatus.NOT_FOUND));
+    }
+
+    @PostMapping(&quot;/leads&quot;)
+    ResponseEntity&lt;Leads.Lead&gt; create(Authentication user, @Valid @RequestBody NewLead body) {
+        Leads.Lead lead = leads.create(SecurityConfig.tenant(user), body.name().strip(), body.email().strip().toLowerCase(Locale.ROOT),
+                body.company() == null || body.company().isBlank() ? null : body.company().strip(),
+                body.status() == null ? &quot;NEW&quot; : body.status(), user.getName());
+        return ResponseEntity.created(URI.create(&quot;/leads/&quot; + lead.id())).body(lead);
+    }
+
+    @ExceptionHandler(Leads.EmailTaken.class)
+    ProblemDetail emailTaken() {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, &quot;Your company already has a lead with this email.&quot;);
+    }
+}</code></pre>
+<h2>Findings</h2>
+<details class="finding"><summary><span class="sev">1</span>The policy switched off without anyone noticing</summary><p>"Switching roles is not needed: every query already says WHERE tenant_id": the connection is the owner's, which the policy does not bind, so the second guard is gone. Nothing fails today; the next forgotten WHERE is a leak again.</p><p class="evidence"><b>Test evidence:</b> <code>thePolicyShowsAndWritesOnlyTheTransactionsTenant</code> fails: as the owner, a write for Brightpath inside Zestful's transaction goes through.</p></details><details class="finding"><summary><span class="sev">2</span>A tenant from the query string</summary><p>"Support staff look at customers' CRMs: ?tenant= lets them switch company": so can every customer. Any salesperson can add <code>?tenant=</code> and read another company's leads.</p><p class="evidence"><b>Test evidence:</b> <code>theApiTakesTheTenantFromTheSignInAndTheDatabaseFiltersWhatACodeForgets</code> fails: <code>?tenant=brightpath</code> returns Brightpath's lead.</p></details>
+<h2>Same tests, flawed version</h2>
+<p class="muted">From <code>docs/review-run.txt</code>: the flawed files copied over the real ones, then the full suite run.</p>
+<div class="scroll"><table class=""><thead><tr><th>Test class</th><th>Fixed version</th><th>Flawed version</th></tr></thead><tbody><tr><td><code>LeadContractTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill ok">3 / 3</span></td></tr><tr><td><code>LeadSecurityTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill ok">3 / 3</span></td></tr><tr><td><code>LeadDatabaseTest</code></td><td><span class="pill ok">3 / 3</span></td><td><span class="pill bad">2 / 3</span></td></tr><tr><td><code>TenantLeakTrapTest</code></td><td><span class="pill ok">2 / 2</span></td><td><span class="pill bad">1 / 2</span></td></tr></tbody></table></div>
+<p class="note">Every listing in the flawed version is still correct for every user who does not type <code>?tenant=</code>. That is what makes both mistakes easy to merge.</p>
+</section></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+
+  function show(key, focus) {
+    var found = tabs.some(function (t) { return t.dataset.tab === key; });
+    if (!found) key = tabs[0].dataset.tab;
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === key;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById('panel-' + t.dataset.tab).hidden = !on;
+      if (on && focus) t.focus();
+      if (on) { // keep the active tab visible in the strip without scrolling the page
+        var strip = t.parentNode;
+        if (t.offsetLeft < strip.scrollLeft || t.offsetLeft + t.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+          strip.scrollLeft = t.offsetLeft - 16;
+        }
+      }
+    });
+    if (location.hash.slice(1) !== key) history.replaceState(null, '', '#' + key);
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
+    t.addEventListener('keydown', function (ev) {
+      var d = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      ev.preventDefault();
+      show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+    });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-goto]');
+    if (!link) return;
+    ev.preventDefault();
+    show(link.dataset.goto);
+    document.querySelector('.tabbar').scrollIntoView({ block: 'start' });
+  });
+
+  // File browsers inside the Code and Tests tabs
+  document.querySelectorAll('.file-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group;
+      document.querySelectorAll('.file-btn[data-group="' + group + '"]').forEach(function (o) {
+        var on = o === b;
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(o.getAttribute('aria-controls')).hidden = !on;
+      });
+    });
+  });
+
+  show(location.hash.slice(1) || 'problem');
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+
+  if (window.hljs) {
+    document.querySelectorAll('pre.code code').forEach(function (el) { window.hljs.highlightElement(el); });
+  }
+})();
+</script>
